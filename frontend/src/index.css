@@ -1,6 +1,21 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@theme {
+  --color-ink: #1b1c20;
+  --color-muted: #6c7078;
+  --color-line: #cdd2d8;
+  --color-line-soft: #e6e8eb;
+  --color-accent: #3652ff;
+  --color-accent-soft: #ecefff;
+  --color-paper: #f6f6f3;
+  --color-surface: #ffffff;
+  --color-error: #e5484d;
+  --color-error-soft: #fdecec;
+
+  --font-sans: 'Pretendard Variable', 'Pretendard', -apple-system, sans-serif;
+
+  --radius-card: 10px;
+}
 
 :root {
   --text: #6b6375;
