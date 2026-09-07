@@ -1,73 +1,52 @@
-# React + TypeScript + Vite
+# Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+카카오테크 캠퍼스 4기 2단계 팀 프로젝트 (전남대 3팀) FE.
 
-Currently, two official plugins are available:
+## 기술 스택
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React 19 + TypeScript
+- Vite
+- Tailwind CSS
+- React Router
+- TanStack Query
 
-## React Compiler
+## 시작하기
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-]);
+```bash
+git clone <repo-url>
+cd ktc4-chonnam-3/frontend
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+`http://localhost:5173` 접속.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x';
-import reactDom from 'eslint-plugin-react-dom';
+## 스크립트
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-]);
+| 명령어 | 설명 |
+| --- | --- |
+| `npm run dev` | 개발 서버 실행 |
+| `npm run build` | 타입 체크 + 프로덕션 빌드 |
+| `npm run preview` | 빌드 결과 로컬 미리보기 |
+| `npm run lint` | ESLint 검사 |
+| `npm run format` | Prettier 포맷팅 |
+
+## 폴더 구조
+
 ```
+src/
+├─ features/      # 도메인별 화면·로직 (auth, home, interview, analysis, report, mypage)
+├─ shared/        # API 클라이언트(api.ts), React Query 키(queryKeys.ts)
+├─ types/         # API 타입
+├─ routes.tsx     # 라우트 정의
+├─ providers.tsx  # 전역 Provider (QueryClient 등)
+└─ main.tsx       # 엔트리 포인트
+```
+
+API 요청은 `src/shared/api.ts`에서 `/api` prefix로 호출. 응답/요청 타입은 `src/types/api.ts`, API 스펙은 [`docs/api-spec.md`](../docs/api-spec.md) 참고.
+
+## 브랜치 / PR
+
+- 작업 브랜치는 `develop`에서 분기, PR도 `develop`으로.
+- `main`은 최종 배포용 (develop → main PR에서만 컨벤션 봇 안내 발생).
+- 브랜치명 예: `feature/fe-xxx`, `fix/fe-xxx`.
