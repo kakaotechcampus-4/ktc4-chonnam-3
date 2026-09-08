@@ -1,4 +1,4 @@
 """세션 / 턴 읽기 쿼리.
 
-becontext.md §2.1 / task-13
+docs/layer-rules.md 1절 / task-13
 """

@@ -1,13 +1,13 @@
 # task-04 — 스키마 · 계약 테스트
 
 > 선행: task-02
-> 설계 근거: [becontext.md](../../becontext.md) · [db-schema.md](db-schema.md)
+> 설계 근거: [layer-rules.md](layer-rules.md) · [db-schema.md](db-schema.md)
 
 ## 목표
 
 `CamelModel` 과 `features/*/schemas.py` 를 api-spec 과 맞추고 `tests/contract/` 를 함께 작성한다.
 
-## 확정본 반영 (becontext.md 대비 변경)
+## 확정본 반영 (설계 초기안 대비 변경)
 
 FE 합의로 **BE 내부명을 그대로 쓴다** — 경계 매핑 레이어를 두지 않는다. FE `types/api.ts` 가 수정된다.
 

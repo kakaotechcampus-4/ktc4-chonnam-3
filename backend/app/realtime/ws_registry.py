@@ -1,4 +1,4 @@
 """단일 접속 락(ws:lock:{sessionId}) + 하트비트.
 
-becontext.md §8.1 / task-15
+docs/pipeline.md 4.1절 / task-15
 """

@@ -1,4 +1,4 @@
 """/interviews/{id}/report, /reports/{id}/feedback-disagreements.
 
-becontext.md §2 / task-16
+docs/layer-rules.md 1절 / task-16
 """

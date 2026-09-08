@@ -6,5 +6,5 @@
   deep_analysis   (M4-a) 확정 레포 L2
   report_generate (M6)   면접 종료 → 리포트
 
-becontext.md §7.1 / task-11
+docs/pipeline.md 1절 / task-11
 """

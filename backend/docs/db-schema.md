@@ -6,7 +6,7 @@
 
 - 작성 시점: task-02
 - 갱신 규칙: 마이그레이션을 추가할 때 같은 PR 에서 이 문서를 함께 고친다.
-- ⚠ `becontext.md` 1장(충돌 9건)·§9.1 은 이 문서보다 낡았다. 아래 "becontext 대비 변경" 참조.
+- 설계 초기안(계약 ↔ 데이터모델 충돌 정리)에서 바뀐 것은 아래 "설계 초기안 대비 변경" 절에 있다.
 
 ## 규약
 
@@ -40,14 +40,14 @@
 
 **`tool_calls`** 는 1차에 없다. Tool 계약 확정 후 2차.
 
-## becontext.md 대비 변경 (확정본 반영)
+## 설계 초기안 대비 변경 (확정본 반영)
 
-| 항목 | becontext | 확정 |
+| 항목 | 초기안 | 확정 |
 |---|---|---|
-| `document_claims` | §9.1 "1단계 제외" | **1차 포함.** 끝난 면접의 "어느 주장이 다뤄졌나" 는 소급 복원이 불가능하다. 1차 컬럼 5개(`claim_text`/`claim_type`/`tech_tags`/`paragraph_no`/`confidence`), `topic_code`·`repository_hint` 는 2차 |
+| `document_claims` | "1단계 제외" | **1차 포함.** 끝난 면접의 "어느 주장이 다뤄졌나" 는 소급 복원이 불가능하다. 1차 컬럼 5개(`claim_text`/`claim_type`/`tech_tags`/`paragraph_no`/`confidence`), `topic_code`·`repository_hint` 는 2차 |
 | `analysis_jobs` | 1 run = 4 steps | **`job_type` 3종** (`initial_sync`/`interview_prep`/`deep_analysis`), `interview_prep` 은 **7 steps** |
 | `analysis_jobs.status` | 4값 | **6값** — `queued`/`running`/`succeeded`/`partial`/`failed`/`canceled` |
-| `interview_sessions.answer_mode` | §1.6 `voice` | **`text` 고정** + `CHECK (answer_mode='text')`. 2차에 완화 (FE 합의) |
+| `interview_sessions.answer_mode` | `voice` | **`text` 고정** + `CHECK (answer_mode='text')`. 2차에 완화 (FE 합의) |
 | `interview_turns` | `transcript_confidence`, `audio_uri` 선반영 | **컬럼 자체를 만들지 않는다** — 스프린트2 |
 | `interview_turns.topic_code` | FK `topic_taxonomy` | **1차 FK 없음.** `topic_taxonomy` 확정 후 2차에 FK 추가 |
 | persona 값 | 3인(값 미정) | `tech_lead` / `hr_manager` / `domain_lead` |
@@ -132,7 +132,7 @@ INDEX (event_name, occurred_at DESC)                               -- events
 - **`batch_position SMALLINT`** (P2) — 배치 내 순번. 없으면 배치 뒤쪽 레포의 품질이 떨어지는지
   (lost in the middle) 측정할 수 없다. 같은 배치의 row 는 `analyzed_at` 이 전부 같아서
   순서를 복원할 방법이 없다. 배치 크기를 20 고정으로 갈 거면 불필요.
-- **리포트 4테이블** — 컬럼 확정본이 아직 없다. `becontext.md` §1.8 · §1.9 기준으로 두고 있다.
+- **리포트 4테이블** — 팀 컬럼 확정본이 아직 없다. 아래 "리포트 — 잠정 결정" 절 기준으로 두고 있다.
 - **`interview_sessions.job_posting_id` NOT NULL ↔ `unsupported_site`** — 아래 참조.
 
 ### `job_posting_id` NOT NULL 과 "공고 없이 진행" 이 충돌한다 ⚠
@@ -142,3 +142,72 @@ INDEX (event_name, occurred_at DESC)                               -- events
 
 `parse_status='failed'` 인 껍데기 `job_postings` 행을 만들어 붙이면 NOT NULL 은 지켜지지만,
 `jd_requirements` 0건인 세션에서 `company_job_fit` 채점을 어떻게 할지가 남는다.
+
+---
+
+## 리포트 — 잠정 결정 (팀 확정본 대기)
+
+리포트 4테이블은 컬럼 확정본이 오지 않았다. 아래는 api-spec 응답을 만들기 위해 필요한 최소
+결정이고, 확정본이 오면 다시 대조해야 한다.
+
+### 점수 스케일 — API 는 0~100 정수, 루브릭은 1~5
+
+`report.scores[].score` / `totalScore` 는 정수 0~100 인데 `score_criteria.rubric` 은
+`{"1":..,"3":..,"5":..}` 서술이다. **둘 다 필요하다** — 화면은 100점, 채점 근거는 5단계.
+
+```
+report_scores      : score         NUMERIC(4,1)  -- 0.0 ~ 100.0 (API 로는 round → int)
+                     rubric_level  SMALLINT      -- 1~5, 어느 루브릭 앵커에 걸렸는지
+interview_reports  : overall_score NUMERIC(4,1)  -- 0.0 ~ 100.0
+```
+
+⚠ 데이터모델 문서에 `report_scores.score` 가 `NUMERIC(3,1)`(최대 99.9)로 되어 있다.
+**100점이 안 들어간다** → `NUMERIC(4,1)` 로 고친다.
+
+### api-spec 에 있고 DB 에 없는 필드 3개
+
+| FE 필드 | 결정 |
+|---|---|
+| `headline` | `interview_reports.headline VARCHAR(200) NOT NULL` |
+| `agentFeedbacks[].tags` (`["Architecture","Trade-off"]`) | `report_persona_feedbacks.tags TEXT[]` |
+| `agentFeedbacks[].disagreementSubmitted` | 저장하지 않고 `report_disagreements` 존재 여부로 **파생** |
+
+`report_persona_feedbacks.strengths` / `improvements` 는 DB 가 `TEXT` 인데 API 는 `string[]` 이다
+→ **`TEXT[]` 로 고친다.**
+
+### DB 에 있고 API 에 안 나가는 것 — 삭제하지 않는다
+
+`strengths` / `improvements`(리포트 레벨), `report_scores.comment`, `evidence_turn_nos`,
+`key_moments`. 데이터 플라이휠과 Eval 의 입력이고, **지금 안 쓰는 필드를 지우면 나중에 소급
+생성이 불가능하다.**
+
+### 피드백 이의 — `feedback_signals` 가 아니라 별도 테이블
+
+`POST /reports/{id}/feedback-disagreements` 는 `agentRole` + `reasonType` + `comment` 이고
+`409 already_submitted` 가 있다. `feedback_signals`(`value SMALLINT`)에는 `reason_type` 이
+안 들어가고 중복 방지 유니크도 걸 수 없다.
+
+```sql
+CREATE TABLE report_disagreements (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  report_id   UUID NOT NULL REFERENCES interview_reports(id),
+  persona     VARCHAR(20) NOT NULL,      -- agentRole
+  reason_type VARCHAR(30) NOT NULL,      -- factual_error / insufficient_basis /
+                                         -- overly_harsh / unclear_intent / other
+  comment     TEXT,                      -- 최대 500자, 앱에서 검증
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (report_id, persona)            -- 409 already_submitted 의 근거
+);
+```
+
+`feedback_signals` 는 남긴다 — Evidence 오류 신고·리포트 유용성(보조지표 2건)의 자리다.
+용도가 다르다.
+
+### `/reports/{id}` 의 `{id}` 는 `interviewId` 다
+
+FE 는 라우트 `/interview/:id/report` 에서 받은 `id` 를 그대로
+`submitFeedbackDisagreement(id, ...)` 에 넘긴다(`shared/api.ts`). 즉 실제로 넘어오는 값은
+**`interviewId`** 인데 경로는 `/reports/{id}` 다.
+
+→ BE 는 **`interviewId` 를 받는 것으로 구현**하고, 내부에서 `interview_reports` 를 조회해
+`report_id` 로 바꾼다. FE 화면이 아직 스텁(`Report.tsx`)이므로 지금 못박는다.

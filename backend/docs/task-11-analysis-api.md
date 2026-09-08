@@ -1,13 +1,13 @@
 # task-11 — 분석 API · 큐 배선
 
 > 선행: task-08, task-09, task-10
-> 설계 근거: [becontext.md](../../becontext.md) · [db-schema.md](db-schema.md)
+> 설계 근거: [layer-rules.md](layer-rules.md) · [db-schema.md](db-schema.md)
 
 ## 목표
 
 `POST /analysis-runs` (multipart) + ARQ 배선 + `GET /analysis-runs/{runId}` / `/result`.
 
-## 확정본 반영 (becontext.md 대비 변경)
+## 확정본 반영 (설계 초기안 대비 변경)
 
 - 파이프라인이 **`job_type` 3종**으로 갈렸다 — `features/analysis/pipeline/{initial_sync,interview_prep,deep_analysis}.py`, 워커 태스크도 3개.
 - `interview_prep` 은 **7 steps** — `doc_extract` → `repo_select` → `repo_detail` → `jd_fetch` → `jd_extract` → `repo_analyze` → `match_score`.

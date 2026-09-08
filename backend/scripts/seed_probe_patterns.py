@@ -1,4 +1,4 @@
 """probe_patterns 시드.
 
-becontext.md §9 / task-03
+docs/db-schema.md / task-03
 """

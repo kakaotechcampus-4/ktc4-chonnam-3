@@ -1,4 +1,4 @@
 """structlog 설정, request_id 바인딩.
 
-becontext.md §2 / task-01
+docs/layer-rules.md 1절 / task-01
 """

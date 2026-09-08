@@ -1,4 +1,4 @@
 """/me, /me/home, /me/interviews.
 
-becontext.md §2 / task-07
+docs/layer-rules.md 1절 / task-07
 """

@@ -1,15 +1,15 @@
 # task-08 — GitHub 수집 — L0-a · L0-b · 룰 필터
 
 > 선행: task-06
-> 설계 근거: [becontext.md](../../becontext.md) · [db-schema.md](db-schema.md)
+> 설계 근거: [layer-rules.md](layer-rules.md) · [db-schema.md](db-schema.md)
 
 ## 목표
 
 M1 `initial_sync`(L0-a 전체 레포) + M2 의 `repo_select` · `repo_detail` step + L1 배치 분석.
 
-## 확정본 반영 (becontext.md 대비 변경)
+## 확정본 반영 (설계 초기안 대비 변경)
 
-becontext 의 "`fetch_repos` step" 하나가 **3개로 쪼개졌다.**
+설계 초기안의 "`fetch_repos` step" 하나가 **3개로 쪼개졌다.**
 
 - **L0-a (M1)** — 연동 직후 백그라운드. 목록 API 응답에 이미 있는 필드만, `fetch_level=list`.
 - **룰 필터 (M2 `repo_select`)** — `is_fork=false AND is_archived=false AND size_kb>50 AND primary_language IS NOT NULL ORDER BY repo_pushed_at DESC LIMIT 10`. 포폴 언급 레포는 이 필터를 **무조건 우회**한다.

@@ -1,4 +1,4 @@
 """/interviews (POST), /{id}, /{id}/retry.
 
-becontext.md §2 / task-13
+docs/layer-rules.md 1절 / task-13
 """

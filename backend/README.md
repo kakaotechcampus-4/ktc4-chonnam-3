@@ -2,7 +2,18 @@
 
 카카오테크 캠퍼스 4기 2단계 팀 프로젝트 (전남대 3팀) BE.
 
-설계 문서는 [`becontext.md`](../becontext.md). 폴더 경계·레이어 규칙·에러 규약은 전부 거기서 결정됐다.
+설계 문서는 [`docs/`](docs/) 안에 있다.
+
+| 문서 | 내용 |
+| --- | --- |
+| [layer-rules.md](docs/layer-rules.md) | 폴더 경계 · 레이어 규칙 · 금지 목록 · 네이밍 · 직렬화 |
+| [db-schema.md](docs/db-schema.md) | 테이블 목록 · 제약 · 1차/2차 경계 · 미결 |
+| [error-reasons.md](docs/error-reasons.md) | 에러 봉투 · 3계층 reason 레지스트리 |
+| [redis-keys.md](docs/redis-keys.md) | Redis 키 설계표 |
+| [pipeline.md](docs/pipeline.md) | ARQ · run 실행 흐름 · SSE · WebSocket |
+| [testing.md](docs/testing.md) | 테스트 전략 · 필수 테스트 4개 · Eval |
+| [deploy.md](docs/deploy.md) | Vercel rewrite · CORS · 쿠키 · CI |
+| [api-spec.md](docs/api-spec.md) | FE 계약 링크 + 합의된 변경 |
 
 ## 기술 스택
 
@@ -89,7 +100,7 @@ API 표면의 유일한 진실은 [`frontend/docs/api-spec.md`](../frontend/docs
 - 에러 봉투와 reason 목록 → [`docs/error-reasons.md`](docs/error-reasons.md)
 - Redis 키 → [`docs/redis-keys.md`](docs/redis-keys.md)
 - 스키마 결정과 1차/2차 경계 → [`docs/db-schema.md`](docs/db-schema.md)
-- 스펙 ↔ 데이터모델 충돌 9건 → [`becontext.md`](../becontext.md) 1장
+- 스펙 ↔ 데이터모델 충돌 결정 → [`docs/db-schema.md`](docs/db-schema.md) "설계 초기안 대비 변경"
 
 **FE 와 합의된 변경 (BE 내부명을 그대로 쓴다 — 경계 매핑 레이어 없음)**
 

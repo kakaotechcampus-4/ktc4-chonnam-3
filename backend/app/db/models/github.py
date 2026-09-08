@@ -1,4 +1,4 @@
 """repositories, repo_analyses, user_profile_summaries.
 
-becontext.md §2 / task-02
+docs/layer-rules.md 1절 / task-02
 """

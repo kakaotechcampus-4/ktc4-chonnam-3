@@ -1,13 +1,13 @@
 # task-09 — 공고 어댑터 · 문서 추출 · claim
 
 > 선행: task-05
-> 설계 근거: [becontext.md](../../becontext.md) · [db-schema.md](db-schema.md)
+> 설계 근거: [layer-rules.md](layer-rules.md) · [db-schema.md](db-schema.md)
 
 ## 목표
 
 원티드 어댑터 + 문서 텍스트 추출 + `jd_extract` · `doc_extract` step.
 
-## 확정본 반영 (becontext.md 대비 변경)
+## 확정본 반영 (설계 초기안 대비 변경)
 
 - `integrations/jd/fetcher.py` 단일 파일이 **어댑터 구조**로 바뀌었다 (`base` / `resolver` / `wanted` / `generic`). `site_adapter` 컬럼이 어댑터별 성공률 비교 축이다.
 - **원티드 1종만 1차.** `/wd/{id}` → `/api/chaos/jobs/v1/{id}/details` 공개 JSON 이 항목별로 이미 나뉘어 오고 `skill_tags` 가 `tech_tags` 원천이라 LLM 추측이 불필요하다. 사람인(본문이 이미지 PNG)·잡코리아는 2차.

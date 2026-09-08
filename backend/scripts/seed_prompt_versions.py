@@ -1,4 +1,4 @@
 """프롬프트 초기본 시드.
 
-becontext.md §3 / task-03
+docs/layer-rules.md 2절 / task-03
 """

@@ -1,13 +1,13 @@
 # task-14 — Director Agent · LLM task
 
 > 선행: task-03
-> 설계 근거: [becontext.md](../../becontext.md) · [db-schema.md](db-schema.md)
+> 설계 근거: [layer-rules.md](layer-rules.md) · [db-schema.md](db-schema.md)
 
 ## 목표
 
 `agents/contracts.py` 계약 4종 + Director Agent + `llm_tasks/` 단발 호출.
 
-## 확정본 반영 (becontext.md 대비 변경)
+## 확정본 반영 (설계 초기안 대비 변경)
 
 **Agent 는 Director 하나뿐이다.** 나머지는 Agent 가 아니라 단발 LLM 호출로 충분하다.
 

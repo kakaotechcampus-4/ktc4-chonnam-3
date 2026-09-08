@@ -1,4 +1,4 @@
 """page/size 를 items/total/page/size 응답으로.
 
-becontext.md §2 / task-04
+docs/layer-rules.md 1절 / task-04
 """

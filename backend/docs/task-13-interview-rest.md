@@ -1,13 +1,13 @@
 # task-13 — 면접 REST
 
 > 선행: task-11
-> 설계 근거: [becontext.md](../../becontext.md) · [db-schema.md](db-schema.md)
+> 설계 근거: [layer-rules.md](layer-rules.md) · [db-schema.md](db-schema.md)
 
 ## 목표
 
 `POST /interviews`, `GET /interviews/{id}`, `/retry` + `sessionId` 발급.
 
-## 확정본 반영 (becontext.md 대비 변경)
+## 확정본 반영 (설계 초기안 대비 변경)
 
 - `job_posting_id` 가 **NOT NULL** 이다 (공고 필수).
 - `status` = `preparing` / `in_progress` / `completed` / `abandoned`. **`paused` 없음 — 세션 재개 미지원.**

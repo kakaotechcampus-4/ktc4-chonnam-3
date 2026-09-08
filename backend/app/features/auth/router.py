@@ -1,4 +1,4 @@
 """/auth/github/login, /callback, /link, /link/callback, /logout.
 
-becontext.md §2 / task-06
+docs/layer-rules.md 1절 / task-06
 """

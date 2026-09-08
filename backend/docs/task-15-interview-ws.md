@@ -1,13 +1,13 @@
 # task-15 — 면접 WebSocket (텍스트)
 
 > 선행: task-13, task-14
-> 설계 근거: [becontext.md](../../becontext.md) · [db-schema.md](db-schema.md)
+> 설계 근거: [layer-rules.md](layer-rules.md) · [db-schema.md](db-schema.md)
 
 ## 목표
 
 WS 핸드셰이크 + L2 deep + prepare 4단계 + 턴 루프.
 
-## 확정본 반영 (becontext.md 대비 변경)
+## 확정본 반영 (설계 초기안 대비 변경)
 
 - **스프린트1 은 양방향 텍스트다** (FE 합의). 오디오 프레임 · `transcript` · `stt_failed` · `tts_failed` · `integrations/speech/` 는 전부 **스프린트2**.
 - 답변 초안 저장 없음 — 제출 1회로 `answer_text` UPDATE.
