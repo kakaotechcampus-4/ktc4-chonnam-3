@@ -1,0 +1,43 @@
+# task-01 에서 확정한다. 아래는 becontext.md 가 못박은 스택만 옮긴 출발점이고,
+# 버전 고정은 `uv sync` 로 생성되는 uv.lock 이 담당한다.
+
+[project]
+name = "devon-backend"
+version = "0.1.0"
+description = "DEVON 백엔드 — FastAPI + PostgreSQL 15 + Redis 7"
+requires-python = ">=3.12"
+
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "pydantic-settings",
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "alembic",
+    "redis",
+    "arq",
+    "sse-starlette",
+    "httpx",
+    "structlog",
+    "python-multipart",
+    "anthropic",
+]
+
+[dependency-groups]
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+    "pytest-asyncio",
+]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+strict = true
+files = ["app"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
