@@ -1,0 +1,73 @@
+[
+  {
+    "name": "me-valid",
+    "schema": "me-response.schema.json",
+    "valid": true,
+    "data": {
+      "name": "검수 사용자",
+      "githubLinked": true
+    }
+  },
+  {
+    "name": "me-missing-link",
+    "schema": "me-response.schema.json",
+    "valid": false,
+    "data": {
+      "name": "검수 사용자"
+    }
+  },
+  {
+    "name": "me-wrong-type",
+    "schema": "me-response.schema.json",
+    "valid": false,
+    "data": {
+      "name": "검수 사용자",
+      "githubLinked": "true"
+    }
+  },
+  {
+    "name": "error-valid",
+    "schema": "api-error.schema.json",
+    "valid": true,
+    "data": {
+      "error": {
+        "reason": "unauthenticated",
+        "message": "로그인이 필요합니다."
+      }
+    }
+  },
+  {
+    "name": "error-retry",
+    "schema": "api-error.schema.json",
+    "valid": true,
+    "data": {
+      "error": {
+        "reason": "rate_limited",
+        "message": "다시 시도하세요.",
+        "retryAfter": 30
+      }
+    }
+  },
+  {
+    "name": "error-missing-reason",
+    "schema": "api-error.schema.json",
+    "valid": false,
+    "data": {
+      "error": {
+        "message": "오류"
+      }
+    }
+  },
+  {
+    "name": "error-null-retry",
+    "schema": "api-error.schema.json",
+    "valid": false,
+    "data": {
+      "error": {
+        "reason": "x",
+        "message": "오류",
+        "retryAfter": null
+      }
+    }
+  }
+]

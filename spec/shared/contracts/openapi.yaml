@@ -1,0 +1,44 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "DEVON partial contract review draft",
+    "version": "0.0.0-draft",
+    "description": "GET /me only. Migration review required; not a runtime implementation claim."
+  },
+  "servers": [
+    {
+      "url": "/api"
+    }
+  ],
+  "paths": {
+    "/me": {
+      "get": {
+        "operationId": "getMe",
+        "description": "인증이 필요한 기존 명세. 쿠키 이름·보안 스키마는 이관 검수에서 확정.",
+        "responses": {
+          "200": {
+            "description": "사용자 정보",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./me-response.schema.json"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "인증되지 않음",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./api-error.schema.json"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "x-contract-status": "draft-partial"
+}

@@ -72,3 +72,12 @@ target/
 *.sqlite3
 *.db
 .terraform/
+
+# DEVON 개인 작업·임시 산출물
+/.claude/settings.local.json
+/.claude/scratch/
+/frontend/report/
+/backend/report/
+/ai/report/
+/.superpowers/
+CLAUDE.local.md

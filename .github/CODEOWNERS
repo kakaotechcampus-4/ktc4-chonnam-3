@@ -68,3 +68,23 @@
 # 이 아래는 팀이 자유롭게 쓰세요. 파트별 자동 리뷰어 지정 예시:
 #   /backend/   @member-a @member-b
 #   /frontend/  @member-c
+
+# DEVON 검수 초안: 리드 GitHub 계정·write 권한 확인 후 아래 주석 해제.
+# /spec/shared/            @FE_LEAD @BE_LEAD @AI_LEAD
+# /spec/README.md          @FE_LEAD @BE_LEAD @AI_LEAD
+# /spec/frontend/          @FE_LEAD
+# /spec/backend/           @BE_LEAD
+# /spec/ai/                @AI_LEAD
+# /CLAUDE.md               @FE_LEAD @BE_LEAD @AI_LEAD
+# /.claude/                @FE_LEAD @BE_LEAD @AI_LEAD
+# /frontend/               @FE_LEAD
+# /backend/                @BE_LEAD
+# /ai/                     @AI_LEAD
+# /backend/app/agents/     @BE_LEAD @AI_LEAD
+# /backend/app/llm_tasks/   @BE_LEAD @AI_LEAD
+# /backend/tests/agents/   @BE_LEAD @AI_LEAD
+# /backend/tests/llm_tasks/ @BE_LEAD @AI_LEAD
+# /.github/pull_request_template.md @FE_LEAD @BE_LEAD @AI_LEAD
+# /.github/workflows/collaboration-check.yml @FE_LEAD @BE_LEAD @AI_LEAD
+# /.github/ 또는 /.github/CODEOWNERS 규칙으로 운영진 소유권을 덮어쓰지 않는다.
+# 코드 소유자 중 한 명 승인과 3팀 각각의 필수 승인은 별도 설정이다.
