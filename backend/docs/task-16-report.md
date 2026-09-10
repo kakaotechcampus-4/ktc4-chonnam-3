@@ -1,28 +1,25 @@
-# task-16 — 리포트
+# task-16 — 리포트 · 프로필 요약
 
 > 선행: task-15
-> 설계 근거: [layer-rules.md](layer-rules.md) · [db-schema.md](db-schema.md)
+> 근거: `spec/backend/features/report.md`
 
 ## 목표
 
-`report_generate` 워커 + `GET report` (202 포함) + `feedback-disagreements`.
-
-## 확정본 반영 (설계 초기안 대비 변경)
-
-- 채점 시 `turn_evidences` 에 `usage=evaluation_basis` 를 남긴다.
-- 커버리지는 `context_state.covered_requirement_ids` / `covered_claim_ids` 에서 산출한다.
-- ⚠ 리포트 4테이블은 컬럼 확정본이 아직 없다 — [db-schema.md](db-schema.md) 의 "리포트 — 잠정 결정" 절 기준.
+Lazy report generation과 profile summary 후속 갱신을 구현한다.
 
 ## 작업
 
-- [ ] TODO
+- `GET /interviews/{id}/report`가 report 존재 시 200을 반환한다.
+- report가 없고 생성 가능하면 `report_generate` enqueue 후 202를 반환한다.
+- 생성 중 lock이 있으면 중복 enqueue 없이 202를 반환한다.
+- 생성 불가면 `report_unavailable`.
+- report 성공 후 `profile_summary` job을 enqueue한다.
+- profile summary 갱신은 report 응답을 막지 않는다.
+- persona별 피드백은 `interview_reports.feedback_json`에 저장한다.
+- `report_disagreements` 테이블은 Sprint 1 migration에 존재하지만 API/row 생성은 Sprint 2로 넘긴다.
+- 점수 산정 공식은 `PENDING_TEAM`이라 임의 고정하지 않는다.
 
 ## 완료 조건
 
-- [ ] TODO
-
-## 커밋 메시지
-
-```
-TODO
-```
+- 200/202/409 흐름과 중복 lock을 테스트한다.
+- profile summary job enqueue가 report 성공 후 발생한다.

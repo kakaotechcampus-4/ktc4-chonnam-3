@@ -1,31 +1,24 @@
-# task-14 — Director Agent · LLM task
+# task-14 — Director · LLM Task
 
 > 선행: task-03
-> 설계 근거: [layer-rules.md](layer-rules.md) · [db-schema.md](db-schema.md)
+> 근거: `spec/backend/features/interview.md`
 
 ## 목표
 
-`agents/contracts.py` 계약 4종 + Director Agent + `llm_tasks/` 단발 호출.
-
-## 확정본 반영 (설계 초기안 대비 변경)
-
-**Agent 는 Director 하나뿐이다.** 나머지는 Agent 가 아니라 단발 LLM 호출로 충분하다.
-
-- `agents/director/{agent,tools}.py` — Evidence 는 별도 Agent 가 아니라 **Director 의 Tool** (`search_code` / `read_file` / `list_commits`). Tool 3종 모두 `ref`(커밋 SHA) 를 필수 인자로 받는다.
-- `app/llm_tasks/` 신규 — `repo_shallow` / `repo_deep` / `jd_extract` / `doc_claims` / `answer_analysis` / `report` / `profile_summary` / `conflict`(2차).
-- `prompt_loader` 는 `llm_tasks` 중 **유일하게 `AsyncSession` 을 받는다.** service 가 이걸로 로드해 문자열로 주입하므로 agents 는 DB 를 모른 채로 남고 Eval 에서 DB 없이 돈다.
-- `analysis` · `decision` JSONB 키 이름을 `contracts.py` 에서 지금 고정한다 (2차에 테이블 승격).
+단일 Director와 작업별 LLM task 계약을 구현한다.
 
 ## 작업
 
-- [ ] TODO
+- Agent는 Director 하나만 둔다.
+- Evidence Retriever는 Director tool로 구현한다.
+- LLM task는 repo_shallow, repo_deep, jd_extract, answer_analysis, report, profile_summary로 나눈다.
+- `doc_claims`, 문서-코드 conflict 확장은 Sprint 2.
+- 모든 LLM 작업은 Sprint 1에서 `5.5 Luna` 모델을 사용한다.
+- prompt version은 작업별로 저장한다.
+- JSON parsing 실패는 1회 재시도 후 실패 처리한다.
+- raw output, model, prompt_version, input/output tokens, latency_ms를 가능한 범위에서 저장한다.
 
 ## 완료 조건
 
-- [ ] TODO
-
-## 커밋 메시지
-
-```
-TODO
-```
+- Director는 DB session 없이 계약 객체만 받는다.
+- LLM mock으로 성공, timeout, parse failure가 테스트된다.

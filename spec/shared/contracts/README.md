@@ -1,26 +1,36 @@
-# 공통 계약 — 전환 초안
+# 공통 계약
 
-## 현재 범위
-- openapi.yaml: GET /api/me의 200·401 응답만 옮긴 부분 계약.
-- me-response.schema.json: 기존 FE MeResponse와 일치하는 응답 구조.
-- api-error.schema.json: 기존 FE ApiError와 BE 에러 봉투의 공통 구조.
-- 기존 타입에 없는 제약을 몰래 추가하지 않기 위해 추가 속성을 허용한다. 정확한 키 집합 검사는 기존 BE 계약 테스트에서 별도 검증한다.
-- 인증 쿠키 이름, OAuth 세부 흐름, SSE/WS, 다른 API는 이 초안의 범위 밖이다.
-- 이 스키마는 현재 서버의 구현 완료를 의미하지 않는다.
+상태: Sprint 1 FIX. 이 디렉터리는 FE/BE가 함께 맞추는 API 계약 원본이다.
 
-## 변경 절차
-1. frontend/docs/api-spec.md, frontend/src/types/api.ts, backend/docs/api-spec.md와 영향 범위를 비교.
-2. 변경 전후 필드·required·nullable·enum·상태코드를 PR에 작성.
-3. 계약·용어에 지속적인 영향이 있으면 spec/shared/decisions/에 Proposed 결정 작성.
-4. FE·BE·AI가 관련 소비 코드·테스트·배포 순서 검토. 검토 상태를 migration.md에 기록.
-5. 스키마·예시·구현·테스트 갱신. 코드 미구현이면 별도 표시.
-6. 모든 대상이 이관된 항목만 기준 계약으로 승격. 기존 명세는 새 원본 링크로 전환.
+## 원본
 
-## 검증
-프로젝트 루트, Python 3.12 권장:
-```bash
-python3 -m pip install -r .claude/scripts/requirements-checks.txt
-python3 .claude/scripts/check_contracts.py
+- API surface: `openapi.yaml`
+- 공통 오류 envelope: `api-error.schema.json`
+- 변경/보류 추적: `migration.md`
+
+FE 문서와 backend docs가 이 계약과 충돌하면 `openapi.yaml`을 우선한다. 단, `PENDING_FE`, `PENDING_AI`, `PENDING_TEAM`으로 표시된 항목은 구현자가 임의 확정하지 않는다.
+
+## 공통 규약
+
+- API 요청/응답 필드는 camelCase.
+- Python/DB 필드는 snake_case.
+- 모든 4xx/5xx는 공통 envelope를 사용한다.
+
+```json
+{
+  "error": {
+    "reason": "invalid_repository",
+    "message": "선택할 수 없는 레포지토리입니다.",
+    "details": {}
+  }
+}
 ```
-OpenAPI 문서 및 JSON Schema 형식, 참조, 정상·오류 fixture를 검사한다.
-실제 API·TS 타입·LLM 품질·하위 호환성을 자동 보증하지 않는다. /contract-check에서 변경 diff와 구현 테스트도 확인한다.
+
+- `reason`은 FE 분기용 stable string이다.
+- 내부 job/LLM 실패는 DB `error_code`에 남기고 API 표면에서는 flow별 reason으로 매핑한다.
+
+## 보류 표시
+
+- `PENDING_FE`: FE 라우팅, 상태머신, UX와 함께 결정해야 한다.
+- `PENDING_AI`: AI 리드가 모델/검색/프롬프트 구조를 확정해야 한다.
+- `PENDING_TEAM`: 팀 자료 보충 또는 평가 기준 합의가 필요하다.

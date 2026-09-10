@@ -1,44 +1,564 @@
-{
-  "openapi": "3.1.0",
-  "info": {
-    "title": "DEVON partial contract review draft",
-    "version": "0.0.0-draft",
-    "description": "GET /me only. Migration review required; not a runtime implementation claim."
-  },
-  "servers": [
-    {
-      "url": "/api"
-    }
-  ],
-  "paths": {
-    "/me": {
-      "get": {
-        "operationId": "getMe",
-        "description": "인증이 필요한 기존 명세. 쿠키 이름·보안 스키마는 이관 검수에서 확정.",
-        "responses": {
-          "200": {
-            "description": "사용자 정보",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "./me-response.schema.json"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "인증되지 않음",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "./api-error.schema.json"
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  },
-  "x-contract-status": "draft-partial"
-}
+openapi: 3.1.0
+info:
+  title: DEVON Sprint 1 Contract
+  version: 1.0.0-sprint1
+  description: Sprint 1 FE/BE API contract source. PENDING_FE items are explicit and must not be guessed by implementers.
+servers:
+  - url: /api
+x-contract-status: sprint1-fix
+x-pending:
+  - WS identifier path: interviewId vs sessionId is PENDING_FE
+  - DEVON JWT delivery method is PENDING_FE
+  - Text WebSocket questionEnd is PENDING_FE
+  - Abandoned/reconnect policy is PENDING_FE
+paths:
+  /documents/preview:
+    post:
+      operationId: previewDocument
+      summary: Preview uploaded portfolio/resume document
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                postingUrl:
+                  type: string
+                  description: Optional Wanted URL used for keyword-based truncation.
+      responses:
+        '200':
+          description: Preview result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentPreviewResponse'
+        '413':
+          $ref: '#/components/responses/Error'
+        '415':
+          $ref: '#/components/responses/Error'
+  /analysis-runs:
+    post:
+      operationId: createAnalysisRun
+      summary: Start an analysis run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAnalysisRunRequest'
+      responses:
+        '202':
+          description: Analysis run accepted or existing running run reused
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAnalysisRunResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /analysis-runs/{runId}:
+    get:
+      operationId: getAnalysisRun
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Analysis status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisRunResponse'
+        '404':
+          $ref: '#/components/responses/Error'
+  /analysis-runs/{runId}/events:
+    get:
+      operationId: streamAnalysisRunEvents
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Server-sent events stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /analysis-runs/{runId}/result:
+    get:
+      operationId: getAnalysisRunResult
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Analysis result. DB partial runs may still expose this result while FE status is failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisRunResultResponse'
+        '409':
+          $ref: '#/components/responses/Error'
+        '410':
+          $ref: '#/components/responses/Error'
+  /analysis-runs/{runId}/candidates:
+    get:
+      operationId: getAnalysisRunCandidates
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+        - name: page
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Candidate page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CandidatePageResponse'
+        '202':
+          description: Candidate page analysis is running
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyzingResponse'
+  /interviews:
+    post:
+      operationId: createInterview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInterviewRequest'
+      responses:
+        '201':
+          description: Interview created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateInterviewResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /interviews/{id}:
+    get:
+      operationId: getInterview
+      parameters:
+        - $ref: '#/components/parameters/InterviewId'
+      responses:
+        '200':
+          description: Interview detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterviewDetailResponse'
+        '404':
+          $ref: '#/components/responses/Error'
+  /interviews/{id}/report:
+    get:
+      operationId: getInterviewReport
+      parameters:
+        - $ref: '#/components/parameters/InterviewId'
+      responses:
+        '200':
+          description: Report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportResponse'
+        '202':
+          description: Report is generating
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeneratingResponse'
+        '409':
+          $ref: '#/components/responses/Error'
+  /interviews/{id}/retry:
+    post:
+      operationId: retryInterview
+      parameters:
+        - $ref: '#/components/parameters/InterviewId'
+      responses:
+        '201':
+          description: New interview from original inputs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateInterviewResponse'
+        '409':
+          $ref: '#/components/responses/Error'
+components:
+  parameters:
+    RunId:
+      name: runId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    InterviewId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+  responses:
+    Error:
+      description: Error envelope
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiError'
+  schemas:
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [reason, message]
+          properties:
+            reason:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+              additionalProperties: true
+    DocumentPreviewResponse:
+      type: object
+      required: [documentId, status, extractedGithubUrls, fileName, sizeBytes]
+      properties:
+        documentId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/DocumentExtractStatus'
+        fileName:
+          type: string
+        sizeBytes:
+          type: integer
+        extractedGithubUrls:
+          type: array
+          items:
+            type: string
+        truncated:
+          type: boolean
+        failureReason:
+          type: string
+          nullable: true
+    DocumentExtractStatus:
+      type: string
+      enum: [succeeded, partial, failed]
+    CreateAnalysisRunRequest:
+      type: object
+      required: [postingUrl]
+      properties:
+        postingUrl:
+          type: string
+        documentId:
+          type: string
+          format: uuid
+          nullable: true
+    CreateAnalysisRunResponse:
+      type: object
+      required: [runId, status]
+      properties:
+        runId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/RunStatus'
+        reused:
+          type: boolean
+    RunStatus:
+      type: string
+      enum: [running, completed, failed]
+    StepKey:
+      type: string
+      enum: [doc_extract, repo_select, repo_detail, jd_fetch, jd_extract, repo_analyze, match_score]
+    StepStatus:
+      type: string
+      enum: [pending, running, succeeded, failed]
+    AnalysisRunResponse:
+      type: object
+      required: [runId, status, progress, steps]
+      properties:
+        runId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/RunStatus'
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        steps:
+          type: array
+          items:
+            type: object
+            required: [key, status]
+            properties:
+              key:
+                $ref: '#/components/schemas/StepKey'
+              status:
+                $ref: '#/components/schemas/StepStatus'
+        failureReason:
+          type: string
+          nullable: true
+    AnalysisRunResultResponse:
+      type: object
+      required: [runId, status, repositories, analyzedCount, failedCount, failedRepositories]
+      properties:
+        runId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/RunStatus'
+        analyzedCount:
+          type: integer
+        failedCount:
+          type: integer
+        failedRepositories:
+          type: array
+          items:
+            type: object
+            required: [repositoryId, errorCode]
+            properties:
+              repositoryId:
+                type: string
+                format: uuid
+              errorCode:
+                type: string
+        repositories:
+          type: array
+          items:
+            $ref: '#/components/schemas/RepositoryCard'
+    CandidatePageResponse:
+      type: object
+      required: [runId, page, repositories]
+      properties:
+        runId:
+          type: string
+          format: uuid
+        page:
+          type: integer
+        repositories:
+          type: array
+          items:
+            $ref: '#/components/schemas/RepositoryCard'
+    RepositoryCard:
+      type: object
+      required: [repositoryId, fullName, name, status, recommended]
+      properties:
+        repositoryId:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        languages:
+          type: array
+          items:
+            type: object
+            required: [name, ratio]
+            properties:
+              name:
+                type: string
+              ratio:
+                type: number
+        topics:
+          type: array
+          items:
+            type: string
+        stars:
+          type: integer
+        forks:
+          type: integer
+        commitCount:
+          type: integer
+          nullable: true
+        userCommitCount:
+          type: integer
+          nullable: true
+        pushedAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [succeeded, partial, failed]
+        errorCode:
+          type: string
+          nullable: true
+        recommended:
+          type: boolean
+        candidateSource:
+          type: string
+          enum: [rule_filter, portfolio, both]
+        recommendReason:
+          type: string
+          nullable: true
+        matchScore:
+          type: number
+          nullable: true
+        matchedRequirementIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    AnalyzingResponse:
+      type: object
+      required: [status, retryAfter]
+      properties:
+        status:
+          type: string
+          enum: [analyzing]
+        retryAfter:
+          type: integer
+    CreateInterviewRequest:
+      type: object
+      required: [runId, repositoryIds]
+      properties:
+        runId:
+          type: string
+          format: uuid
+        repositoryIds:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items:
+            type: string
+            format: uuid
+    CreateInterviewResponse:
+      type: object
+      required: [interviewId]
+      properties:
+        interviewId:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          nullable: true
+          description: PENDING_FE if separate realtime session id is kept.
+    Persona:
+      type: string
+      enum: [tech_lead, hr_manager, domain_lead]
+    InterviewStatus:
+      type: string
+      enum: [preparing, preparing_failed, in_progress, completed, abandoned]
+    InterviewDetailResponse:
+      type: object
+      required: [id, status, currentTurn, totalTurns, turns]
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          nullable: true
+          description: PENDING_FE.
+        status:
+          $ref: '#/components/schemas/InterviewStatus'
+        currentTurn:
+          type: integer
+        totalTurns:
+          type: integer
+        remainingSeconds:
+          type: integer
+        turns:
+          type: array
+          items:
+            type: object
+            required: [turn, persona, question]
+            properties:
+              turn:
+                type: integer
+              persona:
+                $ref: '#/components/schemas/Persona'
+              question:
+                type: string
+              answer:
+                type: string
+                nullable: true
+    GeneratingResponse:
+      type: object
+      required: [status, retryAfter]
+      properties:
+        status:
+          type: string
+          enum: [generating]
+        retryAfter:
+          type: integer
+    ReportResponse:
+      type: object
+      required: [interviewId, totalScore, scores, agentFeedbacks, turns]
+      properties:
+        interviewId:
+          type: string
+          format: uuid
+        totalScore:
+          type: number
+          description: Score formula is PENDING_TEAM.
+        scores:
+          type: array
+          items:
+            type: object
+            required: [key, label, score]
+            properties:
+              key:
+                type: string
+              label:
+                type: string
+              score:
+                type: number
+                description: Score formula is PENDING_TEAM.
+        agentFeedbacks:
+          type: array
+          items:
+            type: object
+            required: [persona, strengths, improvements]
+            properties:
+              persona:
+                $ref: '#/components/schemas/Persona'
+              tags:
+                type: array
+                items:
+                  type: string
+              strengths:
+                type: array
+                items:
+                  type: string
+              improvements:
+                type: array
+                items:
+                  type: string
+        turns:
+          type: array
+          items:
+            type: object
+            required: [turn, persona, question]
+            properties:
+              turn:
+                type: integer
+              persona:
+                $ref: '#/components/schemas/Persona'
+              question:
+                type: string
+              answer:
+                type: string
+                nullable: true

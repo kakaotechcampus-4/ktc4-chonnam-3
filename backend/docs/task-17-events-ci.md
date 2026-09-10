@@ -1,26 +1,22 @@
 # task-17 — 지표 · CI · 배포
 
 > 선행: task-16
-> 설계 근거: [layer-rules.md](layer-rules.md) · [db-schema.md](db-schema.md)
+> 근거: `spec/backend/verification.md`
 
 ## 목표
 
-`events` 10종 로깅 + 지표 쿼리 + `backend-ci.yml` + 배포.
-
-## 확정본 반영 (설계 초기안 대비 변경)
-
-- 필수 지표 3개 — 평균 `depth`(꼬리질문 깊이), `tool_name IS NULL` vs 값 있음 비율(근거 조회가 실제로 도는지), `selection_source=ai_removed` 목록(매칭 로직 수정 근거).
+최소 이벤트 10종, 품질 지표 쿼리, CI 검증을 구현한다.
 
 ## 작업
 
-- [ ] TODO
+- events table은 event_name을 `VARCHAR + CHECK`로 제한한다.
+- Sprint 1 이벤트: `analysis_run_started`, `analysis_run_completed`, `analysis_run_failed`, `repo_recommended`, `repo_selected`, `interview_started`, `turn_asked`, `turn_answered`, `interview_completed`, `report_viewed`.
+- `interview_abandoned`는 `PENDING_FE`.
+- 이벤트 기록 실패는 핵심 트랜잭션을 실패시키지 않는다.
+- 지표 쿼리: 평균 depth, evidence tool 사용 비율, `selection_source=ai_removed` 목록, report_viewed count.
+- CI는 ruff, format check, mypy, pytest를 실행한다.
 
 ## 완료 조건
 
-- [ ] TODO
-
-## 커밋 메시지
-
-```
-TODO
-```
+- 고정 10개 밖의 event_name insert가 거부된다.
+- CI 명령 실행 결과를 PR에 남긴다.

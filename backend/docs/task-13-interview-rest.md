@@ -1,29 +1,22 @@
 # task-13 — 면접 REST
 
 > 선행: task-11
-> 설계 근거: [layer-rules.md](layer-rules.md) · [db-schema.md](db-schema.md)
+> 근거: `spec/backend/features/interview.md`
 
 ## 목표
 
-`POST /interviews`, `GET /interviews/{id}`, `/retry` + `sessionId` 발급.
-
-## 확정본 반영 (설계 초기안 대비 변경)
-
-- `job_posting_id` 가 **NOT NULL** 이다 (공고 필수).
-- `status` = `preparing` / `in_progress` / `completed` / `abandoned`. **`paused` 없음 — 세션 재개 미지원.**
-- 이탈은 `abandoned` + `abandoned_at_turn`. 미답변 턴은 `asked` 로 남긴다 (1차에 `timeout` 판정 배치를 만들지 않는다).
-- ⚠ `job_posting_id` NOT NULL 과 `unsupported_site` 의 "공고 없이 진행 유도" 가 충돌한다 — [db-schema.md](db-schema.md) 미결 절.
+면접 생성, 조회, 재시도 REST API를 구현한다.
 
 ## 작업
 
-- [ ] TODO
+- `POST /interviews`는 run당 활성 면접 1개만 허용한다.
+- repositoryIds는 최소 1개, 최대 5개다.
+- 선택 repo는 current run, public, accessible, eligible, L1 succeeded여야 한다.
+- 성공 직후 `interview_prep`을 enqueue한다.
+- `GET /interviews/{id}`는 preparing/preparing_failed/in_progress/completed/abandoned를 반환한다.
+- `/interviews/{id}/retry`는 completed/abandoned 원본만 허용하고 원본 입력을 복사한다.
+- WS 식별자 정책은 `PENDING_FE`로 유지한다.
 
 ## 완료 조건
 
-- [ ] TODO
-
-## 커밋 메시지
-
-```
-TODO
-```
+- invalid repository, too many, no selected, session limit, retry 상태 제한을 테스트한다.

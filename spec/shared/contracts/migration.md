@@ -1,19 +1,33 @@
-# 계약 이관 현황 — 2026-09-09 develop 조회 기준
+# 계약 이관 현황
 
-이 문서는 충돌을 추적한다. 기존 자료의 내용을 팀의 새 합의로 바꾸지 않는다.
+작성일: 2026-09-10
 
-| 항목 | 현재 자료 | 초안 처리 | 검수·승격 조건 |
-| --- | --- | --- | --- |
-| GET /me | FE 문서·MeResponse | 부분 OpenAPI + schema | FE·BE 필드/상태코드 확인, 실제 구현 테스트 |
-| 에러 봉투 | FE ApiError·BE error-reasons | 공통 구조만 schema | retryAfter optional, reason registry 검토 |
-| Persona | FE tech_lead/senior_developer/manager; BE 문서 tech_lead/hr_manager/domain_lead | enum 새로 생성하지 않음 | FE·AI 반영 시점 확인 |
-| 분석 StepKey | FE 4개; BE 문서 7개 | 이관 대기 | FE·BE·AI 단계 의미·표시 합의 |
-| 에러 reason | FE 구 이름; BE 문서 token_invalid 등 | reason은 string 유지 | 레지스트리 원본과 FE 표시 동시 갱신 |
-| WebSocket | FE 오디오·transcript; BE 문서 스프린트1 텍스트 | 메시지 schema 생성 보류 | 클라이언트 답변 메시지·오디오 제거 범위 확정 |
-| 부분 실패 | BE 내부 partial; FE RunStatus 3값 | 매핑 미확정 표시 | counts/failedRepositories 제안 채택 여부 |
-| AI 배치 | 현재 backend/app/agents·llm_tasks | spec/ai 명세·ai/CLAUDE.md 지침만 추가 | 코드 이동·별도 배포는 별도 결정 |
-| 모델·저장소 | pyproject에 anthropic 의존성 있음 | 모델 선정으로 해석하지 않음 | 실제 모델·provider·RAG 저장소 팀 확인 |
+이 문서는 기존 FE 문서, backend docs, context 기록에서 Sprint 1 FIX 계약으로 옮긴 항목과 보류 항목을 추적한다.
 
-검수 전 API 판단: FE 문서·타입을 기본으로 보되 BE의 합의 변경표를 함께 읽는다. 불일치 시 단독으로 구현 기준을 확정하지 않는다.
+| 항목 | 결정 | 상태 |
+| --- | --- | --- |
+| 계약 원본 | `spec/shared/contracts/openapi.yaml` | FIX |
+| API field casing | API camelCase, Python/DB snake_case | FIX |
+| Error envelope | `{ error: { reason, message, details } }` | FIX |
+| Sprint 1 면접 입력 | 텍스트-only | FIX |
+| Sprint 2 면접 입력 | 음성/STT/TTS 확장 | FIX |
+| WS 식별자 | `interviewId` 통일 vs 별도 `sessionId` | `PENDING_FE` |
+| `questionEnd` | 텍스트 WS에서 유지 여부 | `PENDING_FE` |
+| 이탈/복구 | disconnect, heartbeat, abandoned 자동 판정 | `PENDING_FE` |
+| DEVON JWT 전달 | HttpOnly cookie only vs body 포함 | `PENDING_FE` |
+| Partial run 매핑 | DB `partial` -> FE `failed`, result 조회 가능 | FIX |
+| Persona enum | `tech_lead`, `hr_manager`, `domain_lead` | FIX |
+| Analysis StepKey | 7개 step 유지 | FIX |
+| Document claims | Sprint 1 테이블 생성, row 생성/claim 추출은 Sprint 2 | FIX |
+| Evidence conflict | Sprint 1 `answer_vs_code`, Sprint 2 doc claims 확장 | FIX |
+| Report persona feedback | `interview_reports.feedback_json`으로 흡수 | FIX |
+| Report disagreement | Sprint 1 테이블 생성, API/row 생성은 Sprint 2 | FIX |
+| Knowledge seed tables | `score_criteria`, `prompt_versions`, `domain_question_frames`만 유지 | FIX |
+| Eval/feedback tables | `feedback_signals`, `eval_cases`, `eval_runs` Sprint 1 제외 | FIX |
+| Auth sessions | Sprint 1, Sprint 2 모두 제외 | FIX |
+| Wanted-only JD | Sprint 1 Wanted만 지원 | FIX |
+| Private repo | 지원하지 않음. 필드만 유지 | FIX |
+| Report score | 산정 근거와 저장 스케일 | `PENDING_TEAM` |
+| pgvector | 실제 vector 검색 필요 여부 | `PENDING_AI` |
 
-참고 원본: frontend/docs/api-spec.md, frontend/src/types/api.ts, backend/docs/api-spec.md, backend/docs/error-reasons.md.
+기존 자료는 참고 기록으로 남긴다. 구현자는 이 문서의 FIX/PENDING 상태를 보고 범위를 판단한다.
