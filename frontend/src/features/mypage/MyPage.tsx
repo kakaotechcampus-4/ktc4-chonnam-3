@@ -109,24 +109,24 @@ export default function MyPage() {
               <img
                 src={profile.avatarUrl}
                 alt={profile.name}
-                className="h-16 w-16 shrink-0 rounded-full object-cover"
+                className="h-14 w-14 shrink-0 rounded-full object-cover"
               />
-              <dl className="grid flex-1 grid-cols-2 gap-x-8 gap-y-4 text-sm">
-                <div>
-                  <dt className="text-muted">이름</dt>
-                  <dd className="mt-1 font-semibold">{profile.name}</dd>
+              <dl className="grid flex-1 grid-cols-2 gap-x-8 gap-y-3 text-sm">
+                <div className="flex gap-2">
+                  <dt className="w-16 shrink-0 text-muted">이름</dt>
+                  <dd className="font-semibold">{profile.name}</dd>
                 </div>
-                <div>
-                  <dt className="text-muted">아이디</dt>
-                  <dd className="mt-1 font-semibold">{profile.loginId ?? '-'}</dd>
+                <div className="flex gap-2">
+                  <dt className="w-16 shrink-0 text-muted">아이디</dt>
+                  <dd className="font-semibold">{profile.loginId ?? '-'}</dd>
                 </div>
-                <div>
-                  <dt className="text-muted">가입일</dt>
-                  <dd className="mt-1 font-semibold">{formatDate(profile.joinedAt)}</dd>
+                <div className="flex gap-2">
+                  <dt className="w-16 shrink-0 text-muted">가입일</dt>
+                  <dd className="font-semibold">{formatDate(profile.joinedAt)}</dd>
                 </div>
-                <div>
-                  <dt className="text-muted">GitHub</dt>
-                  <dd className="mt-1 flex items-center gap-2 font-semibold">
+                <div className="flex items-center gap-2">
+                  <dt className="w-16 shrink-0 text-muted">GitHub</dt>
+                  <dd className="flex items-center gap-2 font-semibold">
                     {profile.github.linked ? (
                       <>
                         <span>@{profile.github.login}</span>
@@ -138,6 +138,10 @@ export default function MyPage() {
                       <span className="text-muted">연동 안 됨</span>
                     )}
                   </dd>
+                </div>
+                <div className="flex gap-2">
+                  <dt className="w-16 shrink-0 text-muted">희망 직무</dt>
+                  <dd className="font-semibold">{profile.desiredPosition ?? '-'}</dd>
                 </div>
               </dl>
             </div>
@@ -168,54 +172,44 @@ export default function MyPage() {
           )}
 
           {completedInterviews.length > 0 && (
-            <table className="mt-6 w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-line-soft text-muted">
-                  <th className="pb-2 font-medium">일시</th>
-                  <th className="pb-2 font-medium">공고</th>
-                  <th className="pb-2 font-medium">사용 레포</th>
-                  <th className="pb-2 font-medium">점수</th>
-                  <th className="pb-2" />
-                </tr>
-              </thead>
-              <tbody>
-                {completedInterviews.map((item) => (
-                  <tr key={item.id} className="border-b border-line-soft last:border-0">
-                    <td className="py-3 align-top text-muted">{formatDate(item.completedAt)}</td>
-                    <td className="py-3 align-top">
-                      <p className="font-semibold">
-                        {item.companyName} · {item.position}
-                      </p>
-                    </td>
-                    <td className="py-3 align-top">
-                      <div className="flex flex-wrap gap-1">
-                        {item.repositoryNames.map((name) => (
-                          <span
-                            key={name}
-                            className="rounded-md bg-paper px-2 py-0.5 font-mono text-xs text-muted"
-                          >
-                            {name}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="py-3 align-top">
-                      <span className="font-bold">{item.totalScore}</span>
-                      <span className="text-muted">/100</span>
-                    </td>
-                    <td className="py-3 align-top text-right">
-                      <button
-                        type="button"
-                        className="font-medium text-accent hover:underline"
-                        onClick={() => navigate(`/interview/${item.id}/report`)}
+            <ul className="mt-6 divide-y divide-line-soft text-sm">
+              {completedInterviews.map((item) => (
+                <li key={item.id} className="flex items-center justify-between gap-4 py-3">
+                  <div className="min-w-0 shrink-0">
+                    <p className="font-semibold">
+                      {item.companyName} · {item.position}
+                    </p>
+                    <p className="mt-1 text-xs text-muted">
+                      {formatDate(item.completedAt)} · {item.techStack.join('/')} ·{' '}
+                      {item.careerLevel}
+                    </p>
+                  </div>
+                  <div className="flex flex-1 flex-wrap justify-center gap-1">
+                    {item.repositoryNames.map((name) => (
+                      <span
+                        key={name}
+                        className="rounded-md bg-paper px-2 py-0.5 font-mono text-xs text-muted"
                       >
-                        리포트 보기 →
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        {name}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="font-bold">
+                      {item.totalScore}
+                      <span className="text-muted">/100</span>
+                    </span>
+                    <button
+                      type="button"
+                      className="font-medium text-accent hover:underline"
+                      onClick={() => navigate(`/interview/${item.id}/report`)}
+                    >
+                      리포트 보기 →
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           )}
 
           {totalPages > 1 && (
