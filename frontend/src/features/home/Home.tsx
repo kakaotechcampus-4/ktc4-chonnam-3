@@ -5,15 +5,6 @@ import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import type { ApiError } from '@/types/api';
 
-function formatDate(value: string | null) {
-  if (!value) return '-';
-  return new Date(value).toLocaleDateString('ko-KR', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-}
-
 export default function Home() {
   const navigate = useNavigate();
 
@@ -72,18 +63,6 @@ export default function Home() {
           <p className="mt-4 text-sm text-error">정보를 불러오지 못했어요.</p>
         )}
 
-        <button
-          type="button"
-          onClick={() => navigate('/interview/new')}
-          className="mt-6 flex w-full items-center justify-between rounded-card border border-line-soft bg-surface px-6 py-5 text-left hover:bg-accent-soft"
-        >
-          <div>
-            <p className="font-semibold">AI 모의면접</p>
-            <p className="mt-1 text-sm text-muted">프로젝트 기반 실전 면접</p>
-          </div>
-          <span className="text-accent">→</span>
-        </button>
-
         {home && (
           <section className="mt-6 rounded-card border border-line-soft bg-surface p-6">
             {home.analysisStatus === 'syncing' && (
@@ -115,82 +94,72 @@ export default function Home() {
             {home.analysisStatus === 'completed' && home.analysis && (
               <div>
                 <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-semibold text-muted">
+                  <h2 className="text-sm font-semibold">
                     GitHub 분석 · 레포 {home.analysis.basedOnRepoCount}개 기반
                   </h2>
+                  <a href="#" className="text-xs text-muted hover:underline">
+                    연동 관리
+                  </a>
                 </div>
 
-                <div className="mt-4">
-                  <p className="text-xs font-medium text-muted">주로 사용하는 언어</p>
-                  <div className="mt-2 space-y-2">
-                    {home.analysis.languages.map((lang) => (
-                      <div key={lang.name} className="flex items-center gap-3 text-sm">
-                        <span className="w-24 shrink-0">{lang.name}</span>
-                        <div className="h-1.5 flex-1 rounded-full bg-line-soft">
-                          <div
-                            className="h-1.5 rounded-full bg-accent"
-                            style={{ width: `${lang.ratio}%` }}
-                          />
+                <div className="mt-4 grid grid-cols-2 gap-8">
+                  <div>
+                    <p className="text-xs font-medium text-muted">주로 사용하는 언어</p>
+                    <div className="mt-3 space-y-2.5">
+                      {home.analysis.languages.map((lang) => (
+                        <div key={lang.name} className="flex items-center gap-3 text-sm">
+                          <span className="w-16 shrink-0">{lang.name}</span>
+                          <div className="h-1.5 flex-1 rounded-full bg-line-soft">
+                            <div
+                              className="h-1.5 rounded-full bg-accent"
+                              style={{ width: `${lang.ratio}%` }}
+                            />
+                          </div>
+                          <span className="w-8 shrink-0 text-right text-muted">
+                            {lang.ratio}%
+                          </span>
                         </div>
-                        <span className="w-10 shrink-0 text-right text-muted">
-                          {lang.ratio}%
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-medium text-muted">주요 프로젝트 유형</p>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      {home.analysis.projectTypes.map((type) => (
+                        <span
+                          key={type}
+                          className="rounded-md bg-paper px-3 py-2 text-center text-xs text-ink"
+                        >
+                          {type}
                         </span>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                {home.analysis.projectTypes.length > 0 && (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {home.analysis.projectTypes.map((type) => (
-                      <span
-                        key={type}
-                        className="rounded-full bg-paper px-3 py-1 text-xs text-muted"
-                      >
-                        {type}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                <p className="mt-4 text-sm text-ink">{home.analysis.roleSummary}</p>
+                <p className="mt-5 border-t border-line-soft pt-4 text-sm text-muted">
+                  {home.analysis.roleSummary}
+                </p>
               </div>
             )}
           </section>
         )}
 
-        {home && home.recentInterviews.length > 0 && (
-          <section className="mt-6 rounded-card border border-line-soft bg-surface p-6">
-            <h2 className="text-sm font-semibold text-muted">최근 면접</h2>
-            <ul className="mt-4 divide-y divide-line-soft">
-              {home.recentInterviews.map((item) => (
-                <li key={item.id} className="flex items-center justify-between py-3 text-sm">
-                  <div>
-                    <p className="font-semibold">
-                      {item.companyName} · {item.position}
-                    </p>
-                    <p className="mt-1 text-muted">{formatDate(item.completedAt)}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {item.totalScore != null && (
-                      <span className="font-bold">
-                        {item.totalScore}
-                        <span className="text-muted">/100</span>
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      className="font-medium text-accent hover:underline"
-                      onClick={() => navigate(`/interview/${item.id}/report`)}
-                    >
-                      리포트 보기 →
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        <button
+          type="button"
+          onClick={() => navigate('/interview/new')}
+          className="mt-6 flex w-full items-center gap-4 rounded-card border border-line-soft bg-surface px-6 py-5 text-left hover:bg-accent-soft"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-white">
+            ✦
+          </span>
+          <span className="flex-1">
+            <p className="font-semibold">AI 모의면접</p>
+            <p className="mt-1 text-sm text-muted">프로젝트 기반 실전 면접</p>
+          </span>
+          <span className="text-accent">→</span>
+        </button>
       </main>
     </div>
   );
