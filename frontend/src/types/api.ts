@@ -1,7 +1,12 @@
 // 1. enum 타입
 
-export type AnalysisStatus = 'no_repository' | 'no_interview' | 'completed';
-export type InterviewStatus = 'in_progress' | 'completed' | 'abandoned';
+export type AnalysisStatus = 'syncing' | 'no_repository' | 'no_interview' | 'completed';
+export type InterviewStatus =
+  | 'preparing'
+  | 'preparing_failed'
+  | 'in_progress'
+  | 'completed'
+  | 'abandoned';
 export type RunStatus = 'running' | 'completed' | 'failed';
 export type StepKey = 'fetch_repos' | 'extract_jd' | 'match_score' | 'prepare_result';
 export type PrepareStepKey = 'analyze_repo' | 'build_persona' | 'compose_question' | 'set_criteria';
@@ -64,15 +69,37 @@ export type HomeResponse = {
   recentInterviews: RecentInterview[];
 };
 
-// 7 마이페이지 GET /me/interviews
+// 1a 마이페이지 GET /me/profile
+
+export type MeProfileResponse = {
+  name: string;
+  avatarUrl: string;
+  loginId: string | null;
+  joinedAt: string;
+  desiredPosition: string | null;
+  github: {
+    linked: boolean;
+    login: string | null;
+    publicRepoCount: number | null;
+  };
+  interviewSummary: {
+    totalCount: number;
+    averageScore: number | null;
+  };
+};
+
+// 1a 마이페이지 GET /me/interviews
 
 export type InterviewSummary = {
   id: string;
   position: string;
+  companyName: string;
+  techStack: string[];
+  careerLevel: string;
   repositoryNames: string[];
   status: InterviewStatus;
   totalScore: number | null;
-  startedAt: string;
+  startedAt: string | null;
   completedAt: string | null;
 };
 
@@ -81,6 +108,7 @@ export type InterviewListResponse = {
   total: number;
   page: number;
   size: number;
+  averageScore: number | null;
 };
 
 // 4-v2 공고 입력 POST /analysis-runs
