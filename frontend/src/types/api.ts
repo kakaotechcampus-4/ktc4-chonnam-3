@@ -76,6 +76,7 @@ export type MeProfileResponse = {
   avatarUrl: string;
   loginId: string | null;
   joinedAt: string;
+  desiredPosition: string | null;
   github: {
     linked: boolean;
     login: string | null;
@@ -93,6 +94,8 @@ export type InterviewSummary = {
   id: string;
   position: string;
   companyName: string;
+  techStack: string[];
+  careerLevel: string;
   repositoryNames: string[];
   status: InterviewStatus;
   totalScore: number | null;
