@@ -11,3 +11,7 @@
 - 대체 관계: 이전 또는 후속 결정 링크
 
 팀 내부 결정만 기록한다. 계약·용어 영향이 있으면 spec/shared/decisions로 승격하고 이곳에는 링크를 둔다.
+
+## 현재 결정
+
+- [0001 — 서버 상태 관리: TanStack Query 채택](0001-tanstack-query.md)
