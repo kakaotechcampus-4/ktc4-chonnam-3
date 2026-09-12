@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import type { ApiError } from '@/types/api';
+import { isApiError } from '@/types/api';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -13,9 +13,12 @@ const queryClient = new QueryClient({
   },
   queryCache: new QueryCache({
     onError: (error) => {
-      const err = error as ApiError;
-      if (err?.error?.reason === 'unauthenticated') {
-        window.location.href = '/login';
+      if (isApiError(error)) {
+        if (error.error.reason === 'unauthenticated') {
+          window.location.href = '/login';
+        }
+      } else {
+        console.error('Unexpected non-API error', error);
       }
     },
   }),

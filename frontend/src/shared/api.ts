@@ -1,16 +1,17 @@
-import type {
-  ApiError,
-  MeResponse,
-  HomeResponse,
-  InterviewListResponse,
-  CreateAnalysisRunResponse,
-  AnalysisRunResponse,
-  AnalysisResultResponse,
-  CreateInterviewRequest,
-  CreateInterviewResponse,
-  InterviewDetailResponse,
-  ReportResponse,
-  FeedbackDisagreementRequest,
+import {
+  isApiError,
+  type ApiError,
+  type MeResponse,
+  type HomeResponse,
+  type InterviewListResponse,
+  type CreateAnalysisRunResponse,
+  type AnalysisRunResponse,
+  type AnalysisResultResponse,
+  type CreateInterviewRequest,
+  type CreateInterviewResponse,
+  type InterviewDetailResponse,
+  type ReportResponse,
+  type FeedbackDisagreementRequest,
 } from '@/types/api';
 
 const BASE = '/api';
@@ -22,7 +23,24 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
-    const error: ApiError = await res.json();
+    const text = await res.text();
+    let parsed: unknown;
+    try {
+      parsed = text ? JSON.parse(text) : undefined;
+    } catch {
+      parsed = undefined;
+    }
+
+    const error: ApiError = isApiError(parsed)
+      ? { ...parsed, status: res.status }
+      : {
+          status: res.status,
+          error: {
+            reason: 'unknown_error',
+            message: text || res.statusText || `HTTP ${res.status}`,
+          },
+        };
+
     throw error;
   }
 
