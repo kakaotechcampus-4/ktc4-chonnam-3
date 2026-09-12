@@ -35,22 +35,73 @@ POST /analysis-runs (multipart)
 worker: interview_prep
   for step in [doc_extract, repo_select, repo_detail,
                jd_fetch, jd_extract, repo_analyze, match_score]:
-      emit(step, 'running')     # ① UPDATE analysis_jobs.steps  ② Redis HSET  ③ PUBLISH
+      emit(step, 'running')     # ① UPDATE + COMMIT  ② Redis HSET  ③ PUBLISH
       ...작업...
       emit(step, 'completed')
-  UPDATE status='succeeded' ; PUBLISH {"type":"completed"}
-  실패 시: UPDATE status='failed', error_code=? ; PUBLISH {"type":"failed","reason":...}
+  UPDATE status='succeeded' + COMMIT ; PUBLISH {"type":"completed"}
+  실패 시: UPDATE status='failed', error_code=? + COMMIT ; PUBLISH {"type":"failed","reason":...}
 ```
 
-⚠ **`emit()` 은 Postgres UPDATE → Redis → PUBLISH 순서를 지킨다.**
-반대로 하면 SSE 로 `completed` 를 받은 클라이언트가 `GET /analysis-runs/{runId}` 에서 아직
-`running` 을 본다.
+### `emit()` 의 커밋 경계
+
+⚠ **`emit()` 은 Postgres 커밋 완료 → Redis → PUBLISH 순서를 지킨다.** `UPDATE` 실행이 아니라
+**커밋**이 기준이다.
+
+| 순서 | 결과 |
+|---|---|
+| 커밋 **전**에 PUBLISH | SSE 로 `completed` 를 받은 클라이언트가 `GET /analysis-runs/{runId}` 에서 아직 `running` 을 본다. 화면에 "완료" 가 떴는데 결과가 없다 |
+| 커밋 **후**에 Redis 실패 | Redis 스냅샷에 이전 상태가 남는다. **job 은 실패시키지 않고 로그만 남긴다** |
+
+두 번째를 감수하는 근거는 [redis-keys.md](redis-keys.md) 의 원칙이다 — **진실은 Postgres,
+Redis 는 미러.** Redis 갱신 실패는 표시 지연이지 데이터 손실이 아니다. 3절의 SSE 초기 상태를
+Postgres 에서 읽는 것이 이 실패에 대한 복구 경로다.
 
 ### 락 키에 `jobType` 이 들어가는 이유
 
 M1 `initial_sync` 는 연동 직후 백그라운드로 돈다. 사용자가 바로 공고를 입력하면 M2 와 겹치는데,
 사용자 단일 락으로 두면 **정상 흐름이 `run_in_progress` 로 막힌다.**
 DB 부분 유니크도 `(user_id, job_type) WHERE status IN ('queued','running')` 이다.
+
+### DB 는 썼는데 큐에 못 넣으면 — reaper
+
+`INSERT analysis_jobs` 와 `arq.enqueue` 는 **서로 다른 저장소에 연달아 쓰는 것(dual-write)** 이다.
+둘 다 성공하거나 둘 다 실패하는 것을 보장할 방법이 없다. 사이에서 죽으면:
+
+```
+INSERT analysis_jobs (queued)   ✓ 커밋됨
+arq.enqueue(...)                ✗ 네트워크 장애 · 인스턴스 종료
+```
+
+- 워커가 영영 집어가지 않는다 → 4-2-v2 진행바가 멈춘 채로 남는다
+- 사용자가 새로 시도해도 **API 의 `INSERT` 가 부분 유니크 인덱스에 막혀 `409 run_in_progress`**
+  가 된다 (`(user_id, job_type) WHERE status IN ('queued','running')`)
+
+⚠ **막히는 주체는 워커가 아니라 API 다.** 유니크 인덱스는 Postgres 제약이라 Redis · 워커와
+무관하고, 새 요청은 enqueue 단계까지 가지도 못한다.
+
+**reaper 로 푼다.** 주기적으로 `analysis_jobs` 와 큐 상태를 대조해, `queued` 인데 큐에 없는
+작업을 다시 등록한다. 4.3 절의 `abandoned` 판정 cron 과 같은 주기 작업에 얹는다 — 새 cron 을
+만들지 않는다.
+
+### 중복 실행을 막는 3중 방어
+
+ARQ 는 **at-least-once** 다. 워커가 작업 도중 죽으면 같은 job 이 다시 실행될 수 있고, reaper 의
+재등록도 중복 가능성을 만든다. **중복을 0으로 만드는 것이 아니라 중복돼도 안전한 것**이 목표다.
+
+| 계층 | 방법 | 막는 것 |
+|---|---|---|
+| 큐 | `arq.enqueue(..., _job_id=f"{job_type}:{run_id}")` | 같은 run 이 큐에 두 번 들어가는 것 |
+| 태스크 진입 | `analysis_jobs.status` 확인 → 이미 `running` 이면 즉시 종료 | 살아 있는 워커와의 충돌 |
+| DB | `repo_analyses` UNIQUE + `ON CONFLICT DO NOTHING` | 두 워커가 같은 결과를 중복 저장하는 것 |
+
+세 번째의 `UNIQUE (repository_id, analysis_level, head_sha, prompt_version)` 가 **자연 멱등 키**다.
+중복 실행돼도 LLM 비용만 낭비되고 데이터는 깨지지 않는다.
+
+⚠ 두 번째에는 미결이 있다. `running` 으로 남은 행이 **정말 실행 중인지, 워커가 죽어서 남은
+것인지** 구분해야 한다. 워커 하트비트와 lease/lock TTL 중 어느 쪽으로 갈지는 미결이다.
+
+> 1절의 `analysis_jobs.retry_count` 는 여기서 말하는 재시도가 아니다. ARQ 재시도 · reaper 재등록과
+> 별개로 **사용자가 누른 재시도** 횟수다. 섞지 않는다.
 
 ### 일부 실패는 job 실패가 아니다
 
@@ -62,15 +113,43 @@ FE 에 무엇으로 내려보낼지는 미결이다(같은 문서 미결 절).
 
 `sse-starlette` + `realtime/bus.py`. 접속 시 순서:
 
-1. `run:{runId}:steps` (없으면 Postgres) 를 읽어 **현재 step 상태를 먼저 흘려보낸다**
-2. 그 다음 `run:{runId}:events` 구독
+1. `run:{runId}:events` 를 **먼저 구독하고, 구독이 실제로 성립한 것을 확인한다**
+2. 그다음 **Postgres** 에서 현재 step 상태를 읽어 흘려보낸다
 3. 이미 종료된 run 이면 `completed` / `failed` 하나 보내고 스트림을 닫는다
+4. 구독 이후 들어온 이벤트를 이어서 흘려보낸다 — step 단위로 중복을 제거한다
+
+⚠ **구독이 먼저다.** 반대로 하면 상태를 읽은 뒤 구독하기 전 사이에 run 이 끝났을 때
+`completed` 를 영영 못 받는다.
+
+```
+(뒤집힌 순서 — 이렇게 하면 안 된다)
+  스냅샷 읽음  → "repo_analyze 진행 중"
+       ↓ (이 틈에)
+  워커 완료    → PUBLISH "completed"    구독 전이라 아무도 못 받는다
+  구독 시작    → 이미 지나간 방송
+→ 진행바가 6/7 에서 멈춘 채 남는다
+```
+
+마지막 step(`match_score`)이 순식간에 끝나는 구조라 이 틈에 빠질 확률이 낮지 않다.
+
+순서를 뒤집으면 구독 직후 이벤트와 스냅샷이 겹칠 수 있다. **step 단위 중복 제거**로 처리한다 —
+같은 step 의 같은 상태는 한 번만 내보낸다.
+
+⚠ **초기 상태는 Redis 가 아니라 Postgres 에서 읽는다.** 2절의 커밋 경계에서 "커밋 후 Redis 갱신
+실패" 를 감수하기로 했으므로, `run:{runId}:steps` 에는 이전 상태가 남아 있을 수 있다.
+`GET /analysis-runs/{runId}` 도 같은 이유로 Postgres 를 본다. Redis 스냅샷은 실측에서 조회 부하가
+문제가 될 때 도입한다(미결).
+
+Pub/Sub 은 **at-most-once** 라 구독 이후에도 유실이 가능하다. 종료 상태를 확인할 때까지
+Postgres 를 주기적으로 재확인하는 폴백을 둔다. 이벤트 보관과 재생까지 필요해지면 Redis Streams
+전환을 검토한다(미결).
 
 `estimatedSeconds` 는 `analysis_jobs.estimated_seconds`. 초기값은 상수(20), 이후 완료 run 의
 소요시간 중앙값으로 갱신한다.
 
-⚠ SSE 는 프록시(Vercel/Nginx)에서 버퍼링되면 죽는다. `X-Accel-Buffering: no` +
-`Cache-Control: no-store` 를 응답 헤더에 넣고, 15초 주기 keep-alive 코멘트(`: ping`)를 보낸다.
+⚠ SSE 는 프록시·CDN 에서 버퍼링되면 죽는다. CloudFront 는 해당 behavior 의 **자동 압축을 꺼야
+한다** ([deploy.md](deploy.md) 3절 ③). 응답 헤더에 `X-Accel-Buffering: no` +
+`Cache-Control: no-store` 를 넣고, 15초 주기 keep-alive 코멘트(`: ping`)를 보낸다.
 
 ---
 
@@ -128,6 +207,16 @@ FE 에 무엇으로 내려보낼지는 미결이다(같은 문서 미결 절).
 WS `disconnect` 만으로 `abandoned` 를 확정하지 않는다 (새로고침·터널 끊김과 구분 불가).
 `ws:lock` 이 하트비트 없이 만료되고 재연결이 없으면 그때 `abandoned` 로 넘긴다
 → 주기 작업(`arq` cron) 1개가 필요하다.
+
+이 cron 이 두 가지를 같이 본다. **하나만 만든다.**
+
+| 대상 | 판정 |
+|---|---|
+| `interview_sessions` | `ws:lock` 만료 + 재연결 없음 → `abandoned` |
+| `analysis_jobs` | `queued` 인데 큐에 없음 → 재등록 (2절 reaper) |
+
+⚠ WS 하트비트 주기는 ALB 유휴 타임아웃보다 짧아야 한다. 기본값 60초와 `ws:lock` 60초가
+경계에서 겹치므로 [deploy.md](deploy.md) 3절 ④ 에서 같이 조정한다.
 
 **North Star(완주율)가 이 판정 하나에 걸려 있다.**
 
