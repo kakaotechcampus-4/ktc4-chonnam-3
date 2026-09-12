@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
+import Header from '@/shared/components/Header';
 import type { ApiError } from '@/types/api';
 
 export default function Home() {
@@ -21,30 +22,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-paper text-ink">
-      <header className="flex items-center justify-between border-b border-line-soft bg-surface px-6 py-3">
-        <div className="flex items-center gap-8">
-          <span className="text-lg font-bold">DEVON</span>
-          <nav className="flex items-center gap-1 text-sm">
-            <span className="rounded-full bg-accent-soft px-3 py-1.5 font-medium text-accent">
-              홈
-            </span>
-            <a href="/interview/new" className="rounded-full px-3 py-1.5 text-muted hover:bg-paper">
-              모의면접
-            </a>
-            <a href="/mypage" className="rounded-full px-3 py-1.5 text-muted hover:bg-paper">
-              마이페이지
-            </a>
-          </nav>
-        </div>
-        <div className="flex items-center gap-3">
-          {home?.githubLinked && (
-            <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-accent">
-              GitHub 연동됨
-            </span>
-          )}
-          <span className="h-8 w-8 rounded-full bg-accent-soft" />
-        </div>
-      </header>
+      <Header active="home" githubLinked={home?.githubLinked} />
 
       <main className="mx-auto max-w-3xl px-6 py-10">
         <h1 className="text-2xl font-bold">
