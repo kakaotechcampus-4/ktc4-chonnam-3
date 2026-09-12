@@ -20,9 +20,12 @@
 
 호출 방향은 한 방향이다.
 
+AI 코드 배치는 사용자가 승인한 [AI 패키지 설계](../ai/designs/2026-09-12-ai-package-structure.md)를 따른다. `ai/src/devon_ai/`가 AI 구현 원본이며 기존 backend 파일은 연결 경계로 유지한다. 별도 서비스·API·DB 계약 변경은 아니다.
+
 ```text
 router -> service -> {queries | agents | llm_tasks | integrations | realtime}
 workers -> features/*/pipeline -> service/queries/llm_tasks/integrations
+backend AI 연결 -> devon_ai (역방향 import 금지)
 ```
 
 | 경로 | 책임 |
@@ -30,8 +33,10 @@ workers -> features/*/pipeline -> service/queries/llm_tasks/integrations
 | `backend/app/features/*/router.py` | 요청 검증, dependency, 응답 직렬화 |
 | `backend/app/features/*/service.py` | 비즈니스 로직과 트랜잭션 경계. commit 책임 |
 | `backend/app/features/*/queries.py` | DB 읽기/쓰기 쿼리. GitHub repository와 혼동되므로 `repository.py` 금지 |
-| `backend/app/agents/director/` | 면접 Director 하나. Evidence 조회는 Director tool |
-| `backend/app/llm_tasks/` | 단발 LLM 작업: repo shallow/deep, JD extract, answer analysis, report, profile summary |
+| `ai/src/devon_ai/agents/director/` | 단일 Director와 주입된 Evidence 도구 사용; 현재 골격 |
+| `ai/src/devon_ai/llm_tasks/` | repo shallow/deep, answer analysis, report의 AI 원본; 현재 골격 |
+| `backend/app/agents/director/` | 향후 Director 연결과 실제 도구 adapter 경계; 권한·I/O는 BE |
+| `backend/app/llm_tasks/` | AI task 연결, DB prompt loader, Wanted 규칙 변환·프로필 확정 집계의 BE 경계 |
 | `backend/app/integrations/` | GitHub, Wanted, 문서 추출, LLM client 등 외부 I/O |
 | `backend/app/realtime/` | SSE, WebSocket, Redis bus/registry |
 | `backend/app/workers/` | ARQ task adapter. 실제 로직은 pipeline/service에 둔다 |

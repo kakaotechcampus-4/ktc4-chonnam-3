@@ -1,5 +1,5 @@
-"""L2 정밀 분석 (M4-a). is_selected=true 인 레포만. architecture_summary / notable_areas 생성,
-tech_stack 에 verified 보강. shallow 에서는 architecture_summary 가 항상 NULL.
+"""Backend adapter boundary for ``devon_ai.llm_tasks.repo_deep``.
 
-확정본 §2 repo_analyses / task-15
+The canonical AI module will own deep-analysis logic. The backend retains prompt loading,
+provider I/O, orchestration, and persistence responsibilities.
 """

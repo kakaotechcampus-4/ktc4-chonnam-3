@@ -5,6 +5,7 @@
 ```text
 router -> service -> {queries | agents | llm_tasks | integrations | realtime}
 workers -> features/*/pipeline
+backend AI 연결 -> devon_ai
 ```
 
 | 계층 | 책임 |
@@ -13,13 +14,15 @@ workers -> features/*/pipeline
 | `features/*/service.py` | 비즈니스 로직, 트랜잭션, commit |
 | `features/*/queries.py` | DB 쿼리 |
 | `features/*/pipeline/` | ARQ에서 호출할 긴 흐름 |
-| `agents/director/` | 단일 Interview Director와 tool loop |
-| `llm_tasks/` | 단발 LLM 호출 |
+| `agents/director/` | AI 패키지 Director의 BE 연결·실제 도구 adapter 경계 |
+| `llm_tasks/` | AI task 연결, prompt 로드, BE 소유 규칙 변환·집계 |
 | `integrations/` | 외부 API/파일/LLM client |
 | `realtime/` | SSE, WS, Redis bus |
 | `workers/` | ARQ adapter |
 
 `repository.py` 파일명은 쓰지 않는다. GitHub repository 도메인과 혼동되므로 DB 접근 모듈은 `queries.py`로 둔다.
+
+위 표는 `backend/app/` 기준이다. [승인된 패키지 설계](../../spec/ai/designs/2026-09-12-ai-package-structure.md)에 따라 Director와 네 LLM task의 AI 원본은 `ai/src/devon_ai/`에 둔다. 기존 BE 경로는 삭제하지 않고 향후 연결 계층으로 유지하며, 양쪽에 같은 로직을 구현하지 않는다. 현재 두 영역 모두 기능 함수가 없는 골격이다. AI 패키지는 BE·ORM·Redis·ARQ·구체 provider를 역으로 import하지 않는다.
 
 ## 금지
 

@@ -2,6 +2,8 @@
 
 카카오테크 캠퍼스 4기 2단계 팀 프로젝트 (전남대 3팀) BE.
 
+AI 원본은 [ai/src/devon_ai](../ai/src/devon_ai/)의 로컬 Python 패키지로 분리한다. backend의 API·ARQ worker가 같은 프로세스 안에서 import하며 별도 AI 서버는 없다. [승인 설계](../spec/ai/designs/2026-09-12-ai-package-structure.md)와 [AI 개발 안내](../ai/README.md)를 함께 읽는다. 현재 AI 모듈과 BE 실행 모듈은 기능 함수가 없는 골격이므로 아래 서비스 실행 예시는 실제 기동 성공을 뜻하지 않는다.
+
 설계 문서는 [`docs/`](docs/) 안에 있다.
 
 | 문서 | 내용 |
@@ -24,6 +26,8 @@
 - uv (의존성) / ruff · mypy / pytest
 
 ## 시작하기
+
+`backend/`만 따로 복사하지 않고 형제 `ai/`를 포함한 저장소에서 작업한다. `uv sync --locked --python 3.12`는 `../ai`를 로컬 editable 의존성으로 설치한다. AI의 의존성·metadata 변경 시 두 프로젝트의 lock을 확인한다. Docker build context도 저장소 루트를 사용하며, 이미지 내부에는 `/srv/backend`와 `/srv/ai` 형제 경로를 유지한다.
 
 ```bash
 git clone <repo-url>
@@ -62,9 +66,9 @@ app/
 ├─ shared/          # CamelModel, enums, 페이지네이션, clock
 ├─ features/        # 도메인별 API (auth, me, analysis, interview, report) — FE src/features 와 1:1
 │  └─ analysis/pipeline/   # job_type 3종 + steps/ 7개
-├─ agents/          # ★ Director 하나뿐. DB 세션을 받지 않는다
-│  └─ director/     # agent.py + tools.py (Evidence Tool 3종)
-├─ llm_tasks/       # 단발 LLM 호출 (Agent 아님). prompt_loader 만 DB 세션을 받는다
+├─ agents/          # AI 패키지 연결 예정 경계. Director 원본은 ../ai/src/devon_ai
+│  └─ director/     # agent.py + 실제 Evidence 도구 adapter 경계
+├─ llm_tasks/       # AI task 연결, prompt_loader, BE 규칙 변환·집계
 ├─ integrations/    # 외부 I/O (github, llm, jd, extract). DB 를 모른다
 ├─ realtime/        # Redis pub/sub, SSE, WS 레지스트리
 └─ workers/         # ARQ WorkerSettings + tasks (얇은 껍데기)
@@ -72,8 +76,10 @@ app/
 docs/               # db-schema, error-reasons, redis-keys, task-01~17
 migrations/         # Alembic
 scripts/            # 도메인 지식 시드
-tests/              # contract(api.ts 대조) / features / agents / llm_tasks
+tests/              # 공개 계약 / features / agents(BE 설치 연결) / llm_tasks
 ```
+
+AI 자체 모듈·구조 테스트는 `../ai/src/devon_ai/`와 `../ai/tests/`에 있다. BE 연결 검사는 `uv run --locked pytest tests/agents/test_ai_package_imports.py`로 실행한다. 이 smoke test는 설치와 import만 검사하며 service 호출·모델 결과·DB 저장을 증명하지 않는다.
 
 호출 방향은 한 방향이다.
 
@@ -85,8 +91,7 @@ router → service → { queries | agents | llm_tasks | integrations | realtime 
 - `service.py` — 트랜잭션 경계. 여기서만 `commit()`.
 - 읽기 쿼리 모음은 **`queries.py`** 다. `repository.py` 라는 이름은 쓰지 않는다 —
   `repositories` 가 GitHub 레포 테이블이라 이름이 겹친다.
-- **`agents/` 에는 Director 만 있다.** Evidence 조회는 별도 Agent 가 아니라 Director 의 Tool 이고,
-  레포·공고·자소서 분석과 답변 분석·리포트 생성은 단발 LLM 호출이라 `llm_tasks/` 에 있다.
+- **Agent는 Director 하나다.** AI 원본은 `devon_ai.agents.director`이며 Evidence 조회는 별도 Agent가 아니라 주입된 Tool이다. AI의 repo shallow/deep·답변 분석·리포트 모듈은 `devon_ai.llm_tasks`에 둔다. Sprint 1 Wanted 변환·프로필 확정 집계는 BE에서 LLM 없이 처리하며 문서 Claim은 후속이다.
 - `llm_tasks/prompt_loader.py` 만 `AsyncSession` 을 받는다. service 가 이걸로 프롬프트를 로드해
   문자열로 주입하므로, `agents/` 와 나머지 task 는 DB 를 모른 채 Eval 에서 단독 실행된다.
 - `integrations/speech/` 는 없다 — 스프린트1 은 양방향 텍스트다 (스프린트2 에 STT/TTS 추가).

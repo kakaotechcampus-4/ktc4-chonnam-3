@@ -7,12 +7,17 @@ ENV PYTHONUNBUFFERED=1 \
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-WORKDIR /srv
+WORKDIR /srv/backend
 
-COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+COPY ai/pyproject.toml ai/README.md /srv/ai/
+COPY ai/src /srv/ai/src
+COPY backend/pyproject.toml backend/uv.lock /srv/backend/
+RUN uv sync --locked --no-dev --no-editable
 
-COPY . .
+COPY backend/app /srv/backend/app
+COPY backend/migrations /srv/backend/migrations
+COPY backend/scripts /srv/backend/scripts
+COPY backend/alembic.ini /srv/backend/alembic.ini
 
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
