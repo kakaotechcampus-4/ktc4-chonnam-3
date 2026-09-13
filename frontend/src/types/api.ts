@@ -28,16 +28,15 @@ export type ApiError = {
   };
 };
 
-export function isApiError(value: unknown): value is ApiError {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'error' in value &&
-    typeof (value as { error?: unknown }).error === 'object' &&
-    (value as { error?: unknown }).error !== null &&
-    typeof (value as { error: { reason?: unknown } }).error.reason === 'string' &&
-    typeof (value as { error: { message?: unknown } }).error.message === 'string'
-  );
+export function isApiError(value: unknown): value is Omit<ApiError, 'status'> {
+  if (typeof value !== 'object' || value === null) return false;
+  if (!('error' in value)) return false;
+
+  const error = (value as { error?: unknown }).error;
+  if (typeof error !== 'object' || error === null) return false;
+
+  const { reason, message } = error as { reason?: unknown; message?: unknown };
+  return typeof reason === 'string' && typeof message === 'string';
 }
 
 // (전역) GET /me
