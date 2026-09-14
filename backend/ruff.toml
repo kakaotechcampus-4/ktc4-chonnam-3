@@ -1,0 +1,9 @@
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "T20"]
+
+[lint.per-file-ignores]
+"scripts/*" = ["T20"]   # 시드 스크립트는 print 허용
+"tests/*" = ["B008"]

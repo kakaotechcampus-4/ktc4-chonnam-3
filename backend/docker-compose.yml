@@ -1,0 +1,59 @@
+# task-01 에서 확정한다. 서비스 4개 — db / redis / api / worker
+# 로컬 개발은 보통 `docker compose up -d db redis` 만 띄우고 api·worker 는 uv 로 직접 돌린다.
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: devon
+      POSTGRES_PASSWORD: devon
+      POSTGRES_DB: devon
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # pgcrypto 확장 — gen_random_uuid() 가 PK 기본값이다
+      - ./scripts/init-extensions.sql:/docker-entrypoint-initdb.d/00-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devon -d devon"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://devon:devon@db:5432/devon
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: ["arq", "app.workers.arq_app.WorkerSettings"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://devon:devon@db:5432/devon
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
