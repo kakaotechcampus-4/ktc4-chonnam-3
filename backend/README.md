@@ -12,7 +12,7 @@
 | [redis-keys.md](docs/redis-keys.md) | Redis 키 설계표 |
 | [pipeline.md](docs/pipeline.md) | ARQ · run 실행 흐름 · SSE · WebSocket |
 | [testing.md](docs/testing.md) | 테스트 전략 · 필수 테스트 4개 · Eval |
-| [deploy.md](docs/deploy.md) | Vercel rewrite · CORS · 쿠키 · CI |
+| [deploy.md](docs/deploy.md) | AWS 통합 배포(CloudFront) · 쿠키 · CI |
 | [api-spec.md](docs/api-spec.md) | FE 계약 링크 + 합의된 변경 |
 
 ## 기술 스택

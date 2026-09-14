@@ -25,12 +25,25 @@ export type ReasonType =
 // 2. 공통 에러 타입
 
 export type ApiError = {
+  status: number;
   error: {
     reason: string;
     message: string;
     retryAfter?: number;
   };
 };
+
+export function isApiError(value: unknown): value is ApiError {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'error' in value &&
+    typeof (value as { error?: unknown }).error === 'object' &&
+    (value as { error?: unknown }).error !== null &&
+    typeof (value as { error: { reason?: unknown } }).error.reason === 'string' &&
+    typeof (value as { error: { message?: unknown } }).error.message === 'string'
+  );
+}
 
 // (전역) GET /me
 
