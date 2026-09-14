@@ -17,7 +17,7 @@ export default function Home() {
   });
 
   const home = homeQuery.data;
-  const errorReason = (homeQuery.error as ApiError | undefined)?.error?.reason;
+  const errorReason = (homeQuery.error as unknown as ApiError | undefined)?.error?.reason;
   const githubTokenInvalid = errorReason === 'github_token_invalid';
 
   return (
