@@ -54,7 +54,7 @@ export default function MyPage() {
         active="mypage"
         githubLinked={profile?.github.linked}
         avatarUrl={profile?.avatarUrl}
-        avatarAlt={profile?.name}
+        name={profile?.name}
       />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-10">
