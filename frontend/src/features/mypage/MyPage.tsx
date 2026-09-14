@@ -49,7 +49,7 @@ export default function MyPage() {
   const totalPages = interviewList ? Math.ceil(interviewList.total / interviewList.size) : 1;
 
   return (
-    <div className="min-h-screen bg-paper text-ink">
+    <div className="flex min-h-screen flex-col bg-paper text-ink">
       <Header
         active="mypage"
         githubLinked={profile?.github.linked}
@@ -57,7 +57,7 @@ export default function MyPage() {
         avatarAlt={profile?.name}
       />
 
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-10">
         <h1 className="text-lg font-bold">
           {profileQuery.isLoading ? '불러오는 중...' : `${profile?.name ?? ''} 님의 정보`}
         </h1>
