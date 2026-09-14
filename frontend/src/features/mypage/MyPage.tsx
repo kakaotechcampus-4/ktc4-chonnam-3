@@ -76,14 +76,14 @@ export default function MyPage() {
           )}
 
           {profile && (
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-3">
               <img
                 src={profile.avatarUrl}
                 alt={profile.name}
-                className="h-14 w-14 shrink-0 rounded-full object-cover"
+                className="h-16 w-16 shrink-0 rounded-full object-cover"
               />
               <div className="flex flex-1 gap-8 text-xs">
-                <div className="flex flex-1 flex-col gap-2">
+                <div className="flex flex-1 flex-col gap-2 pl-8">
                   <div className="flex gap-2">
                     <dt className="w-[60px] shrink-0 text-muted">이름</dt>
                     <dd className="font-semibold text-ink">{profile.name}</dd>
@@ -120,15 +120,9 @@ export default function MyPage() {
         </section>
 
         <section className="mt-4 rounded-lg border border-accent/10 bg-surface px-5 pb-2 pt-5">
-          <div className="flex items-center justify-between text-ink">
-            <h2 className="text-sm font-bold">
-              면접 이력 · 총 {profile?.interviewSummary.totalCount ?? 0}회
-            </h2>
-            <p className="text-sm font-bold">
-              평균 점수 {profile?.interviewSummary.averageScore ?? '-'}
-              {profile?.interviewSummary.averageScore != null && '점'}
-            </p>
-          </div>
+          <h2 className="text-sm font-bold text-ink">
+            면접 이력 · 총 {profile?.interviewSummary.totalCount ?? 0}회
+          </h2>
 
           {interviewsQuery.isLoading && <p className="mt-6 text-sm text-muted">불러오는 중...</p>}
           {interviewsQuery.isError && (
