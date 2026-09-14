@@ -54,7 +54,7 @@ JWT를 HttpOnly 쿠키로 전달한다. 프론트는 토큰을 직접 읽거나 
 | Access | `accessToken` | 15분 |
 | Refresh | `refreshToken` | 14일 |
 
-모든 요청에 `credentials: 'include'`. CloudFront 단일 배포로 same-origin이므로 CORS 설정은 없다.
+모든 요청에 `credentials: 'include'`. DuckDNS + Caddy 단일 도메인 배포로 same-origin이므로 CORS 설정은 없다.
 
 ### 401 인터셉터 정책
 

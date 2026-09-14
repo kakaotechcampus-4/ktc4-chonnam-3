@@ -14,7 +14,7 @@ AI 원본은 [ai/src/devon_ai](../ai/src/devon_ai/)의 로컬 Python 패키지�
 | [redis-keys.md](docs/redis-keys.md) | Redis 키 설계표 |
 | [pipeline.md](docs/pipeline.md) | ARQ · run 실행 흐름 · SSE · WebSocket |
 | [testing.md](docs/testing.md) | 테스트 전략 · 필수 테스트 4개 · Eval |
-| [deploy.md](docs/deploy.md) | Vercel rewrite · CORS · 쿠키 · CI |
+| [deploy.md](docs/deploy.md) | DuckDNS · Caddy · 쿠키 · CI |
 | [api-spec.md](docs/api-spec.md) | FE 계약 링크 + 합의된 변경 |
 
 ## 기술 스택

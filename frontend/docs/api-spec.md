@@ -13,7 +13,7 @@
 | 날짜 | ISO 8601 문자열 |
 | 필드 생략 | 금지 |
 | 인증 | JWT — HttpOnly 쿠키 전달. 모든 요청에 `credentials: 'include'` |
-| 배포 | FE·BE 단일 CloudFront 배포. same-origin이므로 CORS 설정 불필요, API base URL은 상대경로 |
+| 배포 | FE·BE 단일 DuckDNS+Caddy 배포. same-origin이므로 CORS 설정 불필요, API base URL은 상대경로 |
 
 ### 인증 구조
 
@@ -609,7 +609,7 @@ BE `spec/backend/features/documents.md` 기준(Sprint 1 FIX). 자기소개서·�
 
 ## 12. POST /analysis-runs
 
-`analysis_jobs` 1행(`job_type='interview_prep'`)을 생성한다.
+`analysis_jobs` 1행(`job_type='analysis_run'`)을 생성한다.
 
 **Request** `application/json`
 
@@ -1534,7 +1534,8 @@ Sprint 1엔 이탈 자동 감지 배치가 없다(`context/DB.md`, `spec/backend
 | 2026-09-10 | **쿠키명 `session` → `accessToken` / `refreshToken`**, OAuth `state` 저장 위치 세션 → `oauthState` 쿠키 |
 | 2026-09-10 | **인증 에러 reason 신설**: `access_token_expired` · `access_token_invalid` · `refresh_token_invalid` · `account_suspended` · `account_withdrawn` |
 | 2026-09-10 | 에러 reason `token_invalid` → **`github_token_invalid`** (DEVON JWT와 구분) |
-| 2026-09-10 | **배포 CloudFront 통합** — same-origin이므로 CORS 불필요, API base URL 상대경로 |
+| 2026-09-10 | **단일 도메인 배포 확정** — same-origin이므로 CORS 불필요, API base URL 상대경로 |
+| 2026-09-14 | 카테캠 제공 인프라 제약 반영 — CloudFront 대신 DuckDNS+Caddy+Docker Compose+EC2 구조로 변경 |
 | 2026-09-10 | `interviewStatus`에 **`preparing`** 추가, `abandonedQ` 오타 수정 → `abandoned` |
 | 2026-09-10 | `analysisStatus`에 **`syncing`** 추가 (`initial_sync` 진행 중) |
 | 2026-09-10 | `jdRequirements` `string[]` → **객체 배열** (`id`·`category`·`text`·`displayOrder`) — `category` 그룹핑·커버리지 계산에 필요 |

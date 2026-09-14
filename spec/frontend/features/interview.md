@@ -131,7 +131,7 @@ Cookie: accessToken=<jwt>
 
 쿠키는 same-origin이므로 브라우저가 자동 첨부한다. 별도 코드 없음.
 
-**`/api` 프리픽스 직접 붙여야 함**: `fetch` 호출은 `shared/api.ts`가 자동으로 `/api`를 붙여주지만(`const BASE = '/api'`), `WebSocket`은 이 래퍼를 거치지 않는다. WS 연결 문자열에 `/api`를 빠뜨리면 CloudFront rewrite(`/api/:path*` → BE)를 안 타서 화면 경로로 오인되고 핸드셰이크가 실패한다. `spec/frontend/architecture.md`의 "`/api` 프리픽스" 참고.
+**`/api` 프리픽스 직접 붙여야 함**: `fetch` 호출은 `shared/api.ts`가 자동으로 `/api`를 붙여주지만(`const BASE = '/api'`), `WebSocket`은 이 래퍼를 거치지 않는다. WS 연결 문자열에 `/api`를 빠뜨리면 Caddy의 `/api/*` reverse proxy를 안 타서 화면 경로로 오인되고 핸드셰이크가 실패한다. `spec/frontend/architecture.md`의 "`/api` 프리픽스" 참고.
 
 | 코드 | 상황 |
 | --- | --- |

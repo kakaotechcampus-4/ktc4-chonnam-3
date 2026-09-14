@@ -64,14 +64,18 @@ src/
 
 ## `/api` 프리픽스
 
-화면 경로(React Router)와 API 경로(BE)는 완전히 별개다. CloudFront rewrite로 갈린다(`context/FE.md`):
+화면 경로(React Router)와 API 경로(BE)는 완전히 별개다. 배포 환경에서는 Caddy reverse proxy가
+먼저 `/api/*` 를 backend로 보내고, 나머지 경로만 FE 정적 파일과 SPA fallback으로 처리한다:
 
-```json
-{
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "https://<BE>/:path*" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+```caddyfile
+handle /api/* {
+  reverse_proxy api:8000
+}
+
+handle {
+  root * /srv/frontend/dist
+  try_files {path} /index.html
+  file_server
 }
 ```
 
@@ -80,4 +84,4 @@ src/
 - **`fetch` 기반 호출**: `shared/api.ts`의 `const BASE = '/api'`가 자동으로 붙여준다. `spec/frontend/features/*.md`·`frontend/docs/api-spec.md`의 엔드포인트 문서는 이 프리픽스를 뺀 논리 경로로 적는다(래퍼가 처리하므로).
 - **`EventSource`·`WebSocket`**: 이 래퍼를 거치지 않는다. **URL에 `/api`를 직접 포함해야 한다** — `new EventSource('/api/analysis-runs/...')`, `GET /api/ws/interviews/...`. 이 두 곳만 예시 코드에 `/api`를 실제로 써둔다.
 
-**미확인**: CloudFront가 WebSocket Upgrade 핸드셰이크와 SSE 스트림에도 이 경로 rewrite를 문제없이 통과시키는지는 배포 설정에서 실제 확인이 필요하다(일반 HTTP rewrite와 별개로 WS는 프록시가 Upgrade 헤더를 명시적으로 지원해야 하는 경우가 많다).
+**배포 확인 필요**: Caddy `reverse_proxy` 는 WebSocket Upgrade 를 지원하지만, 실제 DuckDNS+EC2 배포에서 `/api/ws/*` 핸드셰이크와 `/api/analysis-runs/*/events` SSE 스트림을 직접 확인한다.

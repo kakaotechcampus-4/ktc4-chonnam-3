@@ -178,7 +178,7 @@ new EventSource(`/api/analysis-runs/${runId}/events`, { withCredentials: true })
 
 `withCredentials: true`가 없으면 쿠키가 안 실려 401이다. `EventSource`는 응답 바디를 못 읽어 `onerror`에서 상태 코드를 알 수 없으므로, `onerror` 시 `GET /analysis-runs/{runId}`를 1회 호출해 확인한다.
 
-**`/api` 프리픽스 직접 붙여야 함**: `EventSource`는 `shared/api.ts` 래퍼를 거치지 않아 `/api`를 자동으로 붙여주지 않는다. 위 예시처럼 URL에 직접 포함해야 CloudFront rewrite(`/api/:path*` → BE)를 탄다.
+**`/api` 프리픽스 직접 붙여야 함**: `EventSource`는 `shared/api.ts` 래퍼를 거치지 않아 `/api`를 자동으로 붙여주지 않는다. 위 예시처럼 URL에 직접 포함해야 Caddy의 `/api/*` reverse proxy를 탄다.
 
 인증은 연결 수립 시 1회 검증. 연결 유지 중 토큰 만료로 스트림이 끊기지 않는다.
 
@@ -228,9 +228,9 @@ new EventSource(`/api/analysis-runs/${runId}/events`, { withCredentials: true })
 
 | 상태 | 용도 |
 | --- | --- |
-| `jobUrl` | 입력 중인 URL 텍스트 |
-| `coverLetterFile` | 선택된 파일 객체 |
-| `portfolioFile` / `portfolioUrl` | 선택된 파일 또는 링크 |
+| `postingUrlInput` | 입력 중인 공고 URL 텍스트 |
+| `selectedDocumentFile` | 선택된 문서 파일 객체 |
+| `documentPreview` | `POST /documents/preview` 결과(`documentId`, `status`, 추출 요약) |
 | `isDragging` | 드래그 오버 하이라이트 (업로더별) |
 | `isUrlValid` | `분석 시작` 버튼 활성 여부 (파생값) |
 | `isSubmitting` | 중복 제출 방지 |
