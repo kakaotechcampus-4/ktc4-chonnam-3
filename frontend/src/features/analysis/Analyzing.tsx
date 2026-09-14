@@ -86,10 +86,10 @@ export default function Analyzing() {
   }, [effectiveStatus, runId, navigate]);
 
   return (
-    <div className="min-h-screen bg-surface text-ink">
+    <div className="flex min-h-screen flex-col bg-surface text-ink">
       <Header active="interview" />
 
-      <main className="flex flex-col items-center px-7 pb-7 pt-6">
+      <main className="flex flex-1 flex-col items-center px-7 pb-7 pt-6">
         <div className="flex w-[380px] max-w-full flex-col gap-4 py-14">
           <p className="text-[11px] font-bold text-accent">모의면접 · 분석 중</p>
 
