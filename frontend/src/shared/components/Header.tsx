@@ -40,11 +40,13 @@ export default function Header({ active, githubLinked, avatarUrl, avatarAlt }: H
             GitHub 연동됨
           </span>
         )}
-        {avatarUrl ? (
-          <img src={avatarUrl} alt={avatarAlt ?? ''} className="h-8 w-8 rounded-full object-cover" />
-        ) : (
-          <span className="h-8 w-8 rounded-full bg-line-soft" />
-        )}
+        <a href="/mypage" aria-label="마이페이지">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={avatarAlt ?? ''} className="h-8 w-8 rounded-full object-cover" />
+          ) : (
+            <span className="h-8 w-8 rounded-full bg-line-soft" />
+          )}
+        </a>
       </div>
     </header>
   );
