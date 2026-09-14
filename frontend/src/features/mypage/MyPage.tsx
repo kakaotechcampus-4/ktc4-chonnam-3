@@ -58,82 +58,79 @@ export default function MyPage() {
       />
 
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <p className="text-sm font-medium text-accent">마이페이지</p>
-        <h1 className="mt-1 text-2xl font-bold">
+        <h1 className="text-lg font-bold">
           {profileQuery.isLoading ? '불러오는 중...' : `${profile?.name ?? ''} 님의 정보`}
         </h1>
 
-        <section className="mt-6 rounded-card border border-line-soft bg-surface p-6">
+        <section className="mt-5 flex flex-col gap-4 rounded-lg border border-accent/10 bg-surface p-5">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-muted">내 정보</h2>
-            <button
-              type="button"
-              className="rounded-md border border-line px-3 py-1.5 text-sm hover:bg-paper"
-            >
+            <h2 className="text-sm font-semibold">내 정보</h2>
+            <button type="button" className="text-xs text-muted hover:underline">
               정보 수정
             </button>
           </div>
 
-          {profileQuery.isLoading && <p className="mt-6 text-sm text-muted">불러오는 중...</p>}
+          {profileQuery.isLoading && <p className="text-sm text-muted">불러오는 중...</p>}
           {profileQuery.isError && (
-            <p className="mt-6 text-sm text-error">정보를 불러오지 못했어요.</p>
+            <p className="text-sm text-error">정보를 불러오지 못했어요.</p>
           )}
 
           {profile && (
-            <div className="mt-6 flex items-start gap-6">
+            <div className="flex items-center gap-5">
               <img
                 src={profile.avatarUrl}
                 alt={profile.name}
                 className="h-14 w-14 shrink-0 rounded-full object-cover"
               />
-              <dl className="grid flex-1 grid-cols-2 gap-x-8 gap-y-3 text-sm">
-                <div className="flex gap-2">
-                  <dt className="w-16 shrink-0 text-muted">이름</dt>
-                  <dd className="font-semibold">{profile.name}</dd>
+              <div className="flex flex-1 gap-8 text-xs">
+                <div className="flex flex-1 flex-col gap-2">
+                  <div className="flex gap-2">
+                    <dt className="w-[60px] shrink-0 text-muted">이름</dt>
+                    <dd className="font-semibold text-ink">{profile.name}</dd>
+                  </div>
+                  <div className="flex gap-2">
+                    <dt className="w-[60px] shrink-0 text-muted">가입일</dt>
+                    <dd className="font-semibold text-ink">{formatDate(profile.joinedAt)}</dd>
+                  </div>
+                  <div className="flex gap-2">
+                    <dt className="w-[60px] shrink-0 text-muted">희망 직무</dt>
+                    <dd className="font-semibold text-ink">{profile.desiredPosition ?? '-'}</dd>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <dt className="w-16 shrink-0 text-muted">아이디</dt>
-                  <dd className="font-semibold">{profile.loginId ?? '-'}</dd>
+                <div className="flex flex-1 flex-col gap-2">
+                  <div className="flex gap-2">
+                    <dt className="w-[60px] shrink-0 text-muted">아이디</dt>
+                    <dd className="font-semibold text-ink">{profile.loginId ?? '-'}</dd>
+                  </div>
+                  <div className="flex gap-2">
+                    <dt className="w-[60px] shrink-0 text-muted">GitHub</dt>
+                    <dd className="flex flex-col items-start gap-1 font-semibold text-ink">
+                      {profile.github.linked ? (
+                        <>
+                          <span>@{profile.github.login}</span>
+                          <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-normal text-accent">
+                            연동됨 · 레포 {profile.github.publicRepoCount}개
+                          </span>
+                        </>
+                      ) : (
+                        <span className="font-normal text-muted">연동 안 됨</span>
+                      )}
+                    </dd>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <dt className="w-16 shrink-0 text-muted">가입일</dt>
-                  <dd className="font-semibold">{formatDate(profile.joinedAt)}</dd>
-                </div>
-                <div className="flex items-center gap-2">
-                  <dt className="w-16 shrink-0 text-muted">GitHub</dt>
-                  <dd className="flex items-center gap-2 font-semibold">
-                    {profile.github.linked ? (
-                      <>
-                        <span>@{profile.github.login}</span>
-                        <span className="rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">
-                          연동됨 · 레포 {profile.github.publicRepoCount}개
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-muted">연동 안 됨</span>
-                    )}
-                  </dd>
-                </div>
-                <div className="flex gap-2">
-                  <dt className="w-16 shrink-0 text-muted">희망 직무</dt>
-                  <dd className="font-semibold">{profile.desiredPosition ?? '-'}</dd>
-                </div>
-              </dl>
+              </div>
             </div>
           )}
         </section>
 
-        <section className="mt-6 rounded-card border border-line-soft bg-surface p-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-muted">
+        <section className="mt-4 rounded-lg border border-accent/10 bg-surface px-5 pb-2 pt-5">
+          <div className="flex items-center justify-between text-ink">
+            <h2 className="text-sm font-bold">
               면접 이력 · 총 {profile?.interviewSummary.totalCount ?? 0}회
             </h2>
-            <p className="text-sm text-muted">
-              평균 점수{' '}
-              <span className="font-bold text-ink">
-                {profile?.interviewSummary.averageScore ?? '-'}
-                {profile?.interviewSummary.averageScore != null && '점'}
-              </span>
+            <p className="text-sm font-bold">
+              평균 점수 {profile?.interviewSummary.averageScore ?? '-'}
+              {profile?.interviewSummary.averageScore != null && '점'}
             </p>
           </div>
 
@@ -147,23 +144,23 @@ export default function MyPage() {
           )}
 
           {completedInterviews.length > 0 && (
-            <ul className="mt-6 divide-y divide-line-soft text-sm">
+            <ul className="mt-6 divide-y divide-line-soft text-xs text-ink">
               {completedInterviews.map((item) => (
-                <li key={item.id} className="flex items-center justify-between gap-4 py-3">
+                <li key={item.id} className="flex items-center justify-between gap-4 py-2">
                   <div className="min-w-0 shrink-0">
-                    <p className="font-semibold">
+                    <p className="font-bold">
                       {item.companyName} · {item.position}
                     </p>
-                    <p className="mt-1 text-xs text-muted">
+                    <p className="mt-1 text-[10.5px] text-muted">
                       {formatDate(item.completedAt)} · {item.techStack.join('/')} ·{' '}
                       {item.careerLevel}
                     </p>
                   </div>
-                  <div className="flex flex-1 flex-wrap justify-center gap-1">
+                  <div className="flex flex-1 flex-wrap justify-center gap-1.5">
                     {item.repositoryNames.map((name) => (
                       <span
                         key={name}
-                        className="rounded-md bg-paper px-2 py-0.5 font-mono text-xs text-muted"
+                        className="rounded-full bg-accent-soft px-2 py-1 text-[10.5px] text-ink"
                       >
                         {name}
                       </span>
@@ -172,11 +169,11 @@ export default function MyPage() {
                   <div className="flex shrink-0 items-center gap-3">
                     <span className="font-bold">
                       {item.totalScore}
-                      <span className="text-muted">/100</span>
+                      <span className="font-normal text-muted">/100</span>
                     </span>
                     <button
                       type="button"
-                      className="font-medium text-accent hover:underline"
+                      className="text-accent hover:underline"
                       onClick={() => navigate(`/interview/${item.id}/report`)}
                     >
                       리포트 보기 →
@@ -212,17 +209,23 @@ export default function MyPage() {
           )}
         </section>
 
-        <div className="mt-6 flex items-center justify-between text-sm">
+        <div className="mt-4 flex items-center justify-between text-xs">
           <p className="text-muted">계정을 삭제하려면 고객센터로 문의해주세요.</p>
           <button
             type="button"
-            className="rounded-md border border-line px-4 py-2 font-medium hover:bg-surface"
+            className="rounded-lg border border-line px-4 py-2.5 font-bold hover:bg-surface"
             onClick={() => setLogoutOpen(true)}
           >
             로그아웃
           </button>
         </div>
       </main>
+
+      <footer className="flex items-center border-t border-line-soft px-5 py-2.5 text-[10.5px] text-muted">
+        <span>© 2026 DEVON</span>
+        <span className="flex-1" />
+        <span>이용약관 · 개인정보처리방침</span>
+      </footer>
 
       {logoutOpen && (
         <div className="fixed inset-0 flex items-center justify-center bg-ink/40 px-4">
