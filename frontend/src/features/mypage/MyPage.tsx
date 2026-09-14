@@ -89,10 +89,6 @@ export default function MyPage() {
                     <dd className="font-semibold text-ink">{profile.name}</dd>
                   </div>
                   <div className="flex gap-2">
-                    <dt className="w-[60px] shrink-0 text-muted">가입일</dt>
-                    <dd className="font-semibold text-ink">{formatDate(profile.joinedAt)}</dd>
-                  </div>
-                  <div className="flex gap-2">
                     <dt className="w-[60px] shrink-0 text-muted">희망 직무</dt>
                     <dd className="font-semibold text-ink">{profile.desiredPosition ?? '-'}</dd>
                   </div>
@@ -104,7 +100,7 @@ export default function MyPage() {
                   </div>
                   <div className="flex gap-2">
                     <dt className="w-[60px] shrink-0 text-muted">GitHub</dt>
-                    <dd className="flex flex-col items-start gap-1 font-semibold text-ink">
+                    <dd className="flex items-center gap-2 font-semibold text-ink">
                       {profile.github.linked ? (
                         <>
                           <span>@{profile.github.login}</span>
