@@ -1,4 +1,4 @@
-type ActivePage = 'home' | 'mypage';
+type ActivePage = 'home' | 'mypage' | 'interview';
 
 type HeaderProps = {
   active: ActivePage;
@@ -20,9 +20,15 @@ export default function Header({ active, githubLinked, avatarUrl, avatarAlt }: H
               홈
             </a>
           )}
-          <a href="/interview/new" className="rounded-full px-3 py-1.5 text-muted hover:bg-paper">
-            모의면접
-          </a>
+          {active === 'interview' ? (
+            <span className="rounded-full bg-accent-soft px-3 py-1.5 font-medium text-accent">
+              모의면접
+            </span>
+          ) : (
+            <a href="/interview/new" className="rounded-full px-3 py-1.5 text-muted hover:bg-paper">
+              모의면접
+            </a>
+          )}
           {active === 'mypage' ? (
             <span className="rounded-full bg-accent-soft px-3 py-1.5 font-medium text-accent">
               마이페이지
