@@ -1,11 +1,12 @@
-"""원티드 어댑터 — 1차 유일. /wd/{id} → /api/chaos/jobs/v1/{id}/details 공개 JSON.
+"""원티드 어댑터 — 1차 유일. /wd/{id} → /api/chaos/jobs/v1/{id}/details 공개 JSON
 position / intro / main_tasks / requirements / preferred_points / benefits / skill_tags /
-industry_name 이 항목별로 이미 나뉘어 온다. content_form='text'. 헤드리스 브라우저 불필요.
+industry_name 이 항목별로 이미 나뉘어 옴. content_form='text'. 헤드리스 브라우저 불필요
 
 확정본 §3 3사 비교 / task-09
 
-⚠ 아래 JSON 경로(`detail.job.*`)는 공개 문서가 없는 비공식 엔드포인트라 추정 기반으로 작성했다.
-  머지 전에 실제 응답 1건을 떠서 `tests/contract/`에 고정 픽스처로 넣고 대조할 것 — 아직 안 함.
+주의: 아래 JSON 경로(`detail.job.*`)는 공개 문서가 없는 비공식 엔드포인트라 추정 기반으로 작성함
+실제 공고 2건(job id 380611, 341487)으로 검증하며 position·skill_tags 경로 오류 발견해 수정함
+`tests/contract/` 고정 픽스처로 대조하는 작업은 아직 안 함
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ _TIMEOUT_SECONDS = 10.0
 
 
 def extract_job_id(url: str) -> str | None:
-    """`https://www.wanted.co.kr/wd/12345` 형태에서 `12345`를 뽑는다. 매칭 안 되면 None."""
+    """`https://www.wanted.co.kr/wd/12345` 형태에서 `12345`를 뽑음. 매칭 안 되면 None"""
     match = _WANTED_URL_RE.search(url)
     return match.group("job_id") if match else None
 
@@ -42,7 +43,7 @@ class WantedAdapter:
     async def fetch(self, url: str) -> PostingContent:
         job_id = extract_job_id(url)
         if job_id is None:
-            # resolver 가 이미 걸러줘야 정상이지만, 방어적으로도 unsupported 로 취급한다.
+            # resolver 가 이미 걸러줘야 정상이지만, 방어적으로도 unsupported 로 취급
             raise UnsupportedSiteError(f"원티드 URL에서 job id를 못 찾음: {url}")
 
         detail_url = _DETAIL_URL.format(job_id=job_id)
@@ -78,7 +79,7 @@ class WantedAdapter:
         company = job.get("company") or {}
 
         # 실제 응답(2026-09-14, job id 380611)엔 job.position/job.title 이 둘 다 없고
-        # detail.position 에만 있었다 — 뒤 두 개는 혹시 몰라 폴백으로 남겨둔다.
+        # detail.position 에만 있었음 — 나머지 둘은 혹시 몰라 폴백으로 남겨둠
         position = detail.get("position") or job.get("position") or job.get("title")
         company_name = company.get("name")
         industry = company.get("industry_name")
@@ -88,7 +89,7 @@ class WantedAdapter:
         main_tasks = _split_paragraphs(detail.get("main_tasks"))
         intro = detail.get("intro") or ""
 
-        # 실제 응답(job id 341487)엔 태그 이름이 "name"이 아니라 "text" 키에 있었다.
+        # 실제 응답(job id 341487)엔 태그 이름이 "name"이 아니라 "text" 키에 있었음
         skill_tags = [
             tag.get("text") if isinstance(tag, dict) else str(tag)
             for tag in (job.get("skill_tags") or [])
@@ -127,7 +128,7 @@ class WantedAdapter:
 
 
 def _split_paragraphs(value: object) -> list[str]:
-    """원티드 필드는 리스트(항목별) 또는 개행 구분 단일 문자열로 올 수 있어 둘 다 받는다."""
+    """원티드 필드는 리스트(항목별) 또는 개행 구분 단일 문자열로 올 수 있어 둘 다 받음"""
     if not value:
         return []
     if isinstance(value, list):

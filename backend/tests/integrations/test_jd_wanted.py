@@ -69,7 +69,7 @@ async def test_fetch_empty_body_raises_content_empty():
 
 async def test_fetch_reads_position_from_detail_when_job_level_missing():
     """실제 응답(job id 380611, 2026-09-14 확인)엔 job.position/job.title 이 없고
-    detail.position 에만 직무명이 들어있었다."""
+    detail.position 에만 직무명이 들어있었음"""
     payload = {
         "job": {
             "position": None,

@@ -41,7 +41,7 @@ def test_maps_each_field_to_its_own_category_in_order():
 
 
 def test_preferred_never_becomes_required():
-    """W5 완료 기준: 우대를 필수로 바꾸지 않는다."""
+    """W5 완료 기준: 우대를 필수로 바꾸지 않음"""
     drafts = build_requirement_drafts(_posting())
 
     preferred_texts = {d.text for d in drafts if d.category == "preferred"}
