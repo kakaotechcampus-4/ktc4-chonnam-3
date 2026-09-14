@@ -42,7 +42,7 @@ export default function Home() {
         )}
 
         {home && (
-          <section className="mt-6 flex flex-col gap-4 rounded-lg border border-accent/10 bg-surface p-5">
+          <section className="mt-6 flex flex-col gap-5 rounded-lg border border-accent/10 bg-surface px-5 py-7">
             {home.analysisStatus === 'syncing' && (
               <div className="flex items-center gap-3 py-6 text-sm text-muted">
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-line border-t-accent" />
@@ -81,7 +81,7 @@ export default function Home() {
                 </div>
 
                 <div className="flex gap-8">
-                  <div className="flex flex-1 flex-col gap-2.5">
+                  <div className="flex flex-1 flex-col gap-3.5">
                     <p className="text-xs font-medium text-ink">주로 사용하는 언어</p>
                     {home.analysis.languages.map((lang) => (
                       <div key={lang.name} className="flex items-center gap-2 text-xs">
@@ -114,7 +114,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                <p className="text-xs text-muted">{home.analysis.roleSummary}</p>
+                <p className="mt-2 text-xs text-muted">{home.analysis.roleSummary}</p>
               </>
             )}
           </section>
