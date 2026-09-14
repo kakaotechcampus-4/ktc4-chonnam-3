@@ -1,13 +1,13 @@
-type ActivePage = 'home' | 'mypage';
+type ActivePage = 'home' | 'mypage' | 'interview';
 
 type HeaderProps = {
   active: ActivePage;
   githubLinked?: boolean;
+  name?: string;
   avatarUrl?: string;
-  avatarAlt?: string;
 };
 
-export default function Header({ active, githubLinked, avatarUrl, avatarAlt }: HeaderProps) {
+export default function Header({ active, githubLinked, name, avatarUrl }: HeaderProps) {
   return (
     <header className="flex items-center justify-between border-b border-line-soft bg-surface px-6 py-3">
       <div className="flex items-center gap-8">
@@ -20,9 +20,15 @@ export default function Header({ active, githubLinked, avatarUrl, avatarAlt }: H
               홈
             </a>
           )}
-          <a href="/interview/new" className="rounded-full px-3 py-1.5 text-muted hover:bg-paper">
-            모의면접
-          </a>
+          {active === 'interview' ? (
+            <span className="rounded-full bg-accent-soft px-3 py-1.5 font-medium text-accent">
+              모의면접
+            </span>
+          ) : (
+            <a href="/interview/new" className="rounded-full px-3 py-1.5 text-muted hover:bg-paper">
+              모의면접
+            </a>
+          )}
           {active === 'mypage' ? (
             <span className="rounded-full bg-accent-soft px-3 py-1.5 font-medium text-accent">
               마이페이지
@@ -42,9 +48,11 @@ export default function Header({ active, githubLinked, avatarUrl, avatarAlt }: H
         )}
         <a href="/mypage" aria-label="마이페이지">
           {avatarUrl ? (
-            <img src={avatarUrl} alt={avatarAlt ?? ''} className="h-8 w-8 rounded-full object-cover" />
+            <img src={avatarUrl} alt={name ?? ''} className="h-8 w-8 rounded-full object-cover" />
           ) : (
-            <span className="h-8 w-8 rounded-full bg-line-soft" />
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-soft text-xs font-bold text-accent">
+              {name?.charAt(0) ?? ''}
+            </span>
           )}
         </a>
       </div>
