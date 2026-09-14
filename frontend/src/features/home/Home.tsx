@@ -21,10 +21,10 @@ export default function Home() {
   const githubTokenInvalid = errorReason === 'github_token_invalid';
 
   return (
-    <div className="min-h-screen bg-paper text-ink">
+    <div className="flex min-h-screen flex-col bg-paper text-ink">
       <Header active="home" githubLinked={home?.githubLinked} />
 
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-10">
         <h1 className="text-lg font-bold">
           {homeQuery.isLoading ? '불러오는 중...' : `안녕하세요, ${home?.name ?? ''} 님!`}
         </h1>
