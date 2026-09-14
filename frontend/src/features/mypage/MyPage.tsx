@@ -156,7 +156,7 @@ export default function MyPage() {
                       {item.careerLevel}
                     </p>
                   </div>
-                  <div className="flex flex-1 flex-wrap justify-center gap-1.5">
+                  <div className="flex flex-1 flex-wrap gap-2">
                     {item.repositoryNames.map((name) => (
                       <span
                         key={name}
