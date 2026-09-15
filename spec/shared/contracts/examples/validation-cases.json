@@ -5,6 +5,7 @@
     "valid": true,
     "data": {
       "name": "검수 사용자",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/12345",
       "githubLinked": true
     }
   },
@@ -13,7 +14,17 @@
     "schema": "me-response.schema.json",
     "valid": false,
     "data": {
-      "name": "검수 사용자"
+      "name": "검수 사용자",
+      "avatarUrl": null
+    }
+  },
+  {
+    "name": "me-missing-avatar",
+    "schema": "me-response.schema.json",
+    "valid": false,
+    "data": {
+      "name": "검수 사용자",
+      "githubLinked": true
     }
   },
   {
@@ -22,6 +33,7 @@
     "valid": false,
     "data": {
       "name": "검수 사용자",
+      "avatarUrl": null,
       "githubLinked": "true"
     }
   },
@@ -32,7 +44,8 @@
     "data": {
       "error": {
         "reason": "unauthenticated",
-        "message": "로그인이 필요합니다."
+        "message": "로그인이 필요합니다.",
+        "details": {}
       }
     }
   },
@@ -44,6 +57,7 @@
       "error": {
         "reason": "rate_limited",
         "message": "다시 시도하세요.",
+        "details": {},
         "retryAfter": 30
       }
     }
@@ -54,6 +68,18 @@
     "valid": false,
     "data": {
       "error": {
+        "message": "오류",
+        "details": {}
+      }
+    }
+  },
+  {
+    "name": "error-missing-details",
+    "schema": "api-error.schema.json",
+    "valid": false,
+    "data": {
+      "error": {
+        "reason": "internal_error",
         "message": "오류"
       }
     }
@@ -66,6 +92,7 @@
       "error": {
         "reason": "x",
         "message": "오류",
+        "details": {},
         "retryAfter": null
       }
     }

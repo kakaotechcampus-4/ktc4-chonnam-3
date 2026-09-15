@@ -1,6 +1,8 @@
 # DEVON API 명세
 > 필드: camelCase · URL: kebab-case · 에러 reason·enum: snake_case
 
+공통 API 원본은 `spec/shared/contracts/openapi.yaml`이다. 이 문서의 인증 구현 범위는 login, callback, refresh, logout, `/me` 다섯 개이며 link, initial sync, dashboard/profile API는 후속 설계 메모일 뿐 현재 계약이 아니다. 브라우저의 실제 public 경로에는 `/api` prefix가 붙는다.
+
 각 엔드포인트는 **Endpoint / Request / Response / UI states / Failure** 5단 구조로 기술한다. `UI states`는 이 API가 어느 화면에서 어떻게 쓰이는지(분기·배지·버튼 노출), `Failure`는 실패 응답 코드·reason만 담는다.
 
 ## 공통 규약
@@ -20,20 +22,21 @@
 | 토큰 | 쿠키명 | 만료 | Path |
 | --- | --- | --- | --- |
 | Access Token | `accessToken` | 15분 | `/` |
-| Refresh Token | `refreshToken` | 14일 | `/auth/refresh` |
+| Refresh Token | `refreshToken` | 14일 | `/api/auth` |
+| OAuth State | `oauthState` | 10분 | `/api/auth/github` |
 
 ```
 Set-Cookie: accessToken=<jwt>;  HttpOnly; Secure; SameSite=Lax; Path=/;             Max-Age=900
-Set-Cookie: refreshToken=<jwt>; HttpOnly; Secure; SameSite=Lax; Path=/auth/refresh; Max-Age=1209600
+Set-Cookie: refreshToken=<jwt>; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=1209600
 ```
 
 Access Token 클레임
 
 ```json
-{ "sub": "u_001", "iat": 1757300000, "exp": 1757300900, "jti": "at_9f2c1b" }
+{ "iss": "devon", "aud": "devon-api", "type": "access", "sub": "user-uuid", "iat": 1757300000, "exp": 1757300900, "jti": "at_9f2c1b" }
 ```
 
-리프레시 토큰은 서버 DB에 `jti`·상태·만료 시각을 저장하고, 갱신 시 로테이션한다. 폐기된 `jti`가 재사용되면 해당 사용자의 모든 리프레시 토큰을 무효화한다.
+리프레시 JWT에는 위 claim과 `type=refresh`, `sid`, `generation`이 있다. PostgreSQL의 `users.refresh_generation`과 `auth_sessions`가 유효·폐기의 유일한 원본이며 현재 `refresh_jti`와 만료 시각을 갱신 트랜잭션에서 교체한다. raw JWT는 저장하지 않는다. 같은 generation의 유효 session에서 이전 `jti` 재사용은 기존 모든 Refresh를 무효화하지만 이미 무효인 generation이나 누락·만료 session은 새 로그인을 폐기하지 않는다. Redis는 OAuth state에만 사용하며 Refresh 이중 기록·fallback은 없다.
 
 GitHub 토큰(`github_accounts.access_token_encrypted`)은 JWT에 담지 않는다. 서버가 조회한다.
 
@@ -64,14 +67,15 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
 {
   "error": {
     "reason": "github_token_invalid",
-    "message": "GitHub 재연동이 필요해요.",
+    "message": "로그인이 필요합니다.",
+    "details": {},
     "retryAfter": 30
   }
 }
 ```
 
 `reason`은 종류가 많으므로 union으로 고정하지 않고 `string`으로 둔다.
-`retryAfter`는 optional.
+`details`는 빈 객체여도 항상 존재하고 `retryAfter`는 optional이다. 클라이언트는 HTTP status를 보존한다.
 
 ### 인증 에러 reason (공통 참조)
 
@@ -82,28 +86,31 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
 | `unauthenticated` | 401 | `accessToken` 쿠키 없음 | `/login` 이동 |
 | `access_token_expired` | 401 | 서명 유효, `exp` 초과 | `/auth/refresh` 1회 → 원 요청 재시도 |
 | `access_token_invalid` | 401 | 서명 불일치·변조 | 전체 clear → `/login` |
-| `refresh_token_invalid` | 401 | 리프레시 만료·재사용 감지 | 전체 clear → `/login` |
+| `refresh_token_invalid` | 401 | 리프레시 누락·만료·변조·재사용 | 전체 clear → `/login` |
 | `account_suspended` | 403 | `users.status = 'suspended'` | 정지 안내 |
 | `account_withdrawn` | 403 | `users.status = 'withdrawn'` | 재가입 불가 안내 |
-| `github_token_invalid` | 403 | `github_accounts.token_status`가 `expired`·`revoked` | GitHub 재연동 유도 |
+| `invalid_origin` | 403 | refresh/logout Origin 불일치 또는 누락 | 요청 중단 |
+| `service_unavailable` | 503 | DB 장애; 새 OAuth 시작·완료에는 Redis도 필요 | auth 상태 유지, 재시도 |
+| `internal_error` | 500 | 내부 오류 | auth 상태 유지, 재시도 |
 
 ### 401 인터셉터 정책
 
 ```
-401 수신
-├─ reason === 'access_token_expired'
-│   ├─ 갱신 진행 중이면 → 그 Promise를 await (single-flight)
-│   ├─ 아니면 → POST /auth/refresh
+보호 요청 또는 /me probe
+├─ unauthenticated(access 누락 가능) 또는 access_token_expired
+│   ├─ 같은 tab single-flight + Web Lock `devon-auth`
+│   ├─ lock 안에서 raw /me 재확인 후 필요한 경우에만 POST /auth/refresh
 │   ├─ 성공 → 원 요청 1회 재시도
-│   └─ 실패 → queryClient.clear() → /login
-└─ 그 외 → queryClient.clear() → /login
+│   └─ 인증 거부(401 또는 정지·탈퇴) → queryClient.clear() → /login
+├─ access_token_invalid 또는 blocked account → auth cache 무효화
+└─ network/503 → auth cache 유지, retry 노출
 ```
 
-재시도는 1회만. 갱신은 single-flight(로테이션 충돌 방지). `/auth/refresh` 자신은 인터셉터 제외.
+재시도는 1회만이고 `/auth/refresh` 자신은 인터셉터 제외다. Web Locks 미지원 브라우저는 안전하지 않은 동시 refresh 대신 재로그인을 요구한다. logout epoch/cancellation 뒤 완료된 요청은 cache를 복원하지 못한다.
 
 ### CSRF
 
-`SameSite=Lax`로 방어한다. 상태 변경 요청은 모두 POST이며 `Lax`는 cross-site POST에 쿠키를 보내지 않는다. CSRF 토큰은 도입하지 않는다. `Strict`는 GitHub 콜백에서 돌아오는 top-level GET에 쿠키가 실리지 않아 쓰지 않는다.
+`SameSite=Lax`와 함께 refresh/logout의 `Origin`이 설정된 `FRONTEND_ORIGIN`과 정확히 같은지 검사한다. Origin 누락/불일치는 403 `invalid_origin`이다. `Strict`는 GitHub 콜백의 top-level GET에서 state cookie가 실리지 않아 쓰지 않는다.
 
 ---
 
@@ -116,11 +123,6 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
 | 3 | POST | `/auth/refresh` | fetch |
 | 4 | POST | `/auth/logout` | fetch |
 | 5 | GET | `/me` | fetch |
-| 6 | GET | `/me/profile` | fetch |
-| 7 | GET | `/auth/github/link` | 브라우저 이동 |
-| 8 | GET | `/auth/github/link/callback` | 프론트 무관 |
-| 9 | GET | `/me/home` | fetch |
-| 10 | GET | `/me/interviews` | fetch |
 | 11 | POST | `/documents/preview` | fetch (multipart) |
 | 12 | POST | `/analysis-runs` | fetch |
 | 13 | GET | `/analysis-runs/{runId}/events` | EventSource |
@@ -134,11 +136,11 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
 | 20 | POST | `/interviews/{id}/retry` | fetch |
 | 21 | POST | `/reports/{id}/feedback-disagreements` | fetch |
 
-총 22개. 번호는 아래 "최종 엔드포인트 목록"·`shared/queryKeys.ts` 참조 번호와 같다.
+인증은 1~5만 현재 계약이다. 나머지 번호는 기존 기능 설계의 추적 번호이며 현재 surface는 OpenAPI를 따른다.
 
 > 브라우저 이동 경로는 `shared/api.ts`에 넣지 않는다. `<a href>` 또는 `window.location`으로 처리한다.
 
-> `sessionId`·`session_limit_exceeded`·`already_connected`의 "세션"은 면접 세션(`interview_sessions`)을 뜻한다. 인증 세션은 존재하지 않는다.
+> `sessionId`·`session_limit_exceeded`·`already_connected`의 "세션"은 면접 관련 식별자·상태를 뜻하며 인증용 `auth_sessions` 및 Refresh JWT의 `sid`와 구분한다. WS 식별자 정책은 공통 계약의 `PENDING_FE`를 따른다.
 
 ---
 
@@ -155,23 +157,23 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
 Location: https://github.com/login/oauth/authorize
             ?client_id=<client_id>
             &redirect_uri=<callback>
-            &scope=read:user%20user:email
+            &scope=read:user
             &state=<random>
-Set-Cookie: oauthState=<random>; HttpOnly; Secure; SameSite=Lax; Path=/auth/github; Max-Age=600
+Set-Cookie: oauthState=<binding>; HttpOnly; Secure; SameSite=Lax; Path=/api/auth/github; Max-Age=600
 ```
 
 | 항목 | 값 |
 | --- | --- |
-| `scope` | `read:user`, `user:email` (Private 레포 미지원이므로 `repo` 불필요) |
-| `state` | 서버 생성 랜덤값 — `oauthState` 쿠키에 저장 (CSRF 방어) |
+| `scope` | `read:user` only |
+| `state` | 서버 생성 random key. browser binding은 cookie, single-use state와 S256 PKCE verifier는 Redis에 600초 저장 |
 
 **UI states**
 
-로그인 화면(미인증 상태에서 보호 경로 접근 시 진입)의 `GitHub으로 로그인` 버튼 클릭 시 `window.location = '/auth/github/login'`으로 이동한다. 입력 폼은 없다.
+로그인 화면의 `GitHub으로 로그인` 버튼 클릭 시 `window.location = '/api/auth/github/login'`으로 이동한다. 입력 폼은 없다.
 
 **Failure**
 
-해당 없음 — 항상 302로 GitHub 인증 화면으로 이동한다.
+OAuth 설정 또는 Redis를 사용할 수 없으면 공통 envelope의 503으로 실패한다.
 
 ---
 
@@ -194,8 +196,8 @@ Set-Cookie: oauthState=<random>; HttpOnly; Secure; SameSite=Lax; Path=/auth/gith
 ```
 Location: /home
 Set-Cookie: accessToken=<jwt>;  HttpOnly; Secure; SameSite=Lax; Path=/;             Max-Age=900
-Set-Cookie: refreshToken=<jwt>; HttpOnly; Secure; SameSite=Lax; Path=/auth/refresh; Max-Age=1209600
-Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
+Set-Cookie: refreshToken=<jwt>; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=1209600
+Set-Cookie: oauthState=; Max-Age=0; Path=/api/auth/github
 ```
 
 동의 거부 시
@@ -203,21 +205,17 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 Location: /login?error=denied
 ```
 
-성공 시 `initial_sync` 잡을 큐에 넣고 즉시 302한다. 레포 수집 완료를 기다리지 않는다.
+callback은 사용자와 GitHub account를 transaction-safe하게 수렴시키고 로그인만 완료한다. `initial_sync`를 enqueue하지 않는다.
 
 > 반드시 쿼리를 제거한 주소로 302한다. `?code=`가 남으면 새로고침 시 재사용이 발생하고, GitHub은 code 재사용을 탈취로 판단해 이미 발급한 토큰까지 무효화한다.
 
 **UI states**
 
-프론트 로직 없음(서버 302만 처리). 복귀 후 홈은 `analysisStatus: 'syncing'`으로 시작한다.
+프론트 로직 없음(서버 302만 처리). 실패는 code/token이 없는 `/login?error=<safe_reason>`으로 돌아온다.
 
 **Failure**
 
-| 코드 | reason |
-| --- | --- |
-| 400 | `invalid_state` · `invalid_code` |
-| 403 | `account_suspended` · `account_withdrawn` |
-| 502 | `provider_unavailable` |
+redirect reason은 `denied`, `invalid_state`, `invalid_code`, `account_suspended`, `account_withdrawn`, `provider_unavailable`, `service_unavailable`, `internal_error` 중 안전한 값만 사용한다.
 
 ---
 
@@ -225,17 +223,17 @@ Location: /login?error=denied
 
 **Request**
 
-없음 (`refreshToken` 쿠키만 사용).
+body는 없다. `refreshToken` cookie와 정확한 `Origin: <FRONTEND_ORIGIN>`이 필요하다.
 
 **Response**
 
 `204 No Content`
 ```
 Set-Cookie: accessToken=<new_jwt>;  HttpOnly; Secure; SameSite=Lax; Path=/;             Max-Age=900
-Set-Cookie: refreshToken=<new_jwt>; HttpOnly; Secure; SameSite=Lax; Path=/auth/refresh; Max-Age=1209600
+Set-Cookie: refreshToken=<new_jwt>; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=1209600
 ```
 
-갱신 시 리프레시 토큰도 새로 발급하고 이전 `jti`는 폐기한다.
+갱신 시 PostgreSQL session의 현재 `refresh_jti`와 만료 시각을 한 트랜잭션에서 교체하고 새 JWT cookie를 발급한다. refresh 만료는 다시 14일로 연장한다. 누락 cookie나 누락·만료 session은 401 `refresh_token_invalid`다. Redis 조회는 없으므로 Redis 장애가 기존 로그인 갱신을 막지 않는다.
 
 **UI states**
 
@@ -246,7 +244,8 @@ Set-Cookie: refreshToken=<new_jwt>; HttpOnly; Secure; SameSite=Lax; Path=/auth/r
 | 코드 | reason |
 | --- | --- |
 | 401 | `refresh_token_invalid` |
-| 403 | `account_suspended` · `account_withdrawn` |
+| 403 | `account_suspended` · `account_withdrawn` · `invalid_origin` |
+| 503 | `service_unavailable` |
 
 ---
 
@@ -254,17 +253,17 @@ Set-Cookie: refreshToken=<new_jwt>; HttpOnly; Secure; SameSite=Lax; Path=/auth/r
 
 **Request**
 
-없음.
+body는 없다. 정확한 `Origin: <FRONTEND_ORIGIN>`을 보낸다. refresh cookie는 없어도 된다.
 
 **Response**
 
 `204 No Content`
 ```
 Set-Cookie: accessToken=;  Max-Age=0; Path=/
-Set-Cookie: refreshToken=; Max-Age=0; Path=/auth/refresh
+Set-Cookie: refreshToken=; Max-Age=0; Path=/api/auth
 ```
 
-리프레시 토큰은 서버 DB에서 삭제한다. 액세스 토큰은 무효화하지 않으며 남은 유효기간(최대 15분)까지 서명이 유효하다. 이미 만료된 상태여도 `204`로 응답한다 (멱등). GitHub 토큰은 삭제하지 않는다.
+유효 refresh가 있으면 PostgreSQL에서 현재 `sid`·사용자·generation의 session만 삭제한다. 직전 갱신으로 `jti`가 바뀌어도 같은 로그인은 폐기하며 다른 로그인은 유지한다. access JWT는 무효화하지 않아 최대 15분간 남는다. refresh cookie가 없거나 검증 실패이면 쿠키만 멱등 삭제하고 `204`를 반환한다. GitHub token은 삭제하지 않는다.
 
 **UI states**
 
@@ -272,7 +271,7 @@ Set-Cookie: refreshToken=; Max-Age=0; Path=/auth/refresh
 
 **Failure**
 
-없음 (멱등, 항상 `204`).
+Origin 누락/불일치는 403 `invalid_origin`, 유효 토큰의 DB 처리 장애는 503 `service_unavailable`이다. DB 장애에서는 쿠키를 지우거나 revocation 성공으로 응답하지 않는다. Redis는 사용하지 않는다.
 
 ---
 
@@ -296,20 +295,22 @@ Set-Cookie: refreshToken=; Max-Age=0; Path=/auth/refresh
 | `githubLinked` | boolean | ❌ |
 
 `name`은 `users.display_name` (GitHub `name`, 없으면 `login`).
+`githubLinked`는 `github_accounts`가 존재하고 `token_status=valid`일 때만 true다.
 
 **UI states**
 
-전역 인증 가드용 — 보호 라우트 진입 시 호출해 인증 여부를 확인한다. 응답 필드 자체는 화면에 직접 렌더하지 않는다(프로필 표시는 `/me/home`, `/me/profile` 담당).
+전역 인증 가드와 헤더 identity용이다. 이 인증 범위에서는 별도 dashboard/profile API를 호출하지 않는다.
 
 **Failure**
 
 | 코드 | reason |
 | --- | --- |
 | 401 | `unauthenticated` · `access_token_expired` · `access_token_invalid` |
+| 403 | `account_suspended` · `account_withdrawn` |
 
 ---
 
-## 6. GET /me/profile
+## 6. GET /me/profile (후속, 현재 계약 아님)
 
 **Response**
 
@@ -359,7 +360,7 @@ Set-Cookie: refreshToken=; Max-Age=0; Path=/auth/refresh
 
 ---
 
-## 7. GET /auth/github/link
+## 7. GET /auth/github/link (후속, 현재 계약 아님)
 
 GitHub 토큰 무효 시 재연동. DEVON 로그인 상태는 유지되고 GitHub 토큰만 갱신된다.
 
@@ -372,7 +373,7 @@ GitHub 토큰 무효 시 재연동. DEVON 로그인 상태는 유지되고 GitHu
 `302`
 ```
 Location: https://github.com/login/oauth/authorize?...&state=<random>
-Set-Cookie: oauthState=<random>; HttpOnly; Secure; SameSite=Lax; Path=/auth/github; Max-Age=600
+Set-Cookie: oauthState=<random>; HttpOnly; Secure; SameSite=Lax; Path=/api/auth/github; Max-Age=600
 ```
 
 `302` → `/login` — `accessToken`이 없거나 만료된 경우.
@@ -389,7 +390,7 @@ JSON 에러 없음 — 실패는 `/login` 302로 표현된다.
 
 ---
 
-## 8. GET /auth/github/link/callback
+## 8. GET /auth/github/link/callback (후속, 현재 계약 아님)
 
 **Request** (Query) — `code`, `state` (login 콜백과 동일)
 
@@ -398,7 +399,7 @@ JSON 에러 없음 — 실패는 `/login` 302로 표현된다.
 `302`
 ```
 Location: /home
-Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
+Set-Cookie: oauthState=; Max-Age=0; Path=/api/auth/github
 ```
 
 `github_accounts.token_status`를 `valid`로 갱신한다. 액세스 토큰 쿠키는 재발급하지 않는다.
@@ -415,7 +416,7 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 
 ---
 
-## 9. GET /me/home
+## 9. GET /me/home (후속, 현재 계약 아님)
 
 **Response**
 
@@ -486,7 +487,7 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 
 ---
 
-## 10. GET /me/interviews
+## 10. GET /me/interviews (후속, 현재 계약 아님)
 
 **Request** (Query)
 ```
@@ -1399,27 +1400,29 @@ Sprint 1엔 이탈 자동 감지 배치가 없다(`context/DB.md`, `spec/backend
 | `POST /interviews/{id}/retry` | `interviews` |
 | 면접 완료 (리포트 생성) | `home`, `interviews` |
 | 피드백 이의 제출 | `interview(id).report` |
-| `GET /auth/github/link/callback` 복귀 | `me`, `home` |
 | `POST /auth/logout` | 전체 `clear()` |
 | `POST /auth/refresh` 성공 | 없음 |
-| `POST /auth/refresh` 실패 | 전체 `clear()` |
+| `POST /auth/refresh` terminal 401/403 | 인증 cache 무효화 |
+| `POST /auth/refresh` network/503 | 기존 인증 cache 유지, retry |
 
 ---
 
-## 최종 엔드포인트 목록
+## 기존 전체 설계 엔드포인트 목록
+
+아래 6~10은 후속 설계 기록이다. 현재 인증 계약은 1~5뿐이고 전체 canonical surface는 OpenAPI를 따른다.
 
 | # | 메서드 | 경로 | 구현 방식 | 인증 |
 | --- | --- | --- | --- | --- |
 | 1 | GET | `/auth/github/login` | 브라우저 이동 | 불필요 |
 | 2 | GET | `/auth/github/callback` | 프론트 무관 | 불필요 |
 | 3 | POST | `/auth/refresh` | fetch | `refreshToken` |
-| 4 | POST | `/auth/logout` | fetch | `accessToken` |
+| 4 | POST | `/auth/logout` | fetch | Origin + optional `refreshToken` |
 | 5 | GET | `/me` | fetch | `accessToken` |
-| 6 | GET | `/me/profile` | fetch | `accessToken` |
-| 7 | GET | `/auth/github/link` | 브라우저 이동 | `accessToken` |
-| 8 | GET | `/auth/github/link/callback` | 프론트 무관 | `accessToken` |
-| 9 | GET | `/me/home` | fetch | `accessToken` |
-| 10 | GET | `/me/interviews` | fetch | `accessToken` |
+| 6 | GET | `/me/profile` | 후속 | `accessToken` |
+| 7 | GET | `/auth/github/link` | 후속 | `accessToken` |
+| 8 | GET | `/auth/github/link/callback` | 후속 | `accessToken` |
+| 9 | GET | `/me/home` | 후속 | `accessToken` |
+| 10 | GET | `/me/interviews` | 후속 | `accessToken` |
 | 11 | POST | `/documents/preview` | fetch (multipart) | `accessToken` |
 | 12 | POST | `/analysis-runs` | fetch | `accessToken` |
 | 13 | GET | `/analysis-runs/{runId}/events` | EventSource | `accessToken` |
@@ -1433,17 +1436,17 @@ Sprint 1엔 이탈 자동 감지 배치가 없다(`context/DB.md`, `spec/backend
 | 21 | POST | `/reports/{id}/feedback-disagreements` | fetch | `accessToken` |
 | 22 | GET | `/analysis-runs/{runId}/candidates` | fetch | `accessToken` |
 
-총 22개.
+22개 번호는 기존 전체 설계를 보존한 것이다. 현재 구현 완료를 뜻하지 않는다.
 
-`shared/api.ts`에 넣지 않는 것: 1, 2, 7, 8 (브라우저 이동 또는 프론트 무관). 3은 인터셉터 내부에서만 호출한다.
+`shared/api.ts`에 넣지 않는 것: 1, 2 (브라우저 이동 또는 프론트 무관). 3은 인증 복구 내부에서만 호출한다.
 
 ### 구현 방식별 분류
 
 | 방식 | 엔드포인트 |
 | --- | --- |
-| 브라우저 이동 | 1, 7 |
-| 프론트 무관 (서버 302) | 2, 8 |
-| `fetch` GET | 5, 6, 9, 10, 14, 15, 17, 19, 22 |
+| 브라우저 이동 | 1 |
+| 프론트 무관 (서버 302) | 2 |
+| `fetch` GET | 5, 14, 15, 17, 19, 22 |
 | `fetch` POST | 3, 4, 12, 16, 20, 21 |
 | `fetch` POST (multipart) | 11 |
 | `EventSource` | 13 |
@@ -1462,7 +1465,7 @@ Sprint 1엔 이탈 자동 감지 배치가 없다(`context/DB.md`, `spec/backend
 | 마이페이지 | — | `/me/profile` R · `/me/interviews` R · `/auth/logout` W |
 | 공고·문서 입력 | 4-1-v2 | `/documents/preview` W (파일 선택 시) · `/analysis-runs` W |
 | 분석 진행 | 4-2-v2 | `/analysis-runs/{runId}/events` S · `/analysis-runs/{runId}` R |
-| 분석 실패 | 4-3-v2 | `/analysis-runs/{runId}` R · `/analysis-runs` W (재시도) · `/auth/github/link` (이동) |
+| 분석 실패 | 4-3-v2 | `/analysis-runs/{runId}` R · `/analysis-runs` W (재시도) |
 | 레포 확정 | 5a-v2 | `/analysis-runs/{runId}/result` R · `/analysis-runs/{runId}/candidates` R (더보기) · `/interviews` W |
 | 면접 준비 | 5a2-v2 | `/interviews/{id}` R · `/ws/interviews/{sessionId}` S |
 | 면접 준비 실패 | — | `/interviews/{id}` R (`lastError`) · `/ws/interviews/{sessionId}` S (`prepareRetry`) · `/analysis-runs/{runId}/result` R (레포 재선택) |
@@ -1526,6 +1529,8 @@ Sprint 1엔 이탈 자동 감지 배치가 없다(`context/DB.md`, `spec/backend
 
 | 일자 | 변경 |
 | --- | --- |
+| 2026-09-15 | Refresh 유효·폐기 원본을 PostgreSQL `auth_sessions`로 변경. JWT·cookie·API·FE 흐름 유지. 이전 Redis 로그인은 다음 갱신 때 재로그인 |
+| 2026-09-14 | 인증 5개 endpoint를 OpenAPI 원본으로 확정. cookie Path, Redis refresh record(2026-09-15 대체), exact Origin, `/me.avatarUrl`, no link/initial sync 범위 반영 |
 | 2026-09-08 | `stepKey` 4개 → **7개** (`doc_extract` · `repo_select` · `repo_detail` · `jd_fetch` · `jd_extract` · `repo_analyze` · `match_score`) |
 | 2026-09-08 | `agentRole` → **`persona`**, 값 `senior_developer`/`manager` → **`hr_manager`/`domain_lead`** |
 | 2026-09-08 | 에러 reason `jd_parse_failed` → **`jd_fetch_failed`/`jd_extraction_failed`** |

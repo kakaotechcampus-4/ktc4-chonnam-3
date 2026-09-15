@@ -1,6 +1,7 @@
 # 계약 이관 현황
 
-작성일: 2026-09-10
+작성일: 2026-09-14
+갱신일: 2026-09-15
 
 이 문서는 기존 FE 문서, backend docs, context 기록에서 Sprint 1 FIX 계약으로 옮긴 항목과 보류 항목을 추적한다.
 
@@ -14,7 +15,11 @@
 | WS 식별자 | `interviewId` 통일 vs 별도 `sessionId` | `PENDING_FE` |
 | `questionEnd` | 텍스트 WS에서 유지 여부 | `PENDING_FE` |
 | 이탈/복구 | disconnect, heartbeat, abandoned 자동 판정 | `PENDING_FE` |
-| DEVON JWT 전달 | HttpOnly cookie only vs body 포함 | `PENDING_FE` |
+| Auth API | login, callback, refresh, logout, `/me`만 현재 범위 | FIX |
+| DEVON JWT 전달 | `accessToken`, `refreshToken` HttpOnly cookie only | FIX |
+| OAuth state | Redis 10분 single-use + `oauthState` cookie + S256 PKCE | FIX |
+| Refresh 상태 | PostgreSQL `users.refresh_generation` + `auth_sessions`; Redis 이중 기록/fallback 없음 | FIX |
+| 초기 GitHub 동기화·재연동 | 로그인 callback에서 enqueue하지 않음; link API는 후속 | FIX |
 | Partial run 매핑 | DB `partial` -> FE `failed`, result 조회 가능 | FIX |
 | Persona enum | `tech_lead`, `hr_manager`, `domain_lead` | FIX |
 | Analysis StepKey | 7개 step 유지 | FIX |
@@ -24,7 +29,7 @@
 | Report disagreement | Sprint 1 테이블 생성, API/row 생성은 Sprint 2 | FIX |
 | Knowledge seed tables | `score_criteria`, `prompt_versions`, `domain_question_frames`만 유지 | FIX |
 | Eval/feedback tables | `feedback_signals`, `eval_cases`, `eval_runs` Sprint 1 제외 | FIX |
-| Auth sessions | Sprint 1, Sprint 2 모두 제외 | FIX |
+| Auth sessions | Sprint 1 인증에 포함; migration `0002`로 추가, 만료 session 정기 삭제 | FIX |
 | Wanted-only JD | Sprint 1 Wanted만 지원 | FIX |
 | Private repo | 지원하지 않음. 필드만 유지 | FIX |
 | Report score | 산정 근거와 저장 스케일 | `PENDING_TEAM` |

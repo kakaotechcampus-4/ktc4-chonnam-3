@@ -1,22 +1,19 @@
-# task-07 — /me 계열 API
+# task-07 — /me 인증 API
 
 > 선행: task-06
-> 근거: `spec/backend/features/report.md`
+> 근거: `spec/shared/contracts/openapi.yaml`
 
 ## 목표
 
-`/me`, `/me/home`, `/me/interviews`, `/me/repositories`를 구현한다.
+현재 로그인 사용자를 확인하는 `/api/me`만 구현한다. dashboard, profile, interview list, repository list API는 이 인증 작업 범위가 아니다.
 
 ## 작업
 
-- `/me`는 현재 사용자 기본 정보를 반환한다.
-- `/me/home`은 Sprint 1에서 최소 DB 집계와 `user_profile_summaries` 기반 shape를 맞춘다.
-- 집계 기준은 완료 면접에 사용된 repo다.
-- `/me/interviews`는 pagination으로 면접 목록을 반환한다.
-- `/me/repositories`는 수집된 public repo 목록을 반환하되 분석 후보 pagination과 혼동하지 않는다.
-- `profile_summary` job은 report 생성 성공 후 백그라운드 갱신한다.
+- access JWT를 검증하고 DB의 현재 account status를 확인한다. access 인증은 Redis에 의존하지 않는다.
+- 응답은 `{name, avatarUrl, githubLinked}`이며 `avatarUrl`은 nullable이다.
+- `githubLinked`는 GitHub account가 존재하고 `token_status=valid`일 때만 true다.
 
 ## 완료 조건
 
-- 빈 데이터 사용자, 분석 중 사용자, 완료 면접 보유 사용자 응답을 테스트한다.
-- profile summary가 없어도 홈 응답이 깨지지 않는다.
+- 유효 access, 만료/변조/누락 access, suspended/withdrawn account를 테스트한다.
+- standalone `me-response.schema.json` 및 OpenAPI와 응답 필드가 일치한다.

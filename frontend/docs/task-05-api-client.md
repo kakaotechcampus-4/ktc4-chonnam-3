@@ -54,10 +54,8 @@ export const api = {
 
 아래는 `fetch`가 아니라 브라우저 이동이므로 이 파일에 넣지 않는다.
 
-- `GET /auth/github/login`
-- `GET /auth/github/callback`
-- `GET /auth/github/link`
-- `GET /auth/github/link/callback`
+- `GET /api/auth/github/login`
+- `GET /api/auth/github/callback`
 
 화면에서 `<a href>` 또는 `window.location`으로 처리한다.
 

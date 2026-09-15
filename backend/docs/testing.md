@@ -16,6 +16,12 @@
 | 계약 | Pydantic 응답이 camelCase이며 snake_case가 새지 않음 |
 | 에러 | 모든 AppError가 error envelope로 반환됨 |
 | DB | CHECK/UNIQUE/INDEX 핵심 제약 검증 |
+| 인증 migration | `0001` 기존 사용자·암호화 GitHub token 보존, `0002` generation backfill와 `auth_sessions` FK/INDEX, downgrade 범위 |
+| Refresh DB | 실제 PostgreSQL rotation, 동시 갱신, replay 폐기가 commit된 뒤 401, 다른 로그인 전체 폐기, 옛 generation의 새 로그인 방해 차단 |
+| 로그아웃 | 현재 session만 삭제, 직전 rotation과 경합해도 폐기, 다른 session 보존, Access 최대 15분 유지, 무효·누락 cookie 멱등 삭제 |
+| 인증 장애 | DB 장애는 503이며 성공·쿠키 삭제로 위장하지 않음; Redis 장애·유실에도 기존 session refresh/logout은 Redis 접근 없이 성공 |
+| OAuth state | 실제 Redis에서 browser binding·만료·단일 사용·PKCE 검증, 장애 시 안전한 실패 |
+| Refresh 정리 | 누락·만료 session 갱신 거부, 이전 Redis token 거부, 만료 row만 정리와 반복 실행, DB 설정만으로 CLI 실행 |
 | 문서 preview | PDF/DOCX/TXT/MD 성공, 미지원 형식, 10MB 초과, GitHub URL 정규화 |
 | Wanted | Wanted URL 성공, unsupported site 차단, fetch/extract 실패 구분 |
 | GitHub | public만 수집, private/fork/archived/no_language/too_small excluded 저장 |
@@ -30,6 +36,10 @@
 | Redis | `iv:ctx` 만료 시 Postgres에서 재구성 |
 | Report | lazy generation 202/200/409, `feedback_json`, profile summary enqueue |
 | Events | 고정 10개 외 event_name 거부 |
+
+## 인증 통합 검증
+
+인증 통합 테스트의 `TEST_DATABASE_URL`, `TEST_REDIS_URL`은 독립 테스트 DB와 Redis DB 15를 가리켜야 한다. 환경값이 없어 skip된 경우 통합 검증 성공으로 보고하지 않는다. Redis는 OAuth state 테스트에 사용하며 Refresh의 원본·대체 저장소로 사용하지 않는다. 실행 방법은 [backend README](../README.md#인증-테스트)를 따른다.
 
 ## LLM 실패
 

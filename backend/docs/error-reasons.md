@@ -21,9 +21,16 @@
 | 그룹 | reason | HTTP |
 | --- | --- | --- |
 | 인증 | `unauthenticated` | 401 |
-| 인증 | `token_invalid` | 403 |
+| 인증 | `access_token_expired` | 401 |
+| 인증 | `access_token_invalid` | 401 |
+| 인증 | `refresh_token_invalid` | 401 |
 | 인증 | `account_suspended` | 403 |
 | 인증 | `account_withdrawn` | 403 |
+| 인증 | `invalid_origin` | 403 |
+| OAuth | `invalid_state` | callback 실패 redirect |
+| OAuth | `invalid_code` | callback 실패 redirect |
+| OAuth | `provider_unavailable` | callback 실패 redirect |
+| 공통 | `service_unavailable` | 503 |
 | 문서 | `unsupported_document_type` | 415 |
 | 문서 | `document_too_large` | 413 |
 | 문서 | `document_extract_failed` | 200 또는 409 |

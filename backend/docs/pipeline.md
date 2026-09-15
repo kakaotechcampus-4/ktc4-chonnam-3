@@ -16,7 +16,7 @@
 
 | 태스크 | job_type | 시점 |
 |---|---|---|
-| `initial_sync` | `initial_sync` | M1 — GitHub 연동 직후 백그라운드 |
+| `initial_sync` | `initial_sync` | M1 — 후속 동기화 시작점에서 실행; OAuth callback에서는 enqueue하지 않음 |
 | `analysis_run` | `analysis_run` | M2 — 공고 입력 후 7단계 분석 |
 | `candidate_page_analyze` | `candidate_page_analyze` | M3 — 추천 후보 더 보기 page 분석 |
 | `interview_prep` | `interview_prep` | M4-a — 면접 준비 |
@@ -61,7 +61,7 @@ Postgres 에서 읽는 것이 이 실패에 대한 복구 경로다.
 
 ### 락 키에 `jobType` 이 들어가는 이유
 
-M1 `initial_sync` 는 연동 직후 백그라운드로 돈다. 사용자가 바로 공고를 입력하면 M2 와 겹치는데,
+M1 `initial_sync`는 후속 동기화 기능이 명시적으로 시작한다. 현재 OAuth callback은 로그인만 완료하고 enqueue하지 않는다. 사용자가 동기화와 함께 공고를 입력하면 M2와 겹칠 수 있는데,
 사용자 단일 락으로 두면 **정상 흐름이 `run_in_progress` 로 막힌다.**
 DB 부분 유니크도 `(user_id, job_type) WHERE status IN ('queued','running')` 이다.
 

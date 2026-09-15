@@ -1,6 +1,6 @@
 # AI 의사결정 대기 목록
 
-갱신일: 2026-09-12. 상태: 남은 공동 결정과 후속 검토만 관리.
+갱신일: 2026-09-14. 상태: 남은 공동 결정과 후속 검토만 관리.
 
 확정한 내용은 이 파일에서 제거하고 [AI 결정 기록](spec/ai/decisions/README.md)과 해당 기능 명세에 보존한다. 아래 항목은 각 주제의 **아직 결정하지 않은 부분**이며, 연결된 결정 문서 전체가 미승인이라는 뜻은 아니다.
 
@@ -18,6 +18,14 @@
 | BE·FE·리포트 연결 | AI-L11~AI-L17 | 해당 저장·전송·공개 응답 구현 전 |
 | 자료 운영·평가·검색 | AI-L18~AI-L20 | 실제 자료 수집·최종 평가·검색 확장 전 |
 | 후속 기능 | AI-L21~AI-L26 | 해당 기능의 채택·착수 전 |
+
+## 인증 후속 범위
+
+- GitHub 재연동(`/api/auth/github/link*`)은 현재 로그인 계약에 포함하지 않는다. token revocation UX와 기존 DEVON session 유지 정책을 별도 승인한 뒤 계약을 추가한다.
+- GitHub repository `initial_sync`는 OAuth callback에서 enqueue하지 않는다. repository 분석 기능이 실제 동기화 시점, 실패 복구, 사용자 진행 상태를 합의할 때 연결한다.
+- 현재 `/api/me` 외 dashboard/profile API는 인증 구현 완료 조건이 아니다. 해당 화면의 실제 데이터 계약이 승인될 때 별도 이관한다.
+
+위 항목은 [Accepted 인증 결정](spec/shared/decisions/0002-github-oauth.md)의 의도적 제외 범위이며 기존 AI `PENDING_*` 항목을 변경하지 않는다.
 
 ## 내부 AI·분석 연결
 

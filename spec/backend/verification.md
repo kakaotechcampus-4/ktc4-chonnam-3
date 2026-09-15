@@ -16,7 +16,9 @@
 | Wanted | Sprint 1은 Wanted-only이며 unsupported site를 차단한다 |
 | 면접 | 9턴, 첫 hr_manager 질문, persona target distribution, 텍스트 WS를 검증한다 |
 | Evidence | `question_basis`와 `evaluation_basis`, `answer_vs_code` conflict 생성을 검증한다 |
-| Redis | Redis snapshot 유실 시 Postgres에서 재구성 가능해야 한다 |
+| Refresh | 실제 PostgreSQL에서 rotation·동시 갱신·replay 폐기 commit·옛 generation 보호·logout 경합을 검증한다. Redis 접근 없이 갱신·로그아웃이 동작하고 DB 장애는 503으로 구분한다 |
+| 인증 migration·정리 | `0002`의 기존 계정 보존·generation backfill·FK/INDEX, 이전 Redis token 거부, downgrade 범위와 만료 row만 정리하는 반복 실행을 검증한다 |
+| Redis | 면접 context snapshot 유실 시 Postgres에서 재구성한다. OAuth state는 재구성하지 않고 로그인 절차를 다시 시작하며, Redis 유실·장애가 기존 Refresh DB 기록을 폐기하지 않는다 |
 | 리포트 | lazy generation 200/202/409, feedback disagreement unique를 검증한다 |
 | 이벤트 | 고정 10개 이벤트 외 값은 거부한다 |
 

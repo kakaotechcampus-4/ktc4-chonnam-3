@@ -39,9 +39,13 @@ DuckDNS 로 FE·BE 를 한 origin 아래 묶고, Caddy 가 TLS 와 reverse proxy
 
 ## 2. 쿠키
 
-```
-Set-Cookie: devon_session=...; HttpOnly; Secure; SameSite=Lax; Path=/
-```
+| 쿠키 | Path | 수명 |
+|---|---|---|
+| `accessToken` | `/` | 15분 |
+| `refreshToken` | `/api/auth` | 14일, rotation 시 갱신 |
+| `oauthState` | `/api/auth/github` | 10분, callback에서 삭제 |
+
+세 쿠키는 HttpOnly, SameSite=Lax, Domain 미설정이다. `Secure`는 prod에서 true이고 local HTTP에서는 false다.
 
 | 환경 | Secure | SameSite | CORS |
 |---|---|---|---|
@@ -50,8 +54,8 @@ Set-Cookie: devon_session=...; HttpOnly; Secure; SameSite=Lax; Path=/
 
 `Secure` 는 prod 에서 유지한다. same-origin 이어도 HTTPS 전용 쿠키여야 한다.
 
-`FRONTEND_ORIGIN` 은 prod 에서 CORS 용도로는 쓰이지 않는다. 로컬에서 vite 프록시를 쓰지 않는
-경우의 allowlist 로만 남긴다.
+`FRONTEND_ORIGIN`은 refresh/logout의 `Origin`을 exact match하는 보안 경계다. local은
+`http://localhost:5173`, prod는 실제 HTTPS origin 하나를 trailing slash 없이 설정한다.
 
 ## 3. Caddy 설정 — 반드시 지킬 것 4가지
 
@@ -136,7 +140,7 @@ EC2 public DNS, public IP, 컨테이너 포트를 직접 넣으면 쿠키가 그
 
 ## 5. 로컬 개발 — vite 프록시
 
-`frontend/vite.config.ts` 에 프록시를 추가해야 한다 (현재 없음 — **FE 작업 항목**).
+`frontend/vite.config.ts`의 `/api` 프록시는 `http://localhost:8000`을 향한다.
 
 ```ts
 server: {
@@ -148,6 +152,8 @@ server: {
 
 WS 도 브라우저에서 `/api/ws/interviews/{sessionId}` 로 붙으므로 위 `/api` 프록시에 같이 걸린다.
 로컬도 prod 와 같은 same-origin 구조가 되어 CORS 설정이 필요 없고 `SameSite=lax` 로 충분하다.
+GitHub OAuth App의 local callback과 `GITHUB_REDIRECT_URI`는 브라우저 origin을 거치는
+`http://localhost:5173/api/auth/github/callback`으로 맞춘다.
 
 ## 6. CI
 
@@ -193,3 +199,45 @@ GitHub 토큰은 `BYTEA` + AES-GCM 으로 암호화해 저장한다 (`app/core/c
 | FE 빌드 배치 | Caddy 이미지에 FE dist 를 포함할지, EC2 배포 스크립트가 volume 으로 둘지 결정 필요 |
 | compose 위치 | 현재 `backend/docker-compose.yml` 은 BE 로컬 개발 중심이다. prod compose 는 FE/Caddy 포함 형태로 별도 작성 필요 |
 | CD | GitHub Actions 사용 확정. EC2 배포 방식 확정 후 작성 |
+
+## 10. Refresh 저장소 전환과 정리
+
+### 전환 순서
+
+1. DB를 기존 운영 절차로 백업하고 구버전 인증 인스턴스의 트래픽을 중지한다. 진행 중인 callback·refresh·logout을 종료한 뒤 구버전을 내린다. Redis 원본과 DB 원본 버전을 동시에 서비스하지 않는다.
+2. backend 디렉터리에서 `uv run alembic upgrade head`를 실행한다. `0001`의 계정·GitHub token은 유지하고 `0002`에서 `users.refresh_generation`을 채우며 `auth_sessions`를 생성한다.
+3. 새 DB 원본 버전만 시작한다. 이전 `auth:refresh:*` Redis 키는 읽거나 가져오지 않는다. 기존 Access는 최대 15분간 남고, 이전 Refresh로 갱신하려면 재로그인이 필요하다. 이전 키는 TTL로 자연 만료시키며 다른 Redis 데이터와 함께 비우지 않는다.
+4. 신규 로그인·갱신·로그아웃과 만료 정리 명령을 확인한다. Redis 장애 시 기존 session의 갱신·로그아웃은 계속 처리되고 신규 OAuth는 안전하게 실패해야 한다. DB 장애 시 유효 토큰의 갱신·로그아웃은 503이며 쿠키를 지우거나 성공으로 응답하지 않아야 한다.
+
+`0002` downgrade는 `auth_sessions`와 user generation을 제거하지만 `0001`의 계정은 보존한다. DB 로그인 기록은 잃으므로 재로그인이 필요하다. **아직 TTL이 남은 Redis 키를 읽는 구버전을 되살리는 것은 안전한 인증 롤백이 아니다.** 되돌릴 버전도 이전 Refresh를 승인하지 않는 전환 기준을 적용해야 하며, 구버전과의 무중단 혼합 운영·자동 fallback은 지원하지 않는다.
+
+### 과거 DB 백업 복원 시
+
+PostgreSQL의 정상적인 장애 복구와 과거 시점의 백업 복원은 구분한다. 과거 백업에는 로그아웃·재사용 탐지 이전의 session이 남아 있을 수 있으므로 DB를 사용한다는 이유만으로 폐기 기록의 되돌림이 방지되지는 않는다. 과거 백업을 복원했다면 인증 트래픽을 재개하기 전에 아래 정리를 한 트랜잭션으로 수행하고 모든 사용자에게 재로그인을 요구한다. 사용자·GitHub 계정은 보존하며, 이 명령은 일반 재시작이나 정기 만료 정리 때 실행하지 않는다.
+
+```sql
+BEGIN;
+UPDATE users SET refresh_generation = gen_random_uuid();
+DELETE FROM auth_sessions;
+COMMIT;
+```
+
+이는 Refresh 기록 초기화이며 이미 발급된 Access JWT의 즉시 폐기를 의미하지 않는다. 기존 Access는 최대 15분간 유효할 수 있다.
+
+### 만료 기록 정리
+
+DB 전용 설정은 `DATABASE_URL`을 환경 변수 또는 backend `.env`에서 읽는다. Alembic과 정리 명령에는 GitHub·JWT·암호화 비밀값이나 Redis가 필요하지 않다. 정리 명령은 아래와 같다.
+
+```bash
+uv run python -m scripts.cleanup_auth_sessions
+```
+
+현재 UTC 기준 `expires_at`이 지난 row만 한 트랜잭션에서 삭제한다. 아직 만료되지 않은 session은 삭제하지 않으며 반복 실행해도 안전하다. generation 변경으로 이미 무효화된 row도 만료 시 정리된다. 로그아웃한 row는 즉시 삭제되므로 별도 보존 대상이 아니다. 출력·로그에는 삭제 개수만 남기고 JWT·cookie·GitHub token·사용자 식별자는 남기지 않는다.
+
+기존 운영 스케줄러에서 **매시간 1회** 실행한다. Linux cron을 이미 사용하는 환경에서의 예시는 다음과 같다. backend 작업 경로와 Python 경로를 실제 배포에 맞추고 DB 설정을 해당 실행 환경에 제공한다.
+
+```cron
+0 * * * * cd /srv/backend && /srv/backend/.venv/bin/python -m scripts.cleanup_auth_sessions
+```
+
+Windows 로컬에서는 backend 작업 디렉터리에서 `.venv\Scripts\python.exe -m scripts.cleanup_auth_sessions`로 수동 확인한다. 운영 정기 실행 등록은 기존 배포 스케줄러 책임이며 이 구현이 cron·작업 스케줄러를 자동 등록하지 않는다. 새로운 스케줄러 라이브러리나 API lifespan 정리 loop는 추가하지 않는다. 정리가 늦어져도 만료 검증이 접속을 차단하지만 불필요한 DB row가 쌓이므로 실패를 확인하고 재실행한다.

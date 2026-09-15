@@ -1,24 +1,27 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-import type { ApiError } from '@/types/api';
+import { isAuthFailure } from '@/shared/api';
+import { subscribeAuthChanges } from '@/shared/authEvents';
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
+      retry: (failureCount, error) => !isAuthFailure(error) && failureCount < 1,
       staleTime: 60 * 1000,
       refetchOnWindowFocus: false,
     },
   },
-  queryCache: new QueryCache({
-    onError: (error) => {
-      const err = error as ApiError;
-      if (err?.error?.reason === 'unauthenticated') {
-        window.location.href = '/login';
-      }
-    },
-  }),
+});
+
+subscribeAuthChanges(({ reason, redirect }) => {
+  void queryClient.cancelQueries().then(() => {
+    if (!redirect) return;
+    queryClient.clear();
+    if (window.location.pathname === '/login') return;
+    const blocked = reason === 'account_suspended' || reason === 'account_withdrawn';
+    window.location.assign(`/login${blocked ? `?error=${reason}` : ''}`);
+  });
 });
 
 export function Providers({ children }: { children: ReactNode }) {

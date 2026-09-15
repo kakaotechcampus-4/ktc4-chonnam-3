@@ -6,12 +6,19 @@
     "name": {
       "type": "string"
     },
+    "avatarUrl": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "githubLinked": {
       "type": "boolean"
     }
   },
   "required": [
     "name",
+    "avatarUrl",
     "githubLinked"
   ],
   "additionalProperties": true

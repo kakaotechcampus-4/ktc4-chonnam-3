@@ -8,10 +8,129 @@ servers:
 x-contract-status: sprint1-fix
 x-pending:
   - WS identifier path: interviewId vs sessionId is PENDING_FE
-  - DEVON JWT delivery method is PENDING_FE
   - Text WebSocket questionEnd is PENDING_FE
   - Abandoned/reconnect policy is PENDING_FE
 paths:
+  /auth/github/login:
+    get:
+      operationId: startGitHubLogin
+      summary: Start GitHub OAuth login
+      responses:
+        '302':
+          description: Redirect to GitHub after storing a browser-bound, single-use OAuth state
+          headers:
+            Location:
+              required: true
+              schema:
+                type: string
+                format: uri
+            Set-Cookie:
+              description: HttpOnly oauthState cookie scoped to /api/auth/github
+              schema:
+                type: string
+        '503':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /auth/github/callback:
+    get:
+      operationId: completeGitHubLogin
+      summary: Complete GitHub OAuth login
+      description: Redirects to /home on success or /login?error=<safe_reason> on failure. Codes and tokens never appear in the final URL.
+      security:
+        - OAuthStateCookie: []
+        - {}
+      parameters:
+        - name: code
+          in: query
+          schema:
+            type: string
+        - name: state
+          in: query
+          schema:
+            type: string
+        - name: error
+          in: query
+          description: GitHub denial is mapped to the safe frontend reason denied.
+          schema:
+            type: string
+      responses:
+        '302':
+          description: Browser redirect after success or any safely mapped OAuth failure
+          headers:
+            Location:
+              required: true
+              schema:
+                type: string
+                format: uri-reference
+            Set-Cookie:
+              description: On success, sets DEVON cookies and clears oauthState; on failure, clears oauthState.
+              schema:
+                type: string
+  /auth/refresh:
+    post:
+      operationId: refreshSession
+      summary: Atomically rotate the DEVON refresh session
+      description: PostgreSQL is the sole refresh authority. Rotation updates the current identifier and sliding 14-day expiry in one transaction. Same-generation replay commits user-wide refresh revocation before returning 401. Missing, expired, or stale-generation sessions are rejected without invalidating newer logins. Redis is not used by this endpoint.
+      security:
+        - RefreshTokenCookie: []
+      parameters:
+        - $ref: '#/components/parameters/FrontendOrigin'
+      responses:
+        '204':
+          description: Tokens rotated; response has no body
+        '401':
+          description: Missing, expired, invalid, or replayed refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Revoke the current refresh session and clear auth cookies
+      description: Deletes only the matching PostgreSQL session, including after its identifier rotated. A missing or invalid refresh cookie only clears cookies idempotently. Database failure for a valid token is service_unavailable without clearing cookies, never a successful revocation. Redis is not used. Issued access JWTs remain valid for up to 15 minutes.
+      security:
+        - RefreshTokenCookie: []
+        - {}
+      parameters:
+        - $ref: '#/components/parameters/FrontendOrigin'
+      responses:
+        '204':
+          description: Current session revoked when present; auth cookies cleared; response has no body
+        '403':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /me:
+    get:
+      operationId: getMe
+      summary: Get the authenticated DEVON identity
+      security:
+        - AccessTokenCookie: []
+      responses:
+        '200':
+          description: Current user identity and usable GitHub-link status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
   /documents/preview:
     post:
       operationId: previewDocument
@@ -197,7 +316,31 @@ paths:
         '409':
           $ref: '#/components/responses/Error'
 components:
+  securitySchemes:
+    AccessTokenCookie:
+      type: apiKey
+      in: cookie
+      name: accessToken
+      description: HttpOnly SameSite=Lax DEVON access JWT; Path=/; 15-minute lifetime.
+    RefreshTokenCookie:
+      type: apiKey
+      in: cookie
+      name: refreshToken
+      description: HttpOnly SameSite=Lax DEVON refresh JWT; Path=/api/auth; 14-day rotating lifetime.
+    OAuthStateCookie:
+      type: apiKey
+      in: cookie
+      name: oauthState
+      description: HttpOnly SameSite=Lax browser binding; Path=/api/auth/github; 10-minute lifetime.
   parameters:
+    FrontendOrigin:
+      name: Origin
+      in: header
+      required: true
+      description: Must exactly equal the configured FRONTEND_ORIGIN.
+      schema:
+        type: string
+        format: uri
     RunId:
       name: runId
       in: path
@@ -221,20 +364,9 @@ components:
             $ref: '#/components/schemas/ApiError'
   schemas:
     ApiError:
-      type: object
-      required: [error]
-      properties:
-        error:
-          type: object
-          required: [reason, message]
-          properties:
-            reason:
-              type: string
-            message:
-              type: string
-            details:
-              type: object
-              additionalProperties: true
+      $ref: './api-error.schema.json'
+    MeResponse:
+      $ref: './me-response.schema.json'
     DocumentPreviewResponse:
       type: object
       required: [documentId, status, extractedGithubUrls, fileName, sizeBytes]

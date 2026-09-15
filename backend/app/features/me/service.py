@@ -1,6 +1,13 @@
-"""analysisStatus 파생 로직 + 프로필 재생성 판정.
-★ user_profile_summaries.based_repo_ids 는 정렬해서 저장한다 — 재생성 판정 키라서
-  순서가 흔들리면 매번 재생성된다.
+from sqlalchemy.ext.asyncio import AsyncSession
 
-확정본 §2 user_profile_summaries / task-07
-"""
+from app.db.models.user import User
+from app.features.me.queries import has_valid_github_account
+from app.features.me.schemas import MeResponse
+
+
+async def identity(session: AsyncSession, user: User) -> MeResponse:
+    return MeResponse(
+        name=user.display_name,
+        avatar_url=user.avatar_url,
+        github_linked=await has_valid_github_account(session, user.id),
+    )

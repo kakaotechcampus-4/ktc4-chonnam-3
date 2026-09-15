@@ -27,10 +27,11 @@ export type ReasonType =
 // 2. 공통 에러 타입
 
 export type ApiError = {
+  status: number;
   error: {
     reason: string;
     message: string;
-    retryAfter?: number;
+    details: Record<string, unknown>;
   };
 };
 
@@ -38,6 +39,7 @@ export type ApiError = {
 
 export type MeResponse = {
   name: string;
+  avatarUrl: string | null;
   githubLinked: boolean;
 };
 

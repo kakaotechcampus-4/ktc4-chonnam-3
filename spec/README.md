@@ -22,8 +22,8 @@ spec/ai는 서비스 AI 기능의 명세다. 코딩 AI용 규칙 폴더가 아�
 
 | 기존 원본 | 목표 명세 영역 | 현재 처리 |
 | --- | --- | --- |
-| frontend/docs/api-spec.md, frontend/src/types/api.ts | spec/shared/contracts/ | /me·공통 오류만 부분 이관 초안 |
-| backend/docs/api-spec.md, error-reasons.md | spec/shared/contracts/ | 상충 항목을 migration.md에서 추적 |
+| frontend/docs/api-spec.md, frontend/src/types/api.ts | spec/shared/contracts/ | 인증 5개 endpoint·`/me`·공통 오류는 Accepted 계약, 나머지는 부분 이관 |
+| backend/docs/api-spec.md, error-reasons.md | spec/shared/contracts/ | 인증 계약은 이관 완료, 나머지 상충 항목은 migration.md에서 추적 |
 | backend/docs/layer-rules.md, db-schema.md, pipeline.md | spec/backend/ | 현 원본 유지, architecture·기능 문서에서 참조 |
 | backend/docs/testing.md, deploy.md 등 | 검수 후 관련 팀 spec 또는 실행 가이드 | 이번에 이동하지 않음 |
 
