@@ -4,6 +4,10 @@ import {
   type MeResponse,
   type HomeResponse,
   type InterviewListResponse,
+  type DocumentPreviewResponse,
+  type DocumentKind,
+  type DocumentSource,
+  type CreateAnalysisRunRequest,
   type CreateAnalysisRunResponse,
   type AnalysisRunResponse,
   type AnalysisResultResponse,
@@ -67,11 +71,21 @@ export const api = {
     const qs = query.toString();
     return request<InterviewListResponse>(`/me/interviews${qs ? `?${qs}` : ''}`);
   },
-  createAnalysisRun: (formData: FormData) =>
-    request<CreateAnalysisRunResponse>('/analysis-runs', {
+  // 파일 또는 링크 중 하나를 보낸다(포트폴리오는 링크 허용).
+  // Content-Type을 직접 지정하지 않는다. multipart boundary는 브라우저가 생성해야 한다.
+  previewDocument: (kind: DocumentKind, input: DocumentSource, postingUrl?: string) => {
+    const form = new FormData();
+    form.append('kind', kind);
+    if ('file' in input) form.append('file', input.file);
+    else form.append('sourceUrl', input.sourceUrl);
+    if (postingUrl) form.append('postingUrl', postingUrl);
+    return request<DocumentPreviewResponse>('/documents/preview', {
       method: 'POST',
-      body: formData,
-    }),
+      body: form,
+    });
+  },
+  createAnalysisRun: (body: CreateAnalysisRunRequest) =>
+    requestJson<CreateAnalysisRunResponse>('/analysis-runs', 'POST', body),
   getAnalysisRun: (runId: string) => request<AnalysisRunResponse>(`/analysis-runs/${runId}`),
   getAnalysisRunResult: (runId: string) =>
     request<AnalysisResultResponse>(`/analysis-runs/${runId}/result`),

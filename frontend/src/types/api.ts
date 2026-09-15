@@ -95,17 +95,39 @@ export type InterviewListResponse = {
   size: number;
 };
 
+// 4-v2 공고 입력 POST /documents/preview
+
+export type DocumentStatus = 'succeeded' | 'partial' | 'failed';
+export type DocumentKind = 'cover_letter' | 'portfolio';
+
+// preview 는 파일 또는 링크 중 하나를 받는다. 링크는 포트폴리오만 쓴다.
+export type DocumentSource = { file: File } | { sourceUrl: string };
+
+export type DocumentPreviewResponse = {
+  documentId: string;
+  kind: DocumentKind;
+  status: DocumentStatus;
+  // 파일 업로드면 fileName·sizeBytes, 링크 입력이면 sourceUrl 이 채워진다.
+  fileName: string | null;
+  sizeBytes: number | null;
+  sourceUrl?: string | null;
+  extractedGithubUrls: string[];
+  truncated?: boolean;
+  failureReason?: string | null;
+};
+
 // 4-v2 공고 입력 POST /analysis-runs
 
 export type CreateAnalysisRunRequest = {
-  jobUrl: string;
-  coverLetter?: File;
-  portfolioFile?: File;
-  portfolioUrl?: string;
+  postingUrl: string;
+  coverLetterDocumentId?: string;
+  portfolioDocumentId?: string;
 };
 
 export type CreateAnalysisRunResponse = {
   runId: string;
+  status: RunStatus;
+  reused?: boolean;
 };
 
 // 4-2-v2 분석 중 GET /analysis-runs/{runId}, /events
