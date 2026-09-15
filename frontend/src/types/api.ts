@@ -95,17 +95,29 @@ export type InterviewListResponse = {
   size: number;
 };
 
+// 4-v2 공고 입력 POST /documents/preview
+
+export type DocumentStatus = 'succeeded' | 'partial' | 'failed';
+export type DocumentKind = 'cover_letter' | 'portfolio';
+
+
+export type DocumentPreviewResponse = {
+  documentId: string;
+  extractStatus: DocumentStatus;
+};
+
 // 4-v2 공고 입력 POST /analysis-runs
 
 export type CreateAnalysisRunRequest = {
-  jobUrl: string;
-  coverLetter?: File;
-  portfolioFile?: File;
-  portfolioUrl?: string;
+  postingUrl: string;
+  // Sprint 1 에서는 포트폴리오만 분석에 반영한다. 자소서 연결은 Sprint 2 설계 때 결정한다.
+  documentId?: string;
 };
 
 export type CreateAnalysisRunResponse = {
   runId: string;
+  status: RunStatus;
+  reused?: boolean;
 };
 
 // 4-2-v2 분석 중 GET /analysis-runs/{runId}, /events

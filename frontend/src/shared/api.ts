@@ -4,6 +4,9 @@ import {
   type MeResponse,
   type HomeResponse,
   type InterviewListResponse,
+  type DocumentPreviewResponse,
+  type DocumentKind,
+  type CreateAnalysisRunRequest,
   type CreateAnalysisRunResponse,
   type AnalysisRunResponse,
   type AnalysisResultResponse,
@@ -67,11 +70,20 @@ export const api = {
     const qs = query.toString();
     return request<InterviewListResponse>(`/me/interviews${qs ? `?${qs}` : ''}`);
   },
-  createAnalysisRun: (formData: FormData) =>
-    request<CreateAnalysisRunResponse>('/analysis-runs', {
+  // Content-Type을 직접 지정하지 않는다. multipart boundary는 브라우저가 생성해야 한다.
+  // kind: user_documents.kind 가 NOT NULL 이라 보낸다. 계약 반영은 BE 확인 대기 중.
+  previewDocument: (kind: DocumentKind, file: File, postingUrl?: string) => {
+    const form = new FormData();
+    form.append('kind', kind);
+    form.append('file', file);
+    if (postingUrl) form.append('postingUrl', postingUrl);
+    return request<DocumentPreviewResponse>('/documents/preview', {
       method: 'POST',
-      body: formData,
-    }),
+      body: form,
+    });
+  },
+  createAnalysisRun: (body: CreateAnalysisRunRequest) =>
+    requestJson<CreateAnalysisRunResponse>('/analysis-runs', 'POST', body),
   getAnalysisRun: (runId: string) => request<AnalysisRunResponse>(`/analysis-runs/${runId}`),
   getAnalysisRunResult: (runId: string) =>
     request<AnalysisResultResponse>(`/analysis-runs/${runId}/result`),
