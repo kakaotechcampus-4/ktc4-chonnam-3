@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/shared/api';
 import { isApiError } from '@/types/api';
-import type { DocumentKind, DocumentPreviewResponse, DocumentSource } from '@/types/api';
+import type { DocumentKind, DocumentPreviewResponse } from '@/types/api';
 
 const MB = 1024 * 1024;
 
@@ -14,7 +14,6 @@ type FileFieldConfig = {
   accept: string;
   hint: string;
   maxBytes: number;
-  allowUrl: boolean;
 };
 
 const COVER_LETTER: FileFieldConfig = {
@@ -23,22 +22,19 @@ const COVER_LETTER: FileFieldConfig = {
   accept: '.pdf,.docx',
   hint: 'PDF, DOCX · 최대 10MB',
   maxBytes: 10 * MB,
-  allowUrl: false,
 };
 
 const PORTFOLIO: FileFieldConfig = {
   kind: 'portfolio',
   label: '포트폴리오',
   accept: '.pdf',
-  hint: 'PDF · 최대 10MB',
-  maxBytes: 10 * MB,
-  allowUrl: true,
+  hint: 'PDF · 최대 20MB',
+  maxBytes: 20 * MB,
 };
 
 const UPLOAD_ERROR: Record<string, string> = {
   file_too_large: '파일 용량이 너무 커요.',
   unsupported_media_type: '지원하지 않는 형식이에요.',
-  url_unreachable: '링크를 불러올 수 없어요.',
 };
 
 const RUN_ERROR: Record<string, string> = {
@@ -65,29 +61,31 @@ function messageFor(error: unknown, table: Record<string, string>, fallback: str
 
 type DocSlot = {
   file: File | null;
-  sourceUrl: string | null;
   error: string | null;
   preview: DocumentPreviewResponse | null;
+  // 추출 실패를 사용자가 확인하고 "문서 없이 계속 진행"을 고른 상태.
+  dismissed: boolean;
 };
 
-const EMPTY_SLOT: DocSlot = { file: null, sourceUrl: null, error: null, preview: null };
+const EMPTY_SLOT: DocSlot = { file: null, error: null, preview: null, dismissed: false };
 
-// status: 'failed'는 hard blocker가 아니다 — documentId만 버리고 분석은 그대로 진행한다.
+// extractStatus: 'failed'는 hard blocker가 아니다 — documentId만 버리고 분석은 진행한다.
 function usablePreview(slot: DocSlot) {
   const { preview } = slot;
-  return preview && preview.status !== 'failed' ? preview : null;
+  return preview && preview.extractStatus !== 'failed' ? preview : null;
 }
 
-function slotLabel(slot: DocSlot) {
-  return slot.file?.name ?? slot.sourceUrl ?? '';
+// 추출 실패를 아직 사용자가 확인하지 않은 상태. 확인 전에는 제출을 막는다.
+function needsDecision(slot: DocSlot) {
+  return slot.preview?.extractStatus === 'failed' && !slot.dismissed;
 }
 
 function useDocumentSlot(config: FileFieldConfig) {
   const [slot, setSlot] = useState<DocSlot>(EMPTY_SLOT);
 
   const upload = useMutation({
-    mutationFn: ({ source, postingUrl }: { source: DocumentSource; postingUrl?: string }) =>
-      api.previewDocument(config.kind, source, postingUrl),
+    mutationFn: ({ file, postingUrl }: { file: File; postingUrl?: string }) =>
+      api.previewDocument(config.kind, file, postingUrl),
     onSuccess: (preview) => setSlot((prev) => ({ ...prev, preview, error: null })),
     onError: (error) =>
       setSlot((prev) => ({
@@ -110,21 +108,14 @@ function useDocumentSlot(config: FileFieldConfig) {
     }
     const error = validateFile(file, config);
     setSlot({ ...EMPTY_SLOT, file: error ? null : file, error });
-    if (!error) upload.mutate({ source: { file }, postingUrl });
+    if (!error) upload.mutate({ file, postingUrl });
   }
 
-  function selectUrl(rawUrl: string, postingUrl?: string) {
-    const sourceUrl = rawUrl.trim();
-    upload.reset();
-    if (!isHttpUrl(sourceUrl)) {
-      setSlot({ ...EMPTY_SLOT, error: 'http(s)로 시작하는 주소를 입력해주세요.' });
-      return;
-    }
-    setSlot({ ...EMPTY_SLOT, sourceUrl });
-    upload.mutate({ source: { sourceUrl }, postingUrl });
+  function dismiss() {
+    setSlot((prev) => ({ ...prev, dismissed: true }));
   }
 
-  return { slot, uploading: upload.isPending, selectFile, selectUrl, clear };
+  return { slot, uploading: upload.isPending, selectFile, clear, dismiss };
 }
 
 function Dropzone({
@@ -132,20 +123,17 @@ function Dropzone({
   slot,
   uploading,
   onSelectFile,
-  onSelectUrl,
   onClear,
+  onDismiss,
 }: {
   config: FileFieldConfig;
   slot: DocSlot;
   uploading: boolean;
   onSelectFile: (file: File | null) => void;
-  onSelectUrl: (url: string) => void;
   onClear: () => void;
+  onDismiss: () => void;
 }) {
   const [dragOver, setDragOver] = useState(false);
-  const [urlDraft, setUrlDraft] = useState('');
-
-  const filled = Boolean(slot.file || slot.sourceUrl);
 
   function pickFile(fileList: FileList | null) {
     const picked = fileList?.[0] ?? null;
@@ -158,11 +146,6 @@ function Dropzone({
     setDragOver(false);
     if (uploading) return;
     pickFile(e.dataTransfer.files);
-  }
-
-  function applyUrl() {
-    onSelectUrl(urlDraft);
-    setUrlDraft('');
   }
 
   return (
@@ -188,11 +171,9 @@ function Dropzone({
           className="hidden"
           onChange={(e) => pickFile(e.target.files)}
         />
-        {filled ? (
+        {slot.file ? (
           <div className="flex w-full items-center justify-between gap-2 px-2">
-            <span className="truncate text-sm text-ink">
-              {slot.file ? '📄' : '🔗'} {slotLabel(slot)}
-            </span>
+            <span className="truncate text-sm text-ink">📄 {slot.file.name}</span>
             {uploading ? (
               <span className="shrink-0 text-xs text-muted">읽는 중…</span>
             ) : (
@@ -218,34 +199,34 @@ function Dropzone({
         )}
       </label>
 
-      {config.allowUrl && !filled && (
-        <div className="mt-2 flex gap-2">
-          <input
-            type="text"
-            value={urlDraft}
-            onChange={(e) => setUrlDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && isHttpUrl(urlDraft)) applyUrl();
-            }}
-            placeholder="또는 포트폴리오 링크를 붙여넣어주세요"
-            className="min-w-0 flex-1 rounded-card border border-line-soft px-3 py-2 text-sm text-ink outline-none focus:border-accent"
-          />
-          <button
-            type="button"
-            disabled={!isHttpUrl(urlDraft) || uploading}
-            onClick={applyUrl}
-            className="shrink-0 rounded-card border border-line-soft px-3 py-2 text-sm text-ink disabled:text-muted"
-          >
-            확인
-          </button>
+      {slot.error && <p className="mt-1 text-xs text-error">{slot.error}</p>}
+
+      {needsDecision(slot) && (
+        <div className="mt-2 rounded-card bg-error-soft px-3 py-2">
+          <p className="text-xs text-error">
+            내용을 읽지 못했어요. 텍스트 레이어가 없는 PDF일 수 있어요.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="rounded-card bg-surface px-3 py-1 text-xs text-ink"
+            >
+              문서 없이 계속 진행
+            </button>
+            <button
+              type="button"
+              onClick={onClear}
+              className="rounded-card bg-surface px-3 py-1 text-xs text-ink"
+            >
+              다른 파일 올리기
+            </button>
+          </div>
         </div>
       )}
 
-      {slot.error && <p className="mt-1 text-xs text-error">{slot.error}</p>}
-      {slot.preview?.status === 'failed' && (
-        <p className="mt-1 text-xs text-muted">
-          내용을 읽지 못했어요. 이 문서 없이 분석을 계속 진행할게요.
-        </p>
+      {slot.dismissed && (
+        <p className="mt-1 text-xs text-muted">이 문서 없이 분석을 진행해요.</p>
       )}
     </div>
   );
@@ -283,7 +264,9 @@ export default function JobInput() {
   });
 
   const uploading = coverLetter.uploading || portfolio.uploading;
-  const busy = uploading || startRun.isPending;
+  // 추출 실패를 확인하지 않은 문서가 있으면 제출을 막는다.
+  const pendingDecision = needsDecision(coverLetter.slot) || needsDecision(portfolio.slot);
+  const busy = uploading || pendingDecision || startRun.isPending;
 
   // JD 키워드 축약에 쓰이는 선택 필드. 공고 URL이 아직 유효하지 않으면 생략한다.
   const postingUrlForPreview = urlValid ? jobUrl.trim() : undefined;
@@ -291,11 +274,11 @@ export default function JobInput() {
   function handleSubmit() {
     if (!urlValid || busy) return;
     setSubmitError(null);
-    // 추출 실패한 문서는 usablePreview 가 걸러내 해당 필드가 빠진다. 둘 다 없어도 진행한다.
+    // Sprint 1 은 포트폴리오만 분석에 반영한다(BE 협의). 추출 실패면 usablePreview 가 걸러
+    // documentId 가 빠지고, 서버는 문서 없이 분석한다.
     startRun.mutate({
       postingUrl: jobUrl.trim(),
-      coverLetterDocumentId: usablePreview(coverLetter.slot)?.documentId,
-      portfolioDocumentId: usablePreview(portfolio.slot)?.documentId,
+      documentId: usablePreview(portfolio.slot)?.documentId,
     });
   }
 
@@ -330,16 +313,16 @@ export default function JobInput() {
               slot={coverLetter.slot}
               uploading={coverLetter.uploading}
               onSelectFile={(file) => coverLetter.selectFile(file, postingUrlForPreview)}
-              onSelectUrl={(url) => coverLetter.selectUrl(url, postingUrlForPreview)}
               onClear={coverLetter.clear}
+              onDismiss={coverLetter.dismiss}
             />
             <Dropzone
               config={PORTFOLIO}
               slot={portfolio.slot}
               uploading={portfolio.uploading}
               onSelectFile={(file) => portfolio.selectFile(file, postingUrlForPreview)}
-              onSelectUrl={(url) => portfolio.selectUrl(url, postingUrlForPreview)}
               onClear={portfolio.clear}
+              onDismiss={portfolio.dismiss}
             />
           </div>
 

@@ -100,28 +100,18 @@ export type InterviewListResponse = {
 export type DocumentStatus = 'succeeded' | 'partial' | 'failed';
 export type DocumentKind = 'cover_letter' | 'portfolio';
 
-// preview 는 파일 또는 링크 중 하나를 받는다. 링크는 포트폴리오만 쓴다.
-export type DocumentSource = { file: File } | { sourceUrl: string };
 
 export type DocumentPreviewResponse = {
   documentId: string;
-  kind: DocumentKind;
-  status: DocumentStatus;
-  // 파일 업로드면 fileName·sizeBytes, 링크 입력이면 sourceUrl 이 채워진다.
-  fileName: string | null;
-  sizeBytes: number | null;
-  sourceUrl?: string | null;
-  extractedGithubUrls: string[];
-  truncated?: boolean;
-  failureReason?: string | null;
+  extractStatus: DocumentStatus;
 };
 
 // 4-v2 공고 입력 POST /analysis-runs
 
 export type CreateAnalysisRunRequest = {
   postingUrl: string;
-  coverLetterDocumentId?: string;
-  portfolioDocumentId?: string;
+  // Sprint 1 에서는 포트폴리오만 분석에 반영한다. 자소서 연결은 Sprint 2 설계 때 결정한다.
+  documentId?: string;
 };
 
 export type CreateAnalysisRunResponse = {
