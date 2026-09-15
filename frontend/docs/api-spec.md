@@ -551,7 +551,7 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 
 ## 11. POST /documents/preview
 
-BE `spec/backend/features/documents.md` 기준(Sprint 1 FIX). 자기소개서·포트폴리오 파일은 `analysis-runs`에 직접 싣지 않고 먼저 이 엔드포인트로 업로드해 `documentId`를 발급받는다. Sprint 1은 자소서/포트폴리오 claim을 추출하지 않고 텍스트·GitHub URL만 저장한다.
+BE `spec/backend/features/documents.md` 기준(Sprint 1 FIX). Sprint 1에서 이 엔드포인트는 포트폴리오 파일의 GitHub URL preview에 사용한다. 자기소개서는 preview POST 대상이 아니다. Sprint 1은 문서 claim을 추출하지 않고 텍스트·GitHub URL만 저장한다.
 
 **Request** `multipart/form-data`
 
@@ -594,9 +594,9 @@ BE `spec/backend/features/documents.md` 기준(Sprint 1 FIX). 자기소개서·�
 
 **UI states**
 
-공고 입력 화면에서 파일 선택 즉시(백그라운드) 호출한다. `status: 'failed'`여도 hard blocker가 아니다 — 사용자가 계속 진행을 선택하면 `POST /analysis-runs`를 `documentId` 없이 호출한다.
+공고 입력 화면에서 포트폴리오 파일 선택 즉시(백그라운드) 호출한다. `status: 'failed'`여도 hard blocker가 아니다 — 사용자가 계속 진행을 선택하면 `POST /analysis-runs`를 `documentId` 없이 호출한다.
 
-**`PENDING_TEAM`**: `documentId`는 단수 계약이다. 공고 입력 화면은 자기소개서·포트폴리오 업로더가 2개인데 이걸 어떻게 매핑할지(각각 preview 호출 후 한쪽만 채택 / 병합) 팀 확인 필요.
+`documentId`는 단수 계약이며 Sprint 1에서는 portfolio preview document ID를 의미한다. 자소서 claim 추출과 자소서 기반 분석은 Sprint 2에서 별도 설계한다.
 
 **Failure**
 
@@ -618,7 +618,7 @@ BE `spec/backend/features/documents.md` 기준(Sprint 1 FIX). 자기소개서·�
 | `postingUrl` | text | ✅ |
 | `documentId` | string | ❌ |
 
-`postingUrl`은 Sprint 1에서 Wanted URL만 허용한다. `documentId`는 `POST /documents/preview`에서 발급된 값만 허용한다.
+`postingUrl`은 Sprint 1에서 Wanted URL만 허용한다. `documentId`는 `POST /documents/preview`에서 발급된 portfolio preview document ID만 허용한다.
 
 **Response**
 
@@ -963,6 +963,12 @@ data: {"type":"failed","reason":"github_token_invalid"}
   "currentTurn": 3,
   "totalTurns": 9,
   "remainingSeconds": 177,
+  "prepareSteps": [
+    { "key": "analyze_repo", "status": "completed" },
+    { "key": "build_persona", "status": "completed" },
+    { "key": "set_criteria", "status": "completed" },
+    { "key": "compose_question", "status": "running" }
+  ],
   "turns": [
     {
       "turn": 1,
@@ -1007,6 +1013,8 @@ data: {"type":"failed","reason":"github_token_invalid"}
 | `currentTurn` | number | ❌ |
 | `totalTurns` | number | ❌ |
 | `remainingSeconds` | number | ❌ |
+| `prepareSteps[].key` | PrepareStepKey | ❌ |
+| `prepareSteps[].status` | StepStatus | ❌ |
 | `turns[].turn` | number | ❌ |
 | `turns[].persona` | Persona | ❌ |
 | `turns[].question` | string | ❌ |
@@ -1021,6 +1029,8 @@ data: {"type":"failed","reason":"github_token_invalid"}
 `totalTurns`는 `max_turns`, `remainingSeconds`는 `planned_duration_sec - elapsed_sec`다. 서버 시각 기준이므로 재연결 시 클라이언트 타이머를 이 값으로 덮어쓴다.
 
 `lastError`는 `status === 'preparing_failed'`일 때만 값이 있고 그 외에는 `null`이다. WS `error` 이벤트와 필드 구성이 같다 — 새로고침으로 WS가 끊긴 상태에서도 REST 스냅샷만으로 면접 준비 실패 배너를 완성하기 위함이다.
+
+PrepareStepKey 순서는 `analyze_repo` → `build_persona` → `set_criteria` → `compose_question`이다.
 
 **UI states**
 
@@ -1044,6 +1054,32 @@ data: {"type":"failed","reason":"github_token_invalid"}
 
 ---
 
+## 17-1. POST /interviews/{id}/prepare/retry
+
+면접 준비 실패 화면의 `다시 시도` 버튼에서 호출한다. WS client message가 아니다.
+
+**Request**
+
+없음.
+
+**Response**
+
+`202 Accepted`
+```json
+{ "status": "preparing", "retryAfter": 3 }
+```
+
+서버는 실패한 prepare step부터 재실행하고 이미 성공한 단계는 재실행하지 않는다. `status !== "preparing_failed"`이면 허용하지 않는다.
+
+**Failure**
+
+| 코드 | reason |
+| --- | --- |
+| 409 | `not_preparing_failed` |
+| 409 | `prepare_retry_unavailable` |
+
+---
+
 ## 18. GET (Upgrade) /ws/interviews/{sessionId}
 
 5a2-v2에서 연결하고 5b-v2까지 유지한다.
@@ -1064,18 +1100,16 @@ Sprint 1엔 이탈 자동 감지 배치가 없다(`context/DB.md`, `spec/backend
 
 클라이언트 → 서버
 ```json
-{ "type": "prepareRetry" }
-{ "type": "answer", "text": "상품 조회 성능을 높이기 위해 캐시로 사용했습니다." }
+{ "type": "answer", "turn": 3, "text": "상품 조회 성능을 높이기 위해 캐시로 사용했습니다." }
 ```
 
 | type | 필드 |
 | --- | --- |
-| `prepareRetry` | — |
-| `answer` | `text` (string, 최대 2000자) |
+| `answer` | `turn` (number), `text` (string, 최대 2000자) |
 
-`prepareRetry`는 준비 단계가 실패한 뒤 "다시 시도"를 눌렀을 때 보낸다. 서버는 실패한 `prepareStepKey`부터 다시 실행하고, 성공한 단계는 재실행하지 않는다. 세션과 `session_repositories`는 그대로 유지된다.
+준비 단계가 실패한 뒤 "다시 시도"를 누르면 WS 메시지가 아니라 `POST /interviews/{id}/prepare/retry`를 호출한다. 서버는 실패한 `prepareStepKey`부터 다시 실행하고, 성공한 단계는 재실행하지 않는다. 세션과 `session_repositories`는 그대로 유지된다.
 
-`answer`는 제출 버튼 클릭 시 1회 전송한다. 초안 저장은 없다. 2000자 초과 시 `answer_too_long`.
+`answer`는 제출 버튼 클릭 시 1회 전송한다. 초안 저장은 없다. `turn`이 현재 답변 가능한 turn과 일치해야 하며, 2000자 초과 시 `answer_too_long`.
 
 **Response**
 
@@ -1106,13 +1140,14 @@ Sprint 1엔 이탈 자동 감지 배치가 없다(`context/DB.md`, `spec/backend
 | `interviewEnd` | — |
 | `error` | `reason` (string), `recoverable` (boolean), `code` (string), `step` (PrepareStepKey \| null), `occurredAt` (string) |
 
-`answerReceived`는 서버가 답변 수신·저장을 완료했다는 신호다. `answer` 전송 후 이 메시지를 받기 전까지 제출 중 상태를 유지하고 입력창을 잠근다.
+`answerReceived`는 서버가 답변 수신·저장을 완료했다는 신호다. `answer` 전송 후 이 메시지를 받기 전까지 제출 중 상태를 유지하고 입력창을 잠근다. 수신 뒤에는 제출 중 상태만 해제하고, 다음 `question`이 도착할 때까지 새 답변 입력은 열지 않는다.
 
 준비 단계가 실패하면 해당 단계에 `prepareStep`을 `status: "failed"`로 보낸 뒤 `error`를 보낸다. 이후 단계는 `pending`으로 남는다.
 
 ```
 { "type": "prepareStep", "key": "analyze_repo",      "status": "completed" }
 { "type": "prepareStep", "key": "build_persona",     "status": "completed" }
+{ "type": "prepareStep", "key": "set_criteria",      "status": "completed" }
 { "type": "prepareStep", "key": "compose_question",  "status": "failed" }
 { "type": "error", "reason": "question_gen_timeout", "recoverable": true,
   "code": "ERR_QUESTION_GEN_TIMEOUT", "step": "compose_question",
@@ -1122,7 +1157,7 @@ Sprint 1엔 이탈 자동 감지 배치가 없다(`context/DB.md`, `spec/backend
 **UI states**
 
 - 5a2-v2: 체크리스트를 유지한 상태에서 실패 단계만 ✕로 바꾸고 배너를 띄운다. `prepareCompleted` 수신 시 5b-v2로 전환.
-- 5b-v2: `question`으로 질문 표시, `answer` 제출 → `answerReceived`까지 입력창 잠금, `thinking`/`evidenceCheck` 인디케이터, `interviewEnd` 시 5c-v2로 이동.
+- 5b-v2: `question`으로 질문 표시, `answer` 제출 → `answerReceived`까지 제출 중 상태 유지, 다음 `question`까지 입력창 잠금, `thinking`/`evidenceCheck` 인디케이터, `interviewEnd` 시 5c-v2로 이동.
 - `evidenceCheck` 배너는 다른 서버 메시지 수신 시 해제, 30초간 메시지 없으면 타임아웃 해제.
 - `error` 수신 시 `recoverable`로 분기: `true`면 해당 턴/단계 재시도, `false`면 세션 종료 안내.
 
@@ -1133,11 +1168,11 @@ Sprint 1엔 이탈 자동 감지 배치가 없다(`context/DB.md`, `spec/backend
 | `answer_too_long` | `ERR_ANSWER_TOO_LONG` | `true` | 같은 턴 재제출 |
 | `answer_rejected` | `ERR_ANSWER_REJECTED` | `true` | 같은 턴 재제출 (저장 실패) |
 | `question_failed` | `ERR_QUESTION_FAILED` | `true` | 자동 1회 재시도 |
-| `question_gen_timeout` | `ERR_QUESTION_GEN_TIMEOUT` | `true` | 준비 실패 화면 — `prepareRetry` |
-| `persona_build_failed` | `ERR_PERSONA_BUILD_FAILED` | `true` | 준비 실패 화면 — `prepareRetry` |
-| `criteria_set_failed` | `ERR_CRITERIA_SET_FAILED` | `true` | 준비 실패 화면 — `prepareRetry` |
-| `repo_analyze_failed` | `ERR_REPO_ANALYZE_FAILED` | `true` | 준비 실패 화면 — `prepareRetry` |
-| `github_api_rate_limited` | `ERR_GITHUB_RATE_LIMITED` | `true` | 준비 실패 화면 — 대기 후 `prepareRetry` |
+| `question_gen_timeout` | `ERR_QUESTION_GEN_TIMEOUT` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
+| `persona_build_failed` | `ERR_PERSONA_BUILD_FAILED` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
+| `criteria_set_failed` | `ERR_CRITERIA_SET_FAILED` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
+| `repo_analyze_failed` | `ERR_REPO_ANALYZE_FAILED` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
+| `github_api_rate_limited` | `ERR_GITHUB_RATE_LIMITED` | `true` | 준비 실패 화면 — 대기 후 `POST /interviews/{id}/prepare/retry` |
 | `repo_unreachable` | `ERR_REPO_UNREACHABLE` | `false` | "레포에 접근할 수 없어요" — 레포 재선택 |
 | `github_token_invalid` | `ERR_GITHUB_TOKEN_INVALID` | `false` | GitHub 재연동 유도 |
 
@@ -1292,7 +1327,7 @@ Sprint 1엔 이탈 자동 감지 배치가 없다(`context/DB.md`, `spec/backend
 ```
 `retryAfter` 간격으로 폴링한다.
 
-`409` — `report_unavailable` (진행된 턴 0개, 리포트 없이 안내)
+`409` — `report_unavailable` (생성 대상이 아님, 답변 완료 turn 0개, 또는 Sprint 1에서 재생성하지 않는 생성 실패. 리포트 없이 안내)
 
 ---
 
@@ -1465,7 +1500,7 @@ Sprint 1엔 이탈 자동 감지 배치가 없다(`context/DB.md`, `spec/backend
 | 분석 실패 | 4-3-v2 | `/analysis-runs/{runId}` R · `/analysis-runs` W (재시도) · `/auth/github/link` (이동) |
 | 레포 확정 | 5a-v2 | `/analysis-runs/{runId}/result` R · `/analysis-runs/{runId}/candidates` R (더보기) · `/interviews` W |
 | 면접 준비 | 5a2-v2 | `/interviews/{id}` R · `/ws/interviews/{sessionId}` S |
-| 면접 준비 실패 | — | `/interviews/{id}` R (`lastError`) · `/ws/interviews/{sessionId}` S (`prepareRetry`) · `/analysis-runs/{runId}/result` R (레포 재선택) |
+| 면접 준비 실패 | — | `/interviews/{id}` R (`lastError`) · `/interviews/{id}/prepare/retry` W · `/analysis-runs/{runId}/result` R (레포 재선택) |
 | 면접 진행 | 5b-v2 | `/ws/interviews/{sessionId}` S · `/interviews/{id}` R (재연결 복구) |
 | 리포트 | 5c-v2 | `/interviews/{id}/report` R · `/interviews/{id}/retry` W · `/reports/{id}/feedback-disagreements` W (Sprint 2, 미호출) |
 | 전역 | — | `/me` R (인증 가드) · `/auth/refresh` W (인터셉터) · `/auth/logout` W |
@@ -1487,7 +1522,7 @@ Sprint 1엔 이탈 자동 감지 배치가 없다(`context/DB.md`, `spec/backend
   └─ 새 면접 시작 → 공고 입력
 
 공고 입력 (공고·문서 입력, 공고 URL 필수)
-  ├─ 파일 선택 → POST /documents/preview → documentId
+  ├─ 포트폴리오 파일 선택 → POST /documents/preview → documentId
   └─ POST /analysis-runs { postingUrl, documentId? } → 202 → 4-2-v2
 
 4-2-v2  분석 진행
@@ -1499,7 +1534,7 @@ Sprint 1엔 이탈 자동 감지 배치가 없다(`context/DB.md`, `spec/backend
 
 5a2-v2  면접 준비 (WS 연결)
   ├─ prepareCompleted → 5b-v2
-  └─ error            → 면접 준비 실패 ─(prepareRetry)→ 5a2-v2
+  └─ error            → 면접 준비 실패 ─(POST /interviews/{id}/prepare/retry)→ 5a2-v2
                            └─(레포 다시 선택)→ 5a-v2
 
 5b-v2   면접 진행 (WS 유지)
@@ -1557,7 +1592,8 @@ Sprint 1엔 이탈 자동 감지 배치가 없다(`context/DB.md`, `spec/backend
 | 2026-09-11 | `ForFE.md` FE 결정 회신 — WS는 `sessionId` 유지, 라우트 `:id`는 `interviewId`, `questionEnd`는 Sprint 1에서 제거, CSRF는 SameSite=Lax만(토큰 없음), 포트폴리오 매칭은 개수만 노출 |
 | 2026-09-11 | `context/DB.md` 확인 후 abandoned 판정 정정 — Sprint 1엔 이탈 자동 감지 배치가 없다. `abandoned`는 명시적 이탈(모달 확인)·레포 재선택 시에만 세팅, 연결 끊김·재연결 실패는 전환 트리거 아님 (재연결 실패 시 자동 abandoned로 썼던 이전 항목 정정) |
 | 2026-09-11 | `interviewStatus`에 **`preparing_failed`** 추가, `GET /interviews/{id}` 응답에 **`lastError`** 필드 신규 추가 (새로고침 시 WS 없이 1b 배너 렌더용) |
-| 2026-09-10 | WS **`prepareRetry`** 클라이언트 메시지 추가 — 실패 단계부터 재실행, 세션·레포 유지 |
+| 2026-09-15 | 최종 검토 반영 — `/documents/preview`는 Sprint 1 포트폴리오 전용, WS `answer`에 `turn` 추가, 준비 retry는 WS `prepareRetry`가 아니라 `POST /interviews/{id}/prepare/retry`, 리포트 점수는 0~100 6개 항목 단순 평균, 리포트 재생성은 Sprint 2 |
+| 2026-09-10 | (2026-09-15 결정으로 대체됨) WS **`prepareRetry`** 클라이언트 메시지 추가 — 실패 단계부터 재실행, 세션·레포 유지 |
 | 2026-09-10 | WS `error`에 **`code`·`step`·`occurredAt` 추가**, `reason` 세분화 (`question_gen_timeout` · `persona_build_failed` · `criteria_set_failed` · `repo_analyze_failed` · `github_api_rate_limited`), `prepare_failed` 제거 |
 | 2026-09-10 | 공고 URL 필수 명시 — "공고 없이 진행" 경로 없음 |
 | 2026-09-10 | 화면 코드 정정: 공고 입력 `1c`, 마이페이지 `1a`, 면접 준비 실패 `1b` |

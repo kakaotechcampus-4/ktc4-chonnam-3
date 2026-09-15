@@ -1,6 +1,6 @@
 # 리포트 생성과 프로필 요약
 
-상태: 생성 흐름·저장 위치 FIX. Sprint 1 프로필의 LLM 비호출·확정 집계 원칙은 0006에서 Accepted. 상세 피드백·집계 저장 구조는 Proposed, 점수 공식·스케일은 PENDING_TEAM.
+상태: 생성 흐름·저장 위치 FIX. Sprint 1 프로필의 LLM 비호출·확정 집계 원칙은 0006에서 Accepted. 상세 피드백·집계 저장 구조는 Proposed, 점수 세부 기준 seed는 평가 자료 보강에 따라 갱신 가능.
 
 원본: [BE 리포트](../../backend/features/report.md), [task-16](../../../backend/docs/task-16-report.md), [공통 OpenAPI](../../shared/contracts/openapi.yaml), [FE 리포트](../../frontend/features/report.md), [ForAI 5](../../../ForAI.md).
 
@@ -8,11 +8,11 @@
 
 리포트는 면접 종료 때 자동 enqueue하지 않는다. `GET /interviews/{id}/report`가 기존 결과를 200으로 반환하거나, 생성 가능하면 `report_generate`를 enqueue하고 202를 반환한다. 생성 중에는 중복 enqueue 없이 202, 생성 불가면 `409 report_unavailable`이다.
 
-ARQ worker가 확정 문답·평가·근거·종료 상태를 읽어 `report_v1`을 실행하고 검증된 결과를 저장한다. 같은 면접의 재실행은 문답을 변경하거나 리포트를 중복 생성하지 않아야 한다. lock·재실행·저장 시점은 BE 작업과 함께 검사한다.
+ARQ worker가 확정 문답·평가·근거·종료 상태를 읽어 `report_v1`을 실행하고 검증된 결과를 저장한다. 같은 면접의 재실행은 문답을 변경하거나 리포트를 중복 생성하지 않아야 한다. lock·저장 시점은 BE 작업과 함께 검사한다.
 
-이미 실패한 생성의 재시도 허용 조건과 생성 가능 종료 상태는 상세 검토 대상이다. 본 문서만으로 abandoned의 모든 경우를 생성 가능으로 정하거나 새로운 HTTP reason을 추가하지 않는다.
+생성 가능 조건은 `interview_sessions.status='completed'`이고 답변 완료 turn이 1개 이상인 경우다. `abandoned`, `preparing`, `preparing_failed`, `in_progress`는 Sprint 1 report 생성 대상이 아니다. 이미 생성된 report는 200으로 반환한다.
 
-Redis 생성 lock 만료는 이전 worker의 성공·실패를 증명하지 않는다. 실패 attempt·진행 작업·재enqueue 허용을 어떤 durable 상태로 판정할지 BE가 정해야 한다. 이 소유권과 저장 제약이 없으면 lazy 생성의 멱등성 검증은 보류한다.
+이전 `report_generate` 실패 이력이 있으면 Sprint 1에서는 자동 재생성하지 않고 `409 report_unavailable`로 닫는다. report 재생성, 수동 retry, 이의제기 기반 재평가는 Sprint 2로 넘긴다.
 
 ## 입력
 
@@ -45,15 +45,15 @@ Question Contract와 상세 평가 구조는 [내부 계약](../contracts.md)의
 
 ## 점수 미합의의 실제 영향
 
-현재 OpenAPI의 리포트 200 응답은 숫자 `totalScore`와 `scores[].score`를 요구한다. 점수 공식·가중치·저장 스케일은 아직 합의되지 않았다.
+현재 OpenAPI의 리포트 200 응답은 숫자 `totalScore`와 `scores[].score`를 요구하며, Sprint 1은 점수를 반드시 포함한다.
 
-- 임의의 1~5 또는 0~100 기준·평균·가중치·정규화를 생성하지 않는다.
-- 모르는 점수에 0을 넣으면 관찰 사실을 조작하고, null을 넣으면 현재 숫자 schema와 다르다.
+- `totalScore`와 `scores[].score`는 0~100 number다.
+- score key는 `project_understanding`, `technical_reasoning`, `problem_solving`, `communication`, `contribution_clarity`, `company_job_fit` 6개를 유지한다.
+- `totalScore`는 6개 항목 score의 단순 평균이다.
+- 가중치, nullable score, status 기반 미계산 표현은 Sprint 1에 사용하지 않는다.
 - narrative/근거 연결 로직은 score 계산과 분리하여 mock과 내부 데이터로 개발·검증할 수 있다.
-- 실제 리포트 200 공개 완료에는 승인된 점수 정책 또는 FE·BE가 함께 승인한 nullable/status 등 계약 변경이 필요하다.
-- 점수 준비가 안 됐는데 영구적인 202 “생성 중”으로 숨기지 않는다. 해당 상태를 API에서 어떻게 표현할지도 합의해야 한다.
 
-여섯 score key 등 FE 초안의 표현이 있다는 사실은 산식 승인 근거가 아니다. `score_criteria` 테이블·seed를 만드는 것과 유효한 점수 정책을 정하는 것은 별개다.
+항목별 세부 평가 기준과 `score_criteria` seed 문구·version은 평가 담당자가 자료를 보강하며 갱신할 수 있다.
 
 ## 프로필 요약
 
@@ -63,7 +63,7 @@ Question Contract와 상세 평가 구조는 [내부 계약](../contracts.md)의
 
 [0006 결정](../decisions/0006-task-llm-usage-policy.md)에 따라 Sprint 1 프로필은 job을 유지하되 확정 데이터 집계만 수행하며 LLM을 호출하지 않는다. `profile_summary_v1`은 기존 seed 목록에 유지하고 자연어 LLM 요약 활성화는 후속 검토로 남긴다. 후속 자연어 요약을 도입할 경우에도 확정 집계만 입력으로 사용하고 모델이 통계·수치를 계산하게 하지 않는다. 실제 집계 단위·중복 제거·저장 매핑은 이 결정으로 확정하지 않는다.
 
-프로필 job 실패는 이미 성공한 리포트를 실패로 되돌리지 않는다. 이전에 성공한 요약을 보존하고 갱신 실패를 추적한다. 새 정확한 저장 key·job 인수는 BE와 합의한다.
+프로필 job 실패는 이미 성공한 리포트를 실패로 되돌리지 않는다. Sprint 1에서 실패 재시도·복구·상세 실패 처리는 구현하지 않고 Sprint 2로 넘긴다. 이전에 성공한 요약을 보존하고 갱신 실패는 내부적으로 추적할 수 있다. 새 정확한 저장 key·job 인수는 BE와 합의한다.
 
 ## 후속 경계
 
@@ -77,7 +77,7 @@ Question Contract와 상세 평가 구조는 [내부 계약](../contracts.md)의
 - 질문·답변·Persona·순서가 원본과 일치하고 미답변은 답변을 지어내지 않는다.
 - 모든 주요 평가에 실제 Turn/Evidence 연결이 있고 후속 보완이 반영된다.
 - 미관찰·unresolved·도구 실패가 구분된다.
-- 점수 미합의 상태에서 숫자를 만들어 공개하지 않는다.
+- 점수는 0~100 number 6개와 단순 평균 `totalScore`를 공개한다.
 - profile job은 report 저장 성공 후 enqueue되며 실패해도 report 결과가 유지된다.
 - profile 집계에 완료 면접에 사용하지 않은 repo가 들어가지 않는다.
 

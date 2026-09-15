@@ -32,7 +32,7 @@
 - 면접 답변은 양방향 텍스트 WebSocket, 분석 진행 알림은 SSE다. 기존 계약에 없는 답변 POST나 면접 SSE를 추가하지 않는다.
 - 기본 9턴을 완료하면 종료한다. Director의 자율 조기 종료는 Sprint 1에 없다.
 - Sprint 1 모델 선택 표기는 `5.5 Luna`다. provider·실제 API model ID·구조화 출력 성능은 별도 확인사항이다.
-- Sprint 1 embedding/vector 검색과 pgvector extension 선설치는 [0002 결정](decisions/0002-sprint1-vector-search.md)에 따라 미도입이다. BE 반영 확인과 Sprint 2 도입 여부·세부 설계는 별도 대기이며, 공개 리포트 점수 공식·저장 스케일은 `PENDING_TEAM`이다.
+- Sprint 1 embedding/vector 검색과 pgvector extension 선설치는 [0002 결정](decisions/0002-sprint1-vector-search.md)에 따라 미도입이다. BE 반영 확인과 Sprint 2 도입 여부·세부 설계는 별도 대기다. 공개 리포트 점수는 0~100 score 6개와 단순 평균 `totalScore`를 사용하며, 항목별 세부 기준 seed는 자료 보강에 따라 갱신할 수 있다.
 - 선택 문서 preview와 GitHub URL 추출은 Sprint 1에 있다. 문서 Claim·STT/TTS·이미지 공고 판독은 후속이다.
 
 수정 중인 `context/AI.md`의 세 역할 재구성, HTTPS/SSE 면접, 조기 종료, 별도 면접 Worker는 [검토 기록](source-audit.md)의 변경 제안으로 남긴다. 이를 기존 API와 혼합하지 않는다.

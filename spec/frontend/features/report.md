@@ -24,9 +24,9 @@
 ### 종합리포트 탭
 
 - `headline` — 한 줄 총평
-- `totalScore` — 총점
+- `totalScore` — 0~100 총점. 6개 score의 단순 평균
 - `summary` — 요약 문단
-- `scores` — 6개 고정 (`project_understanding` · `technical_reasoning` · `problem_solving` · `communication` · `contribution_clarity` · `company_job_fit`). `label`은 서버가 내려준 한글 라벨을 그대로 사용
+- `scores` — 6개 고정 (`project_understanding` · `technical_reasoning` · `problem_solving` · `communication` · `contribution_clarity` · `company_job_fit`). 각 `score`는 0~100 number이며, `label`은 서버가 내려준 한글 라벨을 그대로 사용
 - `coverage` — "요구사항 8개 중 5개가 다뤄짐" + `uncoveredRequirements` 목록. `company_job_fit` 점수의 근거로 함께 표시
 
 ### 면접관별 피드백 탭
@@ -81,7 +81,7 @@
 | --- | --- | --- |
 | 200 | 리포트 본문 | 렌더 |
 | 202 | `{ status: "generating", retryAfter: 3 }` | `retryAfter` 간격으로 폴링 |
-| 409 | `report_unavailable` | 진행된 턴 0개. 리포트 없이 안내 |
+| 409 | `report_unavailable` | 리포트 생성 대상 아님, 답변 완료 turn 0개, 또는 Sprint 1에서 재생성하지 않는 생성 실패. 리포트 없이 안내 |
 
 `retryAfter`는 optional이므로 값이 없을 때의 기본 간격을 정해둔다.
 
@@ -126,7 +126,7 @@
 | 면접 완료 (리포트 생성) | `home`, `interviews` |
 | 재도전 | `interviews` |
 
-리포트는 생성 후 바뀌지 않으므로 `staleTime`을 길게 잡을 수 있다.
+리포트는 생성 후 바뀌지 않으며 Sprint 1에서는 재생성하지 않으므로 `staleTime`을 길게 잡을 수 있다.
 
 ## 상태 요구사항
 

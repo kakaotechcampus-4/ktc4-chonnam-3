@@ -18,7 +18,7 @@ GitHub OAuth 로그인과 DEVON 자체 인증 토큰 발급 기반을 구현한�
 - DEVON 자체 JWT를 생성해 이후 BE API 인증에 사용한다.
 - DEVON JWT payload에는 GitHub access token을 넣지 않는다.
 - DEVON JWT 생성은 `users.id`와 필요 시 `github_accounts.id` 같은 식별자만 사용한다.
-- JWT 전달 방식은 `PENDING_FE`이므로 cookie/body 세부 구현은 결정값이 들어오기 전까지 확장 가능한 구조로 둔다.
+- DEVON JWT는 HttpOnly `accessToken` cookie로 전달한다. WS handshake도 같은 cookie를 사용한다.
 - 로그인 성공 후 `initial_sync` job을 enqueue한다.
 - private repo scope는 요청하지 않는다.
 

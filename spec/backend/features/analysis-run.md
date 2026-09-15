@@ -15,7 +15,7 @@
 
 분석 step key는 7개로 고정한다.
 
-1. `doc_extract`: Sprint 1에서는 preview 문서에서 추출한 GitHub URL을 analysis context에 반영한다. claim 추출은 하지 않는다.
+1. `doc_extract`: Sprint 1에서는 포트폴리오 preview 문서에서 추출한 GitHub URL을 analysis context에 반영한다. claim 추출은 하지 않는다.
 2. `repo_select`: 전체 public repo에 대해 L0-a lightweight ranking과 filter를 계산한다.
 3. `repo_detail`: 분석 batch repo의 README, languages, head SHA, commit count, user commit count를 수집한다.
 4. `jd_fetch`: Wanted 공개 JSON을 수집한다.
@@ -29,7 +29,9 @@
 
 - 전체 public repo에 대해 `base_rank`와 `ranking_score`를 계산한다.
 - 첫 batch 10개는 단순 상위 10개가 아니라 혼합 전략으로 구성한다.
-- 포트폴리오 GitHub URL 언급 repo 최대 3개, base rank top 최대 5개, JD signal 최대 2개, high contribution 최대 2개를 중복 제거해 최대 10개로 만든다.
+- 첫 batch는 JD 수집·추출보다 먼저 확정되므로 JD signal을 사용하지 않는다.
+- 첫 batch는 포트폴리오 GitHub URL 언급 repo 최대 3개, base rank top 최대 5개, high contribution 최대 2개를 중복 제거해 최대 10개로 만든다.
+- JD 기반 score와 추천 이유는 `match_score` 단계와 후속 candidate page/ranking에서만 사용한다.
 - 제외 repo도 `filter_status='excluded'`, `filter_reason`으로 저장한다. 기본 응답에는 `eligible`만 노출한다.
 
 주요 필드:
@@ -39,7 +41,7 @@
 - `base_rank`
 - `batch_no`
 - `batch_rank`
-- `selection_reason`: `portfolio_mentioned`, `base_rank_top`, `jd_signal`, `high_contribution`, `other`
+- `selection_reason`: `portfolio_mentioned`, `base_rank_top`, `high_contribution`, `other`. `jd_signal`은 첫 batch에는 사용하지 않고, JD 확보 뒤 후속 ranking 신호로만 사용할 수 있다.
 - `ranking_score`
 - `ranking_signals JSONB`
 - `filter_status`: `eligible`, `excluded`

@@ -14,7 +14,7 @@
 3. [공통 용어](../shared/glossary.md)와 Sprint 1 `FIX` 상태의 기능·아키텍처 문서.
 4. [기획 변경·확정 Report](../../report.md)의 확정 항목.
 5. Sprint 1 `FIX` 명세가 명시적으로 연결한 `backend/docs/*` 구현 체크리스트와 운영 가이드. 상위 계약을 바꾸지는 못하지만 구현 순서와 상세 경계를 함께 확인한다.
-6. `PENDING_FE`, `PENDING_AI`, `PENDING_TEAM` 항목. 결정되기 전에는 구현값을 만들지 않는다.
+6. `PENDING_FE`, `PENDING_AI`, `PENDING_TEAM` 항목. 결정되기 전에는 구현값을 만들지 않는다. 2026-09-15의 [0010 결정](decisions/0010-sprint1-interface-runtime-decisions.md)이 해소한 항목은 해당 결정을 우선한다.
 7. `context/*` 회의 기록과 검토 초안. 승인된 기준과 일치하는 배경 설명만 참고하고, 차이는 변경 제안으로 다룬다.
 8. 이관 전 `frontend/docs/*`, README, 현재 타입과 코드 스켈레톤. 최신 FIX 명세와 일치할 때만 구현 상태 참고자료로 사용한다.
 
@@ -41,9 +41,9 @@
 ### 핵심 범위와 전송
 
 - Sprint 1은 W4~W7의 텍스트 면접이다. 음성, STT, TTS는 Sprint 2다 (`report.md:5-17`, `migration.md:12-13`).
-- 답변은 양방향 텍스트 WebSocket의 `{ "type": "answer", "text": "..." }`로 전달한다. 서버 이벤트는 `answerReceived`, `thinking`, `evidenceCheck`, `question`, `interviewEnd`, `error`다 (`interview.md:46-68`).
+- 답변은 양방향 텍스트 WebSocket의 `{ "type": "answer", "turn": 3, "text": "..." }`로 전달한다. 서버 이벤트는 `answerReceived`, `thinking`, `evidenceCheck`, `question`, `interviewEnd`, `error`다.
 - Public repository와 Wanted 공고만 지원한다. 선택 repository는 1~5개이며 current run, accessible, eligible, L1 성공 조건을 만족해야 한다 (`analysis-run.md:71-80`, `interview.md:5-19`).
-- Sprint 1 문서 preview는 PDF, DOCX, TXT, MD의 텍스트와 GitHub URL을 보조 신호로 추출한다. Claim row 생성과 Claim 기반 면접은 Sprint 2다 (`documents.md:3-29`).
+- Sprint 1 문서 preview는 포트폴리오 PDF, DOCX, TXT, MD의 텍스트와 GitHub URL을 보조 신호로 추출한다. Claim row 생성과 Claim 기반 면접은 Sprint 2다.
 
 ### 면접관과 Director
 
@@ -55,7 +55,7 @@
 ### 모델, 근거, 리포트
 
 - Sprint 1의 모든 LLM 작업은 설정·seed에서 읽는 `5.5 Luna` 기준선으로 실행한다. 코드 상수로 고정하지 않고 실제 모델 문자열, prompt version, token, latency를 기록한다 (`backend/architecture.md:12-17`, `report.md:523-545`).
-- JSON 구조화 출력 파싱 실패는 자동 1회 재시도한 뒤 실패 처리한다. 깨진 JSON을 복구해 downstream에 전달하지 않는다 (`report.md:551-563`, `ForAI.md:38-47`).
+- timeout/provider 오류와 JSON parse/schema 실패는 공통 LLM 호출 계층에서 자동 1회 재시도한 뒤 실패 처리한다. semantic 실패는 재호출하지 않으며, 깨진 JSON을 복구해 downstream에 전달하지 않는다.
 - `question_basis`와 `evaluation_basis`를 구분한다. `tech_lead` 질문에는 가능한 한 질문 근거를 연결하고, 답변의 검증 가능한 주장은 제한된 Evidence Retriever로 후속 확인한다 (`interview.md:100-117`).
 - 리포트는 lazy generation이고 Persona별 피드백은 `interview_reports.feedback_json`에 둔다. 성공 후 profile summary job을 enqueue하며 Sprint 1 summary는 완료 면접에 사용된 repository의 단순 집계가 중심이다 (`report.md`가 아닌 `spec/backend/features/report.md:5-27,35-43`).
 
@@ -85,8 +85,8 @@
 | 분석 요청 | `frontend/src/types/api.ts:93-100`과 `frontend/src/shared/api.ts:52-56`은 `jobUrl`, 파일 필드, `FormData`를 사용한다. OpenAPI `:44-60`은 JSON `postingUrl`과 optional `documentId`를 요구한다. | 현재 FE 호출은 canonical request와 호환되지 않는다. 파일은 `/documents/preview`에서 먼저 처리한다. |
 | StepStatus | 현재 FE 타입은 `pending`, `running`, `completed`이고 `frontend/docs/api-spec.md:49`는 여기에 `failed`를 더한다. OpenAPI `:290-292`는 `pending`, `running`, `succeeded`, `failed`다. | 성공 상태 이름을 계약대로 통일해야 한다. 이벤트 표시용 별도 매핑이 필요하면 명시적 계약으로 정한다. |
 | Interview snapshot | OpenAPI는 `preparing_failed` status를 포함하지만 `InterviewDetailResponse`에 FE 명세가 요구하는 `answerMode`, `lastError`가 없다 (`openapi.yaml:461-497`, `spec/frontend/features/interview.md:102-121`). 현재 FE 타입은 `preparing`과 `preparing_failed`도 누락한다 (`frontend/src/types/api.ts:4`). | 새로고침 복구와 Sprint 2 분기 요구가 canonical snapshot에 완전히 이관되지 않았다. AI가 누락 필드를 내부 출력으로 대신 만들지 않는다. |
-| Prepare 순서 | FE 기능 명세는 `analyze_repo → build_persona → compose_question → set_criteria` 순서다 (`spec/frontend/features/interview.md:19-23`). BE 명세는 criteria를 구성한 뒤 첫 질문을 생성한다 (`spec/backend/features/interview.md:32-37`). | 질문 생성은 JD, domain category, 평가 기준에 의존하므로 `set_criteria`가 `compose_question`보다 먼저여야 한다. 화면 표시 순서도 계약 검토가 필요하다. |
-| Report score | OpenAPI는 `totalScore`와 각 `score`를 필수 number로 둔다 (`openapi.yaml:507-529`). | 공식·스케일은 `PENDING_TEAM`이다. `0`, `null`, 임시 환산값을 채우는 것으로 불일치를 숨기지 않는다. |
+| Prepare 순서 | 과거 FE 기능 명세는 `analyze_repo → build_persona → compose_question → set_criteria` 순서였다. | 0010 이후 기준은 `analyze_repo → build_persona → set_criteria → compose_question`이다. |
+| Report score | OpenAPI는 `totalScore`와 각 `score`를 필수 number로 둔다 (`openapi.yaml:507-529`). | 0010 이후 기준은 0~100 score 6개와 단순 평균 `totalScore`다. 가중치와 nullable/status 표현은 사용하지 않는다. |
 | Worker 목록 | `backend/app/workers/arq_app.py:1-10` docstring은 `initial_sync`, `interview_prep`, `deep_analysis`, `report_generate` 4개를 적는다. Sprint 1 FIX pipeline은 `initial_sync`, `analysis_run`, `candidate_page_analyze`, `interview_prep`, `report_generate`, `profile_summary` 6개다 (`backend/docs/pipeline.md:1-20`). | 현재 worker docstring은 과거 snapshot이다. FIX 6개 작업과 enqueue 경계를 기준으로 registry·테스트를 구현해야 한다. |
 
 ## 구현·검증 준비 상태
@@ -108,12 +108,12 @@
 | 구조화 출력 적합성 | 검증 필요 | Luna가 task별 schema를 안정적으로 생성하는지 실제 평가한다. `notable_areas`, answer claim 분리, Director persona/turn 출력을 우선 확인한다 (`ForAI.md:32-47`). |
 | Domain frame 품질 | AI 검토 필요 | 7개 category와 3개 frame seed는 FIX지만 실제 문구, 중복 방지 guard, `etc` fallback 품질은 검수한다 (`ForAI.md:49-64`). |
 | Evidence 범위 확장 | AI 검토 필요 | Sprint 1 검색 범위는 FIX다. full tree/global search 도입 시점과 `unverified` 기준은 별도 결정한다 (`ForAI.md:66-82`). |
-| Report score | `PENDING_TEAM` | 0~100, 1~5, 가중치, 합산, 임계값을 정하지 않는다 (`ForAI.md:84-97`). |
+| Report score | 0010 Accepted | 0~100 score 6개와 단순 평균 `totalScore`. 세부 기준 seed는 자료 보강에 따라 갱신 가능. |
 | Sprint 2 모델·검색 | Sprint 2 재검토 | task별 모델 분리, 음성 provider, 고비용 task, vector 도입 효과를 측정 뒤 결정한다 (`ForAI.md:99-113`). |
 
 ### 계약상 주의할 미해결점
 
-- `openapi.yaml:509-529`는 `totalScore`와 `scores[].score`를 필수 number로 요구하지만 공식과 스케일은 `PENDING_TEAM`이다. 임의의 `0`, `null`, 가짜 환산식을 넣지 않는다. 구현 전에 계약을 유지할 실제 산정 기준이나 nullable/status 전환 중 하나를 팀이 결정해야 한다.
+- `openapi.yaml:509-529`는 `totalScore`와 `scores[].score`를 필수 number로 요구한다. 0010 이후 Sprint 1은 0~100 score 6개와 단순 평균 `totalScore`를 사용하며, 가중치·nullable/status 전환은 사용하지 않는다.
 - 현재 OpenAPI는 외부 API shape의 부분 이관본이다. Question Contract, 평가 세부 결과, DirectorDecision, evidence provenance 같은 내부 LLM JSON key를 승인하지 않는다. [내부 계약](contracts.md)의 Proposed 구조는 BE 저장·서비스 경계 검토 후 채택한다.
 - `5.5 Luna`는 승인된 논리적 모델 기준선이지만 실제 provider와 호출 가능한 model identifier는 문서에서 확인되지 않았다. 이름을 임의 provider ID로 번역하지 않는다.
 - 음성 원본 보존, 삭제, 다시 듣기, 전사 정정과 입력 채널 전환은 사용자 자료를 수집하기 전에 별도 결정해야 한다.

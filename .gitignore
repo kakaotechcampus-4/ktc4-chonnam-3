@@ -81,3 +81,4 @@ target/
 /ai/report/
 /.superpowers/
 CLAUDE.local.md
+tmp/

@@ -11,10 +11,10 @@
 | Error envelope | `{ error: { reason, message, details } }` | FIX |
 | Sprint 1 면접 입력 | 텍스트-only | FIX |
 | Sprint 2 면접 입력 | 음성/STT/TTS 확장 | FIX |
-| WS 식별자 | `interviewId` 통일 vs 별도 `sessionId` | `PENDING_FE` |
-| `questionEnd` | 텍스트 WS에서 유지 여부 | `PENDING_FE` |
-| 이탈/복구 | disconnect, heartbeat, abandoned 자동 판정 | `PENDING_FE` |
-| DEVON JWT 전달 | HttpOnly cookie only vs body 포함 | `PENDING_FE` |
+| WS 식별자 | REST/route는 `interviewId`, WS는 `/api/ws/interviews/{sessionId}` | FIX |
+| `questionEnd` | Sprint 1 텍스트 WS에서 제거, `question`이 전달 완료를 의미 | FIX |
+| 이탈/복구 | Sprint 1은 명시적 이탈·레포 재선택만 `abandoned`; 자동 heartbeat 판정은 Sprint 2 | FIX |
+| DEVON JWT 전달 | HttpOnly `accessToken` cookie handshake | FIX |
 | Partial run 매핑 | DB `partial` -> FE `failed`, result 조회 가능 | FIX |
 | Persona enum | `tech_lead`, `hr_manager`, `domain_lead` | FIX |
 | Analysis StepKey | 7개 step 유지 | FIX |
@@ -27,7 +27,7 @@
 | Auth sessions | Sprint 1, Sprint 2 모두 제외 | FIX |
 | Wanted-only JD | Sprint 1 Wanted만 지원 | FIX |
 | Private repo | 지원하지 않음. 필드만 유지 | FIX |
-| Report score | 산정 근거와 저장 스케일 | `PENDING_TEAM` |
+| Report score | 0~100 score 6개와 단순 평균 `totalScore`; 세부 기준 seed는 보강 가능 | FIX |
 | pgvector | 실제 vector 검색 필요 여부 | `PENDING_AI` |
 
 기존 자료는 참고 기록으로 남긴다. 구현자는 이 문서의 FIX/PENDING 상태를 보고 범위를 판단한다.

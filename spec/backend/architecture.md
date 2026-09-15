@@ -45,11 +45,11 @@ backend AI 연결 -> devon_ai (역방향 import 금지)
 
 - GitHub OAuth 로그인. GitHub access token은 FE에 노출하지 않고 BE가 암호화 저장한다.
 - GitHub OAuth App long-lived access token을 전제로 하며 refresh token/expiry 컬럼은 두지 않는다.
-- DEVON 자체 JWT는 BE API 인증에 사용한다. 전달 방식은 `PENDING_FE`.
+- DEVON 자체 JWT는 BE API 인증에 사용한다. API와 WS handshake는 HttpOnly `accessToken` cookie를 사용한다.
 - DEVON JWT는 GitHub token과 분리한다. JWT payload에는 GitHub access token을 넣지 않고, `github_accounts` token field도 JWT 발급용으로 읽지 않는다.
 - public GitHub repository만 지원한다. private repository는 Sprint 2에서도 지원하지 않고 필드만 둔다.
 - Wanted 공고만 지원한다. 다른 공고 사이트와 공고 없는 면접은 차단한다.
-- 문서 preview는 PDF, DOCX, TXT, MD 텍스트 추출과 GitHub URL 추출만 수행한다.
+- 문서 preview는 Sprint 1에서 포트폴리오 파일의 PDF, DOCX, TXT, MD 텍스트 추출과 GitHub URL 추출에 사용한다.
 - `document_claims` 테이블은 만들되 자소서/포트폴리오 claim 추출과 row 생성은 하지 않는다.
 - 분석 run은 repo candidate ranking, page 단위 L0-b/L1 분석, repo recommendation을 제공한다.
 - 면접은 텍스트 WebSocket이다. 음성, STT, TTS는 Sprint 2.
@@ -63,7 +63,7 @@ backend AI 연결 -> devon_ai (역방향 import 금지)
 
 ## Sprint 2 방향
 
-- 음성 입력, STT, TTS, `questionEnd` 포함 여부는 FE 결정 후 확장한다.
+- 음성 입력, STT, TTS, `questionEnd`는 Sprint 2에서 확장한다.
 - 자소서/포트폴리오 claim 추출과 문서-코드 conflict를 추가한다.
 - `report_disagreements` API와 row 생성을 추가한다.
 - profile summary는 완료 면접의 누적 repo 기반으로 고도화한다.
@@ -74,10 +74,5 @@ backend AI 연결 -> devon_ai (역방향 import 금지)
 
 | 항목 | 상태 | 이유 |
 | --- | --- | --- |
-| WS 식별자 `interviewId` vs `sessionId` | `PENDING_FE` | FE 라우팅, 새로고침 복구, 상태머신 결정 필요 |
-| 텍스트 WS에서 `questionEnd` 유지 여부 | `PENDING_FE` | Sprint 2 음성 스트리밍과 연결됨 |
-| 이탈/복구/자동 `abandoned` 판정 | `PENDING_FE` | FE UX와 하트비트 정책 결정 필요 |
-| DEVON JWT 전달 방식 | `PENDING_FE` | HttpOnly cookie only vs body 포함 |
 | 포트폴리오 unmatched GitHub URL 노출 | `PENDING_FE` | 개인정보/UX 결정 필요 |
-| 리포트 점수 스케일과 산정 근거 | `PENDING_TEAM` | 팀원이 자료 보충 후 확정 |
 | `pgvector` extension | `PENDING_AI` | embedding/vector 검색 실제 필요 여부 확인 필요 |

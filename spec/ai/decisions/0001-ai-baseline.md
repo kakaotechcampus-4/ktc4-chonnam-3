@@ -23,7 +23,7 @@ AI 구현 문서는 다음 기준선을 따른다.
 6. Persona enum은 `tech_lead`, `hr_manager`, `domain_lead`다. 별도 Strategist Agent나 Senior Developer Persona를 추가하지 않는다.
 7. Sprint 1 LLM 기준선은 설정·seed의 `5.5 Luna`다. 실제 provider/API model ID와 구조화 출력 적합성은 검증 전제이며 임의로 정하지 않는다.
 8. 음성·STT·TTS는 Sprint 2다. 상세 음성 계약과 provider는 이 결정에 포함하지 않는다.
-9. pgvector와 report score 공식은 각각 `PENDING_AI`, `PENDING_TEAM`으로 유지한다.
+9. pgvector는 `PENDING_AI`로 유지한다. report score 공식의 `PENDING_TEAM`은 2026-09-15의 [0010 결정](0010-sprint1-interface-runtime-decisions.md)으로 대체되었다.
 
 이 결정은 새 API, DB 테이블, 내부 JSON key, 모델 성능 임계값을 승인하지 않는다. [AI 내부 계약](../contracts.md)의 상세 구조는 Proposed이며 BE 검토 후 별도 승인해야 한다.
 
@@ -44,7 +44,7 @@ AI 구현 문서는 다음 기준선을 따른다.
 ## 미결정과 후속 결정
 
 - pgvector/embedding 도입 여부, model, dimension, chunk, 재색인, 저장소
-- Report 점수 기준, 스케일, 가중치, 합산과 필수 number 계약 처리
+- Report 점수 세부 평가 자료 보강. Sprint 1 점수 산식과 필수 number 계약은 2026-09-15의 [0010 결정](0010-sprint1-interface-runtime-decisions.md)을 따른다.
 - 실제 Luna provider/API model identifier와 task별 schema 적합성
 - Domain frame의 구체 문구와 품질 수용기준
 - Evidence Retriever의 Sprint 2 확장과 `unverified` 처리 기준

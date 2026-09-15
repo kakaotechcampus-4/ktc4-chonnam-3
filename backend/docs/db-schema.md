@@ -52,7 +52,7 @@ Sprint 1에 만들지 않는 것:
 - `report_persona_feedbacks`는 만들지 않는다. persona별 리포트 피드백은 `interview_reports.feedback_json`에 저장한다.
 - `report_disagreements`는 Sprint 1 migration에 만들되 API/row 생성은 Sprint 2로 넘긴다.
 - `topic_taxonomy`, `interview_personas`, `probe_patterns`는 별도 테이블로 만들지 않는다. Sprint 1에서는 CHECK 값, prompt, seed config로 흡수한다.
-- `score_criteria`는 Sprint 1에 사용한다. 다만 점수 공식/세부 기준은 `PENDING_TEAM`이며 seed 수정 가능성을 열어둔다.
+- `score_criteria`는 Sprint 1에 사용한다. 공개 점수는 0~100 number 6개와 단순 평균 `totalScore`로 계산한다. 항목별 세부 기준과 seed 문구는 평가 담당 자료 보강에 따라 수정 가능성을 열어둔다.
 - `feedback_signals`, `eval_cases`, `eval_runs`는 Sprint 2로 미루고 Sprint 1 DB에서는 제외한다.
 - `auth_sessions`는 Sprint 1과 Sprint 2 모두 만들지 않는다.
 - `github_accounts`는 GitHub API 호출용 OAuth token만 저장한다. DEVON 자체 JWT는 이 테이블에 저장하지 않는다.
@@ -132,7 +132,7 @@ DEVON 자체 JWT 생성은 `users.id`와 필요 시 `github_accounts.id` 같은 
 
 ## Report
 
-리포트 점수 스케일과 산정 근거는 `PENDING_TEAM`. 테이블은 API shape를 만들 수 있는 최소 구조로 둔다. 점수 공식은 문서에서 임의 확정하지 않는다.
+리포트 점수는 Sprint 1에서 반드시 공개한다. `report_scores.score`와 공개 `scores[].score`는 0~100 number이며, `totalScore`는 6개 항목의 단순 평균이다. 가중치와 nullable/status 기반 미계산 표현은 사용하지 않는다.
 
 - persona별 피드백은 `interview_reports.feedback_json`에 저장한다.
 - `report_scores`는 점수 항목별 score/reason/evidence turn 연결을 위해 유지한다.

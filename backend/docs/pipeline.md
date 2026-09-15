@@ -8,7 +8,7 @@
 | Celery            | 동작하지만 sync 기반. `httpx`/LLM async 코드와 섞으면 이벤트 루프 관리가 늘어난다 |
 | **ARQ**           | asyncio 네이티브 + Redis 만 요구. 이미 Redis 가 확정 스택이라 인프라 추가가 0     |
 
-`app/workers/arq_app.py` 의 `WorkerSettings` 에 작업별 타임아웃, `max_tries`, `job_timeout` 을 둔다.
+`app/workers/arq_app.py` 의 `WorkerSettings` 에 작업별 타임아웃과 `job_timeout` 을 둔다. Sprint 1에서 ARQ 자동 retry는 사용하지 않으므로 `max_tries=1`로 둔다.
 
 `analysis_jobs.retry_count` 는 ARQ 재시도와 별개로 **사용자가 누른 재시도** 횟수다. 섞지 않는다.
 
@@ -23,12 +23,14 @@
 | `report_generate`        | —                        | M6 — lazy report 생성                  |
 | `profile_summary`        | —                        | report 생성 성공 후 사용자 프로필 집계 |
 
+Sprint 1에서는 기본 queue 1개와 단일 ARQ worker 프로세스에 위 6개 job을 모두 등록한다. worker/queue 물리 분리는 Sprint 1 운영 지표를 보고 Sprint 2에서 판단한다. 각 job은 `queued_at`, `started_at`, `completed_at`, `duration_ms`, `queue_wait_ms`, `job_type`, `status`, `error_code`를 남긴다.
+
 ## 2. run 실행 흐름
 
 ```
 POST /analysis-runs (application/json)
   ├ 검증: postingUrl 필수(400 posting_url_required), Wanted URL 여부
-  ├ optional documentId 검증
+  ├ optional documentId 검증  # Sprint 1에서는 portfolio preview documentId
   ├ Redis SETNX run:lock:{userId}:{jobType}  ─┐ 둘 중 하나라도 걸리면
   ├ INSERT analysis_jobs (queued)             ─┘ 409 run_in_progress + 진행 중 runId
   ├ documentId가 있으면 preview 결과를 analysis context에 연결
@@ -100,8 +102,9 @@ ARQ 는 **at-least-once** 다. 워커가 작업 도중 죽으면 같은 job 이 
 세 번째의 `UNIQUE (repository_id, analysis_level, head_sha, prompt_version)` 가 **자연 멱등 키**다.
 중복 실행돼도 LLM 비용만 낭비되고 데이터는 깨지지 않는다.
 
-⚠ 두 번째에는 미결이 있다. `running` 으로 남은 행이 **정말 실행 중인지, 워커가 죽어서 남은
-것인지** 구분해야 한다. 워커 하트비트와 lease/lock TTL 중 어느 쪽으로 갈지는 미결이다.
+Sprint 1에서는 `running` 으로 남은 행이 worker lost로 의심되더라도 자동 재실행하지 않는다.
+자동 재실행을 넣으면 이전 worker 결과와 새 worker 결과의 충돌 처리가 필요하므로, 해당 작업은
+실패 상태로 닫고 재실행·복구 정책은 Sprint 2에서 다룬다.
 
 > 1절의 `analysis_jobs.retry_count` 는 여기서 말하는 재시도가 아니다. ARQ 재시도 · reaper 재등록과
 > 별개로 **사용자가 누른 재시도** 횟수다. 섞지 않는다.
@@ -190,12 +193,12 @@ Postgres 를 주기적으로 재확인하는 폴백을 둔다. 이벤트 보관�
 
 **스프린트1 은 양방향 텍스트다.** 오디오 프레임 · TTS · `transcript` · `stt_failed` ·
 `tts_failed` 는 스프린트2 에서 붙인다 (`interview_sessions.answer_mode` CHECK = `'text'`).
-클라→서버 답변 메시지 형태는 FE 와 합의가 남아 있다 — [api-spec.md](api-spec.md) ③ 참조.
+클라→서버 답변 메시지는 `{ "type": "answer", "turn": n, "text": "..." }`다. 서버는 `turn`이 현재 답변 가능한 turn과 일치하고 아직 저장된 답변이 없을 때만 저장한다.
 
 ### 4.1 핸드셰이크
 
 ```
-1) 쿠키 → auth:sess 조회           실패 → 401 (핸드셰이크 거부, WS accept 하지 않음)
+1) 쿠키 accessToken 검증           실패 → 401 (핸드셰이크 거부, WS accept 하지 않음)
 2) rt:{sessionId} 조회              없음 → 409
 3) userId 일치 확인                 불일치 → 409
 4) interview_sessions.status 확인   completed/abandoned → 409
@@ -212,7 +215,7 @@ Postgres 를 주기적으로 재확인하는 폴백을 둔다. 이벤트 보관�
 | `prepareStep` ×4       | S→C  | `interview_sessions.status='preparing'`, `context_state` 초기화                                                                                                                         |
 | `prepareCompleted`     | S→C  | `status='in_progress'`, `events(session_started)`                                                                                                                                       |
 | `question`             | S→C  | `INSERT interview_turns(status='asked', depth, parent_turn_no, topic_code, jd_requirement_ids, claim_ids)` + **`INSERT turn_evidences(usage='question_basis')`** + `events(turn_asked)` |
-| 답변 (C→S, 텍스트 1회) | C→S  | `UPDATE interview_turns SET answer_text, answered_at, answer_duration_sec, status='answered'` + `events(turn_answered)`                                                                 |
+| 답변 (C→S, `{type:"answer", turn, text}`) | C→S  | turn 일치·미답변 확인 후 `UPDATE interview_turns SET answer_text, answered_at, answer_duration_sec, status='answered'` + `events(turn_answered)`                                      |
 | `thinking`             | S→C  | `UPDATE interview_turns SET analysis` (AnswerAnalysis) → `SET decision` (DirectorDecision) + `context_state` 갱신                                                                       |
 | `evidenceCheck`        | S→C  | **`INSERT evidences(retrieved_for_turn=n, git_ref, snippet, tool_name)`**                                                                                                               |
 | (불일치 발견)          | —    | `INSERT evidence_conflicts(verdict='unresolved')` — **2차**                                                                                                                             |
@@ -236,20 +239,14 @@ Postgres 를 주기적으로 재확인하는 폴백을 둔다. 이벤트 보관�
 ### 4.3 이탈 처리
 
 WS `disconnect` 만으로 `abandoned` 를 확정하지 않는다 (새로고침·터널 끊김과 구분 불가).
-`ws:lock` 이 하트비트 없이 만료되고 재연결이 없으면 그때 `abandoned` 로 넘긴다
-→ 주기 작업(`arq` cron) 1개가 필요하다.
+Sprint 1에는 하트비트/timeout 기반 자동 abandoned 판정 배치를 두지 않는다. `abandoned`는 사용자가
+이탈 확인 모달에서 명시적으로 나가거나, 레포 재선택으로 새 세션을 만들 때만 설정한다.
 
-이 cron 이 두 가지를 같이 본다. **하나만 만든다.**
+주기 작업은 분석 reaper만 본다.
 
 | 대상                 | 판정                                          |
 | -------------------- | --------------------------------------------- |
-| `interview_sessions` | `ws:lock` 만료 + 재연결 없음 → `abandoned`    |
 | `analysis_jobs`      | `queued` 인데 큐에 없음 → 재등록 (2절 reaper) |
-
-⚠ WS 하트비트 주기는 ALB 유휴 타임아웃보다 짧아야 한다. 기본값 60초와 `ws:lock` 60초가
-경계에서 겹치므로 [deploy.md](deploy.md) 3절 ④ 에서 같이 조정한다.
-
-**North Star(완주율)가 이 판정 하나에 걸려 있다.**
 
 세션 재개는 미지원이다 (`status` 에 `paused` 없음). 답변 초안 저장도 없다. 제출 1회.
 
@@ -270,20 +267,19 @@ WS `disconnect` 만으로 `abandoned` 를 확정하지 않는다 (새로고침·
 `rt:{sessionId}` 값에 `interviewId`, `userId` 를 담는다. Redis 가 날아가면 WS 만 끊기고 면접
 기록(Postgres)은 남는다. 그때 `GET /interviews/{id}` 가 새 `sessionId` 를 발급한다.
 
-> 세션 재개 미지원이 확정되면서 식별자를 2개로 나눌 근거가 약해졌다. WS 를 `interviewId` 로
-> 붙이면 `rt:{sessionId}` 키가 사라진다. FE 확정이 필요한 미결 항목이다.
+Sprint 1에서는 FE 문서와 맞춰 WS를 `sessionId`로 유지한다.
 
 ### 4.5 세션 상태 — DB 4개, API 3개
 
-| `interview_sessions.status` (DB) | FE `InterviewStatus`                                        |
-| -------------------------------- | ----------------------------------------------------------- |
-| `preparing`                      | ← **`in_progress` 로 매핑** (`currentTurn: 0`, `turns: []`) |
-| `in_progress`                    | `in_progress`                                               |
-| `completed`                      | `completed`                                                 |
-| `abandoned`                      | `abandoned`                                                 |
+| `interview_sessions.status` (DB) | FE `InterviewStatus` |
+| -------------------------------- | -------------------- |
+| `preparing`                      | `preparing`          |
+| `preparing_failed`               | `preparing_failed`   |
+| `in_progress`                    | `in_progress`        |
+| `completed`                      | `completed`          |
+| `abandoned`                      | `abandoned`          |
 
-api-spec 이 "준비 단계면 `currentTurn: 0`, `turns: []`" 라고만 쓰고 상태값을 안 줬으므로 위처럼
-접는다. DB 컬럼은 `preparing` 을 그대로 유지한다. **준비 단계 이탈률을 봐야 한다.**
+준비 단계면 `currentTurn: 0`, `turns: []`를 반환한다. `preparing_failed`일 때는 `lastError`와 `prepareSteps`로 실패 화면을 복구한다.
 
 ## 5. Report
 
@@ -293,9 +289,11 @@ api-spec 이 "준비 단계면 `currentTurn: 0`, `turns: []`" 라고만 쓰고 �
 GET /interviews/{id}/report
   -> report exists: 200
   -> generating lock exists: 202
-  -> generation possible: enqueue report_generate, 202
+  -> generation possible(status=completed and answered turns >= 1 and no failed generation): enqueue report_generate, 202
   -> unavailable: 409 report_unavailable
 
 report_generate succeeded
   -> enqueue profile_summary
 ```
+
+이전 `report_generate` 실패 이력이 있으면 Sprint 1에서는 자동 재생성하지 않는다. `profile_summary` 실패는 report 결과를 실패로 되돌리지 않으며 재시도·복구 정책은 Sprint 2에서 다룬다.

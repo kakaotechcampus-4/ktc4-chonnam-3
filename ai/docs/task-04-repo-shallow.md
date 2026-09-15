@@ -23,7 +23,7 @@
 - `repo_shallow_v1`의 정확한 schema는 AI-L02 채택 범위만 사용한다. 문서 후보 필드를 새 DTO로 먼저 고정하지 않는다.
 - L1의 LLM 사용 방향과 프로젝트 기능·역할 요약 의미는 Accepted다. 실제 provider 연결은 AI-L01 뒤 수행한다.
 - `role_summary` 이름과 DB/API 저장 매핑, deterministic metadata는 AI-L03의 AI·BE 합의 전 연결하지 않는다.
-- 실패 item 재호출의 총 attempt와 batch budget은 AI-L04 결정 전 production 정책으로 만들지 않는다.
+- 실패 item의 attempt는 공통 LLM gateway/task 호출 계층 정책을 따른다. semantic 실패 item은 재호출하지 않는다. batch budget과 timeout/token 상한은 AI-L04 남은 결정 전 production 정책으로 만들지 않는다.
 
 ## 대상 파일과 책임
 
@@ -72,5 +72,5 @@
 ## 결정 대기와 재개 조건
 
 - AI-L03의 Accepted 의미 정책에 따라 개인 기여 없는 프로젝트 요약 검사는 즉시 진행한다. AI·BE가 필드명, 저장/API 매핑과 version·출처 metadata를 기록하면 durable 저장 연결을 재개한다.
-- ADR 0008의 실패 분류와 fail-closed batch 검사는 즉시 구현한다. AI-L04에서 실패 item·semantic 실패의 재호출 여부, 총 attempt, 관리 계층과 소진 처리가 승인되면 production 재시도를 재개한다.
+- ADR 0008의 실패 분류와 fail-closed batch 검사는 즉시 구현한다. 0010에 따라 semantic 실패는 재호출하지 않고, parse/schema 재시도는 공통 LLM 호출 계층의 총 2회 상한을 따른다. AI-L04의 남은 budget·소진 처리가 승인되면 production 상한을 연결한다.
 - AI-L02가 일부 출력만 채택하면 그 범위만 구현한다. 미승인 저장 매핑이 순수 batch 검증을 막지는 않는다.

@@ -42,19 +42,15 @@
 ### AI-L04. 실행 상한과 재시도 책임
 
 - 검토·시점: AI·BE, 실제 호출·Director loop 연결 전.
-- 남은 결정: task별 timeout·입력/token·Context 길이·동시성·Tool·재작성·재계획 budget, 소진 후 서비스 처리, SDK/gateway/task/worker 중 attempt 관리 주체. L1 실패 item 재호출의 총 attempt 계산과 의미 검증 실패의 재호출 여부·attempt 차감·외부 실패 매핑.
+- 확정: LLM 호출 attempt는 공통 LLM gateway/task 호출 계층에서만 관리한다. timeout/provider 오류/parse/schema 실패는 함수 내부에서 자동 1회 재호출해 총 2회까지만 시도한다. semantic 실패는 재호출하지 않고 fail-closed로 처리한다. ARQ 자동 retry는 Sprint 1에서 사용하지 않고 `max_tries=1`로 둔다. SDK/provider 자체 retry는 호출 수가 곱해지지 않도록 끄거나 최소화한다.
+- 남은 결정: task별 timeout·입력/token·Context 길이·동시성·Tool·재작성·재계획 budget, budget 소진 후 서비스 처리, 외부 공개 실패 reason의 세부 매핑. production raw output·metadata 보존 위치와 권한은 AI-L18에서 함께 결정.
 - 근거: [0008 후보 정책](spec/ai/decisions/0008-ai-candidate-policy.md), [Gateway와 실패](spec/ai/contracts.md), [면접](spec/ai/features/interviewer.md), [L1 배치](spec/ai/features/repository-analysis.md).
-
-### AI-L05. JD 신호와 분석 7단계의 선행관계
-
-- 검토·시점: AI·BE, 진행 표시 영향 시 FE; candidate ranking 연결 전.
-- 남은 결정: `repo_select`가 JD 수집보다 앞선 기존 순서에서 첫 batch의 `jd_signal`을 얻는 방법. JD 선확보·외부 단계 표시 분리, 첫 batch 신호 사용 조정, 단계 계약 변경 중 채택안.
-- 근거: [분석 단계 순서 보류](spec/ai/features/repository-analysis.md), [BE pipeline](backend/docs/pipeline.md).
 
 ### AI-L06. L2 부분 결과의 준비 성공·지원 범위 계약
 
 - 검토·시점: AI·BE, L2 결과를 면접 준비 완료로 연결하기 전.
-- 남은 결정: notable area 일부가 무효일 때 전체 실패 또는 검증된 1~5개 subset 성공을 허용할 조건. 실제 지원 언어·도구 목록과 읽기 범위, 한계를 표현할 계약 필드, repo 분석 상태와 `preparing_failed` 매핑.
+- 확정: primary repo 1~2개 중 최소 1개 repo에 검증된 notable area가 1개 이상 있으면 면접 준비 성공을 허용한다. 검증된 notable area가 0개면 `preparing_failed`다. 무효·실패 repo/path/area는 질문 근거에서 제외하고, 내부 context limitations에 한계로 남긴다. Director와 report는 한계 범위의 내용을 관찰 사실처럼 묻거나 평가하지 않는다.
+- 남은 결정: 실제 지원 언어·도구 목록과 읽기 범위, context limitations의 정확한 저장 필드·enum·공개 여부.
 - 근거: [0008 후보 정책](spec/ai/decisions/0008-ai-candidate-policy.md), [레포 분석](spec/ai/features/repository-analysis.md), [준비 조건](spec/ai/features/interviewer.md), [검증](spec/ai/verification.md).
 
 ### AI-L07. 추천 점수와 미계산 표시
@@ -86,7 +82,8 @@
 ### AI-L11. Worker 인수와 실행 배치
 
 - 검토·시점: AI·BE, worker 등록·호출 연결 전. 상태: Proposed 검토.
-- 남은 결정: 기존 6개 job의 정확한 함수 signature·직렬화 인수·timeout과 retry 경계, 답변별 ARQ job 여부, 준비/면접 Worker의 물리적 분리 여부.
+- 확정: Sprint 1은 기본 queue 1개와 단일 ARQ worker 프로세스에 기존 6개 job을 모두 등록한다. 물리적 worker/queue 분리는 Sprint 1에서 수집한 job별 대기·처리·실패 지표를 보고 Sprint 2에서 판단한다. ARQ `max_tries=1`이며 자동 retry로 LLM 호출 수를 늘리지 않는다.
+- 남은 결정: 기존 6개 job의 정확한 함수 signature·직렬화 인수·job별 timeout. 답변별 처리는 Sprint 1 WS loop 안에서 처리하며 별도 ARQ turn job을 만들지 않는 방향을 구현 검토에 반영한다.
 - 근거: [Context](spec/ai/features/job-context.md), [아키텍처](spec/ai/architecture.md), [BE pipeline](backend/docs/pipeline.md).
 
 ### AI-L12. 저장·큐·알림의 중복 방지
@@ -95,34 +92,25 @@
 - 남은 결정: transaction 분리, row lock/CAS·lock token, 입력 버전 비교, 저장 성공·enqueue 실패 복구, outbox 필요 여부, 동일 answer_vs_code 충돌의 중복 방지 키/제약.
 - 근거: [Context](spec/ai/features/job-context.md), [면접](spec/ai/features/interviewer.md), [충돌 저장](spec/ai/features/evidence-retrieval.md).
 
-### AI-L13. WS 식별자·메시지·인증 연결
+### AI-L13. WS 사용자 종료 wire
 
-- 검토·시점: FE·BE, AI payload는 AI도 참여; 실제 WS 연결 전. 상태: PENDING_FE 및 payload 검토.
-- 남은 결정: interviewId/sessionId 경로, 질문 payload와 `answerReceived` 저장 확인 의미, 텍스트 `questionEnd` 유지 여부, 사용자 종료 wire, WS 인증과 공통 JWT 전달 방식.
+- 검토·시점: FE·BE, 실제 사용자 이탈 구현 전. 상태: 일부 확정, 사용자 종료 wire만 잔여.
+- 확정: WS는 `sessionId` 기준 `/api/ws/interviews/{sessionId}`를 사용한다. REST 화면 route와 report는 `interviewId`를 사용하며 `GET /interviews/{id}`와 `POST /interviews`는 `sessionId`를 포함한다. WS 인증은 HttpOnly `accessToken` cookie handshake로 처리한다. Sprint 1 텍스트에서는 `questionEnd`를 제거하고 `question`이 질문 전달 완료를 의미한다. `answerReceived`는 답변 수신·저장 완료 신호이며 다음 질문 입력 가능 신호가 아니다.
+- 남은 결정: 명시적 사용자 종료/이탈 wire 또는 endpoint의 최종 구현 위치.
 - 근거: [면접 공개 메시지](spec/ai/features/interviewer.md), [이관 상태](spec/shared/contracts/migration.md), [원본 검토](spec/ai/source-audit.md).
 
-### AI-L14. 제출 식별·준비 상태·재연결
+### AI-L15. 리포트 점수 세부 기준 보강
 
-- 검토·시점: FE·BE·AI, 준비/새로고침/복구 연결 전. 상태: PENDING_FE 및 계약 차이 검토.
-- 남은 결정: 지연된 이전 답변을 식별할 제출 ID/Turn ID, reconnect·heartbeat·abandoned 판정, prepare retry와 `answerMode`/`lastError` snapshot, 준비 단계 표시 순서, StepStatus 성공값 매핑.
-- 근거: [면접](spec/ai/features/interviewer.md), [FE/계약 차이](spec/ai/source-audit.md), [검증](spec/ai/verification.md).
-
-### AI-L15. 리포트 점수와 공개 응답
-
-- 검토·시점: 팀 평가 담당·AI·BE·FE, 실제 리포트 200 공개 전. 상태: PENDING_TEAM.
-- 남은 결정: 점수 기준·스케일·가중치·합산·미관찰 처리와 `score_criteria` seed, 필수 숫자 계약 유지 또는 nullable/status 변경. FE의 score key·headline·coverage·상세 근거 요구와 공개 필드.
+- 검토·시점: 팀 평가 담당·AI·BE·FE, score criteria seed 보강 전. 상태: 세부 기준 보강.
+- 확정: Sprint 1 리포트는 점수를 반드시 포함한다. `totalScore`와 `scores[].score`는 0~100 number이며, 공개 score key 6개를 유지한다. `totalScore`는 6개 항목의 단순 평균이다. 가중치·nullable/status 전환은 사용하지 않는다.
+- 남은 결정: 각 항목의 세부 평가 기준과 `score_criteria` seed 문구·version 보강. 항목별로 더 세밀한 평가 자료가 확보되면 항목별 산정 근거를 추가한다.
 - 근거: [리포트](spec/ai/features/report-profile.md), [OpenAPI](spec/shared/contracts/openapi.yaml), [ForAI 5](ForAI.md).
-
-### AI-L16. 리포트 생성 가능 상태와 재시도
-
-- 검토·시점: BE·AI, 사용자 상태 표시는 FE; lazy report job 연결 전.
-- 남은 결정: completed/abandoned 등에서 생성 가능한 조건, 실패 attempt의 영구 저장 책임, lock 만료 후 이전 worker 판정, 재enqueue·중복 저장·이전 성공본 보존 방식.
-- 근거: [리포트](spec/ai/features/report-profile.md), [기준 결정](spec/ai/decisions/0001-ai-baseline.md).
 
 ### AI-L17. 프로필 집계 단위와 갱신
 
 - 검토·시점: AI·BE, profile_summary job 연결 전.
-- 남은 결정: 같은 repo를 여러 완료 면접에서 사용한 경우 집계 단위·중복 제거·갱신 시점, 정확한 저장 key·job 인수와 실패/이전 성공본 유지 방식.
+- 확정: `profile_summary`는 `report_generate` 성공 뒤 enqueue하되 리포트 응답을 막지 않는다. Sprint 1에서는 LLM 없이 확정 데이터 집계만 수행한다. profile job 실패는 이미 생성된 report를 실패로 되돌리지 않으며, 재시도·복구·상세 실패 처리는 Sprint 2로 넘긴다.
+- 남은 결정: 같은 repo를 여러 완료 면접에서 사용한 경우 집계 단위·중복 제거·정확한 저장 key·job 인수.
 - 근거: [0006 결정](spec/ai/decisions/0006-task-llm-usage-policy.md), [프로필](spec/ai/features/report-profile.md), [Context](spec/ai/features/job-context.md).
 
 ## 자료 운영·평가·검색

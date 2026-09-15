@@ -5,7 +5,7 @@
 
 ## 목표
 
-BE가 선택한 primary 저장소의 고정 SHA와 허용 원문만 사용해 L2 아키텍처 관찰 후보를 만든다. `notable_areas`의 실제 path와 확인 범위를 검증하고, 부분 결과를 면접 준비 성공으로 승격하는 조건은 별도 결정에 맡긴다.
+BE가 선택한 primary 저장소의 고정 SHA와 허용 원문만 사용해 L2 아키텍처 관찰 후보를 만든다. `notable_areas`의 실제 path와 확인 범위를 검증하고, primary repo 1~2개 중 최소 1개 repo에 검증된 notable area가 1개 이상 있으면 면접 준비 성공으로 연결할 수 있다.
 
 ## 근거
 
@@ -22,8 +22,8 @@ BE가 선택한 primary 저장소의 고정 SHA와 허용 원문만 사용해 L2
 - 고정 SHA, 단일 파일 path, 유효·무효 notable area와 부분 결과 fixture는 실제 GitHub·모델 없이 구현할 수 있다.
 - L2 입력·출력의 정확한 필드는 AI-L02에서 채택된 범위만 사용하며 Proposed 구조를 새 schema로 먼저 고정하지 않는다.
 - L2는 기존 LLM 사용 방향을 유지하지만 실제 provider 연결은 AI-L01, 실행 budget은 AI-L04 결정 뒤 수행한다.
-- 일부 notable area가 무효일 때 준비 성공으로 볼지는 AI-L06 전 확정하지 않는다.
-- 사용 가능·제한·무효 관찰의 의미 정책은 Accepted이며 readiness·repo 상태 매핑과 지원 기능 목록만 AI-L06에 남는다.
+- 검증된 notable area가 총 0개면 `preparing_failed`다. 실패 repo/path/area는 질문 근거에서 제외하고 내부 context limitations에 남긴다.
+- 사용 가능·제한·무효 관찰의 의미 정책은 Accepted이며 지원 기능 목록과 context limitations의 정확한 저장 필드만 AI-L06에 남는다.
 - directory path의 열거 깊이·개수·byte/token/time 상한은 AI-L08 결정 전 production 조회로 연결하지 않는다.
 
 ## 대상 파일과 책임
@@ -48,8 +48,8 @@ BE가 선택한 primary 저장소의 고정 SHA와 허용 원문만 사용해 L2
 - [ ] 존재하지 않는 path, 다른 SHA의 path, 허용 범위 밖 path와 근거 없는 함수·줄 위치를 거부한다.
 - [ ] 단일 파일 path는 승인된 source access 결과로 검증하고 읽은 범위와 미확인 부분을 남긴다.
 - [ ] directory path는 AI-L08 상한 승인 전 자동 재귀·전체 tree·global keyword search로 확장하지 않는다.
-- [ ] 사용 가능·제한·무효 notable area를 분리하되 subset을 준비 성공으로 처리하지 않고 AI-L06 판정 입력으로 넘긴다.
-- [ ] notable area가 없거나 검증된 path가 없으면 L2 준비 성공이나 Evidence 출발점으로 사용하지 않는다.
+- [ ] 사용 가능·제한·무효 notable area를 분리하고, 검증된 notable area가 하나 이상인 primary repo가 있는지 readiness 입력으로 넘긴다.
+- [ ] notable area가 없거나 검증된 path가 없으면 해당 repo를 L2 준비 성공이나 Evidence 출발점으로 사용하지 않는다.
 - [ ] run의 일반 partial과 필수 L2 미완료로 인한 `preparing_failed` 후보를 구분한다.
 - [ ] cache는 분석 level, 고정 SHA, prompt version이 맞는 결과만 재사용하고 진행 중 면접의 ref를 바꾸지 않는다.
 - [ ] Sprint 1에 embedding/vector, Private repo, 전체 snapshot 복원 또는 범위 자동 확대를 추가하지 않는다.
@@ -58,7 +58,7 @@ BE가 선택한 primary 저장소의 고정 SHA와 허용 원문만 사용해 L2
 
 - [ ] 올바른 고정 SHA와 stale/다른 SHA 입력을 대조해 잘못된 ref가 결과에 섞이지 않는지 확인한다.
 - [ ] 실제 파일, 실제 디렉터리, 없는 path, 범위 밖 path와 path traversal 후보 fixture를 검사한다.
-- [ ] notable area 없음, 전부 무효, 제한 관찰, 일부 사용 가능, 모두 사용 가능 결과를 분리해 readiness 결정을 대신하지 않는지 확인한다.
+- [ ] notable area 없음, 전부 무효, 제한 관찰, 일부 사용 가능, 모두 사용 가능 결과를 분리하고 readiness 조건(검증된 notable area 1개 이상)을 확인한다.
 - [ ] 지원 기능이 확인되지 않은 언어 source에서 실행 동작이나 아키텍처를 추론하지 않는지 검사한다.
 - [ ] 구조는 맞지만 ref/path·source 범위를 위반한 후보를 semantic 실패로 거절하는지 검사한다.
 - [ ] 허용된 1~5개 범위, 중복 path와 분석 한계 표현을 검사한다.
@@ -75,6 +75,6 @@ BE가 선택한 primary 저장소의 고정 SHA와 허용 원문만 사용해 L2
 
 ## 결정 대기와 재개 조건
 
-- ADR 0008의 사용 가능·제한·무효 관찰 fixture는 즉시 구현한다. AI-L06에서 지원 언어·parser·읽기 capability와 부분 관찰의 readiness, repo 상태/`preparing_failed` 매핑을 기록하면 준비 완료 연결을 재개한다.
+- ADR 0008의 사용 가능·제한·무효 관찰 fixture는 즉시 구현한다. 0010에 따라 검증된 notable area가 있는 primary repo가 최소 1개면 준비 성공으로 연결할 수 있고, 총 0개면 `preparing_failed`다. AI-L06에는 지원 언어·parser·읽기 capability와 context limitations 저장 필드가 남는다.
 - AI-L08 전에는 고정 ref의 단일 파일 검증과 directory 무확장 정책을 진행한다. AI·BE가 파일 열거 방식, 주변 범위·깊이·개수·byte/token/time 상한을 승인하면 directory 조회를 재개한다.
 - AI-L02·L04·L18의 계약, budget, 원문 보존 결정이 필요한 부분만 대기하며 고정 SHA/path 정책 fixture 검증은 계속한다.
