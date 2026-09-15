@@ -6,16 +6,16 @@ AI 원본은 [ai/src/devon_ai](../ai/src/devon_ai/)의 로컬 Python 패키지�
 
 설계 문서는 [`docs/`](docs/) 안에 있다.
 
-| 문서 | 내용 |
-| --- | --- |
-| [layer-rules.md](docs/layer-rules.md) | 폴더 경계 · 레이어 규칙 · 금지 목록 · 네이밍 · 직렬화 |
-| [db-schema.md](docs/db-schema.md) | 테이블 목록 · 제약 · 1차/2차 경계 · 미결 |
-| [error-reasons.md](docs/error-reasons.md) | 에러 봉투 · 3계층 reason 레지스트리 |
-| [redis-keys.md](docs/redis-keys.md) | Redis 키 설계표 |
-| [pipeline.md](docs/pipeline.md) | ARQ · run 실행 흐름 · SSE · WebSocket |
-| [testing.md](docs/testing.md) | 테스트 전략 · 필수 테스트 4개 · Eval |
-| [deploy.md](docs/deploy.md) | DuckDNS · Caddy · 쿠키 · CI |
-| [api-spec.md](docs/api-spec.md) | FE 계약 링크 + 합의된 변경 |
+| 문서                                      | 내용                                                  |
+| ----------------------------------------- | ----------------------------------------------------- |
+| [layer-rules.md](docs/layer-rules.md)     | 폴더 경계 · 레이어 규칙 · 금지 목록 · 네이밍 · 직렬화 |
+| [db-schema.md](docs/db-schema.md)         | 테이블 목록 · 제약 · 1차/2차 경계 · 미결              |
+| [error-reasons.md](docs/error-reasons.md) | 에러 봉투 · 3계층 reason 레지스트리                   |
+| [redis-keys.md](docs/redis-keys.md)       | Redis 키 설계표                                       |
+| [pipeline.md](docs/pipeline.md)           | ARQ · run 실행 흐름 · SSE · WebSocket                 |
+| [testing.md](docs/testing.md)             | 테스트 전략 · 필수 테스트 4개 · Eval                  |
+| [deploy.md](docs/deploy.md)               | AWS 통합 배포(CloudFront) · 쿠키 · CI                 |
+| [api-spec.md](docs/api-spec.md)           | FE 계약 링크 + 합의된 변경                            |
 
 ## 기술 스택
 
