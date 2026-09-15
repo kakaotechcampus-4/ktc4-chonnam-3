@@ -237,26 +237,13 @@ components:
               additionalProperties: true
     DocumentPreviewResponse:
       type: object
-      required: [documentId, status, extractedGithubUrls, fileName, sizeBytes]
+      required: [documentId, extractStatus]
       properties:
         documentId:
           type: string
           format: uuid
-        status:
+        extractStatus:
           $ref: '#/components/schemas/DocumentExtractStatus'
-        fileName:
-          type: string
-        sizeBytes:
-          type: integer
-        extractedGithubUrls:
-          type: array
-          items:
-            type: string
-        truncated:
-          type: boolean
-        failureReason:
-          type: string
-          nullable: true
     DocumentExtractStatus:
       type: string
       enum: [succeeded, partial, failed]
@@ -272,15 +259,11 @@ components:
           nullable: true
     CreateAnalysisRunResponse:
       type: object
-      required: [runId, status]
+      required: [runId]
       properties:
         runId:
           type: string
           format: uuid
-        status:
-          $ref: '#/components/schemas/RunStatus'
-        reused:
-          type: boolean
     RunStatus:
       type: string
       enum: [running, completed, failed]

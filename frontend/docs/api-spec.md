@@ -571,30 +571,22 @@ BE `spec/backend/features/documents.md` 기준(Sprint 1 FIX). Sprint 1에서 이
 ```json
 {
   "documentId": "doc_abc123",
-  "status": "succeeded",
-  "fileName": "cover_letter.pdf",
-  "sizeBytes": 245678,
-  "extractedGithubUrls": ["https://github.com/kim/project-a"],
-  "truncated": false,
-  "failureReason": null
+  "extractStatus": "succeeded"
 }
 ```
 
 | 필드 | 타입 | null |
 | --- | --- | --- |
 | `documentId` | string | ❌ |
-| `status` | `succeeded`\|`partial`\|`failed` | ❌ |
-| `fileName` | string | ❌ |
-| `sizeBytes` | number | ❌ |
-| `extractedGithubUrls` | string[] | ❌ |
-| `truncated` | boolean | ✅ |
-| `failureReason` | string | ✅ |
+| `extractStatus` | `succeeded`\|`partial`\|`failed` | ❌ |
 
-`status`: `succeeded` / `partial`(일부 추출 또는 길이 초과 축약) / `failed`. `truncated: true`면 길이 초과로 축약됐다는 뜻. `failureReason`은 `status: 'failed'`일 때만 값이 있다.
+`extractStatus`: `succeeded` / `partial`(일부 추출 또는 길이 초과 축약) / `failed`.
+
+추출된 텍스트와 GitHub URL은 서버가 `user_documents`에 저장하고 응답에는 담지 않는다. 파일명·크기는 FE가 로컬 `File` 객체에서 얻으므로 돌려주지 않는다.
 
 **UI states**
 
-공고 입력 화면에서 포트폴리오 파일 선택 즉시(백그라운드) 호출한다. `status: 'failed'`여도 hard blocker가 아니다 — 사용자가 계속 진행을 선택하면 `POST /analysis-runs`를 `documentId` 없이 호출한다.
+공고 입력 화면에서 포트폴리오 파일 선택 즉시(백그라운드) 호출한다. `extractStatus: 'failed'`여도 hard blocker가 아니다 — 사용자가 계속 진행을 선택하면 `POST /analysis-runs`를 `documentId` 없이 호출한다.
 
 `documentId`는 단수 계약이며 Sprint 1에서는 portfolio preview document ID를 의미한다. 자소서 claim 추출과 자소서 기반 분석은 Sprint 2에서 별도 설계한다.
 
@@ -627,16 +619,14 @@ BE `spec/backend/features/documents.md` 기준(Sprint 1 FIX). Sprint 1에서 이
 Location: /analysis-runs/run_abc123
 ```
 ```json
-{ "runId": "run_abc123", "status": "running", "reused": false }
+{ "runId": "run_abc123" }
 ```
 
 | 필드 | 타입 | 필수 |
 | --- | --- | --- |
 | `runId` | string | ✅ |
-| `status` | RunStatus | ✅ |
-| `reused` | boolean | ❌ |
 
-`reused: true`면 동일 fingerprint(사용자·`postingUrl`·문서)의 진행 중인 run을 그대로 반환한 것이다(신규 job 생성 없음).
+동일 fingerprint(사용자·`postingUrl`·문서)의 진행 중인 run이 있으면 그것을 그대로 반환한다(신규 job 생성 없음). 재사용 여부는 응답에 표시하지 않는다 — FE 동작이 같기 때문이다.
 
 > 동일 `postingUrl`이 7일 이내에 `success`로 파싱된 이력이 있으면 `job_postings` 행을 재사용한다. 프론트에서 구분할 필요는 없다.
 
