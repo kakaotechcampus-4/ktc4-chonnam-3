@@ -1,5 +1,6 @@
 export const queryKeys = {
   me: ['me'] as const,
+  profile: ['me', 'profile'] as const,
   home: ['home'] as const,
   interviews: (page: number) => ['interviews', { page }] as const,
   analysisRun: (runId: string) => ['analysis-run', runId] as const,
