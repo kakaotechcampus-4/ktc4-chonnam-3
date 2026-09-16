@@ -10,6 +10,7 @@ public repo L0-a/L0-b 수집과 GitHub rate limit 처리를 구현한다.
 ## 작업
 
 - `initial_sync`에서 전체 public repo L0-a metadata를 저장한다.
+- `initial_sync` 시작 시점은 후속 계약이다. 현재 OAuth callback에서는 enqueue하지 않는다.
 - private repo는 지원하지 않는다. `is_private` 필드는 저장하되 분석/선택 대상에서 제외한다.
 - 기본 필터: public, non-fork, non-archived, primary language 있음.
 - `size_kb` threshold는 기본값을 두되 설정 가능하게 한다.

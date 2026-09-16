@@ -20,7 +20,8 @@
 - GitHub token은 FE에 노출하지 않는다. BE가 암호화 저장하고 GitHub API를 대행한다.
 - GitHub token은 OAuth App long-lived access token 전제다. `github_accounts`에는 `access_token_encrypted`, `token_status`, `token_scope`만 둔다.
 - `token_type`, `token_expires_at`, `refresh_token_encrypted`, `refresh_token_expires_at`는 만들지 않는다.
-- DEVON 자체 JWT는 사용하되 전달 방식은 `PENDING_FE`.
+- DEVON 자체 JWT는 `accessToken`/`refreshToken` HttpOnly cookie로만 전달한다. 상세 계약은 `spec/shared/decisions/0002-github-oauth.md`를 따른다.
+- DEVON Refresh 유효·폐기 기록은 PostgreSQL의 `users.refresh_generation`과 `auth_sessions`에서만 관리한다. Redis는 OAuth state에 사용하며 Refresh 이중 기록/fallback은 금지한다.
 - DEVON JWT payload에는 GitHub access token을 넣지 않는다.
 - API 요청/응답은 camelCase, Python/DB는 snake_case.
 - DB enum은 PostgreSQL ENUM이 아니라 `VARCHAR + CHECK`.
@@ -29,7 +30,7 @@
 - LLM 구조화 JSON parsing 실패는 자동 1회 재시도 후 실패 처리한다. 깨진 JSON을 downstream에 넘기지 않는다.
 - `document_claims`는 Sprint 1에 테이블만 만들고 row 생성/claim 추출은 하지 않는다.
 - `evidence_conflicts`는 Sprint 1에 만들며 `answer_vs_code` 용도로만 사용한다. `claim_id` FK는 Sprint 2.
-- `report_persona_feedbacks`, `topic_taxonomy`, `interview_personas`, `probe_patterns`, `feedback_signals`, `eval_cases`, `eval_runs`, `auth_sessions`는 Sprint 1 DB에서 제외한다.
+- `report_persona_feedbacks`, `topic_taxonomy`, `interview_personas`, `probe_patterns`, `feedback_signals`, `eval_cases`, `eval_runs`는 Sprint 1 DB에서 제외한다.
 
 ## 실행 환경
 

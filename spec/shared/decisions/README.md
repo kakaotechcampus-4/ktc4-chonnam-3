@@ -14,3 +14,6 @@
 
 ## 검토 중
 - [0001 공통 계약 이관](0001-contract-migration.md) — Proposed
+
+## 채택
+- [0002 GitHub OAuth와 DEVON 세션](0002-github-oauth.md) — Accepted. 2026-09-15 Refresh 원본을 PostgreSQL로 변경, JWT·쿠키 계약 유지.

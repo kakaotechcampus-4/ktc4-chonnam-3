@@ -12,13 +12,18 @@
         "message": {
           "type": "string"
         },
+        "details": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "retryAfter": {
           "type": "number"
         }
       },
       "required": [
         "reason",
-        "message"
+        "message",
+        "details"
       ],
       "additionalProperties": true
     }

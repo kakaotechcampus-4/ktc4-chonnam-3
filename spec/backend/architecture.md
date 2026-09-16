@@ -44,8 +44,9 @@ backend AI 연결 -> devon_ai (역방향 import 금지)
 ## Sprint 1 범위
 
 - GitHub OAuth 로그인. GitHub access token은 FE에 노출하지 않고 BE가 암호화 저장한다.
-- GitHub OAuth App long-lived access token을 전제로 하며 refresh token/expiry 컬럼은 두지 않는다.
-- DEVON 자체 JWT는 BE API 인증에 사용한다. 전달 방식은 `PENDING_FE`.
+- GitHub OAuth App long-lived access token을 전제로 하며 refresh token/expiry 컬럼은 두지 않는다. Expiring-token 관련 필드가 포함된 OAuth 응답은 저장하지 않고 실패 처리한다.
+- DEVON 자체 JWT는 BE API 인증에 사용하고 `accessToken`/`refreshToken` HttpOnly cookie로만 전달한다.
+- DEVON Refresh 유효·폐기는 `users.refresh_generation`과 `auth_sessions`를 PostgreSQL 트랜잭션으로 관리한다. raw JWT와 Redis Refresh 기록은 저장하지 않는다. OAuth state만 Redis에 두며 상세 기준은 [인증 결정](../shared/decisions/0002-github-oauth.md)을 따른다.
 - DEVON JWT는 GitHub token과 분리한다. JWT payload에는 GitHub access token을 넣지 않고, `github_accounts` token field도 JWT 발급용으로 읽지 않는다.
 - public GitHub repository만 지원한다. private repository는 Sprint 2에서도 지원하지 않고 필드만 둔다.
 - Wanted 공고만 지원한다. 다른 공고 사이트와 공고 없는 면접은 차단한다.
@@ -58,8 +59,8 @@ backend AI 연결 -> devon_ai (역방향 import 금지)
 - 리포트는 lazy generation이다. 리포트 생성 후 profile summary 갱신 job을 후속 enqueue한다.
 - 이벤트는 최소 10종만 기록한다.
 - `report_disagreements` 테이블은 만들되 API/row 생성은 Sprint 2로 넘긴다.
-- `topic_taxonomy`, `interview_personas`, `probe_patterns`, `report_persona_feedbacks`, `feedback_signals`, `eval_cases`, `eval_runs`, `answer_analyses`, `director_decisions`, `auth_sessions`는 Sprint 1 DB에서 제외한다.
-- `auth_sessions`는 Sprint 2에서도 제외한다.
+- `topic_taxonomy`, `interview_personas`, `probe_patterns`, `report_persona_feedbacks`, `feedback_signals`, `eval_cases`, `eval_runs`, `answer_analyses`, `director_decisions`는 Sprint 1 DB에서 제외한다.
+- `auth_sessions`는 2026-09-15 승인으로 Sprint 1 인증 범위에 포함한다. 기존 `0001`은 유지하고 `0002`로 추가하며, 만료된 session만 별도 정리 명령으로 삭제한다.
 
 ## Sprint 2 방향
 
@@ -77,7 +78,6 @@ backend AI 연결 -> devon_ai (역방향 import 금지)
 | WS 식별자 `interviewId` vs `sessionId` | `PENDING_FE` | FE 라우팅, 새로고침 복구, 상태머신 결정 필요 |
 | 텍스트 WS에서 `questionEnd` 유지 여부 | `PENDING_FE` | Sprint 2 음성 스트리밍과 연결됨 |
 | 이탈/복구/자동 `abandoned` 판정 | `PENDING_FE` | FE UX와 하트비트 정책 결정 필요 |
-| DEVON JWT 전달 방식 | `PENDING_FE` | HttpOnly cookie only vs body 포함 |
 | 포트폴리오 unmatched GitHub URL 노출 | `PENDING_FE` | 개인정보/UX 결정 필요 |
 | 리포트 점수 스케일과 산정 근거 | `PENDING_TEAM` | 팀원이 자료 보충 후 확정 |
 | `pgvector` extension | `PENDING_AI` | embedding/vector 검색 실제 필요 여부 확인 필요 |

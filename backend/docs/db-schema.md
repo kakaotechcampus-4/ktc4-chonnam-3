@@ -18,7 +18,7 @@
 
 | 그룹 | 테이블 |
 | --- | --- |
-| 계정 | `users`, `github_accounts` |
+| 계정 | `users`, `github_accounts`, `auth_sessions` |
 | GitHub | `repositories`, `repo_analyses`, `user_profile_summaries` |
 | 공고 | `job_postings`, `jd_requirements` |
 | 문서 | `user_documents`, `document_claims` |
@@ -32,7 +32,6 @@
 Sprint 1에 만들지 않는 것:
 
 - `tool_calls`
-- `auth_sessions`
 - `topic_taxonomy`
 - `interview_personas`
 - `probe_patterns`
@@ -54,7 +53,7 @@ Sprint 1에 만들지 않는 것:
 - `topic_taxonomy`, `interview_personas`, `probe_patterns`는 별도 테이블로 만들지 않는다. Sprint 1에서는 CHECK 값, prompt, seed config로 흡수한다.
 - `score_criteria`는 Sprint 1에 사용한다. 다만 점수 공식/세부 기준은 `PENDING_TEAM`이며 seed 수정 가능성을 열어둔다.
 - `feedback_signals`, `eval_cases`, `eval_runs`는 Sprint 2로 미루고 Sprint 1 DB에서는 제외한다.
-- `auth_sessions`는 Sprint 1과 Sprint 2 모두 만들지 않는다.
+- `auth_sessions`는 Sprint 1 인증에 포함한다. DEVON Refresh 유효·폐기 기록은 `users.refresh_generation`과 `auth_sessions`만 사용하며 raw JWT는 저장하지 않는다. Redis에 복제하거나 Redis 기록으로 복구하지 않는다.
 - `github_accounts`는 GitHub API 호출용 OAuth token만 저장한다. DEVON 자체 JWT는 이 테이블에 저장하지 않는다.
 - GitHub OAuth App은 long-lived access token 전제로 구현한다. expiring token, refresh token, GitHub App user token으로 바꾸면 별도 migration으로 추가한다.
 - `analysis_jobs.status`는 `queued`, `running`, `succeeded`, `partial`, `failed`, `canceled`.
@@ -82,6 +81,28 @@ Sprint 1에 만들지 않는 것:
 | `refresh_token_expires_at` | DROP | refresh token을 저장하지 않으므로 불필요 |
 
 DEVON 자체 JWT 생성은 `users.id`와 필요 시 `github_accounts.id` 같은 식별자만 사용한다. GitHub access token은 JWT payload에 넣지 않고, JWT 발급/검증을 위해 `github_accounts`의 token 필드를 읽지 않는다.
+
+## DEVON Refresh Session
+
+현재 인증 migration은 `0001`의 `users`, `github_accounts`와 `0002`의 아래 변경이다. 위 Sprint 1 전체 목록이 현재 모두 구현됐다는 의미는 아니다. 인증 PK는 애플리케이션에서 UUID를 생성하며, `refresh_generation`에는 DB 기본값도 둔다.
+
+| 테이블·필드 | 타입·제약 | 역할 |
+| --- | --- | --- |
+| `users.refresh_generation` | `UUID NOT NULL DEFAULT gen_random_uuid()` | 사용자 전체 Refresh 폐기 기준. 기존 users에도 무작위 값으로 채움 |
+| `auth_sessions.id` | `UUID PRIMARY KEY` | 로그인별 식별자, Refresh JWT의 `sid` |
+| `auth_sessions.user_id` | `UUID NOT NULL`, FK `users.id ON DELETE CASCADE`, INDEX | 로그인 소유자 |
+| `auth_sessions.generation` | `UUID NOT NULL` | 발급 당시 사용자 폐기 기준 |
+| `auth_sessions.refresh_jti` | `UUID NOT NULL` | 이 로그인에서 유효한 현재 Refresh 식별자 |
+| `auth_sessions.expires_at` | `TIMESTAMPTZ NOT NULL`, INDEX | 갱신 시점부터 14일; 만료 정리 기준 |
+| `auth_sessions.created_at` | `TIMESTAMPTZ NOT NULL DEFAULT now()` | 로그인 기록 생성 시각 |
+| `auth_sessions.updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT now()` | ORM 갱신 시 변경하는 시각, DB trigger 아님 |
+
+- 로그인 발급·갱신·로그아웃은 `users` row를 먼저 `FOR UPDATE`로 잠그고 session을 처리한다. 쿼리는 `features/auth/queries.py`, commit/rollback은 `features/auth/service.py`에 둔다.
+- 갱신은 user 상태, generation, session 소유자·만료, 현재 `refresh_jti`를 검증한 뒤 `refresh_jti`와 만료 시각을 함께 교체한다.
+- 같은 generation의 유효 session에서 이전 `jti` 재사용을 감지하면 user generation을 새 UUID로 변경하고 commit한 뒤 401을 반환한다. 해당 사용자의 기존 Refresh는 모두 무효다. 이미 폐기된 generation이나 누락·만료 session은 다른 로그인을 무효화하지 않는다.
+- 로그아웃은 해당 `sid`·사용자·generation의 row만 삭제한다. `jti`가 갱신되었더라도 같은 로그인은 폐기하고, 다른 로그인은 유지한다. Access 검증은 session을 조회하지 않아 이미 발급된 Access JWT는 최대 15분간 남는다.
+- `expires_at <= 현재 UTC`인 session만 정기 삭제한다. generation 변경으로 무효가 된 미만료 row도 만료 시 정리된다. 계정 삭제 시 FK cascade로 해당 사용자의 session을 제거한다.
+- migration `0002`는 기존 계정·암호화 GitHub token을 보존한다. 이전 Redis Refresh는 이관하지 않아 재로그인이 필요하고, downgrade도 DB session을 제거하므로 재로그인이 필요하다. [이관·정리 실행 가이드](deploy.md#10-refresh-저장소-전환과-정리)를 따른다.
 
 ## Candidate Tables
 
