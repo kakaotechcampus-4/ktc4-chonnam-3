@@ -3,7 +3,14 @@
 export type AnalysisStatus = 'no_repository' | 'no_interview' | 'completed';
 export type InterviewStatus = 'in_progress' | 'completed' | 'abandoned';
 export type RunStatus = 'running' | 'completed' | 'failed';
-export type StepKey = 'fetch_repos' | 'extract_jd' | 'match_score' | 'prepare_result';
+export type StepKey =
+  | 'doc_extract'
+  | 'repo_select'
+  | 'repo_detail'
+  | 'jd_fetch'
+  | 'jd_extract'
+  | 'repo_analyze'
+  | 'match_score';
 export type PrepareStepKey = 'analyze_repo' | 'build_persona' | 'compose_question' | 'set_criteria';
 export type StepStatus = 'pending' | 'running' | 'completed';
 export type AgentRole = 'tech_lead' | 'senior_developer' | 'manager';

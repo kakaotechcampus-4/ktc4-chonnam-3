@@ -7,24 +7,38 @@ import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
 import type { RunStatus, StepKey, StepStatus } from '@/types/api';
 
-// Figma(3-2 · GitHub 분석 중)의 체크리스트 순서 그대로 — StepKey와의 정확한 1:1 대응은
-// 미확인, 개수(4개)와 위치로만 맞춤. CLAUDE.md의 4-3-v2 체크리스트도 같은 미확인 상태
-const STEP_ORDER: StepKey[] = ['fetch_repos', 'extract_jd', 'match_score', 'prepare_result'];
+// api spec 7단계 반영 (PR #16 리뷰 코멘트). 라벨은 각 step 문서에 맞춰 새로 씀 —
+// Figma 체크리스트는 4개짜리라 7단계 카피는 디자인 쪽 확인 필요
+const STEP_ORDER: StepKey[] = [
+  'doc_extract',
+  'repo_select',
+  'repo_detail',
+  'jd_fetch',
+  'jd_extract',
+  'repo_analyze',
+  'match_score',
+];
 
 const STEP_LABELS: Record<StepKey, string> = {
-  fetch_repos: 'Repository 구조 확인',
-  extract_jd: 'README · 설정 파일 읽기',
-  match_score: '주요 기술 스택 감지 중',
-  prepare_result: 'JD 요구사항과 매칭',
+  doc_extract: '자기소개서 · 포트폴리오 확인',
+  repo_select: 'Repository 목록 선별',
+  repo_detail: 'Repository 구조 확인',
+  jd_fetch: '공고 페이지 불러오는 중',
+  jd_extract: '공고 요구사항 분석',
+  repo_analyze: '주요 기술 스택 감지 중',
+  match_score: 'JD 요구사항과 매칭',
 };
 
 type StepMap = Record<StepKey, StepStatus>;
 
 const INITIAL_STEPS: StepMap = {
-  fetch_repos: 'pending',
-  extract_jd: 'pending',
+  doc_extract: 'pending',
+  repo_select: 'pending',
+  repo_detail: 'pending',
+  jd_fetch: 'pending',
+  jd_extract: 'pending',
+  repo_analyze: 'pending',
   match_score: 'pending',
-  prepare_result: 'pending',
 };
 
 export default function Analyzing() {
