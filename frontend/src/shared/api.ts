@@ -18,7 +18,8 @@ import {
   type FeedbackDisagreementRequest,
 } from '@/types/api';
 
-const BASE = '/api';
+// MSW 핸들러가 같은 prefix를 참조한다. 값이 바뀌면 mock도 함께 따라간다.
+export const BASE = '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
