@@ -15,7 +15,7 @@ const queryClient = new QueryClient({
 });
 
 subscribeAuthChanges(({ reason, redirect }) => {
-  // Cancel pending reads before clearing so their results cannot refill the cache.
+  // 캐시를 비우기 전에 진행 중인 조회를 취소해 늦게 도착한 결과가 캐시를 다시 채우지 못하게 한다.
   void queryClient.cancelQueries().then(() => {
     if (!redirect) return;
     queryClient.clear();

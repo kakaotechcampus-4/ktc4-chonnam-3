@@ -57,7 +57,7 @@ class StaleAuthRequestError extends Error {
 }
 
 function assertAuthEpoch(epoch: number) {
-  // Responses started before an auth change must not restore the previous session's cache.
+  // 인증 상태가 바뀌기 전에 시작한 요청의 응답이 이전 세션의 캐시를 복원하지 못하게 한다.
   if (epoch !== getAuthEpoch()) throw new StaleAuthRequestError();
 }
 
@@ -84,7 +84,7 @@ async function responseError(response: Response) {
       });
     }
   } catch {
-    // HTTP status remains authoritative when an upstream body is not JSON.
+    // 서버 응답 본문이 JSON이 아니어도 HTTP 상태 코드를 오류 판단 기준으로 유지한다.
   }
   return new ApiRequestError(response.status, {
     reason: 'http_error',
@@ -136,11 +136,11 @@ function invalidate(error: ApiRequestError, anonymous: boolean) {
   }
 }
 
-// Share one refresh per tab; the Web Lock serializes cookie rotation across tabs.
+// 같은 탭에서는 하나의 갱신 요청을 공유하고, Web Lock으로 탭 간 쿠키 회전을 순차 처리한다.
 let refreshPromise: Promise<void> | undefined;
 
 function refreshAccess(originalError: ApiRequestError, epoch: number) {
-  // Without cross-tab locking, require login rather than risk concurrent refresh-token reuse.
+  // 탭 간 잠금을 사용할 수 없으면 갱신 토큰의 동시 재사용을 막기 위해 다시 로그인하도록 한다.
   if (!navigator.locks) return Promise.reject(originalError);
   if (refreshPromise) return refreshPromise;
 
@@ -148,7 +148,7 @@ function refreshAccess(originalError: ApiRequestError, epoch: number) {
     .request(AUTH_LOCK_NAME, async () => {
       assertAuthEpoch(epoch);
       try {
-        // Another tab may have refreshed while we waited; a raw probe avoids refresh recursion.
+        // 대기 중 다른 탭이 갱신했을 수 있으므로, 갱신이 재귀 호출되지 않는 직접 요청으로 확인한다.
         await rawRequest<MeResponse>('/me', {}, epoch);
         return;
       } catch (error) {
@@ -218,7 +218,7 @@ async function logout() {
     await rawRequest<void>('/auth/logout', { method: 'POST' });
     publishAuthChange({ reason: 'unauthenticated', redirect: true });
   };
-  // Logout shares the refresh lock so it cannot race another tab's cookie rotation.
+  // 로그아웃도 갱신과 같은 잠금을 사용해 다른 탭의 쿠키 회전과 경합하지 않게 한다.
   if (navigator.locks) return navigator.locks.request(AUTH_LOCK_NAME, performLogout);
   return performLogout();
 }

@@ -25,7 +25,7 @@ export default function AuthGuard({ children }: { children: ReactNode }) {
   }
 
   if (identity.error) {
-    // Only confirmed auth rejection requires login; outages preserve cached identity for retry.
+    // 인증 거부가 확인된 경우에만 로그인을 요구하고, 장애 시에는 재시도를 위해 사용자 캐시를 유지한다.
     if (isAuthFailure(identity.error)) return <Navigate to="/login" replace />;
     return (
       <main className="grid min-h-svh place-items-center px-6">

@@ -22,13 +22,13 @@ export function getAuthEpoch() {
 export function publishAuthChange(change: AuthChange) {
   dispatch(change);
   try {
-    // A nonce makes repeated identical changes trigger storage events in the other tabs.
+    // 매번 다른 nonce를 넣어 같은 변경이 반복되어도 다른 탭에서 storage 이벤트가 발생하게 한다.
     localStorage.setItem(
       AUTH_STORAGE_KEY,
       JSON.stringify({ ...change, nonce: `${Date.now()}-${Math.random()}` }),
     );
   } catch {
-    // Storage can be disabled; the current tab still receives the event.
+    // 브라우저 저장소가 비활성화되어 있어도 현재 탭에는 이벤트가 전달된다.
   }
 }
 
@@ -40,7 +40,7 @@ export function subscribeAuthChanges(listener: (change: AuthChange) => void) {
       const change = JSON.parse(event.newValue) as AuthChange;
       dispatch(change);
     } catch {
-      // Ignore values not written by this client.
+      // 이 클라이언트가 작성하지 않은 값은 무시한다.
     }
   };
 
