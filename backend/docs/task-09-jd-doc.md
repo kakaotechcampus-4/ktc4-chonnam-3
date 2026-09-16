@@ -1,30 +1,27 @@
-# task-09 — 공고 어댑터 · 문서 추출 · claim
+# task-09 — Wanted 공고 · 문서 Preview
 
 > 선행: task-05
-> 설계 근거: [layer-rules.md](layer-rules.md) · [db-schema.md](db-schema.md)
+> 근거: `spec/backend/features/documents.md`, `spec/backend/features/analysis-run.md`
 
 ## 목표
 
-원티드 어댑터 + 문서 텍스트 추출 + `jd_extract` · `doc_extract` step.
-
-## 확정본 반영 (설계 초기안 대비 변경)
-
-- `integrations/jd/fetcher.py` 단일 파일이 **어댑터 구조**로 바뀌었다 (`base` / `resolver` / `wanted` / `generic`). `site_adapter` 컬럼이 어댑터별 성공률 비교 축이다.
-- **원티드 1종만 1차.** `/wd/{id}` → `/api/chaos/jobs/v1/{id}/details` 공개 JSON 이 항목별로 이미 나뉘어 오고 `skill_tags` 가 `tech_tags` 원천이라 LLM 추측이 불필요하다. 사람인(본문이 이미지 PNG)·잡코리아는 2차.
-- 공고 **재사용 TTL 7일** — `fetched_at` 이 이내 + `parse_status=success` 면 LLM 0회.
-- **claim 추출은 자소서만.** 포폴은 `mentioned_repo_urls`(GitHub URL 파싱)만 하고 claim 을 만들지 않는다. `source_type=link` 포폴의 `extract_status=unsupported` 는 정상이다.
-- claim 타입은 `tech_decision` / `contribution` 2종만 (상한 10). `achievement` · `motivation` 은 CHECK 에만 남긴다.
+Wanted 공고 수집과 `POST /documents/preview`를 구현한다.
 
 ## 작업
 
-- [ ] TODO
+- Sprint 1은 Wanted URL만 지원한다.
+- Wanted normalized URL 기준으로 `job_postings`를 재사용한다.
+- `fetched_at` 24시간 이내 성공본은 재사용한다.
+- Wanted 구조화 필드에서 required/preferred/unknown과 `skill_tags`를 추출한다.
+- unsupported site는 공고 없이 진행으로 유도하지 않고 차단한다.
+- `POST /documents/preview`는 PDF/DOCX/TXT/MD만 지원한다.
+- 파일 크기 상한은 10MB.
+- 파일 바이너리는 저장하지 않는다.
+- extracted_text, extracted_github_urls, extract_status, truncation 여부를 저장한다.
+- claim 추출은 하지 않는다.
+- GitHub URL은 root repo로 정규화한다.
 
 ## 완료 조건
 
-- [ ] TODO
-
-## 커밋 메시지
-
-```
-TODO
-```
+- Wanted 성공/unsupported/fetch 실패/extract 실패 테스트가 있다.
+- 문서 preview 성공/partial/failed, 미지원 형식, 크기 초과 테스트가 있다.
