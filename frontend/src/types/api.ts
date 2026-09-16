@@ -1,7 +1,7 @@
 // 1. enum 타입
 
 export type AnalysisStatus = 'no_repository' | 'no_interview' | 'completed';
-export type InterviewStatus = 'in_progress' | 'completed' | 'abandoned';
+export type InterviewStatus = 'preparing' | 'preparing_failed' | 'in_progress' | 'completed' | 'abandoned';
 export type RunStatus = 'running' | 'completed' | 'failed';
 export type StepKey = 'fetch_repos' | 'extract_jd' | 'match_score' | 'prepare_result';
 export type PrepareStepKey = 'analyze_repo' | 'build_persona' | 'compose_question' | 'set_criteria';
@@ -165,7 +165,7 @@ export type CreateInterviewRequest = {
 };
 
 export type CreateInterviewResponse = {
-  sessionId: string;
+  sessionId: string | null;
   interviewId: string;
 };
 
@@ -180,7 +180,7 @@ export type InterviewTurn = {
 
 export type InterviewDetailResponse = {
   id: string;
-  sessionId: string;
+  sessionId: string | null;
   status: InterviewStatus;
   position: string;
   repositoryNames: string[];

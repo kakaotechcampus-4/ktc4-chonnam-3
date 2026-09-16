@@ -5,7 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
-import type { ApiError } from '@/types/api';
+import { isApiError } from '@/types/api';
 
 const MAX_REPOSITORIES = 5;
 
@@ -43,8 +43,14 @@ export default function RepoSelect() {
     },
   });
 
-  const mutationError = createInterviewMutation.error as unknown as ApiError | undefined;
-  const tooMany = mutationError?.error.reason === 'too_many_repositories';
+  const mutationError = createInterviewMutation.error;
+  const errorReason = isApiError(mutationError) ? mutationError.error.reason : null;
+  const tooMany = errorReason === 'too_many_repositories';
+  const submitError = tooMany
+    ? '레포는 최대 5개까지 선택할 수 있어요.'
+    : createInterviewMutation.isError
+      ? '면접을 시작하지 못했어요. 잠시 후 다시 시도해주세요.'
+      : null;
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
@@ -144,9 +150,7 @@ export default function RepoSelect() {
                 </div>
               </div>
 
-              {tooMany && (
-                <p className="mt-3 text-sm text-error">레포는 최대 5개까지 선택할 수 있어요.</p>
-              )}
+              {submitError && <p className="mt-3 text-sm text-error">{submitError}</p>}
 
               <button
                 type="button"
