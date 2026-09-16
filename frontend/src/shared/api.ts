@@ -2,6 +2,7 @@ import {
   isApiError,
   type ApiError,
   type MeResponse,
+  type MeProfileResponse,
   type HomeResponse,
   type InterviewListResponse,
   type DocumentPreviewResponse,
@@ -62,6 +63,7 @@ function requestJson<T>(path: string, method: string, body: unknown): Promise<T>
 export const api = {
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
   getMe: () => request<MeResponse>('/me'),
+  getProfile: () => request<MeProfileResponse>('/me/profile'),
   getHome: () => request<HomeResponse>('/me/home'),
   getInterviews: (params?: { page?: number; size?: number }) => {
     const query = new URLSearchParams();

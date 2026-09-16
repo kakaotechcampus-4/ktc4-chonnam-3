@@ -17,14 +17,12 @@
   --radius-card: 10px;
 }
 
-:root {
+body {
+  margin: 0;
   font-family: var(--font-sans);
   color: var(--color-ink);
   background: var(--color-paper);
-}
-
-body {
-  margin: 0;
+  -webkit-font-smoothing: antialiased;
 }
 
 #root {
