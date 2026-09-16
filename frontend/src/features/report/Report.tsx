@@ -6,17 +6,16 @@ import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
 import type { AgentFeedback, ApiError, Persona } from '@/types/api';
 
-// ponytail: 정확한 표시 문구는 Figma 확인 전 가정 — DB.md 면접 시나리오의 표현을 그대로 씀
 const ROLE_LABELS: Record<Persona, string> = {
-  tech_lead: '테크리더',
-  hr_manager: '인사팀장',
-  domain_lead: '도메인리더',
+  tech_lead: '개발팀',
+  hr_manager: '인사팀',
+  domain_lead: '기획팀',
 };
 
 const ROLE_INITIALS: Record<Persona, string> = {
-  tech_lead: 'TL',
-  hr_manager: 'HR',
-  domain_lead: 'DL',
+  tech_lead: '개발',
+  hr_manager: '인사',
+  domain_lead: '기획',
 };
 
 export default function Report() {
