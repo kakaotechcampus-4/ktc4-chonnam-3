@@ -1,4 +1,4 @@
-"""Partial contract validation; no runtime or compatibility claims."""
+"""계약 일부만 검증하며 런타임 동작이나 호환성은 보장하지 않는다."""
 import copy
 import json
 import sys
@@ -9,7 +9,7 @@ CONTRACTS = ROOT / 'spec/shared/contracts'
 
 
 def load_yaml_document(path):
-    """Load a YAML mapping without enabling object construction."""
+    """임의 객체 생성을 허용하지 않고 YAML 매핑을 읽는다."""
     from yaml import safe_load
 
     document = safe_load(path.read_text(encoding='utf-8'))
@@ -19,7 +19,7 @@ def load_yaml_document(path):
 
 
 def inline_refs(value, contracts, trail=()):
-    """Inline local refs only, never retrieve remote URLs."""
+    """로컬 참조만 인라인으로 풀고 원격 URL은 조회하지 않는다."""
     if isinstance(value, list):
         return [inline_refs(item, contracts, trail) for item in value]
     if not isinstance(value, dict):
@@ -27,7 +27,7 @@ def inline_refs(value, contracts, trail=()):
     if '$ref' in value:
         reference = value['$ref']
         if reference.startswith('#/components/'):
-            # Internal refs must keep the root OpenAPI document as their resolution context.
+            # 내부 참조는 원본 OpenAPI 문서를 기준으로 해석해야 한다.
             return {
                 key: item if key == '$ref' else inline_refs(item, contracts, trail)
                 for key, item in value.items()
@@ -51,7 +51,7 @@ def main():
     try:
         from jsonschema import Draft202012Validator
         from openapi_spec_validator import validate
-        import yaml  # noqa: F401 - dependency preflight for a clear setup error
+        import yaml  # noqa: F401 - 설정 오류를 명확히 알리기 위한 의존성 사전 확인
     except ImportError:
         print('미실행: python3 -m pip install -r .claude/scripts/requirements-checks.txt 필요', file=sys.stderr)
         return 2
