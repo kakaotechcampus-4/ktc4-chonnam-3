@@ -281,6 +281,12 @@ export type ReportResponse = {
   completedAt: string;
 };
 
+// 202 — 리포트 생성 중. retryAfter(초) 간격으로 폴링한다.
+export type ReportGeneratingResponse = {
+  status: 'generating';
+  retryAfter: number;
+};
+
 // POST /reports/{id}/feedback-disagreements
 
 export type FeedbackDisagreementRequest = {

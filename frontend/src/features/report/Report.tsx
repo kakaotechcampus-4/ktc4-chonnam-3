@@ -4,7 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
-import type { AgentFeedback, ApiError, Persona } from '@/types/api';
+import type { AgentFeedback, ApiError, Persona, ReportResponse } from '@/types/api';
 
 const ROLE_LABELS: Record<Persona, string> = {
   tech_lead: '개발팀',
@@ -27,6 +27,11 @@ export default function Report() {
     queryKey: queryKeys.report(id),
     queryFn: () => api.getInterviewReport(id),
     enabled: !!id,
+    // 202 { status: 'generating', retryAfter }면 retryAfter(초) 간격으로 재조회한다.
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      return data && 'status' in data && data.status === 'generating' ? data.retryAfter * 1000 : false;
+    },
   });
 
   const retryMutation = useMutation({
@@ -37,7 +42,9 @@ export default function Report() {
     },
   });
 
-  const report = reportQuery.data;
+  const data = reportQuery.data;
+  const generating = !!data && 'status' in data && data.status === 'generating';
+  const report = data && !generating ? (data as ReportResponse) : undefined;
   const errorReason = (reportQuery.error as unknown as ApiError | undefined)?.error.reason;
   const reportUnavailable = errorReason === 'report_unavailable';
 
@@ -47,6 +54,7 @@ export default function Report() {
 
       <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-7 px-7 py-6">
         {reportQuery.isLoading && <p className="text-sm text-muted">불러오는 중...</p>}
+        {generating && <p className="text-sm text-muted">리포트를 만들고 있어요...</p>}
         {reportQuery.isError && !reportUnavailable && (
           <p className="text-sm text-error">리포트를 불러오지 못했어요.</p>
         )}

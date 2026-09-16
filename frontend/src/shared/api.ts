@@ -15,6 +15,7 @@ import {
   type CreateInterviewResponse,
   type InterviewDetailResponse,
   type ReportResponse,
+  type ReportGeneratingResponse,
   type FeedbackDisagreementRequest,
 } from '@/types/api';
 
@@ -93,7 +94,8 @@ export const api = {
   createInterview: (body: CreateInterviewRequest) =>
     requestJson<CreateInterviewResponse>('/interviews', 'POST', body),
   getInterview: (id: string) => request<InterviewDetailResponse>(`/interviews/${id}`),
-  getInterviewReport: (id: string) => request<ReportResponse>(`/interviews/${id}/report`),
+  getInterviewReport: (id: string) =>
+    request<ReportResponse | ReportGeneratingResponse>(`/interviews/${id}/report`),
   retryInterview: (id: string) =>
     request<CreateInterviewResponse>(`/interviews/${id}/retry`, { method: 'POST' }),
   submitFeedbackDisagreement: (id: string, body: FeedbackDisagreementRequest) =>
