@@ -8,6 +8,16 @@ ROOT = Path(__file__).resolve().parents[2]
 CONTRACTS = ROOT / 'spec/shared/contracts'
 
 
+def load_yaml_document(path):
+    """Load a YAML mapping without enabling object construction."""
+    from yaml import safe_load
+
+    document = safe_load(path.read_text(encoding='utf-8'))
+    if not isinstance(document, dict):
+        raise ValueError(f'Expected YAML mapping: {path}')
+    return document
+
+
 def inline_refs(value, contracts, trail=()):
     """Inline local refs only, never retrieve remote URLs."""
     if isinstance(value, list):
@@ -16,6 +26,12 @@ def inline_refs(value, contracts, trail=()):
         return value
     if '$ref' in value:
         reference = value['$ref']
+        if reference.startswith('#/components/'):
+            # Internal refs must keep the root OpenAPI document as their resolution context.
+            return {
+                key: item if key == '$ref' else inline_refs(item, contracts, trail)
+                for key, item in value.items()
+            }
         if not reference.startswith('./') or '#' in reference:
             raise ValueError(f'Unsupported ref in draft validator: {reference}')
         target = (contracts / reference).resolve()
@@ -35,6 +51,7 @@ def main():
     try:
         from jsonschema import Draft202012Validator
         from openapi_spec_validator import validate
+        import yaml  # noqa: F401 - dependency preflight for a clear setup error
     except ImportError:
         print('미실행: python3 -m pip install -r .claude/scripts/requirements-checks.txt 필요', file=sys.stderr)
         return 2
@@ -46,8 +63,7 @@ def main():
             schemas[path.name] = Draft202012Validator(schema)
         if not schemas:
             raise ValueError('No contract schemas found')
-        # JSON syntax is a YAML-compatible subset used by this draft .yaml.
-        document = json.loads((CONTRACTS / 'openapi.yaml').read_text(encoding='utf-8'))
+        document = load_yaml_document(CONTRACTS / 'openapi.yaml')
         validate(inline_refs(copy.deepcopy(document), CONTRACTS))
         cases = json.loads((CONTRACTS / 'examples/validation-cases.json').read_text(encoding='utf-8'))
         if not cases:
