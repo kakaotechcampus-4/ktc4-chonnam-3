@@ -19,17 +19,29 @@
 ## 1. enum 타입
 
 ```ts
-export type AnalysisStatus = 'no_repository' | 'no_interview' | 'completed';
-export type InterviewStatus = 'in_progress' | 'completed' | 'abandoned';
+export type AnalysisStatus = 'syncing' | 'no_repository' | 'no_interview' | 'completed';
+export type InterviewStatus =
+  | 'preparing'
+  | 'preparing_failed'
+  | 'in_progress'
+  | 'completed'
+  | 'abandoned';
 export type RunStatus = 'running' | 'completed' | 'failed';
-export type StepKey = 'fetch_repos' | 'extract_jd' | 'match_score' | 'prepare_result';
+export type StepKey =
+  | 'doc_extract'
+  | 'repo_select'
+  | 'repo_detail'
+  | 'jd_fetch'
+  | 'jd_extract'
+  | 'repo_analyze'
+  | 'match_score';
 export type PrepareStepKey =
   | 'analyze_repo'
   | 'build_persona'
-  | 'compose_question'
-  | 'set_criteria';
-export type StepStatus = 'pending' | 'running' | 'completed';
-export type AgentRole = 'tech_lead' | 'senior_developer' | 'manager';
+  | 'set_criteria'
+  | 'compose_question';
+export type StepStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type Persona = 'tech_lead' | 'hr_manager' | 'domain_lead';
 export type ScoreKey =
   | 'project_understanding'
   | 'technical_reasoning'
@@ -68,7 +80,8 @@ export type ApiError = {
 | `GET /me` | `MeResponse` |
 | `GET /me/home` | `HomeResponse` · `AnalysisPanel` · `LanguageRatio` · `RecentInterview` |
 | `GET /me/interviews` | `InterviewListResponse` · `InterviewSummary` |
-| `POST /analysis-runs` | `CreateAnalysisRunRequest`(FormData) · `CreateAnalysisRunResponse` |
+| `POST /documents/preview` | `DocumentPreviewResponse` |
+| `POST /analysis-runs` | `CreateAnalysisRunRequest` · `CreateAnalysisRunResponse` |
 | `GET /analysis-runs/{runId}` | `AnalysisRunResponse` · `AnalysisStep` |
 | `GET /analysis-runs/{runId}/events` | `SseStepEvent` · `SseCompletedEvent` · `SseFailedEvent` |
 | `GET /analysis-runs/{runId}/result` | `AnalysisResultResponse` · `RepositoryItem` |
@@ -87,19 +100,17 @@ export type ApiError = {
 
 ```ts
 export type WsClientMessage =
-  | { type: 'answerStart' }
-  | { type: 'answerEnd' };
+  | { type: 'answer'; turn: number; text: string };
 
 export type WsServerMessage =
   | { type: 'prepareStep'; key: PrepareStepKey; status: StepStatus }
   | { type: 'prepareCompleted' }
-  | { type: 'transcript'; text: string }
+  | { type: 'answerReceived' }
   | { type: 'thinking' }
   | { type: 'evidenceCheck'; repository: string; file: string }
-  | { type: 'question'; role: AgentRole; text: string; turn: number }
-  | { type: 'questionEnd' }
+  | { type: 'question'; persona: Persona; text: string; turn: number }
   | { type: 'interviewEnd' }
-  | { type: 'error'; reason: string };
+  | { type: 'error'; reason: string; recoverable: boolean; code: string; step: PrepareStepKey | null; occurredAt: string };
 ```
 
 이렇게 정의하면 `switch (msg.type)` 에서 각 분기의 필드가 자동으로 좁혀진다.

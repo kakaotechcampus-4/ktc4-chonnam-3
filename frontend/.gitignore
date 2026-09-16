@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Local scratch (중간 결과 확인용, 커밋 안 함)
+report/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
