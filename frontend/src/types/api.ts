@@ -188,19 +188,44 @@ export type SseFailedEvent = {
 
 // 5a-v2 레포 선택 GET /analysis-runs/{runId}/result
 
+export type JdRequirementType = 'required' | 'preferred';
+export type RepoStatus = 'succeeded' | 'partial' | 'failed';
+export type CandidateSource = 'rule_filter' | 'portfolio' | 'both';
+
+export type JdRequirement = {
+  id: string;
+  type: JdRequirementType;
+  text: string;
+};
+
 export type RepositoryItem = {
   id: string;
   name: string;
-  languages: string[];
+  fullName: string;
+  description: string | null;
+  languages: LanguageRatio[];
+  topics: string[];
+  stars: number;
+  forks: number;
+  commitCount: number | null;
+  userCommitCount: number | null;
+  pushedAt: string | null;
+  status: RepoStatus;
+  errorCode: string | null;
   recommended: boolean;
-  recommendReason: string;
+  candidateSource: CandidateSource;
+  recommendReason: string | null;
   matchScore: number | null;
+  matchedRequirementIds: string[];
 };
 
 export type AnalysisResultResponse = {
   runId: string;
   position: string;
-  jdRequirements: string[];
+  companyName: string | null;
+  jdRequirements: JdRequirement[];
+  mentionedRepoCount: number;
+  matchedRepoCount: number;
   repositories: RepositoryItem[];
 };
 

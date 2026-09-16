@@ -9,6 +9,16 @@ import { isApiError } from '@/types/api';
 
 const MAX_REPOSITORIES = 5;
 
+const JD_TYPE_LABELS = { required: '필수 요건', preferred: '우대 요건' } as const;
+
+const REPO_ERROR_MESSAGES: Record<string, string> = {
+  llm_timeout: '분석이 지연되고 있어요',
+  parse_failed: '분석이 지연되고 있어요',
+  input_too_large: '정보가 부족해요',
+  no_readme: '정보가 부족해요',
+  github_token_invalid: 'GitHub 재연동이 필요해요',
+};
+
 export default function RepoSelect() {
   const { runId = '' } = useParams<{ runId: string }>();
   const navigate = useNavigate();
@@ -71,32 +81,45 @@ export default function RepoSelect() {
 
           {result && (
             <>
+              {result.mentionedRepoCount !== result.matchedRepoCount && (
+                <p className="mt-4 text-xs text-muted">
+                  포트폴리오에 언급된 {result.mentionedRepoCount}개 중 {result.matchedRepoCount}개를
+                  찾았어요.
+                </p>
+              )}
+
               <div className="mt-5 flex gap-4">
                 <div className="flex-1 rounded-[10px] border border-line-soft p-4">
                   <p className="text-[11.5px] font-bold tracking-wide text-muted">내 GitHub 레포</p>
                   <ul className="mt-3 flex flex-col gap-2">
                     {result.repositories.map((repo) => {
                       const checked = selected.includes(repo.id);
+                      const failed = repo.status === 'failed';
                       return (
                         <li key={repo.id}>
                           <button
                             type="button"
+                            disabled={failed}
                             onClick={() => toggle(repo.id)}
                             className={
-                              checked
-                                ? 'flex w-full gap-2.5 rounded-lg border border-accent bg-accent-soft px-3 py-2.5 text-left'
-                                : 'flex w-full gap-2.5 rounded-lg border border-line-soft px-3 py-2.5 text-left'
+                              failed
+                                ? 'flex w-full gap-2.5 rounded-lg border border-line-soft bg-paper px-3 py-2.5 text-left opacity-60'
+                                : checked
+                                  ? 'flex w-full gap-2.5 rounded-lg border border-accent bg-accent-soft px-3 py-2.5 text-left'
+                                  : 'flex w-full gap-2.5 rounded-lg border border-line-soft px-3 py-2.5 text-left'
                             }
                           >
-                            <span
-                              className={
-                                checked
-                                  ? 'mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border-[1.5px] border-accent bg-accent text-[11px] font-bold text-white'
-                                  : 'mt-0.5 h-[18px] w-[18px] shrink-0 rounded-[5px] border-[1.5px] border-line'
-                              }
-                            >
-                              {checked && '✓'}
-                            </span>
+                            {!failed && (
+                              <span
+                                className={
+                                  checked
+                                    ? 'mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] border-[1.5px] border-accent bg-accent text-[11px] font-bold text-white'
+                                    : 'mt-0.5 h-[18px] w-[18px] shrink-0 rounded-[5px] border-[1.5px] border-line'
+                                }
+                              >
+                                {checked && '✓'}
+                              </span>
+                            )}
                             <span className="flex-1">
                               <span className="flex items-center gap-2">
                                 <span className="text-[13px] font-bold text-ink">{repo.name}</span>
@@ -105,21 +128,29 @@ export default function RepoSelect() {
                                     AI 추천
                                   </span>
                                 )}
+                                {(repo.candidateSource === 'portfolio' ||
+                                  repo.candidateSource === 'both') && (
+                                  <span className="rounded-full bg-paper px-2 py-0.5 text-[11px] font-bold text-muted">
+                                    📎 포트폴리오
+                                  </span>
+                                )}
                               </span>
                               {repo.languages.length > 0 && (
                                 <span className="mt-1 flex flex-wrap gap-1.5">
                                   {repo.languages.map((lang) => (
                                     <span
-                                      key={lang}
+                                      key={lang.name}
                                       className="rounded-full bg-paper px-2 py-0.5 text-[11px] text-muted"
                                     >
-                                      {lang}
+                                      {lang.name}
                                     </span>
                                   ))}
                                 </span>
                               )}
                               <span className="mt-1 block text-[11.5px] text-muted">
-                                {repo.recommendReason}
+                                {failed
+                                  ? (REPO_ERROR_MESSAGES[repo.errorCode ?? ''] ?? '분석에 실패했어요')
+                                  : repo.recommendReason}
                               </span>
                             </span>
                           </button>
@@ -140,13 +171,22 @@ export default function RepoSelect() {
 
                 <div className="w-[260px] shrink-0 rounded-[10px] border border-line-soft p-3.5">
                   <p className="text-[11.5px] font-bold tracking-wide text-muted">JD 요구사항</p>
-                  <ul className="mt-3 flex flex-col gap-2">
-                    {result.jdRequirements.map((req, i) => (
-                      <li key={i} className="text-xs text-ink">
-                        {req}
-                      </li>
-                    ))}
-                  </ul>
+                  {(['required', 'preferred'] as const).map((type) => {
+                    const reqs = result.jdRequirements.filter((req) => req.type === type);
+                    if (reqs.length === 0) return null;
+                    return (
+                      <div key={type} className="mt-3">
+                        <p className="text-[11px] font-bold text-muted">{JD_TYPE_LABELS[type]}</p>
+                        <ul className="mt-1.5 flex flex-col gap-2">
+                          {reqs.map((req) => (
+                            <li key={req.id} className="text-xs text-ink">
+                              {req.text}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
