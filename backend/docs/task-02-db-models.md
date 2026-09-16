@@ -1,34 +1,28 @@
 # task-02 — DB 모델 · 초기 마이그레이션
 
 > 선행: task-01
-> 설계 근거: [layer-rules.md](layer-rules.md) · [db-schema.md](db-schema.md)
+> 근거: `backend/docs/db-schema.md`
 
 ## 목표
 
-1차 테이블 전체 모델 + `0001_initial` 마이그레이션. `pgcrypto` 확장 포함.
-
-## 확정본 반영 (설계 초기안 대비 변경)
-
-- **`document_claims` 가 1차 포함**으로 바뀌었다 (설계 초기안의 "1단계 제외" 폐기). 1차 컬럼 5개만 채우고 `topic_code`·`repository_hint` 는 2차.
-- `analysis_jobs` 에 **`job_type`** 3종 + `status` 6값(`partial`·`canceled` 추가).
-- `repositories` 에 `fetch_level`(`list`/`detail`), `repo_analyses` 에 `analysis_level`(`shallow`/`deep`).
-- `interview_turns.topic_code` 는 **1차에 FK 를 걸지 않는다**.
-- `interview_turns` 에 `transcript_confidence` / `audio_uri` 를 **만들지 않는다** (스프린트2).
-- `interview_sessions` 에 `CHECK (answer_mode = text)`.
-- persona CHECK = `tech_lead` / `hr_manager` / `domain_lead`.
-- `github_accounts.token_status`, `users.status` / `last_login_at` 추가.
-- `auth_sessions` 는 만들지 않는다.
+Sprint 1 DB 모델과 `0001_initial` Alembic migration을 만든다.
 
 ## 작업
 
-- [ ] TODO
+- 초기 migration은 수동 작성한다. autogenerate는 참고용으로만 사용한다.
+- `pgcrypto` extension을 추가한다.
+- PostgreSQL ENUM 대신 `VARCHAR + CHECK`를 쓴다.
+- `tool_calls`, `auth_sessions`, 음성 컬럼은 만들지 않는다.
+- `topic_taxonomy`, `interview_personas`, `probe_patterns`, `report_persona_feedbacks`, `feedback_signals`, `eval_cases`, `eval_runs`, `answer_analyses`, `director_decisions`는 만들지 않는다.
+- `user_documents`, `document_claims`, `analysis_repo_candidates`, `analysis_repo_candidate_pages`, `evidence_conflicts`, `user_profile_summaries`, `report_disagreements`를 Sprint 1에 포함한다.
+- `document_claims`는 Sprint 1에 테이블만 만들고 row 생성/claim 추출은 하지 않는다.
+- `report_disagreements`는 Sprint 1에 테이블만 만들고 API/row 생성은 Sprint 2로 넘긴다.
+- `evidence_conflicts.claim_id`는 FK 없이 nullable UUID로 둔다.
+- `repo_analyses.batch_position`을 추가하고 UNIQUE에는 `model`을 넣지 않는다.
+- `interview_sessions.status`에 `preparing_failed`를 포함한다.
 
 ## 완료 조건
 
-- [ ] TODO
-
-## 커밋 메시지
-
-```
-TODO
-```
+- migration upgrade가 새 DB에서 성공한다.
+- CHECK/UNIQUE/INDEX가 문서와 일치한다.
+- downgrade 가능 범위를 명시한다.
