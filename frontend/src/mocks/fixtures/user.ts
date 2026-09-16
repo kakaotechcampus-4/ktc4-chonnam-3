@@ -7,11 +7,13 @@ import type { HomeResponse, InterviewListResponse, MeResponse } from '@/types/ap
  */
 export const me: MeResponse = {
   name: '김개발',
+  avatarUrl: 'https://avatars.githubusercontent.com/u/12345',
   githubLinked: true,
 };
 
 export const meUnlinked: MeResponse = {
   name: '김개발',
+  avatarUrl: null,
   githubLinked: false,
 };
 
