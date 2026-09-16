@@ -16,6 +16,9 @@ def inline_refs(value, contracts, trail=()):
         return value
     if '$ref' in value:
         reference = value['$ref']
+        if reference.startswith('#/'):
+            # Internal component refs stay as-is; the OpenAPI validator resolves them.
+            return {key: inline_refs(item, contracts, trail) for key, item in value.items()}
         if not reference.startswith('./') or '#' in reference:
             raise ValueError(f'Unsupported ref in draft validator: {reference}')
         target = (contracts / reference).resolve()
@@ -33,6 +36,7 @@ def inline_refs(value, contracts, trail=()):
 
 def main():
     try:
+        import yaml
         from jsonschema import Draft202012Validator
         from openapi_spec_validator import validate
     except ImportError:
@@ -46,8 +50,8 @@ def main():
             schemas[path.name] = Draft202012Validator(schema)
         if not schemas:
             raise ValueError('No contract schemas found')
-        # JSON syntax is a YAML-compatible subset used by this draft .yaml.
-        document = json.loads((CONTRACTS / 'openapi.yaml').read_text(encoding='utf-8'))
+        # The draft contract is written as real YAML; schemas stay .schema.json.
+        document = yaml.safe_load((CONTRACTS / 'openapi.yaml').read_text(encoding='utf-8'))
         validate(inline_refs(copy.deepcopy(document), CONTRACTS))
         cases = json.loads((CONTRACTS / 'examples/validation-cases.json').read_text(encoding='utf-8'))
         if not cases:
