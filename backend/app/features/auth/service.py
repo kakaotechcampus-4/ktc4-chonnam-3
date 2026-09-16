@@ -8,7 +8,7 @@ from app.core.errors import AppError
 from app.core.security import Tokens
 from app.db.models.user import AuthSession, GitHubAccount, User
 from app.features.auth import queries
-from app.features.auth.oauth import GitHubIdentity
+from app.features.auth.oauth import GitHubIdentity, GitHubTokens
 
 
 def require_active(user: User | None) -> User:
@@ -46,9 +46,6 @@ async def save_identity(
                 user_id=user.id,
                 github_user_id=identity.profile.id,
                 login=identity.profile.login,
-                access_token_encrypted=cipher.encrypt(identity.access_token),
-                token_status="valid",
-                token_scope=identity.scope,
             )
             session.add(account)
         else:
@@ -57,10 +54,18 @@ async def save_identity(
             user.avatar_url = identity.profile.avatar_url
             user.last_login_at = datetime.now(UTC)
             account.login = identity.profile.login
-            account.access_token_encrypted = cipher.encrypt(identity.access_token)
-            account.token_status = "valid"
-            account.token_scope = identity.scope
+        store_github_tokens(account, identity.tokens, cipher)
     return user
+
+
+def store_github_tokens(account: GitHubAccount, pair: GitHubTokens, cipher: TokenCipher) -> None:
+    # GitHub rotates both credentials; keep the whole pair in the caller's transaction.
+    account.access_token_encrypted = cipher.encrypt(pair.access_token)
+    account.refresh_token_encrypted = cipher.encrypt(pair.refresh_token)
+    account.token_expires_at = pair.expires_at
+    account.refresh_token_expires_at = pair.refresh_expires_at
+    account.token_status = "valid"
+    account.token_scope = pair.scope
 
 
 async def issue_tokens(session: AsyncSession, tokens: Tokens, user_id: str) -> tuple[str, str]:

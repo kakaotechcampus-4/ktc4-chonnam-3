@@ -19,8 +19,24 @@ async def lock_github_identity(session: AsyncSession, github_id: int) -> None:
 
 
 async def find_github_account(session: AsyncSession, github_id: int) -> GitHubAccount | None:
+    # Existing callbacks must share the row lock used by provider-token refresh.
     result = await session.scalars(
-        select(GitHubAccount).where(GitHubAccount.github_user_id == github_id)
+        select(GitHubAccount)
+        .where(GitHubAccount.github_user_id == github_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return result.one_or_none()
+
+
+async def lock_github_account(session: AsyncSession, user_id: UUID) -> GitHubAccount | None:
+    await ensure_connection(session)
+    result = await session.scalars(
+        select(GitHubAccount)
+        .where(GitHubAccount.user_id == user_id)
+        .with_for_update()
+        # After waiting, use the pair committed by the previous lock holder, not an ORM cache.
+        .execution_options(populate_existing=True)
     )
     return result.one_or_none()
 

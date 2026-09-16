@@ -10,6 +10,7 @@ MESSAGES = {
     "invalid_code": "The OAuth authorization code is invalid.",
     "denied": "GitHub authorization was denied.",
     "provider_unavailable": "GitHub is temporarily unavailable.",
+    "token_invalid": "The GitHub connection must be authorized again.",
     "service_unavailable": "The service is temporarily unavailable.",
     "internal_error": "An unexpected error occurred.",
 }

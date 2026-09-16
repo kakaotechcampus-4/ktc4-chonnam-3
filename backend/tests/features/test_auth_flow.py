@@ -41,7 +41,7 @@ async def runtime():
     def github(request):
         if request.url.path == "/login/oauth/access_token":
             assert b"code_verifier=" in request.content
-            return httpx.Response(200, json={"access_token": "gho_private", "scope": "read:user"})
+            return httpx.Response(200, json=github_tokens())
         return httpx.Response(
             200,
             json={
@@ -64,6 +64,17 @@ async def runtime():
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.drop_all)
     await engine.dispose()
+
+
+def github_tokens(access_token="gho_private", refresh_token="ghr_private"):
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "scope": "read:user",
+        "expires_in": 28800,
+        "refresh_token_expires_in": 15897600,
+    }
 
 
 async def login(client):
@@ -168,6 +179,9 @@ async def test_concurrent_signup_and_encrypted_storage(runtime):
         account = await session.scalar(select(GitHubAccount))
         assert b"gho_private" not in account.access_token_encrypted
         assert app.state.cipher.decrypt(account.access_token_encrypted) == "gho_private"
+        assert b"ghr_private" not in account.refresh_token_encrypted
+        assert app.state.cipher.decrypt(account.refresh_token_encrypted) == "ghr_private"
+        assert account.token_expires_at < account.refresh_token_expires_at
 
 
 @pytest.mark.parametrize("status", ["suspended", "withdrawn"])
@@ -291,7 +305,7 @@ async def test_relogin_updates_profile_and_falls_back_to_login(runtime):
     def renamed(request):
         if request.url.path == "/login/oauth/access_token":
             return httpx.Response(
-                200, json={"access_token": "replacement-token", "scope": "read:user"}
+                200, json=github_tokens("replacement-token", "replacement-refresh")
             )
         return httpx.Response(
             200, json={"id": 12345, "login": "renamed", "name": None, "avatar_url": None}
