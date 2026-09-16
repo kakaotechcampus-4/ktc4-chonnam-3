@@ -18,7 +18,7 @@ export type StepKey =
   | 'match_score';
 export type PrepareStepKey = 'analyze_repo' | 'build_persona' | 'compose_question' | 'set_criteria';
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed';
-export type AgentRole = 'tech_lead' | 'hr_manager' | 'domain_lead';
+export type Persona = 'tech_lead' | 'hr_manager' | 'domain_lead';
 export type ScoreKey =
   | 'project_understanding'
   | 'technical_reasoning'
@@ -245,7 +245,7 @@ export type CreateInterviewResponse = {
 
 export type InterviewTurn = {
   turn: number;
-  role: AgentRole;
+  persona: Persona;
   question: string;
   answer: string | null;
 };
@@ -272,7 +272,7 @@ export type WsServerMessage =
   | { type: 'transcript'; text: string }
   | { type: 'thinking' }
   | { type: 'evidenceCheck'; repository: string; file: string }
-  | { type: 'question'; role: AgentRole; text: string; turn: number }
+  | { type: 'question'; persona: Persona; text: string; turn: number }
   | { type: 'questionEnd' }
   | { type: 'interviewEnd' }
   | { type: 'error'; reason: string };
@@ -286,30 +286,44 @@ export type ScoreItem = {
 };
 
 export type AgentFeedback = {
-  role: AgentRole;
+  persona: Persona;
   tags: string[];
   strengths: string[];
   improvements: string[];
   disagreementSubmitted: boolean;
 };
 
+export type ReportCoverage = {
+  totalRequirements: number;
+  coveredRequirements: number;
+  uncoveredRequirements: string[];
+};
+
 export type ReportResponse = {
   interviewId: string;
   position: string;
+  positionLabel: string;
   totalScore: number;
   headline: string;
   summary: string;
   scores: ScoreItem[];
   agentFeedbacks: AgentFeedback[];
+  coverage: ReportCoverage;
   turns: InterviewTurn[];
   repositoryNames: string[];
   completedAt: string;
 };
 
+// 202 — 리포트 생성 중. retryAfter(초) 간격으로 폴링한다.
+export type ReportGeneratingResponse = {
+  status: 'generating';
+  retryAfter: number;
+};
+
 // POST /reports/{id}/feedback-disagreements
 
 export type FeedbackDisagreementRequest = {
-  agentRole: AgentRole;
+  persona: Persona;
   reasonType: ReasonType;
   comment?: string;
 };
