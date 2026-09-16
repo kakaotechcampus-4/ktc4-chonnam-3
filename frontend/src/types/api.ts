@@ -75,6 +75,7 @@ export type AnalysisPanel = {
 export type RecentInterview = {
   id: string;
   position: string;
+  companyName: string;
   totalScore: number | null;
   completedAt: string | null;
 };
