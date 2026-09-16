@@ -6,11 +6,12 @@ import {
   type HomeResponse,
   type InterviewListResponse,
   type DocumentPreviewResponse,
-  type DocumentKind,
   type CreateAnalysisRunRequest,
   type CreateAnalysisRunResponse,
   type AnalysisRunResponse,
   type AnalysisResultResponse,
+  type CandidatesResponse,
+  type CandidatesAnalyzingResponse,
   type CreateInterviewRequest,
   type CreateInterviewResponse,
   type InterviewDetailResponse,
@@ -63,6 +64,8 @@ function requestJson<T>(path: string, method: string, body: unknown): Promise<T>
 }
 
 export const api = {
+  // 401 인터셉터가 single-flight 로 호출한다. 자신은 인터셉터 대상에서 제외한다.
+  refresh: () => request<void>('/auth/refresh', { method: 'POST' }),
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
   getMe: () => request<MeResponse>('/me'),
   getProfile: () => request<MeProfileResponse>('/me/profile'),
@@ -75,12 +78,9 @@ export const api = {
     return request<InterviewListResponse>(`/me/interviews${qs ? `?${qs}` : ''}`);
   },
   // Content-Type을 직접 지정하지 않는다. multipart boundary는 브라우저가 생성해야 한다.
-  // kind: user_documents.kind 가 NOT NULL 이라 보낸다. 계약 반영은 BE 확인 대기 중.
-  previewDocument: (kind: DocumentKind, file: File, postingUrl?: string) => {
+  previewDocument: (file: File) => {
     const form = new FormData();
-    form.append('kind', kind);
     form.append('file', file);
-    if (postingUrl) form.append('postingUrl', postingUrl);
     return request<DocumentPreviewResponse>('/documents/preview', {
       method: 'POST',
       body: form,
@@ -91,6 +91,11 @@ export const api = {
   getAnalysisRun: (runId: string) => request<AnalysisRunResponse>(`/analysis-runs/${runId}`),
   getAnalysisRunResult: (runId: string) =>
     request<AnalysisResultResponse>(`/analysis-runs/${runId}/result`),
+  // 200 이면 카드 배열, 202 면 analyzing. 호출부가 status 필드로 구분한다.
+  getAnalysisRunCandidates: (runId: string, page: number) =>
+    request<CandidatesResponse | CandidatesAnalyzingResponse>(
+      `/analysis-runs/${runId}/candidates?page=${page}`,
+    ),
   createInterview: (body: CreateInterviewRequest) =>
     requestJson<CreateInterviewResponse>('/interviews', 'POST', body),
   getInterview: (id: string) => request<InterviewDetailResponse>(`/interviews/${id}`),
@@ -99,6 +104,6 @@ export const api = {
   retryInterview: (id: string) =>
     request<CreateInterviewResponse>(`/interviews/${id}/retry`, { method: 'POST' }),
   submitFeedbackDisagreement: (id: string, body: FeedbackDisagreementRequest) =>
-    requestJson<void>(`/reports/${id}/feedback-disagreements`, 'POST', body),
+    requestJson<void>(`/interviews/${id}/feedback-disagreements`, 'POST', body),
   analysisRunEventsUrl: (runId: string) => `${BASE}/analysis-runs/${runId}/events`,
 };

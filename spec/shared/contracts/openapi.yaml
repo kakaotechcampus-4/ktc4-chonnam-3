@@ -2,20 +2,118 @@ openapi: 3.1.0
 info:
   title: DEVON Sprint 1 Contract
   version: 1.0.0-sprint1
-  description: Sprint 1 FE/BE API contract source. PENDING_FE items are explicit and must not be guessed by implementers.
+  description: >-
+    Sprint 1 FE/BE API contract source, aligned with frontend/docs/api-spec.md.
+    Only fetch-based endpoints appear here. Browser-navigation endpoints
+    (GET /auth/github/login, /auth/github/callback, /auth/github/link,
+    /auth/github/link/callback), the SSE stream (GET /analysis-runs/{runId}/events)
+    and the WebSocket upgrade (/ws/interviews/{sessionId}) are specified in
+    frontend/docs/api-spec.md and are not expressible here.
+    PENDING_FE items are explicit and must not be guessed by implementers.
 servers:
   - url: /api
 x-contract-status: sprint1-fix
 x-pending:
+  - documentId is singular while the job-input screen has two uploaders (PENDING_TEAM)
   - WS identifier path: interviewId vs sessionId is PENDING_FE
-  - DEVON JWT delivery method is PENDING_FE
   - Text WebSocket questionEnd is PENDING_FE
   - Abandoned/reconnect policy is PENDING_FE
 paths:
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      summary: Rotate the refresh token and issue a new access token
+      description: >-
+        Called by the 401 interceptor as a single-flight request. This endpoint is
+        itself excluded from the interceptor.
+      responses:
+        '204':
+          description: New cookies set
+        '401':
+          $ref: '#/components/responses/Error'
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Clear auth cookies and revoke the refresh token
+      responses:
+        '204':
+          description: Logged out
+        '401':
+          $ref: '#/components/responses/Error'
+  /me:
+    get:
+      operationId: getMe
+      summary: Minimal identity for the global header
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+  /me/profile:
+    get:
+      operationId: getMeProfile
+      summary: My page profile panel
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeProfileResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+  /me/home:
+    get:
+      operationId: getHome
+      summary: Home dashboard
+      responses:
+        '200':
+          description: Home panel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+  /me/interviews:
+    get:
+      operationId: listInterviews
+      summary: My interview history
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 20
+      responses:
+        '200':
+          description: Interview page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InterviewListResponse'
+        '401':
+          $ref: '#/components/responses/Error'
   /documents/preview:
     post:
       operationId: previewDocument
-      summary: Preview uploaded portfolio/resume document
+      summary: Extract text and GitHub URLs from an uploaded document
+      description: >-
+        Called in the background as soon as a file is selected. The client must not
+        set Content-Type - the browser generates the multipart boundary.
       requestBody:
         required: true
         content:
@@ -27,9 +125,7 @@ paths:
                 file:
                   type: string
                   format: binary
-                postingUrl:
-                  type: string
-                  description: Optional Wanted URL used for keyword-based truncation.
+                  description: .pdf (text layer only), .docx, .txt or .md. Max 10MB.
       responses:
         '200':
           description: Preview result
@@ -37,6 +133,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DocumentPreviewResponse'
+        '401':
+          $ref: '#/components/responses/Error'
         '413':
           $ref: '#/components/responses/Error'
         '415':
@@ -45,6 +143,9 @@ paths:
     post:
       operationId: createAnalysisRun
       summary: Start an analysis run
+      description: >-
+        documentId is optional. When omitted, the doc_extract step is reported as
+        skipped rather than failed.
       requestBody:
         required: true
         content:
@@ -53,18 +154,29 @@ paths:
               $ref: '#/components/schemas/CreateAnalysisRunRequest'
       responses:
         '202':
-          description: Analysis run accepted or existing running run reused
+          description: Analysis run accepted
+          headers:
+            Location:
+              description: /analysis-runs/{runId}
+              schema:
+                type: string
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateAnalysisRunResponse'
         '400':
           $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
         '409':
           $ref: '#/components/responses/Error'
   /analysis-runs/{runId}:
     get:
       operationId: getAnalysisRun
+      summary: Analysis run state
+      description: >-
+        A failed analysis still returns 200. The client branches on status and
+        failureReason, not on the status code.
       parameters:
         - $ref: '#/components/parameters/RunId'
       responses:
@@ -74,23 +186,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AnalysisRunResponse'
-        '404':
+        '401':
           $ref: '#/components/responses/Error'
-  /analysis-runs/{runId}/events:
-    get:
-      operationId: streamAnalysisRunEvents
-      parameters:
-        - $ref: '#/components/parameters/RunId'
-      responses:
-        '200':
-          description: Server-sent events stream
-          content:
-            text/event-stream:
-              schema:
-                type: string
+        '410':
+          $ref: '#/components/responses/Error'
   /analysis-runs/{runId}/result:
     get:
       operationId: getAnalysisRunResult
+      summary: JD requirements and repository cards
       parameters:
         - $ref: '#/components/parameters/RunId'
       responses:
@@ -100,6 +203,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AnalysisRunResultResponse'
+        '401':
+          $ref: '#/components/responses/Error'
         '409':
           $ref: '#/components/responses/Error'
         '410':
@@ -107,6 +212,10 @@ paths:
   /analysis-runs/{runId}/candidates:
     get:
       operationId: getAnalysisRunCandidates
+      summary: Next ranked batch of repository candidates within the same run
+      description: >-
+        Filter-rejected repositories (private, fork, archived, no_language,
+        too_small, inaccessible) are not returned.
       parameters:
         - $ref: '#/components/parameters/RunId'
         - name: page
@@ -117,20 +226,23 @@ paths:
             minimum: 1
       responses:
         '200':
-          description: Candidate page
+          description: Candidate page. Card schema is identical to the result endpoint.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CandidatePageResponse'
+                $ref: '#/components/schemas/CandidatesResponse'
         '202':
           description: Candidate page analysis is running
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AnalyzingResponse'
+        '401':
+          $ref: '#/components/responses/Error'
   /interviews:
     post:
       operationId: createInterview
+      summary: Create an interview session from a run and selected repositories
       requestBody:
         required: true
         content:
@@ -146,11 +258,19 @@ paths:
                 $ref: '#/components/schemas/CreateInterviewResponse'
         '400':
           $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
         '409':
+          $ref: '#/components/responses/Error'
+        '410':
           $ref: '#/components/responses/Error'
   /interviews/{id}:
     get:
       operationId: getInterview
+      summary: Interview state, shared by the prepare and in-progress screens
+      description: >-
+        Returns 200 for any existing interview regardless of status. The client
+        decides which screen to render from status.
       parameters:
         - $ref: '#/components/parameters/InterviewId'
       responses:
@@ -160,11 +280,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InterviewDetailResponse'
+        '401':
+          $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
   /interviews/{id}/report:
     get:
       operationId: getInterviewReport
+      summary: Interview report
       parameters:
         - $ref: '#/components/parameters/InterviewId'
       responses:
@@ -180,11 +303,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GeneratingResponse'
+        '401':
+          $ref: '#/components/responses/Error'
         '409':
           $ref: '#/components/responses/Error'
   /interviews/{id}/retry:
     post:
       operationId: retryInterview
+      summary: Create a new session copying the original run and repositories
       parameters:
         - $ref: '#/components/parameters/InterviewId'
       responses:
@@ -194,6 +320,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CreateInterviewResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '410':
+          $ref: '#/components/responses/Error'
+  /interviews/{id}/feedback-disagreements:
+    post:
+      operationId: submitFeedbackDisagreement
+      summary: Disagree with one persona's feedback
+      description: >-
+        The path parameter is interviewId. A report is unique per interview, so no
+        separate reportId is issued.
+      parameters:
+        - $ref: '#/components/parameters/InterviewId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackDisagreementRequest'
+      responses:
+        '204':
+          description: Submitted
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
         '409':
           $ref: '#/components/responses/Error'
 components:
@@ -204,14 +358,12 @@ components:
       required: true
       schema:
         type: string
-        format: uuid
     InterviewId:
       name: id
       in: path
       required: true
       schema:
         type: string
-        format: uuid
   responses:
     Error:
       description: Error envelope
@@ -230,126 +382,353 @@ components:
           properties:
             reason:
               type: string
+              description: Stable snake_case string the client branches on.
             message:
               type: string
+            retryAfter:
+              type: integer
+              description: Optional. Distinct from the top-level retryAfter of 202 bodies.
             details:
               type: object
               additionalProperties: true
+
+    AnalysisStatus:
+      type: string
+      enum: [syncing, no_repository, no_interview, completed]
+    RunStatus:
+      type: string
+      enum: [running, completed, failed]
+    InterviewStatus:
+      type: string
+      enum: [preparing, preparing_failed, in_progress, completed, abandoned]
+    StepKey:
+      type: string
+      enum: [doc_extract, repo_select, repo_detail, jd_fetch, jd_extract, repo_analyze, match_score]
+    PrepareStepKey:
+      type: string
+      enum: [analyze_repo, build_persona, compose_question, set_criteria]
+    StepStatus:
+      type: string
+      enum: [pending, running, completed, failed, skipped]
+      description: >-
+        skipped means the step was not run because its input was absent - a normal
+        path, distinct from failed. It applies to StepKey only.
+    AnswerMode:
+      type: string
+      enum: [text]
+    DocumentExtractStatus:
+      type: string
+      enum: [succeeded, partial, failed]
+    RepoStatus:
+      type: string
+      enum: [succeeded, partial, failed]
+    CandidateSource:
+      type: string
+      enum: [rule_filter, portfolio, both]
+    JdCategory:
+      type: string
+      enum: [required, preferred, responsibility]
+    Persona:
+      type: string
+      enum: [tech_lead, hr_manager, domain_lead]
+    ScoreKey:
+      type: string
+      enum:
+        - project_understanding
+        - technical_reasoning
+        - problem_solving
+        - communication
+        - contribution_clarity
+        - company_job_fit
+    ReasonType:
+      type: string
+      enum: [factual_error, insufficient_basis, overly_harsh, unclear_intent, other]
+
+    LanguageRatio:
+      type: object
+      required: [name, ratio]
+      properties:
+        name:
+          type: string
+        ratio:
+          type: number
+
+    MeResponse:
+      type: object
+      required: [name, avatarUrl, githubLinked]
+      properties:
+        name:
+          type: string
+        avatarUrl:
+          type: string
+          nullable: true
+        githubLinked:
+          type: boolean
+
+    MeProfileResponse:
+      type: object
+      required: [name, avatarUrl, loginId, joinedAt, desiredPosition, github, interviewSummary]
+      properties:
+        name:
+          type: string
+        avatarUrl:
+          type: string
+        loginId:
+          type: string
+          nullable: true
+        joinedAt:
+          type: string
+          format: date-time
+        desiredPosition:
+          type: string
+          nullable: true
+          description: >-
+            Position of the most recently completed interview, null when there is
+            none.
+        github:
+          type: object
+          required: [linked, login, publicRepoCount]
+          properties:
+            linked:
+              type: boolean
+            login:
+              type: string
+              nullable: true
+            publicRepoCount:
+              type: integer
+              nullable: true
+        interviewSummary:
+          type: object
+          required: [totalCount, averageScore]
+          properties:
+            totalCount:
+              type: integer
+            averageScore:
+              type: number
+              nullable: true
+
+    AnalysisPanel:
+      type: object
+      required: [basedOnRepoCount, languages, projectTypes, roleSummary]
+      properties:
+        basedOnRepoCount:
+          type: integer
+        languages:
+          type: array
+          items:
+            $ref: '#/components/schemas/LanguageRatio'
+        projectTypes:
+          type: array
+          items:
+            type: string
+        roleSummary:
+          type: string
+
+    RecentInterview:
+      type: object
+      required: [id, position, companyName, totalScore, completedAt]
+      properties:
+        id:
+          type: string
+        position:
+          type: string
+        companyName:
+          type: string
+          nullable: true
+        totalScore:
+          type: number
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    HomeResponse:
+      type: object
+      required: [name, githubLinked, repositoryCount, analysisStatus, analysis, recentInterviews]
+      properties:
+        name:
+          type: string
+        githubLinked:
+          type: boolean
+        repositoryCount:
+          type: integer
+        analysisStatus:
+          $ref: '#/components/schemas/AnalysisStatus'
+        analysis:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/AnalysisPanel'
+        recentInterviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecentInterview'
+
+    InterviewSummary:
+      type: object
+      required:
+        - id
+        - position
+        - companyName
+        - techStack
+        - careerLevel
+        - repositoryNames
+        - status
+        - totalScore
+        - startedAt
+        - completedAt
+      properties:
+        id:
+          type: string
+        position:
+          type: string
+        companyName:
+          type: string
+          nullable: true
+        techStack:
+          type: array
+          items:
+            type: string
+        careerLevel:
+          type: string
+        repositoryNames:
+          type: array
+          items:
+            type: string
+        status:
+          $ref: '#/components/schemas/InterviewStatus'
+        totalScore:
+          type: number
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    InterviewListResponse:
+      type: object
+      required: [interviews, total, page, size, averageScore]
+      properties:
+        interviews:
+          type: array
+          items:
+            $ref: '#/components/schemas/InterviewSummary'
+        total:
+          type: integer
+        page:
+          type: integer
+        size:
+          type: integer
+        averageScore:
+          type: number
+          nullable: true
+
     DocumentPreviewResponse:
       type: object
       required: [documentId, extractStatus]
       properties:
         documentId:
           type: string
-          format: uuid
         extractStatus:
           $ref: '#/components/schemas/DocumentExtractStatus'
-    DocumentExtractStatus:
-      type: string
-      enum: [succeeded, partial, failed]
+
     CreateAnalysisRunRequest:
       type: object
       required: [postingUrl]
       properties:
         postingUrl:
           type: string
+          description: Sprint 1 accepts Wanted URLs only.
         documentId:
           type: string
-          format: uuid
-          nullable: true
+          description: Must come from POST /documents/preview. Omit to skip doc_extract.
+
     CreateAnalysisRunResponse:
       type: object
       required: [runId]
       properties:
         runId:
           type: string
-          format: uuid
-    RunStatus:
-      type: string
-      enum: [running, completed, failed]
-    StepKey:
-      type: string
-      enum: [doc_extract, repo_select, repo_detail, jd_fetch, jd_extract, repo_analyze, match_score]
-    StepStatus:
-      type: string
-      enum: [pending, running, succeeded, failed]
+
+    AnalysisStep:
+      type: object
+      required: [key, status]
+      properties:
+        key:
+          $ref: '#/components/schemas/StepKey'
+        status:
+          $ref: '#/components/schemas/StepStatus'
+
     AnalysisRunResponse:
       type: object
-      required: [runId, status, progress, steps]
+      required: [runId, status, steps, progress, failureReason, estimatedSeconds]
       properties:
         runId:
           type: string
-          format: uuid
         status:
           $ref: '#/components/schemas/RunStatus'
+        steps:
+          type: array
+          description: >-
+            Always contains all seven StepKey values. A step that did not run is
+            reported as skipped rather than omitted, and is excluded from progress.
+          items:
+            $ref: '#/components/schemas/AnalysisStep'
         progress:
           type: integer
           minimum: 0
           maximum: 100
-        steps:
-          type: array
-          items:
-            type: object
-            required: [key, status]
-            properties:
-              key:
-                $ref: '#/components/schemas/StepKey'
-              status:
-                $ref: '#/components/schemas/StepStatus'
         failureReason:
           type: string
           nullable: true
-    AnalysisRunResultResponse:
+        estimatedSeconds:
+          type: integer
+          nullable: true
+
+    JdRequirement:
       type: object
-      required: [runId, status, repositories, analyzedCount, failedCount, failedRepositories]
+      required: [id, category, text, displayOrder]
       properties:
-        runId:
+        id:
           type: string
-          format: uuid
-        status:
-          $ref: '#/components/schemas/RunStatus'
-        analyzedCount:
-          type: integer
-        failedCount:
-          type: integer
-        failedRepositories:
-          type: array
-          items:
-            type: object
-            required: [repositoryId, errorCode]
-            properties:
-              repositoryId:
-                type: string
-                format: uuid
-              errorCode:
-                type: string
-        repositories:
-          type: array
-          items:
-            $ref: '#/components/schemas/RepositoryCard'
-    CandidatePageResponse:
-      type: object
-      required: [runId, page, repositories]
-      properties:
-        runId:
+        category:
+          $ref: '#/components/schemas/JdCategory'
+        text:
           type: string
-          format: uuid
-        page:
+        displayOrder:
           type: integer
-        repositories:
-          type: array
-          items:
-            $ref: '#/components/schemas/RepositoryCard'
+
     RepositoryCard:
       type: object
-      required: [repositoryId, fullName, name, status, recommended]
+      required:
+        - id
+        - name
+        - fullName
+        - description
+        - languages
+        - topics
+        - stars
+        - forks
+        - commitCount
+        - userCommitCount
+        - pushedAt
+        - status
+        - errorCode
+        - recommended
+        - candidateSource
+        - recommendReason
+        - matchScore
+        - matchedRequirementIds
       properties:
-        repositoryId:
-          type: string
-          format: uuid
-        fullName:
+        id:
           type: string
         name:
+          type: string
+        fullName:
           type: string
         description:
           type: string
@@ -357,13 +736,7 @@ components:
         languages:
           type: array
           items:
-            type: object
-            required: [name, ratio]
-            properties:
-              name:
-                type: string
-              ratio:
-                type: number
+            $ref: '#/components/schemas/LanguageRatio'
         topics:
           type: array
           items:
@@ -383,16 +756,14 @@ components:
           format: date-time
           nullable: true
         status:
-          type: string
-          enum: [succeeded, partial, failed]
+          $ref: '#/components/schemas/RepoStatus'
         errorCode:
           type: string
           nullable: true
         recommended:
           type: boolean
         candidateSource:
-          type: string
-          enum: [rule_filter, portfolio, both]
+          $ref: '#/components/schemas/CandidateSource'
         recommendReason:
           type: string
           nullable: true
@@ -403,7 +774,48 @@ components:
           type: array
           items:
             type: string
-            format: uuid
+
+    AnalysisRunResultResponse:
+      type: object
+      required:
+        - runId
+        - position
+        - companyName
+        - jdRequirements
+        - mentionedRepoCount
+        - matchedRepoCount
+        - repositories
+      properties:
+        runId:
+          type: string
+        position:
+          type: string
+        companyName:
+          type: string
+          nullable: true
+        jdRequirements:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/JdRequirement'
+        mentionedRepoCount:
+          type: integer
+        matchedRepoCount:
+          type: integer
+        repositories:
+          type: array
+          items:
+            $ref: '#/components/schemas/RepositoryCard'
+
+    CandidatesResponse:
+      type: object
+      required: [repositories]
+      properties:
+        repositories:
+          type: array
+          items:
+            $ref: '#/components/schemas/RepositoryCard'
+
     AnalyzingResponse:
       type: object
       required: [status, retryAfter]
@@ -413,50 +825,104 @@ components:
           enum: [analyzing]
         retryAfter:
           type: integer
+          description: Top-level field. Distinct from error.retryAfter.
+
     CreateInterviewRequest:
       type: object
       required: [runId, repositoryIds]
       properties:
         runId:
           type: string
-          format: uuid
         repositoryIds:
           type: array
           minItems: 1
           maxItems: 5
           items:
             type: string
-            format: uuid
+
     CreateInterviewResponse:
       type: object
-      required: [interviewId]
+      required: [sessionId, interviewId]
       properties:
-        interviewId:
-          type: string
-          format: uuid
         sessionId:
           type: string
+        interviewId:
+          type: string
+
+    InterviewTurn:
+      type: object
+      required: [turn, persona, question, answer]
+      properties:
+        turn:
+          type: integer
+        persona:
+          $ref: '#/components/schemas/Persona'
+        question:
+          type: string
+        answer:
+          type: string
           nullable: true
-          description: PENDING_FE if separate realtime session id is kept.
-    Persona:
-      type: string
-      enum: [tech_lead, hr_manager, domain_lead]
-    InterviewStatus:
-      type: string
-      enum: [preparing, preparing_failed, in_progress, completed, abandoned]
+
+    InterviewLastError:
+      type: object
+      required: [reason, code, step, recoverable, occurredAt]
+      description: >-
+        Present only when status is preparing_failed. Field layout matches the WS
+        error event so the prepare-failed banner can render from REST alone.
+      properties:
+        reason:
+          type: string
+        code:
+          type: string
+        step:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/PrepareStepKey'
+        recoverable:
+          type: boolean
+        occurredAt:
+          type: string
+          format: date-time
+
     InterviewDetailResponse:
       type: object
-      required: [id, status, currentTurn, totalTurns, turns]
+      required:
+        - id
+        - sessionId
+        - runId
+        - status
+        - answerMode
+        - position
+        - companyName
+        - repositoryNames
+        - currentTurn
+        - totalTurns
+        - remainingSeconds
+        - turns
+        - lastError
       properties:
         id:
           type: string
-          format: uuid
         sessionId:
           type: string
-          nullable: true
-          description: PENDING_FE.
+        runId:
+          type: string
+          description: >-
+            The analysis_jobs row that produced this interview. Lets the client
+            return to the repository-selection screen after a reload.
         status:
           $ref: '#/components/schemas/InterviewStatus'
+        answerMode:
+          $ref: '#/components/schemas/AnswerMode'
+        position:
+          type: string
+        companyName:
+          type: string
+          nullable: true
+        repositoryNames:
+          type: array
+          items:
+            type: string
         currentTurn:
           type: integer
         totalTurns:
@@ -466,18 +932,113 @@ components:
         turns:
           type: array
           items:
-            type: object
-            required: [turn, persona, question]
-            properties:
-              turn:
-                type: integer
-              persona:
-                $ref: '#/components/schemas/Persona'
-              question:
-                type: string
-              answer:
-                type: string
-                nullable: true
+            $ref: '#/components/schemas/InterviewTurn'
+        lastError:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/InterviewLastError'
+
+    ScoreItem:
+      type: object
+      required: [key, label, score]
+      properties:
+        key:
+          $ref: '#/components/schemas/ScoreKey'
+        label:
+          type: string
+        score:
+          type: number
+          description: Score formula is PENDING_TEAM.
+
+    AgentFeedback:
+      type: object
+      required: [persona, tags, strengths, improvements, disagreementSubmitted]
+      properties:
+        persona:
+          $ref: '#/components/schemas/Persona'
+        tags:
+          type: array
+          items:
+            type: string
+        strengths:
+          type: array
+          items:
+            type: string
+        improvements:
+          type: array
+          items:
+            type: string
+        disagreementSubmitted:
+          type: boolean
+
+    ReportCoverage:
+      type: object
+      required: [totalRequirements, coveredRequirements, uncoveredRequirements]
+      properties:
+        totalRequirements:
+          type: integer
+        coveredRequirements:
+          type: integer
+        uncoveredRequirements:
+          type: array
+          items:
+            type: string
+
+    ReportResponse:
+      type: object
+      required:
+        - interviewId
+        - position
+        - positionLabel
+        - totalScore
+        - headline
+        - summary
+        - scores
+        - agentFeedbacks
+        - coverage
+        - turns
+        - repositoryNames
+        - completedAt
+      properties:
+        interviewId:
+          type: string
+        position:
+          type: string
+        positionLabel:
+          type: string
+        totalScore:
+          type: number
+          description: Score formula is PENDING_TEAM.
+        headline:
+          type: string
+        summary:
+          type: string
+        scores:
+          type: array
+          minItems: 6
+          maxItems: 6
+          items:
+            $ref: '#/components/schemas/ScoreItem'
+        agentFeedbacks:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/AgentFeedback'
+        coverage:
+          $ref: '#/components/schemas/ReportCoverage'
+        turns:
+          type: array
+          items:
+            $ref: '#/components/schemas/InterviewTurn'
+        repositoryNames:
+          type: array
+          items:
+            type: string
+        completedAt:
+          type: string
+          format: date-time
+
     GeneratingResponse:
       type: object
       required: [status, retryAfter]
@@ -487,61 +1048,15 @@ components:
           enum: [generating]
         retryAfter:
           type: integer
-    ReportResponse:
+
+    FeedbackDisagreementRequest:
       type: object
-      required: [interviewId, totalScore, scores, agentFeedbacks, turns]
+      required: [persona, reasonType]
       properties:
-        interviewId:
+        persona:
+          $ref: '#/components/schemas/Persona'
+        reasonType:
+          $ref: '#/components/schemas/ReasonType'
+        comment:
           type: string
-          format: uuid
-        totalScore:
-          type: number
-          description: Score formula is PENDING_TEAM.
-        scores:
-          type: array
-          items:
-            type: object
-            required: [key, label, score]
-            properties:
-              key:
-                type: string
-              label:
-                type: string
-              score:
-                type: number
-                description: Score formula is PENDING_TEAM.
-        agentFeedbacks:
-          type: array
-          items:
-            type: object
-            required: [persona, strengths, improvements]
-            properties:
-              persona:
-                $ref: '#/components/schemas/Persona'
-              tags:
-                type: array
-                items:
-                  type: string
-              strengths:
-                type: array
-                items:
-                  type: string
-              improvements:
-                type: array
-                items:
-                  type: string
-        turns:
-          type: array
-          items:
-            type: object
-            required: [turn, persona, question]
-            properties:
-              turn:
-                type: integer
-              persona:
-                $ref: '#/components/schemas/Persona'
-              question:
-                type: string
-              answer:
-                type: string
-                nullable: true
+          maxLength: 500
