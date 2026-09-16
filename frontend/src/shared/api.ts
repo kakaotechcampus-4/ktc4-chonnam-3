@@ -98,4 +98,5 @@ export const api = {
     request<CreateInterviewResponse>(`/interviews/${id}/retry`, { method: 'POST' }),
   submitFeedbackDisagreement: (id: string, body: FeedbackDisagreementRequest) =>
     requestJson<void>(`/reports/${id}/feedback-disagreements`, 'POST', body),
+  analysisRunEventsUrl: (runId: string) => `${BASE}/analysis-runs/${runId}/events`,
 };
