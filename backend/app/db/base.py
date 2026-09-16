@@ -1,4 +1,17 @@
-"""DeclarativeBase, TimestampMixin, UUID PK 믹스인.
+from datetime import datetime
+from uuid import UUID, uuid4
 
-docs/db-schema.md / task-02
-"""
+from sqlalchemy import DateTime, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class IdentityTimestamps:
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

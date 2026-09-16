@@ -19,6 +19,8 @@ dependencies = [
     "arq",
     "sse-starlette",
     "httpx",
+    "PyJWT>=2.10,<3",
+    "cryptography>=44",
     "structlog",
     "python-multipart",
     "anthropic",
