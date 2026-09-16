@@ -17,7 +17,7 @@ export type StepKey =
   | 'repo_analyze'
   | 'match_score';
 export type PrepareStepKey = 'analyze_repo' | 'build_persona' | 'compose_question' | 'set_criteria';
-export type StepStatus = 'pending' | 'running' | 'completed';
+export type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 export type AgentRole = 'tech_lead' | 'hr_manager' | 'domain_lead';
 export type ScoreKey =
   | 'project_understanding'

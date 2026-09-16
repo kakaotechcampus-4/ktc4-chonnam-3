@@ -20,7 +20,8 @@ const STEP_GROUPS: { label: string; keys: StepKey[] }[] = [
 type StepMap = Record<StepKey, StepStatus>;
 
 function groupStatus(keys: StepKey[], steps: StepMap): StepStatus {
-  if (keys.every((key) => steps[key] === 'completed')) return 'completed';
+  if (keys.some((key) => steps[key] === 'failed')) return 'failed';
+  if (keys.every((key) => steps[key] === 'completed' || steps[key] === 'skipped')) return 'completed';
   if (keys.some((key) => steps[key] === 'running')) return 'running';
   return 'pending';
 }
@@ -121,6 +122,11 @@ export default function Analyzing() {
                       ···
                     </span>
                   )}
+                  {status === 'failed' && (
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-error-soft text-[10px] font-bold text-error">
+                      !
+                    </span>
+                  )}
                   {status === 'pending' && (
                     <span className="h-5 w-5 shrink-0 rounded-full bg-line-soft" />
                   )}
@@ -128,9 +134,11 @@ export default function Analyzing() {
                     className={
                       status === 'running'
                         ? 'flex-1 text-[13px] font-bold'
-                        : status === 'pending'
-                          ? 'flex-1 text-[13px] text-muted'
-                          : 'flex-1 text-[13px]'
+                        : status === 'failed'
+                          ? 'flex-1 text-[13px] font-bold text-error'
+                          : status === 'pending'
+                            ? 'flex-1 text-[13px] text-muted'
+                            : 'flex-1 text-[13px]'
                     }
                   >
                     {group.label}
