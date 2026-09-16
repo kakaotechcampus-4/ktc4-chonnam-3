@@ -14,7 +14,7 @@
 
   --font-sans: 'Pretendard Variable', 'Pretendard', -apple-system, sans-serif;
 
-  --radius-card: 10px;
+  --radius-card: 8px;
 }
 
 :root {
@@ -27,6 +27,288 @@ body {
   margin: 0;
 }
 
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
 #root {
   min-height: 100svh;
+}
+
+.app-header {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--color-line-soft);
+  background: var(--color-surface);
+  padding: 12px clamp(16px, 4vw, 40px);
+}
+
+.nav-link {
+  white-space: nowrap;
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--color-muted);
+}
+
+.nav-link-active {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.github-badge {
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  padding: 5px 10px;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+}
+
+.header-name {
+  max-width: 9rem;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.avatar-link,
+.avatar-link img {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.avatar-link {
+  overflow: hidden;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.avatar-link img {
+  object-fit: cover;
+}
+
+.page-shell {
+  width: min(100% - 32px, 1080px);
+  margin: 0 auto;
+  padding: clamp(48px, 8vw, 88px) 0;
+}
+
+.section-label {
+  color: var(--color-accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.page-title {
+  margin: 10px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 2.25rem;
+  line-height: 1.2;
+}
+
+.page-copy {
+  max-width: 34rem;
+  margin: 14px 0 0;
+  color: var(--color-muted);
+  line-height: 1.7;
+}
+
+.button-primary,
+.button-secondary,
+.button-danger,
+.button-danger-solid {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  padding: 10px 16px;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button-primary {
+  border: 1px solid var(--color-accent);
+  background: var(--color-accent);
+  color: white;
+}
+
+.button-secondary {
+  border: 1px solid var(--color-line);
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+.button-danger {
+  border: 1px solid var(--color-error);
+  background: transparent;
+  color: var(--color-error);
+}
+
+.button-danger-solid {
+  border: 1px solid var(--color-error);
+  background: var(--color-error);
+  color: white;
+}
+
+.button-primary:disabled,
+.button-secondary:disabled,
+.button-danger:disabled,
+.button-danger-solid:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.login-page {
+  display: grid;
+  min-height: 100svh;
+  place-items: center;
+  background: var(--color-paper);
+  padding: 24px;
+}
+
+.login-content {
+  display: flex;
+  width: min(100%, 420px);
+  min-height: 360px;
+  align-items: center;
+  border-top: 3px solid var(--color-accent);
+  background: var(--color-surface);
+  padding: clamp(32px, 7vw, 52px);
+  box-shadow: 0 16px 42px rgb(27 28 32 / 9%);
+}
+
+.login-content h1 {
+  margin: 0;
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+.login-copy {
+  margin: 10px 0 32px;
+  color: var(--color-muted);
+  line-height: 1.7;
+}
+
+.github-login {
+  display: flex;
+  width: 100%;
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid var(--color-ink);
+  border-radius: 6px;
+  background: var(--color-ink);
+  color: white;
+  font-weight: 700;
+}
+
+.github-login[aria-disabled='true'] {
+  opacity: 0.65;
+}
+
+.github-login svg {
+  width: 20px;
+  height: 20px;
+  filter: invert(1);
+}
+
+.error-banner {
+  border-left: 3px solid var(--color-error);
+  background: var(--color-error-soft);
+  padding: 12px 14px;
+  color: #a82429;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.status-panel,
+.logout-dialog {
+  border: 1px solid var(--color-line-soft);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  padding: 24px;
+}
+
+.status-panel {
+  width: min(100%, 420px);
+}
+
+.identity-panel {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.identity-avatar {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  object-fit: cover;
+  font-weight: 700;
+}
+
+.logout-dialog {
+  width: min(calc(100% - 40px), 420px);
+  margin: auto;
+  color: var(--color-ink);
+  box-shadow: 0 20px 50px rgb(27 28 32 / 18%);
+}
+
+.logout-dialog::backdrop {
+  background: rgb(27 28 32 / 45%);
+}
+
+@media (max-width: 560px) {
+  .app-header {
+    gap: 8px;
+  }
+
+  .github-badge {
+    display: none;
+  }
+
+  .header-name {
+    max-width: 4.5rem;
+  }
+
+  .nav-link {
+    padding-inline: 7px;
+  }
+
+  .page-title {
+    font-size: 1.75rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .header-name {
+    max-width: 3rem;
+  }
 }
