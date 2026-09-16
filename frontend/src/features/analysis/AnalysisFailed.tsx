@@ -4,7 +4,7 @@ import { useParams } from 'react-router-dom';
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
-import { STEP_LABELS, STEP_ORDER } from '@/features/analysis/steps';
+import { STEP_GROUPS, groupStatus } from '@/features/analysis/steps';
 import type { StepKey, StepStatus } from '@/types/api';
 
 export default function AnalysisFailed() {
@@ -20,9 +20,6 @@ export default function AnalysisFailed() {
   const stepStatus: Partial<Record<StepKey, StepStatus>> = Object.fromEntries(
     (run?.steps ?? []).map((s) => [s.key, s.status]),
   );
-
-  // steps API엔 'failed' 상태가 없어서, completed가 아닌 첫 단계를 실패 지점으로 간주 — 미확인 추론
-  const failedIndex = STEP_ORDER.findIndex((key) => stepStatus[key] !== 'completed');
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
@@ -41,11 +38,12 @@ export default function AnalysisFailed() {
 
           {run && (
             <ul className="flex flex-col gap-3">
-              {STEP_ORDER.map((key, i) => {
-                const isFailed = i === failedIndex;
-                const isDone = failedIndex === -1 || i < failedIndex;
+              {STEP_GROUPS.map((group) => {
+                const status = groupStatus(group.keys, stepStatus);
+                const isFailed = status === 'failed';
+                const isDone = status === 'completed';
                 return (
-                  <li key={key} className="flex items-center gap-2.5">
+                  <li key={group.label} className="flex items-center gap-2.5">
                     {isFailed && (
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-error-soft text-[10px] font-bold text-error">
                         !
@@ -68,7 +66,7 @@ export default function AnalysisFailed() {
                             : 'flex-1 text-[13px] text-muted'
                       }
                     >
-                      {STEP_LABELS[key]}
+                      {group.label}
                     </span>
                   </li>
                 );

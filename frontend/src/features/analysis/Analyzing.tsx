@@ -5,16 +5,19 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
-import { STEP_LABELS, STEP_ORDER } from '@/features/analysis/steps';
+import { STEP_GROUPS, groupStatus } from '@/features/analysis/steps';
 import type { RunStatus, StepKey, StepStatus } from '@/types/api';
 
 type StepMap = Record<StepKey, StepStatus>;
 
 const INITIAL_STEPS: StepMap = {
-  fetch_repos: 'pending',
-  extract_jd: 'pending',
+  doc_extract: 'pending',
+  repo_select: 'pending',
+  repo_detail: 'pending',
+  jd_fetch: 'pending',
+  jd_extract: 'pending',
+  repo_analyze: 'pending',
   match_score: 'pending',
-  prepare_result: 'pending',
 };
 
 export default function Analyzing() {
@@ -89,10 +92,10 @@ export default function Analyzing() {
           </div>
 
           <ul className="flex flex-col gap-3">
-            {STEP_ORDER.map((key) => {
-              const status = effectiveSteps[key];
+            {STEP_GROUPS.map((group) => {
+              const status = groupStatus(group.keys, effectiveSteps);
               return (
-                <li key={key} className="flex items-center gap-2.5">
+                <li key={group.label} className="flex items-center gap-2.5">
                   {status === 'completed' && (
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[10px] font-bold text-accent">
                       ✓
@@ -115,7 +118,7 @@ export default function Analyzing() {
                           : 'flex-1 text-[13px]'
                     }
                   >
-                    {STEP_LABELS[key]}
+                    {group.label}
                   </span>
                 </li>
               );
