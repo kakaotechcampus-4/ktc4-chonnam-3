@@ -29,7 +29,8 @@
 | 인증 | `invalid_origin` | 403 |
 | OAuth | `invalid_state` | callback 실패 redirect |
 | OAuth | `invalid_code` | callback 실패 redirect |
-| OAuth | `provider_unavailable` | callback 실패 redirect |
+| OAuth·GitHub | `provider_unavailable` | callback 실패 redirect 또는 GitHub API 서비스 503 |
+| GitHub | `token_invalid` | 401, GitHub 재로그인 필요 |
 | 공통 | `service_unavailable` | 503 |
 | 문서 | `unsupported_document_type` | 415 |
 | 문서 | `document_too_large` | 413 |
@@ -52,6 +53,10 @@
 | 리포트 | `report_unavailable` | 409 |
 | 이의 제출 | `already_submitted` | 409 |
 | 공통 | `internal_error` | 500 |
+
+GitHub API 서비스의 `token_invalid`는 계정 연결이 없거나 revoked인 경우, access가 만료되고 사용할 refresh가 없는 경우, GitHub의 refresh 거부 또는 현재 access token에 대한 API 401에 사용한다. 필요한 폐기 기록은 commit한 뒤 반환한다. 교체 전 token에서 늦게 도착한 401은 새 pair를 폐기하지 않는다. 이 reason은 DEVON JWT의 `access_token_invalid`·`refresh_token_invalid`와 별개이며 DEVON session을 폐기하지 않는다.
+
+GitHub의 네트워크 오류·429·5xx·잘못된 응답은 기존 pair를 폐기하지 않고 `provider_unavailable`로 처리한다. 서버 암호화 키·복호화 문제는 `service_unavailable` 503이며 GitHub 폐기로 취급하지 않는다. GitHub API 서비스는 후속 API용 내부 기능이고, 이 구분을 위해 새 공개 경로를 추가하지 않는다.
 
 ## Job Error Code
 

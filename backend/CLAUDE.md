@@ -18,8 +18,9 @@
 
 - Sprint 1은 텍스트 면접이다. 음성, STT, TTS는 Sprint 2.
 - GitHub token은 FE에 노출하지 않는다. BE가 암호화 저장하고 GitHub API를 대행한다.
-- GitHub token은 OAuth App long-lived access token 전제다. `github_accounts`에는 `access_token_encrypted`, `token_status`, `token_scope`만 둔다.
-- `token_type`, `token_expires_at`, `refresh_token_encrypted`, `refresh_token_expires_at`는 만들지 않는다.
+- GitHub OAuth App의 만료형 access/refresh token을 사용한다. 새 OAuth 응답에는 유효한 token pair와 TTL, `token_type=bearer`, `read:user` scope가 모두 필요하다.
+- GitHub access/refresh token은 AES-GCM으로 암호화한다. `github_accounts`의 `token_expires_at`, `refresh_token_encrypted`, `refresh_token_expires_at`는 `0003`으로 추가하며 세 필드는 모두 NULL인 기존 비만료 token 또는 모두 값이 있는 만료형 pair만 허용한다. `token_type` 컬럼은 만들지 않는다.
+- GitHub API 호출은 `app.state.github.get(user_id, path)`를 사용한다. access 만료 60초 전부터 요청 시 갱신하며 callback과 갱신은 같은 GitHub account row를 잠그고 최신 값을 다시 확인한다. GitHub token 폐기는 DEVON JWT session을 폐기하지 않는다. 상세 오류·동시성 기준은 `spec/shared/decisions/0002-github-oauth.md`를 따른다.
 - DEVON 자체 JWT는 `accessToken`/`refreshToken` HttpOnly cookie로만 전달한다. 상세 계약은 `spec/shared/decisions/0002-github-oauth.md`를 따른다.
 - DEVON Refresh 유효·폐기 기록은 PostgreSQL의 `users.refresh_generation`과 `auth_sessions`에서만 관리한다. Redis는 OAuth state에 사용하며 Refresh 이중 기록/fallback은 금지한다.
 - DEVON JWT payload에는 GitHub access token을 넣지 않는다.

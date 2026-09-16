@@ -11,7 +11,7 @@
 | JSON | `JSONB` |
 | 배열 | `TEXT[]`, `UUID[]` |
 | migration | CHECK, UNIQUE, INDEX, extension을 수동 확인 |
-| GitHub token | 일반 OAuth App long-lived token 전제. `BYTEA` 암호화 저장. FE 노출 금지 |
+| GitHub token | OAuth App 만료형 access/refresh pair를 `BYTEA` 암호화 저장하고 응답 TTL로 UTC 만료 시각 계산. FE 노출 금지 |
 | pgvector | `PENDING_AI` |
 
 ## Sprint 1 테이블
@@ -55,7 +55,7 @@ Sprint 1에 만들지 않는 것:
 - `feedback_signals`, `eval_cases`, `eval_runs`는 Sprint 2로 미루고 Sprint 1 DB에서는 제외한다.
 - `auth_sessions`는 Sprint 1 인증에 포함한다. DEVON Refresh 유효·폐기 기록은 `users.refresh_generation`과 `auth_sessions`만 사용하며 raw JWT는 저장하지 않는다. Redis에 복제하거나 Redis 기록으로 복구하지 않는다.
 - `github_accounts`는 GitHub API 호출용 OAuth token만 저장한다. DEVON 자체 JWT는 이 테이블에 저장하지 않는다.
-- GitHub OAuth App은 long-lived access token 전제로 구현한다. expiring token, refresh token, GitHub App user token으로 바꾸면 별도 migration으로 추가한다.
+- GitHub OAuth App 만료형 access/refresh token은 migration `0003`으로 지원한다. 기존 비만료 token은 보존하고 다음 로그인에서 전체 pair를 교체한다. DEVON JWT session과 GitHub token 수명은 별개다.
 - `analysis_jobs.status`는 `queued`, `running`, `succeeded`, `partial`, `failed`, `canceled`.
 - FE `RunStatus`는 `running`, `completed`, `failed`; DB `partial`은 FE에 `failed`로 매핑한다.
 - `repo_analyses` UNIQUE는 `(repository_id, analysis_level, head_sha, prompt_version)`. `model`은 UNIQUE에 넣지 않는다.
@@ -74,17 +74,22 @@ Sprint 1에 만들지 않는 것:
 | --- | --- | --- |
 | `access_token_encrypted` | KEEP, NOT NULL | BE가 GitHub API를 대행 호출하기 위한 필수 토큰. 평문 저장/응답/log 노출 금지 |
 | `token_status` | KEEP | `valid`, `revoked` 등 GitHub API 호출 가능 상태를 빠르게 판단 |
-| `token_scope` | KEEP, NULL 허용 | 실제 부여된 scope 기록과 권한 문제 디버깅에 사용 |
-| `token_type` | DROP | 일반 OAuth App 응답에서 사실상 `bearer` 고정이라 컬럼 실익이 낮음 |
-| `token_expires_at` | DROP | long-lived OAuth App access token 전제에서는 만료 시각이 없음 |
-| `refresh_token_encrypted` | DROP | refresh token을 받지 않는 전제라 저장하지 않음 |
-| `refresh_token_expires_at` | DROP | refresh token을 저장하지 않으므로 불필요 |
+| `token_scope` | KEEP, NOT NULL | 실제 부여된 scope를 기록하며 새 token 응답은 `read:user`를 요구 |
+| `token_type` | DROP | 응답의 `bearer` 여부만 검증하며 DB 컬럼은 두지 않음 |
+| `token_expires_at` | ADD in `0003`, `TIMESTAMPTZ NULL` | GitHub `expires_in`으로 계산한 UTC access 만료 시각 |
+| `refresh_token_encrypted` | ADD in `0003`, `BYTEA NULL` | AES-GCM으로 암호화한 GitHub refresh token |
+| `refresh_token_expires_at` | ADD in `0003`, `TIMESTAMPTZ NULL` | GitHub `refresh_token_expires_in`으로 계산한 UTC refresh 만료 시각 |
+
+- `ck_github_accounts_token_pair`는 신규 세 필드가 모두 NULL이거나 모두 NOT NULL인 상태만 허용한다. 모두 NULL이면 migration 이전 비만료 token이다. 새 OAuth 로그인은 유효한 만료형 pair만 저장한다.
+- callback 저장과 요청 시 refresh는 같은 GitHub account row를 `FOR UPDATE`로 잠그고 최신 pair를 확인한다. refresh는 access 만료 60초 전부터 실행하고 두 암호문·만료 시각을 한 DB 트랜잭션에서 교체한다. 원격 GitHub rotation과 DB commit 사이 장애까지 원자성을 보장하지는 않는다.
+- refresh가 만료돼도 access가 유효하면 남은 수명 동안 사용한다. access까지 만료돼 갱신할 수 없거나 refresh가 거부된 경우, 현재 access token의 API 401은 `token_status=revoked`를 commit한다. 교체 전 token의 늦은 401은 새 pair를 폐기하지 않는다. 일시적인 provider 오류는 pair를 유지한다.
+- `0003` upgrade는 기존 계정과 암호화 access token을 보존한다. downgrade는 만료형 계정을 `revoked`로 표시한 뒤 신규 필드를 제거하며 비만료 token을 복원하지 않는다. GitHub 앱 설정과 재로그인 절차는 [인증 결정](../../spec/shared/decisions/0002-github-oauth.md)을 따른다.
 
 DEVON 자체 JWT 생성은 `users.id`와 필요 시 `github_accounts.id` 같은 식별자만 사용한다. GitHub access token은 JWT payload에 넣지 않고, JWT 발급/검증을 위해 `github_accounts`의 token 필드를 읽지 않는다.
 
 ## DEVON Refresh Session
 
-현재 인증 migration은 `0001`의 `users`, `github_accounts`와 `0002`의 아래 변경이다. 위 Sprint 1 전체 목록이 현재 모두 구현됐다는 의미는 아니다. 인증 PK는 애플리케이션에서 UUID를 생성하며, `refresh_generation`에는 DB 기본값도 둔다.
+현재 인증 migration은 `0001`의 `users`, `github_accounts`, `0002`의 아래 DEVON session 변경, `0003`의 위 GitHub token 변경이다. 위 Sprint 1 전체 목록이 현재 모두 구현됐다는 의미는 아니다. 인증 PK는 애플리케이션에서 UUID를 생성하며, `refresh_generation`에는 DB 기본값도 둔다.
 
 | 테이블·필드 | 타입·제약 | 역할 |
 | --- | --- | --- |

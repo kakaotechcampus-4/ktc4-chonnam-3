@@ -33,7 +33,8 @@ FE 문서와 backend docs가 이 계약과 충돌하면 `openapi.yaml`을 우선
 
 - 현재 인증 API는 `/api/auth/github/login`, `/api/auth/github/callback`, `/api/auth/refresh`, `/api/auth/logout`, `/api/me` 다섯 개다.
 - DEVON access/refresh JWT는 HttpOnly cookie로만 전달하며 body나 브라우저 저장소에 노출하지 않는다.
-- `/api/me`는 `name`, nullable `avatarUrl`, `githubLinked`를 항상 반환한다. `githubLinked`는 GitHub account가 있고 `token_status=valid`일 때만 true다.
+- `/api/me`는 `name`, nullable `avatarUrl`, `githubLinked`를 항상 반환한다. `githubLinked`는 GitHub account가 있고 `token_status=valid`이며 access 또는 refresh가 사용 가능할 때 true다. 기존 비만료 token은 valid이면 true다. 이 판정은 DB만 읽으며 GitHub API 호출·갱신을 실행하지 않는다.
+- GitHub token의 갱신·폐기는 BE 내부에서 처리하며 DEVON JWT session과 별개다. GitHub token·만료 시각을 응답에 추가하거나 새 공개 갱신 경로를 만들지 않는다.
 - refresh/logout은 `Origin`이 정확한 `FRONTEND_ORIGIN`과 같아야 한다. PostgreSQL만 Refresh 유효·폐기의 원본이며 DB 장애를 성공으로 숨기지 않는다. Redis 장애는 OAuth state에 영향을 주지만 기존 session의 refresh/logout에는 영향을 주지 않는다.
 - 상세 보안·저장 결정은 [0002 GitHub OAuth와 DEVON 세션](../decisions/0002-github-oauth.md)을 따른다.
 

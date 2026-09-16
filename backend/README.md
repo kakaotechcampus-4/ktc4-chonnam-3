@@ -60,11 +60,11 @@ JWT_ISSUER=devon
 JWT_AUDIENCE=devon-api
 ```
 
-GitHub scope는 `read:user`만 사용한다. OAuth App은 비만료 access token 설정을 사용하며, `expires_in`, `refresh_token`, `refresh_token_expires_in`이 포함된 응답은 저장하지 않고 login을 실패시킨다. local callback은 Vite의 `/api` proxy를 거쳐 backend `localhost:8000`으로 전달되므로 frontend dev server와 backend를 함께 실행한다. 포트를 변경하면 OAuth App 등록값과 두 환경값도 함께 변경한다.
+GitHub scope는 `read:user`만 사용한다. OAuth App의 만료형 access/refresh token을 사용하며, 새 로그인 응답에는 `access_token`, `expires_in`, `refresh_token`, `refresh_token_expires_in`, `token_type=bearer`와 유효한 `read:user` scope가 필요하다. `token_type`은 응답 검증에만 사용하고 DB 컬럼은 두지 않는다. local callback은 Vite의 `/api` proxy를 거쳐 backend `localhost:8000`으로 전달되므로 frontend dev server와 backend를 함께 실행한다. 포트를 변경하면 OAuth App 등록값과 두 환경값도 함께 변경한다.
 
-GitHub의 **Settings → Developer settings → OAuth Apps → 해당 앱 → Optional features**에서 만료형 access token 옵션이 활성화되어 있지 않은지 확인한다. 이 프로젝트는 GitHub 토큰의 자동 갱신을 구현하지 않았으므로 해당 옵션을 해제한 뒤 새 로그인 절차를 시작해야 한다. 설정 위치는 [GitHub 공식 안내](https://docs.github.com/en/apps/oauth-apps/maintaining-oauth-apps/activating-optional-features-for-oauth-apps)를 따른다. 이는 DEVON JWT의 Access 15분·Refresh 14일 정책과는 별개다.
+GitHub의 **Settings → Developer settings → OAuth Apps → 해당 앱 → Optional features**에서 만료형 access token 옵션을 활성화한다. 앱 전체에 이 설정을 적용하므로 `offline_access` scope는 추가하지 않는다. 응답 TTL로 UTC 만료 시각을 저장하고, BE의 GitHub API 호출 시 access 만료까지 60초 이하이면 refresh token으로 새 pair를 받아 암호화 저장한다. 토큰 응답·갱신 규칙은 [GitHub 공식 안내](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)를 따른다. 이는 DEVON JWT의 Access 15분·Refresh 14일 정책과는 별개다.
 
-GitHub에서 동의한 뒤 서비스로 돌아와 `provider_unavailable`이 표시되면 실제 네트워크 장애로 단정하지 않는다. 토큰 교환이 HTTP 200이어도 응답에 위 만료·갱신 필드가 있으면 현재 계약상 거부한다. 먼저 앱의 토큰 만료 옵션을 확인하고, 진단 시에는 HTTP 상태·오류 분류·필드 존재 여부만 기록한다. token, code, state, cookie 또는 응답 본문 전체를 출력하지 않는다.
+GitHub에서 동의한 뒤 서비스로 돌아와 `provider_unavailable`이 표시되면 앱의 토큰 만료 옵션과 응답 형식을 확인한다. 토큰 교환이 HTTP 200이어도 필수 token pair·TTL·type·scope가 누락되거나 잘못되면 저장하지 않는다. 진단 시에는 HTTP 상태·오류 분류·필드 존재 여부만 기록한다. token, code, state, cookie 또는 응답 본문 전체를 출력하지 않는다.
 
 local/dev에서는 GitHub Client ID와 secret이 둘 다 비어 있을 때만 auth 외 개발을 위해 서버를 시작할 수 있고 login은 503으로 실패한다. 둘 중 하나만 설정하면 구성 오류이며, prod에서는 둘 다 필수다.
 
@@ -100,6 +100,16 @@ uv run python -m scripts.cleanup_auth_sessions
 ```
 
 Alembic과 정리 명령은 `core/config.py`의 DB 전용 설정(`DATABASE_URL`, `.env` 또는 환경 변수)을 사용한다. GitHub secret·JWT signing key·암호화 키·Redis 연결이 필요하지 않다. 정리는 `expires_at <= 현재 UTC`인 row만 삭제하고 삭제 개수만 출력한다. 별도 스케줄러를 설치하거나 API마다 작업을 띄우지 않고 기존 배포 스케줄러에 주기 실행을 등록한다. 시간별 실행 예시와 되돌리기 주의사항은 [배포 가이드](docs/deploy.md#10-refresh-저장소-전환과-정리)를 따른다.
+
+### GitHub 만료형 토큰 전환
+
+서버를 중지하고 진행 중인 인증·GitHub 요청을 종료한 뒤 `uv run alembic upgrade head`로 `0003`까지 적용하고 새 서버를 시작한다. `0003`은 GitHub access 만료 시각, 암호화 refresh token, refresh 만료 시각을 추가한다. 기존 계정과 비만료 access token은 세 필드가 모두 NULL인 상태로 보존하며, 해당 사용자가 다음 GitHub 로그인을 완료하면 만료형 pair로 교체한다. DEVON의 기존 JWT와 `auth_sessions`는 이 migration으로 변경하지 않는다.
+
+현재 서버는 후속 GitHub API용 `app.state.github.get(user_id, path)`와 요청 시 갱신을 제공한다. `/api/me`는 DB만 읽어 GitHub 연결 상태를 계산하며 갱신을 실행하지 않는다. 저장소 수집 API·pipeline·worker는 아직 골격이고, 새 공개 경로나 GitHub 갱신 cron은 추가하지 않는다.
+
+GitHub refresh token이 만료돼도 access가 아직 유효하면 남은 수명 동안 사용한다. access까지 만료돼 갱신할 수 없거나 GitHub가 refresh를 거부하면 연결을 `revoked`로 기록하고 `token_invalid`를 반환한다. 사용자는 GitHub 로그인 절차를 다시 진행해야 한다. 현재 access token의 API 401도 같은 방식으로 처리하되, 교체 전 token에서 늦게 도착한 401이 새 pair를 폐기하지 않게 확인한다. 네트워크·429·5xx·잘못된 응답은 기존 pair를 폐기하지 않고 `provider_unavailable`로 처리한다. GitHub의 원격 token 교체와 DB commit은 하나의 원자적 트랜잭션이 아니므로 그 사이 장애가 발생하면 재로그인이 필요할 수 있다.
+
+`0003` downgrade는 만료형 계정을 `revoked`로 표시하고 추가한 세 필드를 제거한다. 비만료 token으로 되돌려 주지 않으므로, 되돌린 서버가 지원하는 GitHub 앱 설정과 재로그인 절차도 함께 준비해야 한다. 상세 결정은 [GitHub OAuth와 DEVON 세션](../spec/shared/decisions/0002-github-oauth.md)을 따른다.
 
 ## 스크립트
 
