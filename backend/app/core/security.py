@@ -47,8 +47,8 @@ class Tokens:
 
     def decode(self, token: str, kind: TokenType) -> dict[str, Any]:
         try:
-            # Validate signature and claim shape before classifying expiry; only a
-            # valid expired access token should trigger the client's refresh flow.
+            # 만료 여부보다 서명과 클레임 형식을 먼저 검증한다.
+            # 만료만 된 정상 Access 토큰에 한해서 클라이언트가 갱신을 시도해야 한다.
             claims = jwt.decode(
                 token,
                 self.settings.jwt_secret_key.get_secret_value(),

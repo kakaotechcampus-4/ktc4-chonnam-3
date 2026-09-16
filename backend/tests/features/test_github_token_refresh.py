@@ -192,7 +192,7 @@ async def test_late_401_from_previous_token_cannot_revoke_relogin(runtime):
         app.state.github.client.client = provider
         pending = asyncio.create_task(app.state.github.get(user_id, "/user"))
         await asyncio.wait_for(in_flight.wait(), 5)
-        # Simulate the separately committed replacement from another callback.
+        # 다른 콜백이 별도 트랜잭션으로 토큰을 교체하고 커밋한 상황을 재현한다.
         async with app.state.sessions() as session:
             account = await session.scalar(
                 select(GitHubAccount).where(GitHubAccount.user_id == user_id)

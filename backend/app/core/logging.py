@@ -7,7 +7,7 @@ class AuthRedactionFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if record.name == "uvicorn.access" and isinstance(record.args, tuple):
             if len(record.args) == 5 and isinstance(record.args[2], str):
-                # Keep Uvicorn's positional args intact for its access-log formatter.
+                # Uvicorn 접근 로그 포매터가 기대하는 위치 인자 구조를 유지한다.
                 target = urlsplit(record.args[2])
                 if target.query:
                     record.args = (

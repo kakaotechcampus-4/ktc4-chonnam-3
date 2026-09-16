@@ -1,4 +1,4 @@
-"""Support expiring GitHub tokens without discarding existing accounts."""
+"""기존 계정을 보존하면서 만료형 GitHub 토큰을 지원한다."""
 
 import sqlalchemy as sa
 from alembic import op
@@ -10,7 +10,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # NULL metadata identifies pre-migration non-expiring tokens until next login.
+    # 다음 로그인 전까지는 NULL 메타데이터로 기존 비만료 토큰을 구분한다.
     op.add_column("github_accounts", sa.Column("token_expires_at", sa.DateTime(timezone=True)))
     op.add_column("github_accounts", sa.Column("refresh_token_encrypted", sa.LargeBinary()))
     op.add_column(
@@ -27,7 +27,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Old code must not mistake an expiring token for a non-expiring credential.
+    # 구버전 코드가 만료형 토큰을 비만료 토큰으로 오인하지 않도록 한다.
     op.execute(
         "UPDATE github_accounts SET token_status = 'revoked' WHERE token_expires_at IS NOT NULL"
     )

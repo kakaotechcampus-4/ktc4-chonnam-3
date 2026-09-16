@@ -10,8 +10,8 @@ from app.db.session import ensure_connection
 
 
 async def lock_github_identity(session: AsyncSession, github_id: int) -> None:
-    # All signup paths lock the provider ID before looking up or creating its user.
-    # First login has no row to lock, so concurrent callbacks use an advisory lock.
+    # 모든 가입 경로는 사용자 조회·생성 전에 GitHub 사용자 ID로 잠근다.
+    # 최초 로그인에는 잠글 행이 없으므로 advisory lock으로 동시 콜백을 직렬화한다.
     await ensure_connection(session)
     await session.execute(
         text("SELECT pg_advisory_xact_lock(:github_id)"), {"github_id": github_id}
@@ -19,7 +19,7 @@ async def lock_github_identity(session: AsyncSession, github_id: int) -> None:
 
 
 async def find_github_account(session: AsyncSession, github_id: int) -> GitHubAccount | None:
-    # Existing callbacks must share the row lock used by provider-token refresh.
+    # 기존 계정의 콜백도 GitHub 토큰 갱신과 같은 행 잠금을 사용해야 한다.
     result = await session.scalars(
         select(GitHubAccount)
         .where(GitHubAccount.github_user_id == github_id)
@@ -35,7 +35,7 @@ async def lock_github_account(session: AsyncSession, user_id: UUID) -> GitHubAcc
         select(GitHubAccount)
         .where(GitHubAccount.user_id == user_id)
         .with_for_update()
-        # After waiting, use the pair committed by the previous lock holder, not an ORM cache.
+        # 잠금 대기 후에는 ORM 캐시 대신 앞선 작업이 커밋한 최신 토큰 쌍을 읽는다.
         .execution_options(populate_existing=True)
     )
     return result.one_or_none()
@@ -47,13 +47,13 @@ async def find_user(session: AsyncSession, user_id: UUID) -> User | None:
 
 
 async def lock_user(session: AsyncSession, user_id: UUID) -> User | None:
-    # Issuance, refresh, and logout lock the user before touching session rows.
+    # 발급·갱신·로그아웃 모두 세션 행에 접근하기 전에 사용자 행부터 잠근다.
     await ensure_connection(session)
     result = await session.scalars(
         select(User)
         .where(User.id == user_id)
         .with_for_update()
-        # Replace any cached ORM value with the generation read under this lock.
+        # ORM 캐시를 덮어쓰고 잠금 안에서 읽은 최신 폐기 세대 값을 사용한다.
         .execution_options(populate_existing=True)
     )
     return result.one_or_none()
@@ -64,7 +64,7 @@ async def find_auth_session(session: AsyncSession, sid: UUID) -> AuthSession | N
         select(AuthSession)
         .where(AuthSession.id == sid)
         .with_for_update()
-        # An earlier read in this session may still hold the pre-rotation jti.
+        # 같은 DB 세션의 이전 조회 결과에는 갱신 전 jti가 남아 있을 수 있다.
         .execution_options(populate_existing=True)
     )
     return result.one_or_none()

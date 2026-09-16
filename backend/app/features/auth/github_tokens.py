@@ -1,4 +1,4 @@
-"""Server-side GitHub API access, independent of DEVON JWT refresh sessions."""
+"""DEVON JWT 갱신 세션과 독립적으로 서버에서 GitHub API를 호출한다."""
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -30,7 +30,7 @@ class GitHubAPI:
     async def get(
         self, user_id: UUID, path: str, params: dict[str, str] | None = None
     ) -> dict[str, Any] | list[Any]:
-        # Retry once only when another login/refresh replaced the rejected token.
+        # 다른 로그인·갱신이 거부된 토큰을 이미 교체한 경우에만 한 번 재시도한다.
         for _ in range(2):
             token = await self._access_token(user_id)
             try:
@@ -40,7 +40,7 @@ class GitHubAPI:
                     raise
                 if await self._revoke_current(user_id, token):
                     raise
-                # A delayed 401 for a replaced token must not revoke the new login.
+                # 교체 전 토큰의 늦은 401 응답으로 새 로그인까지 폐기해서는 안 된다.
         raise AppError("token_invalid")
 
     async def _access_token(self, user_id: UUID) -> str:
@@ -51,7 +51,8 @@ class GitHubAPI:
             if account is None or account.token_status != "valid":
                 raise AppError("token_invalid")
             now = datetime.now(UTC)
-            # NULL expiry is a preserved legacy token; the margin covers in-flight API calls.
+            # 만료 시각이 NULL이면 기존 비만료형 토큰이다.
+            # API 호출 중 만료에 대비해 60초 여유를 둔다.
             if account.token_expires_at is None or account.token_expires_at > now + timedelta(
                 seconds=60
             ):
@@ -61,14 +62,14 @@ class GitHubAPI:
                 or account.refresh_token_expires_at is None
                 or account.refresh_token_expires_at <= now
             ):
-                # Refresh expiry alone does not invalidate an access token still in its lifetime.
+                # Refresh가 만료됐어도 Access의 유효기간이 남아 있으면 계속 사용할 수 있다.
                 if account.token_expires_at > now:
                     return self._decrypt(account.access_token_encrypted)
                 account.token_status = "revoked"
             else:
                 try:
-                    # The account lock also covers callback updates and other workers.
-                    # A remote rotation and our DB commit cannot be one atomic operation.
+                    # 같은 계정 잠금으로 콜백의 토큰 저장과 다른 워커의 갱신도 직렬화한다.
+                    # 다만 GitHub 토큰 교체와 DB 커밋을 하나의 원자적 작업으로 묶을 수는 없다.
                     pair = await self.oauth.refresh(self._decrypt(account.refresh_token_encrypted))
                 except AppError as error:
                     if error.reason != "token_invalid":
@@ -77,7 +78,7 @@ class GitHubAPI:
                 else:
                     service.store_github_tokens(account, pair, self.cipher)
                     token = pair.access_token
-        # Commit invalidation before reporting reconnect-required to the caller.
+        # 재연결이 필요하다는 오류를 전달하기 전에 폐기 상태를 커밋한다.
         if token is None:
             raise AppError("token_invalid")
         return token
@@ -96,5 +97,5 @@ class GitHubAPI:
         try:
             return self.cipher.decrypt(value)
         except (InvalidTag, ValueError, UnicodeError):
-            # Key/configuration failures do not prove that GitHub revoked a token.
+            # 암호화 키나 설정 오류만으로 GitHub가 토큰을 폐기했다고 판단할 수 없다.
             raise AppError("service_unavailable", 503) from None

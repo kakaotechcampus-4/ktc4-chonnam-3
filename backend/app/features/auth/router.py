@@ -108,7 +108,7 @@ async def refresh(request: Request, session: DbSession) -> Response:
 @router.post("/logout", status_code=204)
 async def logout(request: Request, session: DbSession) -> Response:
     require_origin(request)
-    # Keep cookies if revocation raises, so a DB failure can be retried.
+    # DB 장애로 폐기에 실패하면 재시도할 수 있도록 쿠키를 유지한다.
     await service.logout(session, request.app.state.tokens, request.cookies.get("refreshToken"))
     response = Response(status_code=204)
     clear_cookie(response, request, "accessToken", "/")

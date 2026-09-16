@@ -1,4 +1,4 @@
-"""Create OAuth users and encrypted GitHub accounts."""
+"""OAuth 사용자와 토큰을 암호화해 저장하는 GitHub 계정 테이블을 생성한다."""
 
 import sqlalchemy as sa
 from alembic import op

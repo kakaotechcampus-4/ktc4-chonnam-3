@@ -4,6 +4,7 @@ from alembic import context
 from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
+# DB 연결 정보는 alembic.ini가 아니라 app.core.config의 DATABASE_URL 설정에서 읽는다.
 from app.core.config import DatabaseSettings
 from app.db.base import Base
 from app.db.models import user  # noqa: F401

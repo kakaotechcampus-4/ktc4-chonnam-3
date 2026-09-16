@@ -22,7 +22,7 @@ class GitHubProfile(BaseModel):
 
 @dataclass(frozen=True)
 class GitHubTokens:
-    # A refresh rotates both secrets; neither may appear in identity or token repr output.
+    # 갱신 시 두 토큰이 함께 교체되며, 계정 정보나 토큰 객체의 repr에 비밀값을 노출하지 않는다.
     access_token: str = field(repr=False)
     refresh_token: str = field(repr=False)
     scope: str
@@ -37,7 +37,7 @@ class GitHubIdentity:
 
 
 class _GitHubTokenPayload(BaseModel):
-    # Require a complete expiring pair, with integer lifetimes bounded before datetime arithmetic.
+    # 만료형 토큰 쌍을 모두 요구하고, 날짜 계산 전에 정수 유효기간의 범위를 검증한다.
     model_config = ConfigDict(strict=True)
     access_token: str = Field(min_length=1, pattern=r"^\S+$", repr=False)
     refresh_token: str = Field(min_length=1, pattern=r"^\S+$", repr=False)
@@ -95,7 +95,7 @@ class GitHubOAuth:
         if not self.settings.github_client_id or not client_secret:
             raise AppError("provider_unavailable", 503)
         try:
-            # Anchor expiry before network I/O so response latency never extends a token's lifetime.
+            # 응답 지연만큼 유효기간이 늘어나지 않도록 요청 시작 시각을 기준으로 만료를 계산한다.
             requested_at = datetime.now(UTC)
             response = await self.client.post(
                 "https://github.com/login/oauth/access_token",
@@ -107,7 +107,7 @@ class GitHubOAuth:
                     **data,
                 },
             )
-            # Rate limits, redirects, and server failures cannot prove credentials were revoked.
+            # 요청 제한·리다이렉트·서버 장애만으로는 토큰이 폐기됐다고 판단할 수 없다.
             if response.status_code not in {200, 400, 401}:
                 raise AppError("provider_unavailable", 503)
             payload = response.json()

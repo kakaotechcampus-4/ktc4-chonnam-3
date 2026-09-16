@@ -1,4 +1,4 @@
-"""Move refresh validity and revocation to PostgreSQL."""
+"""Refresh 토큰의 유효·폐기 기록을 PostgreSQL로 옮긴다."""
 
 import sqlalchemy as sa
 from alembic import op

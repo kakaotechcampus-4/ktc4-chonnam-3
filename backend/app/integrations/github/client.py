@@ -1,4 +1,4 @@
-"""GitHub JSON GET requests; credentials and database state belong to the caller."""
+"""GitHub JSON GET 요청을 처리하며, 인증 정보와 DB 상태는 호출자가 관리한다."""
 
 from typing import Any
 
@@ -14,7 +14,7 @@ class GitHubClient:
     async def get(
         self, path: str, access_token: str, params: dict[str, str] | None = None
     ) -> dict[str, Any] | list[Any]:
-        # Credentials must never follow a pagination URL or redirect to another host.
+        # 페이지네이션 URL이나 리다이렉트를 따라 다른 호스트로 인증 정보가 전달되지 않게 한다.
         if not path.startswith("/") or path.startswith("//") or any(c in path for c in "?#\\"):
             raise ValueError("Use a GitHub API path and separate query parameters")
         try:
@@ -30,7 +30,7 @@ class GitHubClient:
             )
             if response.status_code == 401:
                 raise AppError("token_invalid")
-            # A 403/429 may be a scope or rate-limit issue, not proof of token revocation.
+            # 403·429는 권한 부족이나 요청 제한일 수 있으므로 토큰 폐기로 단정하지 않는다.
             if not response.is_success:
                 raise AppError("provider_unavailable", 503)
             result = response.json()

@@ -1,4 +1,4 @@
-"""Delete expired refresh sessions; invoke periodically from the deployment scheduler."""
+"""만료된 Refresh 세션을 삭제한다. 배포 스케줄러에서 주기적으로 실행한다."""
 
 import asyncio
 import sys

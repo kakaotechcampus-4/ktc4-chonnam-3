@@ -37,7 +37,7 @@ class GitHubAccount(IdentityTimestamps, Base):
         CheckConstraint(
             "token_status IN ('valid', 'revoked')", name="ck_github_accounts_token_status"
         ),
-        # Preserve legacy rows, but reject partially stored expiring-token metadata.
+        # 기존 비만료형 토큰은 보존하되, 만료형 토큰 정보가 일부만 저장되는 것은 막는다.
         CheckConstraint(
             "(token_expires_at IS NULL AND refresh_token_encrypted IS NULL "
             "AND refresh_token_expires_at IS NULL) OR "

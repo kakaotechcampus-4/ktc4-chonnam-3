@@ -23,7 +23,7 @@ async def authenticate(session: AsyncSession, tokens: Tokens, token: str | None)
     if not token:
         raise AppError("unauthenticated")
     claims = tokens.decode(token, "access")
-    # Refresh revocation does not invalidate access; account status still applies.
+    # Refresh 폐기 후에도 Access는 만료까지 유효하지만, 계정 상태는 계속 확인한다.
     return require_active(await queries.find_user(session, UUID(claims["sub"])))
 
 
@@ -59,7 +59,7 @@ async def save_identity(
 
 
 def store_github_tokens(account: GitHubAccount, pair: GitHubTokens, cipher: TokenCipher) -> None:
-    # GitHub rotates both credentials; keep the whole pair in the caller's transaction.
+    # GitHub는 두 토큰을 함께 교체하므로 호출자의 트랜잭션에서 토큰 쌍을 함께 저장한다.
     account.access_token_encrypted = cipher.encrypt(pair.access_token)
     account.refresh_token_encrypted = cipher.encrypt(pair.refresh_token)
     account.token_expires_at = pair.expires_at
@@ -99,7 +99,7 @@ async def refresh(session: AsyncSession, tokens: Tokens, token: str | None) -> t
     pair = None
     async with session.begin():
         user = require_active(await queries.lock_user(session, UUID(claims["sub"])))
-        # Stale generations must not revoke sessions created after an earlier replay.
+        # 이미 폐기된 세대의 토큰으로는 이전 재사용 감지 후 생성된 세션을 폐기할 수 없다.
         if user.refresh_generation != UUID(claims["generation"]):
             raise AppError("refresh_token_invalid")
         record = await queries.find_auth_session(session, UUID(claims["sid"]))
@@ -111,7 +111,7 @@ async def refresh(session: AsyncSession, tokens: Tokens, token: str | None) -> t
         ):
             raise AppError("refresh_token_invalid")
         if record.refresh_jti != UUID(claims["jti"]):
-            # Replay in a live session invalidates every refresh in this generation.
+            # 유효한 세션에서 재사용이 감지되면 이 사용자의 같은 세대 Refresh를 모두 폐기한다.
             user.refresh_generation = uuid4()
         else:
             record.refresh_jti = uuid4()
@@ -128,7 +128,7 @@ async def refresh(session: AsyncSession, tokens: Tokens, token: str | None) -> t
             record.expires_at = datetime.fromtimestamp(
                 tokens.decode(pair[1], "refresh")["exp"], UTC
             )
-    # Replay revocation must commit before the failure reaches the request boundary.
+    # 재사용으로 인한 폐기를 먼저 커밋한 뒤 예외를 전달해야 변경이 롤백되지 않는다.
     if pair is None:
         raise AppError("refresh_token_invalid")
     return pair
@@ -144,7 +144,7 @@ async def logout(session: AsyncSession, tokens: Tokens, token: str | None) -> No
     async with session.begin():
         user = await queries.lock_user(session, UUID(claims["sub"]))
         if user is not None:
-            # Match the login, not jti: a concurrent refresh may have rotated it.
+            # 동시 갱신으로 jti가 바뀔 수 있으므로 jti가 아닌 로그인 세션을 기준으로 삭제한다.
             await queries.delete_auth_session(
                 session, UUID(claims["sid"]), user.id, UUID(claims["generation"])
             )

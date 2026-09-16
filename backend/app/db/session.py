@@ -20,5 +20,5 @@ async def ensure_connection(session: AsyncSession) -> None:
     try:
         await session.connection()
     except (OSError, TimeoutError):
-        # asyncpg can raise transport errors before SQLAlchemy wraps a DBAPI error.
+        # asyncpg의 통신 오류는 SQLAlchemy가 DBAPI 오류로 감싸기 전에 발생할 수 있다.
         raise AppError("service_unavailable", 503) from None

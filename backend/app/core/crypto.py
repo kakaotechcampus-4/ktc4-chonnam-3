@@ -13,7 +13,7 @@ class TokenCipher:
         )
 
     def encrypt(self, token: str) -> bytes:
-        # Store the fresh nonce with the ciphertext; AAD binds it to this token format.
+        # 매번 새 nonce를 암호문과 함께 저장하고, AAD로 이 토큰 형식에 묶어 검증한다.
         nonce = secrets.token_bytes(12)
         return nonce + self.cipher.encrypt(nonce, token.encode(), b"devon:github:v1")
 
