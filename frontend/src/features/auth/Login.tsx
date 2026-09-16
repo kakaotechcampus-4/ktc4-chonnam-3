@@ -41,8 +41,6 @@ export default function Login() {
             <GithubMark />
             GitHub로 계속하기
           </a>
-
-          <p className="text-xs text-muted">아이디·비밀번호 회원가입은 더 이상 지원하지 않아요</p>
         </div>
       </main>
 
