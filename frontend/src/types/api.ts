@@ -18,7 +18,7 @@ export type StepKey =
   | 'match_score';
 export type PrepareStepKey = 'analyze_repo' | 'build_persona' | 'compose_question' | 'set_criteria';
 export type StepStatus = 'pending' | 'running' | 'completed';
-export type AgentRole = 'tech_lead' | 'hr_manager' | 'domain_lead';
+export type Persona = 'tech_lead' | 'hr_manager' | 'domain_lead';
 export type ScoreKey =
   | 'project_understanding'
   | 'technical_reasoning'
@@ -220,7 +220,7 @@ export type CreateInterviewResponse = {
 
 export type InterviewTurn = {
   turn: number;
-  role: AgentRole;
+  persona: Persona;
   question: string;
   answer: string | null;
 };
@@ -247,7 +247,7 @@ export type WsServerMessage =
   | { type: 'transcript'; text: string }
   | { type: 'thinking' }
   | { type: 'evidenceCheck'; repository: string; file: string }
-  | { type: 'question'; role: AgentRole; text: string; turn: number }
+  | { type: 'question'; persona: Persona; text: string; turn: number }
   | { type: 'questionEnd' }
   | { type: 'interviewEnd' }
   | { type: 'error'; reason: string };
@@ -261,7 +261,7 @@ export type ScoreItem = {
 };
 
 export type AgentFeedback = {
-  role: AgentRole;
+  persona: Persona;
   tags: string[];
   strengths: string[];
   improvements: string[];
@@ -284,7 +284,7 @@ export type ReportResponse = {
 // POST /reports/{id}/feedback-disagreements
 
 export type FeedbackDisagreementRequest = {
-  agentRole: AgentRole;
+  persona: Persona;
   reasonType: ReasonType;
   comment?: string;
 };

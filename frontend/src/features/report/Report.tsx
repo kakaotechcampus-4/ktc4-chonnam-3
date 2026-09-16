@@ -4,18 +4,19 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
-import type { AgentFeedback, AgentRole, ApiError } from '@/types/api';
+import type { AgentFeedback, ApiError, Persona } from '@/types/api';
 
-const ROLE_LABELS: Record<AgentRole, string> = {
-  tech_lead: 'Tech Lead',
-  senior_developer: 'Senior Developer',
-  manager: 'Manager',
+// ponytail: 정확한 표시 문구는 Figma 확인 전 가정 — DB.md 면접 시나리오의 표현을 그대로 씀
+const ROLE_LABELS: Record<Persona, string> = {
+  tech_lead: '테크리더',
+  hr_manager: '인사팀장',
+  domain_lead: '도메인리더',
 };
 
-const ROLE_INITIALS: Record<AgentRole, string> = {
+const ROLE_INITIALS: Record<Persona, string> = {
   tech_lead: 'TL',
-  senior_developer: 'SD',
-  manager: 'MG',
+  hr_manager: 'HR',
+  domain_lead: 'DL',
 };
 
 export default function Report() {
@@ -98,7 +99,7 @@ export default function Report() {
             <section className="flex flex-col gap-3.5">
               <SectionTitle>면접관별 피드백</SectionTitle>
               {report.agentFeedbacks.map((feedback) => (
-                <FeedbackCard key={feedback.role} feedback={feedback} reportId={id} />
+                <FeedbackCard key={feedback.persona} feedback={feedback} reportId={id} />
               ))}
             </section>
 
@@ -113,11 +114,11 @@ export default function Report() {
                 >
                   <div className="flex gap-2.5">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[11px] font-bold text-accent">
-                      {ROLE_INITIALS[turn.role]}
+                      {ROLE_INITIALS[turn.persona]}
                     </span>
                     <div className="flex-1">
                       <p className="text-[11.5px] font-bold text-accent">
-                        {ROLE_LABELS[turn.role]}
+                        {ROLE_LABELS[turn.persona]}
                       </p>
                       <p className="text-xs">{turn.question}</p>
                     </div>
@@ -178,7 +179,7 @@ function FeedbackCard({ feedback, reportId }: { feedback: AgentFeedback; reportI
   const mutation = useMutation({
     mutationFn: () =>
       api.submitFeedbackDisagreement(reportId, {
-        agentRole: feedback.role,
+        persona: feedback.persona,
         reasonType: 'other',
       }),
     onSuccess: () => {
@@ -189,11 +190,11 @@ function FeedbackCard({ feedback, reportId }: { feedback: AgentFeedback; reportI
   return (
     <div className="flex gap-3 rounded-lg border border-line-soft p-3.5">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[11.5px] font-bold text-accent">
-        {ROLE_INITIALS[feedback.role]}
+        {ROLE_INITIALS[feedback.persona]}
       </span>
       <div className="flex flex-1 flex-col gap-1.5">
         <div className="flex items-center justify-between">
-          <p className="text-[13.5px] font-bold">{ROLE_LABELS[feedback.role]}</p>
+          <p className="text-[13.5px] font-bold">{ROLE_LABELS[feedback.persona]}</p>
           <span className="rounded-full bg-paper px-2.5 py-0.5 text-[10.5px] font-bold text-muted">
             {feedback.tags.join(' · ')}
           </span>
