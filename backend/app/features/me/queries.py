@@ -1,4 +1,17 @@
-"""읽기 쿼리 모음 (언어 비중 집계 등). repository.py 라는 이름은 쓰지 않는다.
+from uuid import UUID
 
-docs/layer-rules.md 1절 / task-07
-"""
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models.user import GitHubAccount
+
+
+async def has_valid_github_account(session: AsyncSession, user_id: UUID) -> bool:
+    return (
+        await session.scalar(
+            select(GitHubAccount.id).where(
+                GitHubAccount.user_id == user_id, GitHubAccount.token_status == "valid"
+            )
+        )
+        is not None
+    )

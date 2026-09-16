@@ -1,4 +1,7 @@
-"""/me 계열 응답 스키마. tests/contract/ 와 1:1.
+from app.shared.schema import CamelModel
 
-docs/layer-rules.md 5절 / task-04
-"""
+
+class MeResponse(CamelModel):
+    name: str
+    avatar_url: str | None
+    github_linked: bool
