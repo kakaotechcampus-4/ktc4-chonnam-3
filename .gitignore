@@ -82,3 +82,4 @@ target/
 /.superpowers/
 CLAUDE.local.md
 tmp/
+.env.deploy
