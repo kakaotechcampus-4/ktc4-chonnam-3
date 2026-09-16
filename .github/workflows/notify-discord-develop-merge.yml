@@ -1,0 +1,26 @@
+name: Notify Discord on merge to develop
+# 팀 자유 영역 워크플로 (CODEOWNERS 운영진 4파일 아님). 다른 브랜치 → develop 머지 시 Discord 알림.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [develop]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+    steps:
+      - name: Send Discord notification
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.LINKER_DISCORD_WEBHOOK }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          curl -sf -X POST "$DISCORD_WEBHOOK" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg content "🔀 **$HEAD_REF** → develop 머지됨: [$PR_TITLE]($PR_URL) by $PR_AUTHOR" \
+              '{content: $content}')"

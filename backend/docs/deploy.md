@@ -19,13 +19,13 @@ FE·BE 를 **하나의 CloudFront 배포** 뒤에 둔다. 브라우저가 보는
 FE 가 Vercel, BE 가 AWS 면 **도메인이 갈린다.** 그러면 BE 가 심는 인증 쿠키가 브라우저 기준
 **서드파티 쿠키**로 분류된다.
 
-| | 분리 배포 | 통합 배포 |
-|---|---|---|
-| 쿠키 분류 | 서드파티 | 퍼스트파티 |
-| Safari · iOS | **기본 차단 → 로그인 불가** | 정상 |
-| Firefox | Total Cookie Protection 으로 분리 저장 → 사실상 동작 불가 | 정상 |
-| 필요한 설정 | `SameSite=None; Secure` + CORS allowlist | `SameSite=Lax` 만 |
-| CSRF 방어 | `SameSite` 방어가 사라져 별도 토큰 필요 | `SameSite=Lax` 로 유지 |
+|              | 분리 배포                                                 | 통합 배포              |
+| ------------ | --------------------------------------------------------- | ---------------------- |
+| 쿠키 분류    | 서드파티                                                  | 퍼스트파티             |
+| Safari · iOS | **기본 차단 → 로그인 불가**                               | 정상                   |
+| Firefox      | Total Cookie Protection 으로 분리 저장 → 사실상 동작 불가 | 정상                   |
+| 필요한 설정  | `SameSite=None; Secure` + CORS allowlist                  | `SameSite=Lax` 만      |
+| CSRF 방어    | `SameSite` 방어가 사라져 별도 토큰 필요                   | `SameSite=Lax` 로 유지 |
 
 ⚠ **`SameSite=None` 으로는 해결되지 않는다.** 차단은 `SameSite` 와 별개인 **서드파티 쿠키
 정책 레이어**에서 일어난다. iOS 는 브라우저 앱과 무관하게 WebKit 을 쓰므로 앱을 바꿔도 같다.
@@ -48,10 +48,10 @@ FE 가 Vercel, BE 가 AWS 면 **도메인이 갈린다.** 그러면 BE 가 심�
 Set-Cookie: devon_session=...; HttpOnly; Secure; SameSite=Lax; Path=/
 ```
 
-| 환경 | Secure | SameSite | CORS |
-|---|---|---|---|
-| local (vite 프록시) | false | lax | 불필요 |
-| prod (CloudFront) | true | lax | **불필요** |
+| 환경                | Secure | SameSite | CORS       |
+| ------------------- | ------ | -------- | ---------- |
+| local (vite 프록시) | false  | lax      | 불필요     |
+| prod (CloudFront)   | true   | lax      | **불필요** |
 
 `Secure` 는 prod 에서 유지한다 — same-origin 이어도 HTTPS 전용 쿠키여야 한다.
 
@@ -83,11 +83,11 @@ GET /api/interviews/{없는id}
 CloudFront 는 캐시 적중률을 위해 **기본적으로 쿠키·헤더를 원본에 넘기지 않는다.** 그대로 두면
 쿠키 없이 도착해 전부 401 이다.
 
-| behavior | 캐시 정책 | 오리진 요청 정책 |
-|---|---|---|
-| `/api/*` | `CachingDisabled` | `AllViewer` (ALB 가 host 기반 라우팅을 쓰면 `AllViewerExceptHostHeader`) |
-| `/ws/*` | `CachingDisabled` | 위와 동일 — `Upgrade` · `Connection` 헤더 전달에 필요 |
-| `/` (기본) | 정적 캐시 | 최소 |
+| behavior   | 캐시 정책         | 오리진 요청 정책                                                         |
+| ---------- | ----------------- | ------------------------------------------------------------------------ |
+| `/api/*`   | `CachingDisabled` | `AllViewer` (ALB 가 host 기반 라우팅을 쓰면 `AllViewerExceptHostHeader`) |
+| `/ws/*`    | `CachingDisabled` | 위와 동일 — `Upgrade` · `Connection` 헤더 전달에 필요                    |
+| `/` (기본) | 정적 캐시         | 최소                                                                     |
 
 ### ③ SSE — 압축을 끈다
 
@@ -136,7 +136,6 @@ GitHub OAuth App 설정의 Callback URL 도 같이 맞춘다.
 server: {
   proxy: {
     '/api': { target: 'http://localhost:8000', changeOrigin: true },
-    '/ws':  { target: 'ws://localhost:8000', ws: true },
   },
 }
 ```
@@ -151,7 +150,7 @@ server: {
 ```yaml
 on:
   pull_request:
-    paths: ['backend/**']       # FE PR 에서 BE CI 가 돌지 않게
+    paths: ['backend/**', 'ai/**']
 jobs: ruff → mypy → pytest (services: postgres:15, redis:7)
 ```
 
@@ -170,8 +169,8 @@ CODEOWNERS 의 [팀 자유 영역] 이 팀 자체 CI 추가를 명시적으로 �
 
 ## 8. 보안
 
-🚨 **이 repo 는 public 이다.** 키를 코드·문서·노트북 본문에 붙여넣지 않는다. 실수했으면 지우는
-게 아니라 **폐기(rotate)** 한다. (`.gitignore` 상단 경고 참조 — 1단계에 실제로 8건 유출됐다.)
+이 repo 는 public 이다. 키를 코드·문서·노트북 본문에 붙여넣지 않는다. 실수했으면 지우는 게
+아니라 **폐기(rotate)** 한다.
 
 GitHub 토큰은 `BYTEA` + AES-GCM 으로 암호화해 저장한다 (`app/core/crypto.py`, 키는
 `TOKEN_ENCRYPTION_KEY`). 평문 저장 금지.
@@ -182,9 +181,9 @@ GitHub 토큰은 `BYTEA` + AES-GCM 으로 암호화해 저장한다 (`app/core/c
 
 ## 9. 미결
 
-| 항목 | 내용 |
-|---|---|
-| ALB 뒤 실행 방식 | EC2 + docker compose / ECS. 멘토 의견 대기 중 |
-| ALB 생략 여부 | CloudFront → EC2 직접(custom origin)도 가능하다. ALB 비용은 없어지지만 헬스체크·무중단 배포·다중 인스턴스를 잃는다 |
-| 커스텀 도메인 | `*.cloudfront.net` 기본 도메인으로도 동작한다. 데모용 도메인이 필요하면 ACM 인증서와 함께 추가 |
-| CD | GitHub Actions 사용 확정. 대상 인프라 확정 후 작성 |
+| 항목             | 내용                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ |
+| ALB 뒤 실행 방식 | EC2 + docker compose / ECS. 멘토 의견 대기 중                                                                      |
+| ALB 생략 여부    | CloudFront → EC2 직접(custom origin)도 가능하다. ALB 비용은 없어지지만 헬스체크·무중단 배포·다중 인스턴스를 잃는다 |
+| 커스텀 도메인    | `*.cloudfront.net` 기본 도메인으로도 동작한다. 데모용 도메인이 필요하면 ACM 인증서와 함께 추가                     |
+| CD               | GitHub Actions 사용 확정. 대상 인프라 확정 후 작성                                                                 |
