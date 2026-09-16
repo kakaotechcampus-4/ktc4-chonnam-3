@@ -7,6 +7,7 @@ from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 
@@ -45,7 +46,22 @@ async def test_auth_migration_roundtrip_and_constraints():
             assert {"users", "github_accounts", "auth_sessions"} <= set(inspector.get_table_names())
             columns = {column["name"] for column in inspector.get_columns("github_accounts")}
             assert "access_token_encrypted" in columns
-            assert not {"refresh_token_encrypted", "token_expires_at", "token_type"} & columns
+            assert {
+                "refresh_token_encrypted",
+                "token_expires_at",
+                "refresh_token_expires_at",
+            } <= columns
+            assert "token_type" not in columns
+            assert (
+                sync_connection.scalar(
+                    text(
+                        "SELECT refresh_token_encrypted IS NULL AND token_expires_at IS NULL "
+                        "AND refresh_token_expires_at IS NULL FROM github_accounts WHERE id = :id"
+                    ),
+                    {"id": account_id},
+                )
+                is True
+            )
             assert len(inspector.get_unique_constraints("github_accounts")) == 2
             assert len(inspector.get_check_constraints("users")) == 1
             generation = sync_connection.scalar(
@@ -68,6 +84,32 @@ async def test_auth_migration_roundtrip_and_constraints():
             assert (
                 compare_metadata(MigrationContext.configure(sync_connection), Base.metadata) == []
             )
+            with pytest.raises(IntegrityError):
+                with sync_connection.begin_nested():
+                    sync_connection.execute(
+                        text("UPDATE github_accounts SET token_expires_at = now() WHERE id = :id"),
+                        {"id": account_id},
+                    )
+            sync_connection.execute(
+                text(
+                    "UPDATE github_accounts SET token_expires_at = now(), "
+                    "refresh_token_expires_at = now(), refresh_token_encrypted = :token "
+                    "WHERE id = :id"
+                ),
+                {"id": account_id, "token": b"encrypted-refresh"},
+            )
+            command.downgrade(config, "0002")
+            assert "token_expires_at" not in {
+                column["name"] for column in inspect(sync_connection).get_columns("github_accounts")
+            }
+            assert (
+                sync_connection.scalar(text("SELECT token_status FROM github_accounts"))
+                == "revoked"
+            )
+            assert (
+                sync_connection.scalar(text("SELECT refresh_generation FROM users")) == generation
+            )
+            command.upgrade(config, "head")
             command.downgrade(config, "0001")
             assert "auth_sessions" not in inspect(sync_connection).get_table_names()
             assert sync_connection.scalar(text("SELECT count(*) FROM users")) == 1
