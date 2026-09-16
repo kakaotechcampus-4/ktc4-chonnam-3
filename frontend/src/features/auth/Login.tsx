@@ -23,10 +23,10 @@ export default function Login() {
         <span className="text-[15px] font-bold">DEVON</span>
       </header>
 
-      <main className="flex flex-1 flex-col items-center px-7 py-[108px]">
-        <div className="flex w-[318px] max-w-full flex-col items-center gap-3.5 text-center">
-          <p className="text-lg font-bold">DEVON</p>
-          <p className="text-[13px] text-muted">회원가입 없이 GitHub 계정으로 바로 시작하세요</p>
+      <main className="flex flex-1 flex-col items-center justify-center px-7">
+        <div className="flex w-[480px] max-w-full flex-col items-center gap-5 text-center">
+          <p className="text-2xl font-bold">DEVON</p>
+          <p className="text-base text-muted">회원가입 없이 GitHub 계정으로 바로 시작하세요</p>
 
           {denied && (
             <p className="w-full rounded-md border border-error-soft bg-error-soft px-4 py-3 text-sm text-error">
@@ -36,7 +36,7 @@ export default function Login() {
 
           <a
             href={`${BASE}/auth/github/login`}
-            className="flex h-[33px] w-full items-center justify-center gap-2.5 rounded-md bg-ink text-sm font-bold text-white"
+            className="flex h-12 w-full items-center justify-center gap-2.5 rounded-md bg-ink text-base font-bold text-white"
           >
             <GithubMark />
             GitHub로 계속하기
