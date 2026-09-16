@@ -7,29 +7,23 @@ import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
 import type { RunStatus, StepKey, StepStatus } from '@/types/api';
 
-// api spec 7단계 반영 (PR #16 리뷰 코멘트). 라벨은 각 step 문서에 맞춰 새로 씀 —
-// Figma 체크리스트는 4개짜리라 7단계 카피는 디자인 쪽 확인 필요
-const STEP_ORDER: StepKey[] = [
-  'doc_extract',
-  'repo_select',
-  'repo_detail',
-  'jd_fetch',
-  'jd_extract',
-  'repo_analyze',
-  'match_score',
+// api spec은 7단계(doc_extract~match_score)지만 Figma 체크리스트는 4줄 —
+// 파이프라인 순서를 유지한 채 인접 단계를 묶어 4그룹으로 표시. 그룹 경계는 임의 판단이라
+// 디자인·기획 쪽 확인 필요(ponytail: 그룹 매핑은 가정, 명세에 그룹 개념이 생기면 그걸 따를 것)
+const STEP_GROUPS: { label: string; keys: StepKey[] }[] = [
+  { label: '공고 문서 확인', keys: ['doc_extract'] },
+  { label: 'Repository 구조 확인', keys: ['repo_select', 'repo_detail'] },
+  { label: '공고 요구사항 분석', keys: ['jd_fetch', 'jd_extract'] },
+  { label: '기술 스택 매칭', keys: ['repo_analyze', 'match_score'] },
 ];
 
-const STEP_LABELS: Record<StepKey, string> = {
-  doc_extract: '자기소개서 · 포트폴리오 확인',
-  repo_select: 'Repository 목록 선별',
-  repo_detail: 'Repository 구조 확인',
-  jd_fetch: '공고 페이지 불러오는 중',
-  jd_extract: '공고 요구사항 분석',
-  repo_analyze: '주요 기술 스택 감지 중',
-  match_score: 'JD 요구사항과 매칭',
-};
-
 type StepMap = Record<StepKey, StepStatus>;
+
+function groupStatus(keys: StepKey[], steps: StepMap): StepStatus {
+  if (keys.every((key) => steps[key] === 'completed')) return 'completed';
+  if (keys.some((key) => steps[key] === 'running')) return 'running';
+  return 'pending';
+}
 
 const INITIAL_STEPS: StepMap = {
   doc_extract: 'pending',
@@ -113,10 +107,10 @@ export default function Analyzing() {
           </div>
 
           <ul className="flex flex-col gap-3">
-            {STEP_ORDER.map((key) => {
-              const status = effectiveSteps[key];
+            {STEP_GROUPS.map((group) => {
+              const status = groupStatus(group.keys, effectiveSteps);
               return (
-                <li key={key} className="flex items-center gap-2.5">
+                <li key={group.label} className="flex items-center gap-2.5">
                   {status === 'completed' && (
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[10px] font-bold text-accent">
                       ✓
@@ -139,7 +133,7 @@ export default function Analyzing() {
                           : 'flex-1 text-[13px]'
                     }
                   >
-                    {STEP_LABELS[key]}
+                    {group.label}
                   </span>
                 </li>
               );
