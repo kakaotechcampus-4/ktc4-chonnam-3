@@ -1,6 +1,8 @@
 # task-12 - 평가 체계 준비
 
-상태: 구현 가이드. 현재 실제 평가자료와 loader·harness·채점기는 미구현이다.
+상태: 구현 가이드. `ai/tests/eval_loader.py`에 후보 loader(mismatch/duplicate/orphan 거부,
+payload/control 분리, source group split 누출 거부)가 있다. 실제 평가자료·harness 실행·
+채점기·검수자 워크플로는 여전히 미구현이다 (AI-L18/AI-L19 대기).
 
 ## 목표
 
@@ -54,9 +56,10 @@ loader·harness로 분리·누출·채점기 검사를 먼저 만들 수 있다.
 - [ ] 같은 source group이 development와 독립 최종검증 split 양쪽에 들어가지 않게 검사한다.
 - [ ] 합성 로컬 사례는 `inputs/`와 `expectations/`의 JSON 쌍으로 만들고 같은
   `case_id`와 `version`으로 연결한다.
-- [ ] loader는 mismatch, duplicate, orphan 쌍을 거부한다.
-- [ ] 입력 파일의 실행 payload와 식별·분류·split·source group 제어 정보를 분리한다.
+- [x] loader는 mismatch, duplicate, orphan 쌍을 거부한다. (`ai/tests/eval_loader.py`)
+- [x] 입력 파일의 실행 payload와 식별·분류·split·source group 제어 정보를 분리한다.
   모델에는 실행 payload만 전달하고 기대값·검수·control 정보도 전달하지 않는다.
+  (`EvalCase.execution_payload`)
 - [ ] 실제 운영에서도 모델이 받는 Question Contract 등은 입력에 유지하고 평가 전용 정답만 숨긴다.
 - [ ] 기대 결과는 원문, 질문 범위와 Accepted 정책에 연결하고 확인되지 않은 사실을 만들지 않는다.
 - [ ] 여러 행동이 타당할 때 단일 문구 일치 대신 허용 집합과 목적을 검수한다.
@@ -77,8 +80,8 @@ loader·harness로 분리·누출·채점기 검사를 먼저 만들 수 있다.
 - [ ] 실제 실행에서 확인된 commit, provider/model, prompt/schema/policy/dataset version을 기록한다.
 - [ ] token·latency·비용은 실측값과 계산 근거가 있을 때만 기록하고 미수집 값을 0으로 채우지 않는다.
 - [ ] 초기 제안 규모나 split 비율을 확정 목표로 복사하지 않는다.
-- [ ] 합성·비식별 fixture용 후보 로컬 loader·harness와 분리·채점기 검사는 운영 결정과
-  독립적으로 구현한다.
+- [x] 합성·비식별 fixture용 후보 로컬 loader·harness와 분리·채점기 검사는 운영 결정과
+  독립적으로 구현한다. (loader만 — 채점기는 아직 없음)
 - [ ] baseline과 candidate는 같은 사례·source group에서 한 요인씩 바꾸고 task 실패,
   품질, 비용, 지연을 함께 비교한다. 권한·참조·parser·tool·source 부재 실패는 검색
   방법 결함과 구분한다.
@@ -89,12 +92,14 @@ loader·harness로 분리·누출·채점기 검사를 먼저 만들 수 있다.
 
 ## 검증
 
-추가 예정, 현재 없음: `ai/tests/test_eval_data_boundaries.py`.
+`ai/tests/test_eval_data_boundaries.py` — tmp_path 합성 fixture로 loader 자체를 검사한다.
+아래 중 loader 범위(앞 4개)만 다루고, 나머지(검수자·채점기·전체 결과 기록)는 여전히
+추가 예정이다 — 실제 데이터셋·검수자·채점기가 없으면 검사할 대상이 없다.
 
-- [ ] source group 중복과 split 누출을 의도적으로 넣은 fixture를 거절하는지 검사한다.
-- [ ] mismatch, duplicate, orphan fixture 쌍을 모두 거부하는지 검사한다.
-- [ ] expectation과 review 메모가 prompt·retrieval 입력에 섞이지 않는지 검사한다.
-- [ ] 모델 호출 경계에 실행 payload 외 loader control metadata가 없는지 검사한다.
+- [x] source group 중복과 split 누출을 의도적으로 넣은 fixture를 거절하는지 검사한다.
+- [x] mismatch, duplicate, orphan fixture 쌍을 모두 거부하는지 검사한다.
+- [x] expectation과 review 메모가 prompt·retrieval 입력에 섞이지 않는지 검사한다.
+- [x] 모델 호출 경계에 실행 payload 외 loader control metadata가 없는지 검사한다.
 - [ ] 실제 운영 입력과 평가 전용 정답을 과도하게 함께 제거하지 않는지 검사한다.
 - [ ] 독립 검수 누락, holdout 사용 뒤 미재분류와 과거 기록 삭제를 탐지한다.
 - [ ] 모든 결과 상태가 보고되고 안전 오류가 평균 품질로 가려지지 않는지 검사한다.
