@@ -67,7 +67,7 @@ export default function Report() {
             <div className="flex flex-col gap-3">
               <p className="text-[11px] font-bold text-muted">면접 리포트</p>
               <h1 className="text-xl font-bold">{report.headline}</h1>
-              <p className="text-xs text-muted">지원 포지션 · {report.position}</p>
+              <p className="text-xs text-muted">지원 포지션 · {report.positionLabel}</p>
             </div>
 
             <section className="flex flex-col gap-4">
@@ -99,6 +99,17 @@ export default function Report() {
                   </div>
                 ))}
               </div>
+              <div className="rounded-lg bg-paper px-4 py-3">
+                <p className="text-xs font-bold">
+                  요구사항 {report.coverage.totalRequirements}개 중{' '}
+                  {report.coverage.coveredRequirements}개가 면접에서 다뤄졌어요
+                </p>
+                {report.coverage.uncoveredRequirements.length > 0 && (
+                  <p className="mt-1 text-xs text-muted">
+                    미검증: {report.coverage.uncoveredRequirements.join(', ')}
+                  </p>
+                )}
+              </div>
             </section>
 
             <hr className="border-line-soft" />
@@ -106,7 +117,7 @@ export default function Report() {
             <section className="flex flex-col gap-3.5">
               <SectionTitle>면접관별 피드백</SectionTitle>
               {report.agentFeedbacks.map((feedback) => (
-                <FeedbackCard key={feedback.persona} feedback={feedback} reportId={id} />
+                <FeedbackCard key={feedback.persona} feedback={feedback} />
               ))}
             </section>
 
@@ -181,19 +192,7 @@ function SectionTitle({ children }: { children: string }) {
   );
 }
 
-function FeedbackCard({ feedback, reportId }: { feedback: AgentFeedback; reportId: string }) {
-  const queryClient = useQueryClient();
-  const mutation = useMutation({
-    mutationFn: () =>
-      api.submitFeedbackDisagreement(reportId, {
-        persona: feedback.persona,
-        reasonType: 'other',
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.report(reportId) });
-    },
-  });
-
+function FeedbackCard({ feedback }: { feedback: AgentFeedback }) {
   return (
     <div className="flex gap-3 rounded-lg border border-line-soft p-3.5">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[11.5px] font-bold text-accent">
@@ -220,19 +219,14 @@ function FeedbackCard({ feedback, reportId }: { feedback: AgentFeedback; reportI
             </p>
           ))}
         </div>
-        {feedback.disagreementSubmitted ? (
-          <p className="text-[11px] text-muted">의견 제출됨</p>
-        ) : (
-          <button
-            type="button"
-            disabled={mutation.isPending}
-            onClick={() => mutation.mutate()}
-            className="self-start text-[11px] text-muted hover:underline"
-          >
-            이 평가에 동의하지 않아요
-          </button>
-        )}
-        {mutation.isError && <p className="text-[11px] text-error">제출에 실패했어요.</p>}
+        {/* Sprint 1: 이의 제기는 항상 비활성 — POST /reports/{id}/feedback-disagreements 호출 없음 (spec/frontend/features/report.md) */}
+        <button
+          type="button"
+          disabled
+          className="self-start text-[11px] text-muted opacity-50"
+        >
+          이 평가에 동의하지 않아요
+        </button>
       </div>
     </div>
   );

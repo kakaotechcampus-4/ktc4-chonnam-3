@@ -268,14 +268,22 @@ export type AgentFeedback = {
   disagreementSubmitted: boolean;
 };
 
+export type ReportCoverage = {
+  totalRequirements: number;
+  coveredRequirements: number;
+  uncoveredRequirements: string[];
+};
+
 export type ReportResponse = {
   interviewId: string;
   position: string;
+  positionLabel: string;
   totalScore: number;
   headline: string;
   summary: string;
   scores: ScoreItem[];
   agentFeedbacks: AgentFeedback[];
+  coverage: ReportCoverage;
   turns: InterviewTurn[];
   repositoryNames: string[];
   completedAt: string;
