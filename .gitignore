@@ -83,3 +83,5 @@ target/
 CLAUDE.local.md
 tmp/
 .env.deploy
+
+backups/
