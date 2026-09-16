@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 
-import { api } from '@/shared/api';
+import { api, BASE } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
 import type { ApiError } from '@/types/api';
@@ -32,7 +32,7 @@ export default function Home() {
         {githubTokenInvalid && (
           <div className="mt-4 flex items-center justify-between rounded-card border border-error-soft bg-error-soft px-4 py-3 text-sm">
             <span className="text-error">GitHub 연동이 만료됐어요. 다시 연동해주세요.</span>
-            <a href="/auth/github/link" className="font-medium text-error hover:underline">
+            <a href={`${BASE}/auth/github/link`} className="font-medium text-error hover:underline">
               GitHub 재연동
             </a>
           </div>
