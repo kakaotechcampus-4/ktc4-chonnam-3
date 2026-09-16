@@ -19,12 +19,14 @@ const recentInterviews = [
   {
     id: 'a3d51c20-1001-4c00-9a00-000000000001',
     position: 'Backend Developer',
+    companyName: '테스트 기업',
     totalScore: 81,
     completedAt: '2026-09-01T15:20:00Z',
   },
   {
     id: 'a3d51c20-1002-4c00-9a00-000000000002',
     position: 'Server Engineer',
+    companyName: '테스트 기업',
     totalScore: 74,
     completedAt: '2026-08-21T10:05:00Z',
   },
@@ -75,6 +77,9 @@ const allInterviews: InterviewListResponse['interviews'] = [
   {
     id: 'a3d51c20-1001-4c00-9a00-000000000001',
     position: 'Backend Developer',
+    companyName: '테스트 기업',
+    techStack: ['Python', 'FastAPI'],
+    careerLevel: '신입',
     repositoryNames: ['payment-service', 'project-a'],
     status: 'completed',
     totalScore: 81,
@@ -84,6 +89,9 @@ const allInterviews: InterviewListResponse['interviews'] = [
   {
     id: 'a3d51c20-1002-4c00-9a00-000000000002',
     position: 'Server Engineer',
+    companyName: '테스트 기업',
+    techStack: ['Python', 'FastAPI'],
+    careerLevel: '신입',
     repositoryNames: ['payment-service'],
     status: 'completed',
     totalScore: 74,
@@ -93,6 +101,9 @@ const allInterviews: InterviewListResponse['interviews'] = [
   {
     id: 'a3d51c20-1003-4c00-9a00-000000000003',
     position: 'Backend Developer',
+    companyName: '테스트 기업',
+    techStack: ['Python', 'FastAPI'],
+    careerLevel: '신입',
     repositoryNames: ['notification-worker'],
     status: 'abandoned',
     totalScore: null,
@@ -102,6 +113,9 @@ const allInterviews: InterviewListResponse['interviews'] = [
   {
     id: 'a3d51c20-1004-4c00-9a00-000000000004',
     position: 'Platform Engineer',
+    companyName: '테스트 기업',
+    techStack: ['Python', 'FastAPI'],
+    careerLevel: '신입',
     repositoryNames: ['infra-terraform', 'batch-pipeline'],
     status: 'in_progress',
     totalScore: null,
@@ -115,6 +129,7 @@ export function interviewPage(page: number, size: number): InterviewListResponse
   return {
     interviews: allInterviews.slice(start, start + size),
     total: allInterviews.length,
+    averageScore: 77.5,
     page,
     size,
   };
