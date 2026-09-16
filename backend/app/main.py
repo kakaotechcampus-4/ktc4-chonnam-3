@@ -13,10 +13,12 @@ from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import configure_auth_logging
 from app.core.security import Tokens
 from app.db.session import create_database
+from app.features.auth.github_tokens import GitHubAPI
 from app.features.auth.oauth import GitHubOAuth
 from app.features.auth.router import router as auth_router
 from app.features.auth.session_store import OAuthStateStore
 from app.features.me.router import router as me_router
+from app.integrations.github.client import GitHubClient
 
 
 def create_app(
@@ -39,6 +41,9 @@ def create_app(
             app.state.cipher = TokenCipher(cfg)
             app.state.oauth_states = OAuthStateStore(redis)
             app.state.oauth = GitHubOAuth(cfg, client)
+            app.state.github = GitHubAPI(
+                sessions, app.state.oauth, app.state.cipher, GitHubClient(client)
+            )
             try:
                 yield
             finally:
