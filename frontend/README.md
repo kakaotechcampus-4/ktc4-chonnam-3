@@ -37,11 +37,14 @@ npm run dev
 src/
 ├─ features/      # 도메인별 화면·로직 (auth, home, interview, analysis, report, mypage)
 ├─ shared/        # API 클라이언트(api.ts), React Query 키(queryKeys.ts)
+├─ mocks/         # MSW mock API (개발 서버 전용)
 ├─ types/         # API 타입
 ├─ routes.tsx     # 라우트 정의
 ├─ providers.tsx  # 전역 Provider (QueryClient 등)
 └─ main.tsx       # 엔트리 포인트
 ```
+
+개발 서버에서는 MSW mock API가 기본으로 켜진다. 끄려면 `.env.local`에 `VITE_USE_MSW=false`를 넣는다. 자세한 내용은 [`docs/task-07-msw.md`](docs/task-07-msw.md) 참고.
 
 API 요청은 `src/shared/api.ts`에서 `/api` prefix로 호출. 응답/요청 타입은 `src/types/api.ts`, API 스펙은 [`docs/api-spec.md`](../docs/api-spec.md) 참고.
 
