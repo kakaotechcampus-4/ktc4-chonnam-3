@@ -1,0 +1,14 @@
+[Unit]
+Description=DEVON PostgreSQL backup to S3
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+SupplementaryGroups=docker
+WorkingDirectory=/home/ubuntu/apps/devon
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/home/ubuntu/apps/devon/ops/backup-db.sh
+TimeoutStartSec=1h

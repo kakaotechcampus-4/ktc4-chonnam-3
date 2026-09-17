@@ -1,0 +1,29 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "devon-ai"
+version = "0.1.0"
+description = "DEVON in-process AI package skeleton"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = ["ruff", "mypy", "pytest"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/devon_ai"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src/devon_ai", "/pyproject.toml", "/README.md", "/ruff.toml"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib"

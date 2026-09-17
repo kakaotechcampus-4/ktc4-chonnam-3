@@ -22,7 +22,11 @@ dependencies = [
     "structlog",
     "python-multipart",
     "anthropic",
+    "devon-ai",
 ]
+
+[tool.uv.sources]
+devon-ai = { path = "../ai", editable = true }
 
 [dependency-groups]
 dev = [

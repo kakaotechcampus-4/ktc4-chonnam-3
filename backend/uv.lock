@@ -214,6 +214,20 @@ wheels = [
 ]
 
 [[package]]
+name = "devon-ai"
+version = "0.1.0"
+source = { editable = "../ai" }
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
+[[package]]
 name = "devon-backend"
 version = "0.1.0"
 source = { virtual = "." }
@@ -222,6 +236,7 @@ dependencies = [
     { name = "anthropic" },
     { name = "arq" },
     { name = "asyncpg" },
+    { name = "devon-ai" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "pydantic" },
@@ -248,6 +263,7 @@ requires-dist = [
     { name = "anthropic" },
     { name = "arq" },
     { name = "asyncpg" },
+    { name = "devon-ai", editable = "../ai" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "pydantic" },
