@@ -137,7 +137,6 @@ export type InterviewListResponse = {
 // 4-v2 공고 입력 POST /documents/preview
 
 export type DocumentStatus = 'succeeded' | 'partial' | 'failed';
-export type DocumentKind = 'cover_letter' | 'portfolio';
 
 
 export type DocumentPreviewResponse = {
