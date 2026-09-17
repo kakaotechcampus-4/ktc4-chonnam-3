@@ -15,7 +15,7 @@
 | 날짜 | ISO 8601 문자열 |
 | 필드 생략 | 금지 |
 | 인증 | JWT — HttpOnly 쿠키 전달. 모든 요청에 `credentials: 'include'` |
-| 배포 | FE·BE 단일 CloudFront 배포. same-origin이므로 CORS 설정 불필요, API base URL은 상대경로 |
+| 배포 | FE·BE 단일 DuckDNS+Caddy 배포. same-origin이므로 CORS 설정 불필요, API base URL은 상대경로 |
 
 ### 인증 구조
 
