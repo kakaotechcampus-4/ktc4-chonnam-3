@@ -18,6 +18,7 @@ export type StepKey =
   | 'match_score';
 export type PrepareStepKey = 'analyze_repo' | 'build_persona' | 'compose_question' | 'set_criteria';
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+export type AnswerMode = 'text';
 export type Persona = 'tech_lead' | 'hr_manager' | 'domain_lead';
 export type ScoreKey =
   | 'project_understanding'
@@ -55,6 +56,7 @@ export function isApiError(value: unknown): value is Omit<ApiError, 'status'> {
 
 export type MeResponse = {
   name: string;
+  avatarUrl: string | null;
   githubLinked: boolean;
 };
 
@@ -75,7 +77,7 @@ export type AnalysisPanel = {
 export type RecentInterview = {
   id: string;
   position: string;
-  companyName: string;
+  companyName: string | null;
   totalScore: number | null;
   completedAt: string | null;
 };
@@ -96,6 +98,7 @@ export type MeProfileResponse = {
   avatarUrl: string;
   loginId: string | null;
   joinedAt: string;
+  // 가장 최근 완료 면접의 position. 완료 면접이 없으면 null.
   desiredPosition: string | null;
   github: {
     linked: boolean;
@@ -134,7 +137,6 @@ export type InterviewListResponse = {
 // 4-v2 공고 입력 POST /documents/preview
 
 export type DocumentStatus = 'succeeded' | 'partial' | 'failed';
-export type DocumentKind = 'cover_letter' | 'portfolio';
 
 
 export type DocumentPreviewResponse = {
@@ -152,8 +154,6 @@ export type CreateAnalysisRunRequest = {
 
 export type CreateAnalysisRunResponse = {
   runId: string;
-  status: RunStatus;
-  reused?: boolean;
 };
 
 // 4-2-v2 분석 중 GET /analysis-runs/{runId}, /events
@@ -166,7 +166,9 @@ export type AnalysisStep = {
 export type AnalysisRunResponse = {
   runId: string;
   status: RunStatus;
+  // steps 는 항상 StepKey 7개를 모두 포함한다. 실행하지 않은 단계도 skipped 로 온다.
   steps: AnalysisStep[];
+  progress: number;
   failureReason: string | null;
   estimatedSeconds: number | null;
 };
@@ -175,6 +177,11 @@ export type SseStepEvent = {
   type: 'step';
   key: StepKey;
   status: StepStatus;
+};
+
+export type SseProgressEvent = {
+  type: 'progress';
+  value: number;
 };
 
 export type SseCompletedEvent = {
@@ -188,14 +195,15 @@ export type SseFailedEvent = {
 
 // 5a-v2 레포 선택 GET /analysis-runs/{runId}/result
 
-export type JdRequirementType = 'required' | 'preferred';
+export type JdCategory = 'required' | 'preferred' | 'responsibility';
 export type RepoStatus = 'succeeded' | 'partial' | 'failed';
 export type CandidateSource = 'rule_filter' | 'portfolio' | 'both';
 
 export type JdRequirement = {
   id: string;
-  type: JdRequirementType;
+  category: JdCategory;
   text: string;
+  displayOrder: number;
 };
 
 export type RepositoryItem = {
@@ -219,6 +227,19 @@ export type RepositoryItem = {
   matchedRequirementIds: string[];
 };
 
+// 5a-v2 더 보기 GET /analysis-runs/{runId}/candidates
+// 200 이면 repositories 와 같은 카드 스키마, 202 면 아래 analyzing 응답이 온다.
+
+export type CandidatesResponse = {
+  repositories: RepositoryItem[];
+};
+
+export type CandidatesAnalyzingResponse = {
+  status: 'analyzing';
+  // 본문 최상위 필드다. 공통 에러 객체의 error.retryAfter 와 위치가 다르다.
+  retryAfter: number;
+};
+
 export type AnalysisResultResponse = {
   runId: string;
   position: string;
@@ -237,7 +258,7 @@ export type CreateInterviewRequest = {
 };
 
 export type CreateInterviewResponse = {
-  sessionId: string | null;
+  sessionId: string;
   interviewId: string;
 };
 
@@ -250,16 +271,30 @@ export type InterviewTurn = {
   answer: string | null;
 };
 
+// status 가 preparing_failed 일 때만 값이 있다. WS error 이벤트와 필드 구성이 같다.
+export type InterviewLastError = {
+  reason: string;
+  code: string;
+  step: PrepareStepKey | null;
+  recoverable: boolean;
+  occurredAt: string;
+};
+
 export type InterviewDetailResponse = {
   id: string;
-  sessionId: string | null;
+  sessionId: string;
+  // 이 면접을 만든 analysis_jobs 행의 id. 새로고침 후 5a-v2 로 돌아갈 때 쓴다.
+  runId: string;
   status: InterviewStatus;
+  answerMode: AnswerMode;
   position: string;
+  companyName: string | null;
   repositoryNames: string[];
   currentTurn: number;
-  totalTurns: number | null;
+  totalTurns: number;
   remainingSeconds: number;
   turns: InterviewTurn[];
+  lastError: InterviewLastError | null;
 };
 
 // 4. WebSocket 메시지 타입

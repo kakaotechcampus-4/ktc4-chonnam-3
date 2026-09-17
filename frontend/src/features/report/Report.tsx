@@ -37,7 +37,7 @@ export default function Report() {
   const retryMutation = useMutation({
     mutationFn: () => api.retryInterview(id),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['interviews'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.interviewsAll });
       navigate(`/interview/${data.interviewId}/prepare`);
     },
   });

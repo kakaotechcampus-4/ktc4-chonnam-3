@@ -4,12 +4,11 @@ import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/shared/api';
 import { isApiError } from '@/types/api';
-import type { DocumentKind, DocumentPreviewResponse } from '@/types/api';
+import type { DocumentPreviewResponse } from '@/types/api';
 
 const MB = 1024 * 1024;
 
 type FileFieldConfig = {
-  kind: DocumentKind;
   label: string;
   accept: string;
   hint: string;
@@ -17,7 +16,6 @@ type FileFieldConfig = {
 };
 
 const COVER_LETTER: FileFieldConfig = {
-  kind: 'cover_letter',
   label: '자기소개서',
   accept: '.pdf,.docx',
   hint: 'PDF, DOCX · 최대 10MB',
@@ -25,7 +23,6 @@ const COVER_LETTER: FileFieldConfig = {
 };
 
 const PORTFOLIO: FileFieldConfig = {
-  kind: 'portfolio',
   label: '포트폴리오',
   accept: '.pdf',
   hint: 'PDF · 최대 20MB',
@@ -84,8 +81,7 @@ function useDocumentSlot(config: FileFieldConfig) {
   const [slot, setSlot] = useState<DocSlot>(EMPTY_SLOT);
 
   const upload = useMutation({
-    mutationFn: ({ file, postingUrl }: { file: File; postingUrl?: string }) =>
-      api.previewDocument(config.kind, file, postingUrl),
+    mutationFn: (file: File) => api.previewDocument(file),
     onSuccess: (preview) => setSlot((prev) => ({ ...prev, preview, error: null })),
     onError: (error) =>
       setSlot((prev) => ({
@@ -100,7 +96,7 @@ function useDocumentSlot(config: FileFieldConfig) {
     setSlot(EMPTY_SLOT);
   }
 
-  function selectFile(file: File | null, postingUrl?: string) {
+  function selectFile(file: File | null) {
     upload.reset();
     if (!file) {
       setSlot(EMPTY_SLOT);
@@ -108,7 +104,7 @@ function useDocumentSlot(config: FileFieldConfig) {
     }
     const error = validateFile(file, config);
     setSlot({ ...EMPTY_SLOT, file: error ? null : file, error });
-    if (!error) upload.mutate({ file, postingUrl });
+    if (!error) upload.mutate(file);
   }
 
   function dismiss() {
@@ -269,7 +265,6 @@ export default function JobInput() {
   const busy = uploading || pendingDecision || startRun.isPending;
 
   // JD 키워드 축약에 쓰이는 선택 필드. 공고 URL이 아직 유효하지 않으면 생략한다.
-  const postingUrlForPreview = urlValid ? jobUrl.trim() : undefined;
 
   function handleSubmit() {
     if (!urlValid || busy) return;
@@ -312,7 +307,7 @@ export default function JobInput() {
               config={COVER_LETTER}
               slot={coverLetter.slot}
               uploading={coverLetter.uploading}
-              onSelectFile={(file) => coverLetter.selectFile(file, postingUrlForPreview)}
+              onSelectFile={(file) => coverLetter.selectFile(file)}
               onClear={coverLetter.clear}
               onDismiss={coverLetter.dismiss}
             />
@@ -320,7 +315,7 @@ export default function JobInput() {
               config={PORTFOLIO}
               slot={portfolio.slot}
               uploading={portfolio.uploading}
-              onSelectFile={(file) => portfolio.selectFile(file, postingUrlForPreview)}
+              onSelectFile={(file) => portfolio.selectFile(file)}
               onClear={portfolio.clear}
               onDismiss={portfolio.dismiss}
             />

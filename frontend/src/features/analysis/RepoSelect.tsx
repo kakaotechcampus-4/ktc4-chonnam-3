@@ -9,7 +9,11 @@ import { isApiError } from '@/types/api';
 
 const MAX_REPOSITORIES = 5;
 
-const JD_TYPE_LABELS = { required: '필수 요건', preferred: '우대 요건' } as const;
+const JD_CATEGORY_LABELS = {
+  required: '필수 요건',
+  preferred: '우대 요건',
+  responsibility: '담당 업무',
+} as const;
 
 const REPO_ERROR_MESSAGES: Record<string, string> = {
   llm_timeout: '분석이 지연되고 있어요',
@@ -48,7 +52,7 @@ export default function RepoSelect() {
   const createInterviewMutation = useMutation({
     mutationFn: () => api.createInterview({ runId, repositoryIds: selected }),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['interviews'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.interviewsAll });
       navigate(`/interview/${data.interviewId}/prepare`);
     },
   });
@@ -171,12 +175,17 @@ export default function RepoSelect() {
 
                 <div className="w-[260px] shrink-0 rounded-[10px] border border-line-soft p-3.5">
                   <p className="text-[11.5px] font-bold tracking-wide text-muted">JD 요구사항</p>
-                  {(['required', 'preferred'] as const).map((type) => {
-                    const reqs = result.jdRequirements.filter((req) => req.type === type);
+                  {(['required', 'preferred', 'responsibility'] as const).map((category) => {
+                    // displayOrder 순으로 표시한다. 응답 배열 순서에 기대지 않는다.
+                    const reqs = result.jdRequirements
+                      .filter((req) => req.category === category)
+                      .sort((a, b) => a.displayOrder - b.displayOrder);
                     if (reqs.length === 0) return null;
                     return (
-                      <div key={type} className="mt-3">
-                        <p className="text-[11px] font-bold text-muted">{JD_TYPE_LABELS[type]}</p>
+                      <div key={category} className="mt-3">
+                        <p className="text-[11px] font-bold text-muted">
+                          {JD_CATEGORY_LABELS[category]}
+                        </p>
                         <ul className="mt-1.5 flex flex-col gap-2">
                           {reqs.map((req) => (
                             <li key={req.id} className="text-xs text-ink">

@@ -1,8 +1,11 @@
+const interviewsAll = ['interviews'] as const;
+
 export const queryKeys = {
   me: ['me'] as const,
   profile: ['me', 'profile'] as const,
   home: ['home'] as const,
-  interviews: (page: number) => ['interviews', { page }] as const,
+  interviewsAll,
+  interviews: (page: number) => [...interviewsAll, { page }] as const,
   analysisRun: (runId: string) => ['analysis-run', runId] as const,
   analysisResult: (runId: string) => ['analysis-run', runId, 'result'] as const,
   interview: (id: string) => ['interview', id] as const,
