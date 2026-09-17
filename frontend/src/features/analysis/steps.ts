@@ -16,7 +16,7 @@ export function groupStatus(
   steps: Partial<Record<StepKey, StepStatus>>,
 ): StepStatus {
   if (keys.some((key) => steps[key] === 'failed')) return 'failed';
-  if (keys.every((key) => steps[key] === 'completed')) return 'completed';
+  if (keys.every((key) => steps[key] === 'completed' || steps[key] === 'skipped')) return 'completed';
   if (keys.some((key) => steps[key] === 'running')) return 'running';
   return 'pending';
 }
