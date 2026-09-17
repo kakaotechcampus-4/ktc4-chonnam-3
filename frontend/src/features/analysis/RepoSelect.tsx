@@ -52,7 +52,7 @@ export default function RepoSelect() {
   const createInterviewMutation = useMutation({
     mutationFn: () => api.createInterview({ runId, repositoryIds: selected }),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['interviews'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.interviewsAll });
       navigate(`/interview/${data.interviewId}/prepare`);
     },
   });
