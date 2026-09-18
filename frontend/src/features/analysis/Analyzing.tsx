@@ -76,6 +76,7 @@ export default function Analyzing() {
     ...sseSteps,
   };
   const runStatus: RunStatus = sseStatus ?? runQuery.data?.status ?? 'running';
+  const hasFailedStep = Object.values(steps).some((status) => status === 'failed');
 
   useEffect(() => {
     if (!runId) return;
@@ -92,7 +93,13 @@ export default function Analyzing() {
           <p className="text-[11px] font-bold text-accent">모의면접 · 분석 중</p>
 
           <div className="flex items-center gap-3">
-            <span className="h-7 w-7 shrink-0 animate-spin rounded-full border-[3px] border-accent-soft border-t-accent" />
+            {hasFailedStep ? (
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-error-soft text-sm font-bold text-error">
+                !
+              </span>
+            ) : (
+              <span className="h-7 w-7 shrink-0 animate-spin rounded-full border-[3px] border-accent-soft border-t-accent" />
+            )}
             <h1 className="flex-1 text-base font-bold">GitHub 레포를 분석하고 있어요</h1>
           </div>
 
