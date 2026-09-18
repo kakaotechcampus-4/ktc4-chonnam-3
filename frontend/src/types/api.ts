@@ -2,11 +2,7 @@
 
 export type AnalysisStatus = 'syncing' | 'no_repository' | 'no_interview' | 'completed';
 export type InterviewStatus =
-  | 'preparing'
-  | 'preparing_failed'
-  | 'in_progress'
-  | 'completed'
-  | 'abandoned';
+  'preparing' | 'preparing_failed' | 'in_progress' | 'completed' | 'abandoned';
 export type RunStatus = 'running' | 'completed' | 'failed';
 export type StepKey =
   | 'doc_extract'
@@ -137,7 +133,6 @@ export type InterviewListResponse = {
 // 4-v2 공고 입력 POST /documents/preview
 
 export type DocumentStatus = 'succeeded' | 'partial' | 'failed';
-
 
 export type DocumentPreviewResponse = {
   documentId: string;
@@ -299,7 +294,8 @@ export type InterviewDetailResponse = {
 
 // 4. WebSocket 메시지 타입
 
-export type WsClientMessage = { type: 'answerStart' } | { type: 'answerEnd' };
+export type WsClientMessage =
+  { type: 'prepareRetry' } | { type: 'answerStart' } | { type: 'answerEnd' };
 
 export type WsServerMessage =
   | { type: 'prepareStep'; key: PrepareStepKey; status: StepStatus }
@@ -310,7 +306,15 @@ export type WsServerMessage =
   | { type: 'question'; persona: Persona; text: string; turn: number }
   | { type: 'questionEnd' }
   | { type: 'interviewEnd' }
-  | { type: 'error'; reason: string };
+  // step 은 준비 단계 오류일 때만 값이 있고, 진행 중 오류에서는 null 이다.
+  | {
+      type: 'error';
+      reason: string;
+      code: string;
+      step: PrepareStepKey | null;
+      recoverable: boolean;
+      occurredAt: string;
+    };
 
 // 5c-v2 면접 리포트 GET /interviews/{id}/report
 
