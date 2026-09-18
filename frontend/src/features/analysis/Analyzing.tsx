@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
@@ -24,19 +24,24 @@ export default function Analyzing() {
   const { runId = '' } = useParams<{ runId: string }>();
   const navigate = useNavigate();
 
-  const [steps, setSteps] = useState<StepMap>(INITIAL_STEPS);
-  const [runStatus, setRunStatus] = useState<RunStatus>('running');
+  const [sseSteps, setSseSteps] = useState<Partial<StepMap>>({});
+  const [sseStatus, setSseStatus] = useState<RunStatus | null>(null);
   const [ssePending, setSsePending] = useState(true);
+  const sseOpenedRef = useRef(false);
 
-  const pollQuery = useQuery({
+  const runQuery = useQuery({
     queryKey: queryKeys.analysisRun(runId),
     queryFn: () => api.getAnalysisRun(runId),
-    enabled: !!runId && !ssePending,
-    refetchInterval: (query) => (query.state.data?.status === 'running' ? 3000 : false),
+    enabled: !!runId,
+    refetchInterval: (query) => (!ssePending && query.state.data?.status === 'running' ? 3000 : false),
   });
 
+  // SSE는 구독 시점 이후의 델타만 전달하므로, 이미 끝난 뒤 재진입하거나 이벤트를
+  // 놓치면 pending에서 멈출 수 있다. 스냅샷(runQuery)이 running일 때만 구독한다.
   useEffect(() => {
-    if (!runId) return;
+    if (!runId || sseOpenedRef.current) return;
+    if (!runQuery.data || runQuery.data.status !== 'running') return;
+    sseOpenedRef.current = true;
 
     const source = new EventSource(api.analysisRunEventsUrl(runId), { withCredentials: true });
 
@@ -47,12 +52,12 @@ export default function Analyzing() {
         | { type: 'failed'; reason: string };
 
       if (data.type === 'step') {
-        setSteps((prev) => ({ ...prev, [data.key]: data.status }));
+        setSseSteps((prev) => ({ ...prev, [data.key]: data.status }));
       } else if (data.type === 'completed') {
-        setRunStatus('completed');
+        setSseStatus('completed');
         source.close();
       } else if (data.type === 'failed') {
-        setRunStatus('failed');
+        setSseStatus('failed');
         source.close();
       }
     };
@@ -63,20 +68,20 @@ export default function Analyzing() {
     };
 
     return () => source.close();
-  }, [runId]);
+  }, [runId, runQuery.data]);
 
-  const effectiveStatus = ssePending ? runStatus : (pollQuery.data?.status ?? runStatus);
-  const effectiveSteps = ssePending
-    ? steps
-    : pollQuery.data
-      ? { ...steps, ...Object.fromEntries(pollQuery.data.steps.map((s) => [s.key, s.status])) }
-      : steps;
+  const steps: StepMap = {
+    ...INITIAL_STEPS,
+    ...Object.fromEntries((runQuery.data?.steps ?? []).map((s) => [s.key, s.status])),
+    ...sseSteps,
+  };
+  const runStatus: RunStatus = sseStatus ?? runQuery.data?.status ?? 'running';
 
   useEffect(() => {
     if (!runId) return;
-    if (effectiveStatus === 'completed') navigate(`/interview/repos/${runId}`);
-    if (effectiveStatus === 'failed') navigate(`/interview/failed/${runId}`);
-  }, [effectiveStatus, runId, navigate]);
+    if (runStatus === 'completed') navigate(`/interview/repos/${runId}`);
+    if (runStatus === 'failed') navigate(`/interview/failed/${runId}`);
+  }, [runStatus, runId, navigate]);
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
@@ -93,7 +98,7 @@ export default function Analyzing() {
 
           <ul className="flex flex-col gap-3">
             {STEP_GROUPS.map((group) => {
-              const status = groupStatus(group.keys, effectiveSteps);
+              const status = groupStatus(group.keys, steps);
               return (
                 <li key={group.label} className="flex items-center gap-2.5">
                   {status === 'completed' && (
