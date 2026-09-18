@@ -98,7 +98,10 @@ router → service → { queries | agents | llm_tasks | integrations | realtime 
 
 ## API 스펙
 
-API 표면의 유일한 진실은 [`frontend/docs/api-spec.md`](../frontend/docs/api-spec.md) 이고,
+API 표면의 원본은 [`spec/shared/contracts/openapi.yaml`](../spec/shared/contracts/openapi.yaml) 이다.
+WebSocket · SSE · 브라우저 이동 경로는 OpenAPI 로 표현할 수 없어
+[`frontend/docs/api-spec.md`](../frontend/docs/api-spec.md) 가 원본이다
+(범위는 [`spec/shared/contracts/README.md`](../spec/shared/contracts/README.md) 참고).
 응답 타입은 [`frontend/src/types/api.ts`](../frontend/src/types/api.ts) 와 1:1 로 맞춘다
 (`tests/contract/` 가 응답 키 집합을 대조한다).
 
