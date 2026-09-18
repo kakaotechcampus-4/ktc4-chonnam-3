@@ -2,11 +2,7 @@
 
 export type AnalysisStatus = 'syncing' | 'no_repository' | 'no_interview' | 'completed';
 export type InterviewStatus =
-  | 'preparing'
-  | 'preparing_failed'
-  | 'in_progress'
-  | 'completed'
-  | 'abandoned';
+  'preparing' | 'preparing_failed' | 'in_progress' | 'completed' | 'abandoned';
 export type RunStatus = 'running' | 'completed' | 'failed';
 export type StepKey =
   | 'doc_extract'
@@ -116,7 +112,8 @@ export type MeProfileResponse = {
 export type InterviewSummary = {
   id: string;
   position: string;
-  companyName: string;
+  // 회사명이 없는 공고가 있다. openapi.yaml·api-spec.md #10 모두 nullable 이다.
+  companyName: string | null;
   techStack: string[];
   careerLevel: string;
   repositoryNames: string[];
@@ -137,7 +134,6 @@ export type InterviewListResponse = {
 // 4-v2 공고 입력 POST /documents/preview
 
 export type DocumentStatus = 'succeeded' | 'partial' | 'failed';
-
 
 export type DocumentPreviewResponse = {
   documentId: string;
