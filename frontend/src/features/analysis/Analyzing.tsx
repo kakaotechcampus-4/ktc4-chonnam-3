@@ -26,6 +26,7 @@ export default function Analyzing() {
 
   const [sseSteps, setSseSteps] = useState<Partial<StepMap>>({});
   const [sseStatus, setSseStatus] = useState<RunStatus | null>(null);
+  const [sseProgress, setSseProgress] = useState<number | null>(null);
   const [ssePending, setSsePending] = useState(true);
   const sseOpenedRef = useRef(false);
 
@@ -48,11 +49,14 @@ export default function Analyzing() {
     source.onmessage = (event) => {
       const data = JSON.parse(event.data) as
         | { type: 'step'; key: StepKey; status: StepStatus }
+        | { type: 'progress'; value: number }
         | { type: 'completed' }
         | { type: 'failed'; reason: string };
 
       if (data.type === 'step') {
         setSseSteps((prev) => ({ ...prev, [data.key]: data.status }));
+      } else if (data.type === 'progress') {
+        setSseProgress(data.value);
       } else if (data.type === 'completed') {
         setSseStatus('completed');
         source.close();
@@ -76,6 +80,7 @@ export default function Analyzing() {
     ...sseSteps,
   };
   const runStatus: RunStatus = sseStatus ?? runQuery.data?.status ?? 'running';
+  const progress = sseProgress ?? runQuery.data?.progress ?? 0;
 
   useEffect(() => {
     if (!runId) return;
@@ -94,7 +99,14 @@ export default function Analyzing() {
           <div className="flex items-center gap-3">
             <span className="h-7 w-7 shrink-0 animate-spin rounded-full border-[3px] border-accent-soft border-t-accent" />
             <h1 className="flex-1 text-base font-bold">GitHub 레포를 분석하고 있어요</h1>
+            <span className="text-[13px] font-bold text-accent">{progress}%</span>
           </div>
+
+          <progress
+            value={progress}
+            max={100}
+            className="h-1.5 w-full overflow-hidden rounded-full [&::-webkit-progress-bar]:rounded-full [&::-webkit-progress-bar]:bg-line-soft [&::-webkit-progress-value]:bg-accent"
+          />
 
           <ul className="flex flex-col gap-3">
             {STEP_GROUPS.map((group) => {
