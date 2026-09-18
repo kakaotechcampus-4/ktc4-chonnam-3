@@ -1,16 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
+import { useInterviewSocket } from '@/features/interview/useInterviewSocket';
+import { QUESTION_TEXT_KEY, readQuestionText } from '@/features/interview/questionText';
 import type {
   InterviewLastError,
   MeResponse,
   PrepareStepKey,
-  StepStatus,
-  WsServerMessage,
+  PrepareStepStatus,
 } from '@/types/api';
 
 /** 실행 순서는 spec/frontend/features/interview.md의 4단계를 따른다. */
@@ -21,15 +22,14 @@ const PREPARE_STEPS: { key: PrepareStepKey; label: string }[] = [
   { key: 'compose_question', label: '첫 질문 구성' },
 ];
 
-const STATUS_SUFFIX: Record<StepStatus, string> = {
+const STATUS_SUFFIX: Record<PrepareStepStatus, string> = {
   pending: '',
   running: ' 중',
   completed: ' 완료',
   failed: ' 실패',
-  skipped: '',
 };
 
-type StepMap = Record<PrepareStepKey, StepStatus>;
+type StepMap = Record<PrepareStepKey, PrepareStepStatus>;
 
 const INITIAL_STEPS: StepMap = {
   analyze_repo: 'pending',
@@ -67,26 +67,9 @@ const FAILURE_TITLE: Record<string, string> = {
 
 const AUDIO_DEVICES = [
   { label: '스피커', hint: '기본 스피커', action: '테스트 재생' },
-  // 감지 상태 표시만 두고 테스트 버튼은 없다. 실제 감지는 Sprint 2.
-  { label: '마이크', hint: '기본 마이크', badge: '✓ 정상 감지됨' },
+  // 실제 장치 감지는 Sprint 2다. 감지했다고 단언하지 않는다.
+  { label: '마이크', hint: '기본 마이크', badge: '점검 예정' },
 ];
-
-/** 5b-v2에서 질문을 텍스트로도 볼지. 준비 화면에서 켜 두고 면접 화면이 읽는다. */
-export const QUESTION_TEXT_KEY = 'devon.showQuestionText';
-
-function readQuestionText() {
-  try {
-    return localStorage.getItem(QUESTION_TEXT_KEY) !== 'false';
-  } catch {
-    return true;
-  }
-}
-
-/**
- * 재연결 간격. 명세는 "실패해도 계속 재시도"만 정하고 간격은 정하지 않는다.
- * ponytail: 고정 2초. 서버가 오래 죽어 있는 상황이 문제가 되면 지수 백오프로 올린다.
- */
-const RECONNECT_DELAY_MS = 2000;
 
 /** 파형은 Sprint 1에서 고정 패턴이다. 입력 레벨 연동은 Sprint 2. */
 const IDLE_LEVELS = [
@@ -97,8 +80,6 @@ const IDLE_LEVELS = [
 export default function InterviewPrepare() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
-
-  const queryClient = useQueryClient();
 
   const { data: me } = useQuery({ queryKey: queryKeys.me, queryFn: api.getMe });
   const {
@@ -116,22 +97,10 @@ export default function InterviewPrepare() {
   const [error, setError] = useState<InterviewLastError | null>(null);
   const [retried, setRetried] = useState(false);
   const [ready, setReady] = useState(false);
+  const [starting, setStarting] = useState(false);
+  /** 시작을 눌렀지만 서버가 아직 in_progress가 아니거나 조회에 실패했다. */
+  const [startFailed, setStartFailed] = useState(false);
   const [showQuestionText, setShowQuestionText] = useState(readQuestionText);
-  /** WS를 다시 열기 위한 카운터. 다시 시도와 재연결이 함께 올린다. */
-  const [attempt, setAttempt] = useState(0);
-
-  const [wsStatus, setWsStatus] = useState<'connecting' | 'open' | 'reconnecting'>('connecting');
-
-  const socketRef = useRef<WebSocket | null>(null);
-  const retryOnOpenRef = useRef(false);
-  /** recoverable: false면 서버가 세션을 닫는다. 그때는 재연결하지 않는다. */
-  const sessionClosedRef = useRef(false);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /**
-   * 예약된 재연결의 일련번호. 사용자가 다시 시도를 누르면 번호를 올려
-   * 이미 떠 있는 GET 응답이 돌아와도 attempt를 올리지 못하게 막는다.
-   */
-  const reconnectSeqRef = useRef(0);
 
   const status = interview?.status;
   const sessionId = interview?.sessionId;
@@ -147,38 +116,17 @@ export default function InterviewPrepare() {
   const displayError = retried ? error : (error ?? snapshotError);
   const displaySteps = steps ?? stepsFromSnapshot(snapshotError?.step);
 
-  useEffect(() => {
-    if (!sessionId) return;
+  const { wsStatus, send } = useInterviewSocket({
+    interviewId: id,
+    sessionId,
     // preparing_failed 진입은 스냅샷으로 충분하다. 다시 시도를 누른 뒤에만 연결한다.
-    // attempt는 재연결로도 올라가므로 조건에 쓰지 않는다.
-    if (status !== 'preparing' && !(status === 'preparing_failed' && retried)) return;
-
-    let disposed = false;
-    const socket = new WebSocket(api.interviewSocketUrl(sessionId));
-    socketRef.current = socket;
-
-    socket.onopen = () => {
-      setWsStatus('open');
-      if (!retryOnOpenRef.current) return;
-      retryOnOpenRef.current = false;
-      socket.send(JSON.stringify({ type: 'prepareRetry' }));
-    };
-
-    socket.onmessage = (event) => {
-      let message: WsServerMessage;
-      try {
-        message = JSON.parse(event.data as string) as WsServerMessage;
-      } catch {
-        // 깨진 프레임 하나 때문에 이후 메시지 처리까지 죽지 않게 한다.
-        return;
-      }
-
+    enabled: status === 'preparing' || (status === 'preparing_failed' && retried),
+    onMessage: (message) => {
       if (message.type === 'prepareStep') {
         setSteps((prev) => ({ ...(prev ?? INITIAL_STEPS), [message.key]: message.status }));
       } else if (message.type === 'prepareCompleted') {
         setReady(true);
       } else if (message.type === 'error') {
-        if (!message.recoverable) sessionClosedRef.current = true;
         setError({
           reason: message.reason,
           code: message.code,
@@ -187,36 +135,8 @@ export default function InterviewPrepare() {
           occurredAt: message.occurredAt,
         });
       }
-    };
-
-    socket.onclose = () => {
-      socketRef.current = null;
-      if (disposed || sessionClosedRef.current) return;
-
-      setWsStatus('reconnecting');
-      retryOnOpenRef.current = false;
-      /**
-       * 재연결 전에 GET /interviews/{id}를 먼저 호출한다. 이 요청이 401 인터셉터를 타면서
-       * 토큰이 갱신된다. 순서를 바꾸면 만료 토큰으로 핸드셰이크를 시도해 401이 반복된다.
-       * 재연결 실패는 세션 상태를 바꾸지 않는다 — 될 때까지 다시 시도한다.
-       */
-      const seq = ++reconnectSeqRef.current;
-      reconnectTimerRef.current = setTimeout(() => {
-        void queryClient.refetchQueries({ queryKey: queryKeys.interview(id) }).finally(() => {
-          if (reconnectSeqRef.current !== seq) return;
-          setAttempt((count) => count + 1);
-        });
-      }, RECONNECT_DELAY_MS);
-    };
-
-    return () => {
-      disposed = true;
-      // 화면을 떠나거나 새 연결로 넘어갈 때 예약된 재연결을 남기지 않는다.
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-      socket.close();
-    };
-  }, [sessionId, status, attempt, retried, id, queryClient]);
+    },
+  });
 
   const handleRetry = () => {
     setError(null);
@@ -231,21 +151,28 @@ export default function InterviewPrepare() {
         ]),
       ) as StepMap,
     );
+    // 멱등한 메시지라 연결이 끊겨 있으면 재연결 후 보내도 안전하다.
+    send({ type: 'prepareRetry' }, { queue: true });
+  };
 
-    // 예약된 재연결과 이미 떠 있는 GET을 모두 무효화한다. attempt가 두 번 오르면
-    // 새로 연 소켓이 곧바로 닫히면서 prepareRetry가 유실된다.
-    reconnectSeqRef.current += 1;
-    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-    reconnectTimerRef.current = null;
+  /**
+   * prepareCompleted는 WS로만 왔고 REST 캐시의 status는 아직 preparing이다.
+   * 진행 화면은 그 캐시를 그대로 읽으므로, 먼저 갱신해 두지 않으면 준비 화면으로 되튕긴다.
+   * refetch는 실패해도 throw하지 않으므로 결과의 status를 직접 확인한다.
+   */
+  async function handleStart() {
+    setStarting(true);
+    setStartFailed(false);
 
-    const socket = socketRef.current;
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'prepareRetry' }));
+    const { data } = await refetchInterview();
+    if (data?.status === 'in_progress') {
+      navigate(`/interview/${id}/session`);
       return;
     }
-    retryOnOpenRef.current = true;
-    setAttempt((count) => count + 1);
-  };
+
+    setStarting(false);
+    setStartFailed(true);
+  }
 
   if (interviewFailed) {
     return (
@@ -265,7 +192,7 @@ export default function InterviewPrepare() {
         <button
           type="button"
           onClick={() => navigate('/home')}
-          className="h-10 text-[13px] font-bold text-muted"
+          className="h-11 rounded-lg border border-line text-[13px] font-bold text-muted"
         >
           홈으로
         </button>
@@ -328,7 +255,7 @@ export default function InterviewPrepare() {
                   !
                 </span>
               )}
-              {(stepStatus === 'pending' || stepStatus === 'skipped') && (
+              {stepStatus === 'pending' && (
                 <span className="h-5 w-5 shrink-0 rounded-full bg-line-soft" />
               )}
               <span
@@ -385,7 +312,7 @@ export default function InterviewPrepare() {
               <p className="text-[11px] text-muted">{hint}</p>
             </div>
             {badge ? (
-              <span className="rounded-full bg-accent-soft px-3 py-1.5 text-[12px] font-bold text-accent">
+              <span className="rounded-full bg-paper px-3 py-1.5 text-[12px] font-bold text-muted">
                 {badge}
               </span>
             ) : (
@@ -452,7 +379,7 @@ export default function InterviewPrepare() {
             onClick={() => navigate(`/interview/repos/${interview!.runId}`)}
             className={
               displayError.recoverable
-                ? 'h-10 text-[13px] font-bold text-muted'
+                ? 'h-11 rounded-lg border border-line text-[13px] font-bold text-muted'
                 : 'h-12 rounded-lg bg-accent text-sm font-bold text-surface'
             }
           >
@@ -460,14 +387,21 @@ export default function InterviewPrepare() {
           </button>
         </div>
       ) : (
-        <button
-          type="button"
-          disabled={!ready}
-          onClick={() => navigate(`/interview/${id}/session`)}
-          className="h-12 rounded-lg bg-accent text-sm font-bold text-surface disabled:bg-line-soft disabled:text-muted"
-        >
-          면접 시작하기
-        </button>
+        <>
+          {startFailed && (
+            <p className="text-[11px] font-bold text-error">
+              면접을 열지 못했어요 · 잠시 후 다시 눌러주세요
+            </p>
+          )}
+          <button
+            type="button"
+            disabled={!ready || starting}
+            onClick={() => void handleStart()}
+            className="h-12 rounded-lg bg-accent text-sm font-bold text-surface disabled:bg-line-soft disabled:text-muted"
+          >
+            {starting ? '면접을 여는 중...' : '면접 시작하기'}
+          </button>
+        </>
       )}
     </Shell>
   );
@@ -482,8 +416,8 @@ function Shell({ me, children }: { me?: MeResponse; children: React.ReactNode })
         name={me?.name}
         avatarUrl={me?.avatarUrl ?? undefined}
       />
-      <main className="flex flex-1 flex-col items-center px-7 pb-7 pt-6">
-        <div className="flex w-[440px] max-w-full flex-col gap-4 py-10">{children}</div>
+      <main className="flex flex-1 flex-col items-center justify-center px-7 py-6">
+        <div className="flex w-full max-w-md flex-col gap-4">{children}</div>
       </main>
       <footer className="flex items-center border-t border-line-soft px-5 py-2.5 text-[10.5px] text-muted">
         <span>© 2026 DEVON</span>
