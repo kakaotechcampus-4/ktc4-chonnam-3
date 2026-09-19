@@ -28,16 +28,20 @@ export type ReasonType =
 
 // 2. 공통 에러 타입
 
-export type ApiError = {
-  status: number;
+// 네트워크로 오는 본문 그대로. openapi.yaml #/components/schemas/ApiError 와 1:1 이다.
+export type ApiErrorBody = {
   error: {
     reason: string;
     message: string;
     retryAfter?: number;
+    details?: Record<string, unknown>;
   };
 };
 
-export function isApiError(value: unknown): value is Omit<ApiError, 'status'> {
+// 클라이언트가 HTTP 상태코드를 덧붙인 형태. 본문에는 status 가 없다.
+export type ApiError = ApiErrorBody & { status: number };
+
+export function isApiError(value: unknown): value is ApiErrorBody {
   if (typeof value !== 'object' || value === null) return false;
   if (!('error' in value)) return false;
 
