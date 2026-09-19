@@ -427,6 +427,7 @@ components:
       enum: [rule_filter, portfolio, both]
     JdCategory:
       type: string
+      description: API 표시 분류. responsibility는 Wanted main_tasks에서 나온 주요 업무이며 DB requirement_type의 unknown과 원문 출처를 함께 사용해 구분한다.
       enum: [required, preferred, responsibility]
     Persona:
       type: string

@@ -128,6 +128,7 @@ DEVON 자체 JWT 생성은 `users.id`와 필요 시 `github_accounts.id` 같은 
 - `job_postings`는 normalized Wanted URL 기준 재사용.
 - `fetched_at` 기준 TTL은 24시간.
 - `jd_requirements.requirement_type`: `required`, `preferred`, `unknown`.
+- API 표시용 `category`와 저장 분류를 구분한다. 주요 업무는 `unknown`으로 분류하고 원문 출처를 함께 보존한다. 변환·재조회 규칙은 [분석 Run의 Wanted 공고 수집·분류](../../spec/backend/features/analysis-run.md#wanted-공고-수집분류)를 따른다.
 - `skill_tags`를 `tech_tags` 원천으로 사용한다.
 
 ## Report

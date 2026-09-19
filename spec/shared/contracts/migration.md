@@ -31,3 +31,7 @@
 | pgvector | 실제 vector 검색 필요 여부 | `PENDING_AI` |
 
 기존 자료는 참고 기록으로 남긴다. 구현자는 이 문서의 FIX/PENDING 상태를 보고 범위를 판단한다.
+
+## PR #15 JD 분류 정합화
+
+API `JdCategory`와 DB·AI `requirement_type`은 서로 다른 의미이므로 기존 enum을 각각 유지한다. 이번 수정은 두 enum의 변환과 원문 출처 보존을 [분석 Run](../../backend/features/analysis-run.md#wanted-공고-수집분류)에 명시하고 추출 초안에 반영한다. 공개 API 값이나 DB enum을 변경하지 않는다.
