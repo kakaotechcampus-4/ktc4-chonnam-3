@@ -22,7 +22,11 @@ dependencies = [
     "structlog",
     "python-multipart",
     "anthropic",
+    "devon-ai",
 ]
+
+[tool.uv.sources]
+devon-ai = { path = "../ai", editable = true }
 
 [dependency-groups]
 dev = [
@@ -41,3 +45,4 @@ files = ["app"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["."]
