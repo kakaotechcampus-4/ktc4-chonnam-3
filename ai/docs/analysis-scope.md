@@ -3,8 +3,6 @@
 작성일: 2026-09-16
 근거: `spec/ai/features/repository-analysis.md`, `ai/docs/task-04-repo-shallow.md`, `ai/docs/task-05-repo-deep.md`
 
-> **임시 상태 안내**: 위 세 문서는 현재 `feature/spec-ai-docs` 브랜치에 있고 `develop` 에 아직 머지되지 않아 이 브랜치에서는 열리지 않는다. 그 브랜치가 머지되면 위 경로 그대로 읽을 수 있다. 머지 후 이 문단을 발견하면 지운다.
-
 ## 1. 목적과 경계
 
 기본 분석(L1)과 정밀 분석(L2)이 각각 어떤 파일을 읽고 무엇을 읽지 않는지 고정한다. 읽지 않는 범위가 사실표의 `미확인` 항목과 대응한다.

@@ -2,8 +2,6 @@
 
 > **격리 규칙**: 이 문서의 내용은 모델 프롬프트, 검색(retrieval) 쿼리, tool 입력 어디에도 들어가서는 안 된다. 모델이 이 표를 읽어 요약·재구성·추론의 입력으로 쓰는 모든 경로를 금지한다. 사람이 원문을 직접 읽고 확인한 사실과 확인하지 않은 것을 사람만 보는 문서로 남기는 것이 이 표의 존재 이유이며, 모델이 이 내용을 읽으면 그 격리가 깨진다. 세부 규칙의 근거는 `ai/evals/README.md` 의 expectations 격리 규칙이다.
 
-> **임시 상태 안내**: `ai/evals/README.md`, `spec/ai/features/repository-analysis.md`, `spec/ai/decisions/0008-ai-candidate-policy.md` 는 현재 `feature/spec-ai-docs` 브랜치에 있고 `develop` 에 아직 머지되지 않아 이 브랜치에서는 열리지 않는다. 그 브랜치가 머지되면 위 경로 그대로 읽을 수 있다. 머지 후 이 문단을 발견하면 지운다.
-
 작성일: 2026-09-16
 근거: `ai/docs/analysis-scope.md`, `spec/ai/features/repository-analysis.md`
 오픈소스 주소: https://github.com/Savers-Save-Earth/Savers / https://github.com/JEJUGILMOA/JEJUGILMOA-BE / https://github.com/spring-projects/spring-petclinic
@@ -44,7 +42,7 @@
 - source group: `sg-r1`
 - 언어·규모: Java / Spring Boot (Gradle), 파일 538개
 - 작성자·작성일: jinyeong, 2026-09-16
-- 검수자: 미정 (전수 검수 미완료)
+- 검수: 작성자 자체 재확인 완료 (2026-09-19). 제3자 대조 검수는 미완료
 
 ### F-R1-001 · Redis 스타터 의존성 선언
 
@@ -110,7 +108,7 @@
 - source group: `sg-r2`
 - 언어·규모: TypeScript / Next.js, 파일 201개
 - 작성자·작성일: jinyeong, 2026-09-16
-- 검수자: 미정 (전수 검수 미완료)
+- 검수: 작성자 자체 재확인 완료 (2026-09-19). 제3자 대조 검수는 미완료
 
 ### F-R2-001 · Next.js 의존성 버전 선언
 
@@ -176,7 +174,7 @@
 - source group: `sg-r3`
 - 언어·규모: Java / Spring Boot (Maven), 파일 132개
 - 작성자·작성일: jinyeong, 2026-09-16
-- 검수자: 미정 (전수 검수 미완료)
+- 검수: 작성자 자체 재확인 완료 (2026-09-19). 제3자 대조 검수는 미완료
 
 ### F-R3-001 · 캐시 스타터 의존성 선언
 
@@ -230,7 +228,7 @@
 | --- | --- |
 | 사실 | `CacheConfiguration` 의 `cacheConfiguration()` 메서드 Javadoc(L40-L48)은 JCache API 표준이 제공하는 설정 객체에는 제한된 옵션만 있으며, size limit 같은 "정말 관련 있는 설정 옵션"(the really relevant configuration options)은 "선택된 JCache 구현체가 제공하는 설정 메커니즘"(a configuration mechanism that is provided by the selected JCache implementation)을 통해 별도로 설정해야 한다고 적혀 있으나, 이 파일과 4절이 열거한 다른 L2 후보 path(application.properties) 어디에도 그 구현체가 무엇이고 설정이 어디에 있는지는 나타나지 않는다 |
 | 출처 | [CacheConfiguration.java#L40-L48](https://github.com/spring-projects/spring-petclinic/blob/818c4136ea971c21674525f9053de0d9c7ad8cfe/src/main/java/org/springframework/samples/petclinic/system/CacheConfiguration.java#L40-L48) |
-| 확인 범위 | CacheConfiguration.java 전체(53줄, 클래스 Javadoc L26-L29 포함), 그리고 application.properties 전체(29줄)에 JCache·캐시 구현체별 설정 프로퍼티가 없음을 확인 |
+| 확인 범위 | CacheConfiguration.java 전체(53줄, 클래스 Javadoc L26-L30 포함), 그리고 application.properties 전체(29줄)에 JCache 구현체 설정 프로퍼티가 없음을 확인(L29 `spring.web.resources.cache.cachecontrol.max-age` 는 정적 리소스 HTTP 캐시 헤더로 JCache 와 무관) |
 | 미확인 | 런타임에 실제로 어떤 JCache 구현체가 선택되는지(Spring Boot 자동 설정 내부 동작은 열거되지 않은 경로), size limit 등 "정말 관련 있는 설정"이 이 저장소 어디에 존재하는지 여부(열거되지 않은 경로 포함), 개인 기여 |
 | 확인 수준 | 확인 실패 |
 | 금지 | P1, P5, P6 |
@@ -290,6 +288,10 @@ ADR 0009 는 평가 fixture 를 **합성 로컬 사례**로 규정한다.
 
 이 결정은 W12 에서 AI 리드와 함께 내린다. 이 문서에서 임의로 정하지 않는다.
 
-### 사람 전수 검수 — 미완료
+### 사람 전수 검수 — 작성자 자체 재확인만 완료
 
-이 사실표 작성 계획(Task 7 Step 5)은 사람이 레코드 15개 전부의 permalink 을 열어 `사실`·`확인 범위`·`미확인` 이 원문과 맞는지 대조하는 전수 검수를 요구한다. 이 검수는 이번 작업에서 수행하지 않았다 — 작성자와 검수자가 같은 사람이면 대조 검수의 의미가 없기 때문이다. 작성자가 아닌 사람이 별도로 수행해야 하며, 아직 열려 있다. 수행 시 결론이 갈리는 레코드는 ADR 0009 에 따라 양쪽의 출처 근거와 이유를 보존한 `pending` 행으로 표에 추가한다.
+이 사실표 작성 계획(Task 7 Step 5)은 사람이 레코드 15개 전부의 permalink 을 열어 `사실`·`확인 범위`·`미확인` 이 원문과 맞는지 대조하는 전수 검수를 요구한다.
+
+작성자가 레코드 15개 전부의 permalink 을 다시 열어 자체 재확인했다(2026-09-19). 고정 SHA 와 줄 번호가 원문과 맞는지, `사실` 서술이 `확인 범위` 를 넘지 않는지, `미확인` 이 "확인하지 않았다" 가 아니라 "없다" 로 새지 않았는지, `확인 실패` 판정이 정의에 맞는지를 확인했다. 이 과정에서 F-R3-005 의 `확인 범위` 표기 두 곳을 정정했다 — 클래스 Javadoc 범위를 L26-L29 에서 닫는 `*/` 를 포함한 L26-L30 으로 맞추고(같은 레코드의 다른 Javadoc 표기 L40-L48 과 기준을 통일), application.properties 에 JCache 설정이 없다는 진술에 L29 의 정적 리소스 HTTP 캐시 헤더가 이와 무관함을 덧붙였다.
+
+**이것은 제3자 대조 검수가 아니다.** 작성자와 검수자가 같으면 같은 곳을 같게 읽을 가능성이 높아 대조의 목적을 달성하지 못한다. 작성자가 아닌 사람의 전수 검수는 여전히 열려 있다. 수행 시 결론이 갈리는 레코드는 ADR 0009 에 따라 양쪽의 출처 근거와 이유를 보존한 `pending` 행으로 표에 추가한다.
