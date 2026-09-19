@@ -9,10 +9,13 @@
 
 이 문서는 읽기 범위만 정한다. L1·L2 의 실제 구현은 `ai/docs/task-04-repo-shallow.md` 와 `ai/docs/task-05-repo-deep.md` 가 다룬다.
 
+`L0-a` 는 파일을 읽지 않고 저장소 목록 메타데이터만 보는 lightweight filter 이므로(`spec/ai/features/repository-analysis.md` — "LLM을 호출하지 않는다") 사실표의 `미확인` 항목과 대응하지 않는다. 4단계가 모두 보이도록 표에는 남긴다.
+
 ## 2. 분석 수준별 읽기 범위
 
 | 수준 | 읽는다 | 읽지 않는다 |
 | --- | --- | --- |
+| L0-a | 저장소 목록 메타데이터 — 식별자, 공개·접근 상태, fork/archive 여부, 크기, 주 언어, 활동 | 파일 일체. README 도 읽지 않는다 |
 | L0-b | README, languages 메타데이터, head SHA, commit 수, 사용자 commit 수 | 파일 내용 일체 |
 | L1 | 위 항목 + 의존성 선언 파일, 최상위 디렉터리 목록 | 함수 본문, 설정 값, 테스트 |
 | L2 | 고정 SHA 의 **열거된 단일 파일** 원문 | 열거되지 않은 path, 재귀 디렉터리 탐색, 전체 tree, global keyword search |
