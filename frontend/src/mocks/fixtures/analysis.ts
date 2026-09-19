@@ -1,13 +1,14 @@
-import type { FailedRepository, RepositoryCard } from '@/types/contract';
+import type { RepositoryItem } from '@/types/api';
+import { REQ_BACKEND_API, REQ_CACHE, REQ_MESSAGING } from './jd';
 
 /**
  * 추천 결과 카드.
- * `spec/shared/contracts/openapi.yaml` 의 RepositoryCard 스키마를 따른다.
+ * `spec/shared/contracts/openapi.yaml` 의 RepositoryCard 스키마(= `types/api.ts` 의 RepositoryItem)를 따른다.
  * page 1 = `GET /analysis-runs/{runId}/result` 의 첫 batch.
  */
-const page1: RepositoryCard[] = [
+const page1: RepositoryItem[] = [
   {
-    repositoryId: '9f1c0a6e-0001-4f00-8a01-000000000001',
+    id: '9f1c0a6e-0001-4f00-8a01-000000000001',
     fullName: 'kimdev/payment-service',
     name: 'payment-service',
     description: '결제 트랜잭션 처리와 재시도 정책을 담당하는 백엔드 서비스',
@@ -28,13 +29,10 @@ const page1: RepositoryCard[] = [
     candidateSource: 'both',
     recommendReason: 'JD의 결제·트랜잭션 요구사항과 직접 대응하고, 커밋 기여도가 가장 높습니다.',
     matchScore: 92,
-    matchedRequirementIds: [
-      '7a2b0000-0000-4000-8000-00000000000a',
-      '7a2b0000-0000-4000-8000-00000000000b',
-    ],
+    matchedRequirementIds: [REQ_BACKEND_API, REQ_CACHE],
   },
   {
-    repositoryId: '9f1c0a6e-0002-4f00-8a01-000000000002',
+    id: '9f1c0a6e-0002-4f00-8a01-000000000002',
     fullName: 'kimdev/project-a',
     name: 'project-a',
     description: 'Redis 캐시를 도입한 상품 조회 API',
@@ -55,10 +53,10 @@ const page1: RepositoryCard[] = [
     candidateSource: 'rule_filter',
     recommendReason: '분산 캐시 운영 경험을 보여줄 수 있는 근거가 README와 커밋에 모두 있습니다.',
     matchScore: 84,
-    matchedRequirementIds: ['7a2b0000-0000-4000-8000-00000000000b'],
+    matchedRequirementIds: [REQ_CACHE],
   },
   {
-    repositoryId: '9f1c0a6e-0003-4f00-8a01-000000000003',
+    id: '9f1c0a6e-0003-4f00-8a01-000000000003',
     fullName: 'kimdev/devon-frontend',
     name: 'devon-frontend',
     description: 'React 기반 면접 준비 서비스 프론트엔드',
@@ -81,7 +79,7 @@ const page1: RepositoryCard[] = [
     matchedRequirementIds: [],
   },
   {
-    repositoryId: '9f1c0a6e-0004-4f00-8a01-000000000004',
+    id: '9f1c0a6e-0004-4f00-8a01-000000000004',
     fullName: 'kimdev/batch-pipeline',
     name: 'batch-pipeline',
     description: '일 단위 정산 배치 파이프라인',
@@ -104,7 +102,7 @@ const page1: RepositoryCard[] = [
     matchedRequirementIds: [],
   },
   {
-    repositoryId: '9f1c0a6e-0005-4f00-8a01-000000000005',
+    id: '9f1c0a6e-0005-4f00-8a01-000000000005',
     fullName: 'kimdev/algorithm-study',
     name: 'algorithm-study',
     description: null,
@@ -124,7 +122,7 @@ const page1: RepositoryCard[] = [
     matchedRequirementIds: [],
   },
   {
-    repositoryId: '9f1c0a6e-0006-4f00-8a01-000000000006',
+    id: '9f1c0a6e-0006-4f00-8a01-000000000006',
     fullName: 'kimdev/legacy-crawler',
     name: 'legacy-crawler',
     description: '채용 공고 크롤러',
@@ -146,9 +144,9 @@ const page1: RepositoryCard[] = [
 ];
 
 /** page 2 이상 = `GET /analysis-runs/{runId}/candidates?page=N` */
-const page2: RepositoryCard[] = [
+const page2: RepositoryItem[] = [
   {
-    repositoryId: '9f1c0a6e-0007-4f00-8a01-000000000007',
+    id: '9f1c0a6e-0007-4f00-8a01-000000000007',
     fullName: 'kimdev/notification-worker',
     name: 'notification-worker',
     description: 'Kafka consumer 기반 알림 발송 워커',
@@ -168,10 +166,10 @@ const page2: RepositoryCard[] = [
     candidateSource: 'rule_filter',
     recommendReason: 'JD의 메시징 시스템 요구사항과 연관됩니다.',
     matchScore: 77,
-    matchedRequirementIds: ['7a2b0000-0000-4000-8000-00000000000c'],
+    matchedRequirementIds: [REQ_MESSAGING],
   },
   {
-    repositoryId: '9f1c0a6e-0008-4f00-8a01-000000000008',
+    id: '9f1c0a6e-0008-4f00-8a01-000000000008',
     fullName: 'kimdev/infra-terraform',
     name: 'infra-terraform',
     description: '서비스 인프라 IaC 정의',
@@ -191,7 +189,7 @@ const page2: RepositoryCard[] = [
     matchedRequirementIds: [],
   },
   {
-    repositoryId: '9f1c0a6e-0009-4f00-8a01-000000000009',
+    id: '9f1c0a6e-0009-4f00-8a01-000000000009',
     fullName: 'kimdev/portfolio-site',
     name: 'portfolio-site',
     description: '개인 포트폴리오 정적 사이트',
@@ -215,16 +213,20 @@ const page2: RepositoryCard[] = [
   },
 ];
 
-export const candidatePages: Record<number, RepositoryCard[]> = {
+export const candidatePages: Record<number, RepositoryItem[]> = {
   1: page1,
   2: page2,
 };
 
 export const resultRepositories = page1;
 
-export const failedRepositories: FailedRepository[] = [
-  {
-    repositoryId: '9f1c0a6e-0006-4f00-8a01-000000000006',
-    errorCode: 'llm_failed',
-  },
-];
+/**
+ * 포트폴리오 문서에서 언급된 레포 수와, 그중 GitHub 계정에서 실제로 찾아낸 수.
+ * 두 값이 다를 때만 RepoSelect가 안내 문구를 띄운다. 그 분기를 볼 수 있도록 일부러 다르게 둔다.
+ */
+export const matchedRepoCount = resultRepositories.filter(
+  (repo) => repo.candidateSource === 'portfolio' || repo.candidateSource === 'both',
+).length;
+
+export const mentionedRepoCount = matchedRepoCount + 1;
+
