@@ -1,9 +1,13 @@
-import type { HomeResponse, InterviewListResponse, MeResponse } from '@/types/api';
+import type {
+  HomeResponse,
+  InterviewListResponse,
+  MeProfileResponse,
+  MeResponse,
+} from '@/types/api';
 
 /**
- * `GET /me`는 `spec/shared/contracts/me-response.schema.json`으로 이관된 계약이다.
- * `GET /me/home`, `GET /me/interviews`, `POST /auth/logout`은 아직 이관 전이라
- * `frontend/docs/api-spec.md`와 `src/types/api.ts`를 기준으로 둔다.
+ * 응답은 모두 `spec/shared/contracts/openapi.yaml`의 스키마를 따른다.
+ * 이 파일의 4개 경로(`/me`, `/me/profile`, `/me/home`, `/me/interviews`)는 전부 계약에 있다.
  */
 export const me: MeResponse = {
   name: '김개발',
@@ -126,12 +130,44 @@ const allInterviews: InterviewListResponse['interviews'] = [
   },
 ];
 
+/** 완료 면접 점수의 평균. 마이페이지 프로필과 면접 목록이 같은 값을 봐야 한다. */
+const averageScore =
+  allInterviews
+    .filter((item) => item.totalScore !== null)
+    .reduce((sum, item) => sum + (item.totalScore ?? 0), 0) /
+  allInterviews.filter((item) => item.totalScore !== null).length;
+
+/**
+ * `desiredPosition`은 가장 최근 완료 면접의 position이다. 완료 면접이 없으면 null.
+ * 목록 fixture에서 파생시켜 두 화면이 어긋나지 않게 한다.
+ */
+const latestCompleted = allInterviews
+  .filter((item) => item.status === 'completed' && item.completedAt !== null)
+  .sort((a, b) => (a.completedAt! < b.completedAt! ? 1 : -1))[0];
+
+export const meProfile: MeProfileResponse = {
+  name: me.name,
+  avatarUrl: 'https://avatars.githubusercontent.com/u/12345',
+  loginId: 'kimdev',
+  joinedAt: '2026-06-02T04:11:00Z',
+  desiredPosition: latestCompleted?.position ?? null,
+  github: {
+    linked: true,
+    login: 'kimdev',
+    publicRepoCount: 9,
+  },
+  interviewSummary: {
+    totalCount: allInterviews.length,
+    averageScore,
+  },
+};
+
 export function interviewPage(page: number, size: number): InterviewListResponse {
   const start = (page - 1) * size;
   return {
     interviews: allInterviews.slice(start, start + size),
     total: allInterviews.length,
-    averageScore: 77.5,
+    averageScore,
     page,
     size,
   };

@@ -1,10 +1,10 @@
 import { HttpResponse } from 'msw';
 
 import { BASE } from '@/shared/api';
-import type { ContractError } from '@/types/contract';
+import type { ApiErrorBody } from '@/types/api';
 
 /** 핸들러가 돌려줄 수 있는 응답 본문. 성공 스키마는 고정하고 공통 에러만 함께 허용한다. */
-export type Res<T> = T | ContractError;
+export type Res<T> = T | ApiErrorBody;
 
 /** 핸들러 경로는 항상 api 클라이언트의 BASE를 따라간다. prefix가 바뀌면 mock도 같이 움직인다. */
 export function path(suffix: string) {
@@ -21,7 +21,7 @@ export function errorResponse(
   message: string,
   extra?: { details?: Record<string, unknown>; retryAfter?: number },
 ) {
-  return HttpResponse.json<ContractError>({ error: { reason, message, ...extra } }, { status });
+  return HttpResponse.json<ApiErrorBody>({ error: { reason, message, ...extra } }, { status });
 }
 
 /**
