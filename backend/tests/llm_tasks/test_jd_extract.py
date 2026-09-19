@@ -28,6 +28,15 @@ def test_maps_each_field_to_its_own_category_in_order():
     categories = [d.category for d in drafts]
     assert categories == ["required", "required", "preferred", "responsibility"]
 
+    # API 표시 분류와 DB/AI 분류를 구분하고, 원문 출처를 함께 보존한다.
+    assert [d.requirement_type for d in drafts] == ["required", "required", "preferred", "unknown"]
+    assert [d.source_field for d in drafts] == [
+        "requirements",
+        "requirements",
+        "preferred_points",
+        "main_tasks",
+    ]
+
     texts = [d.text for d in drafts]
     assert texts == [
         "Python 3년 이상",
@@ -49,6 +58,16 @@ def test_preferred_never_becomes_required():
 
     assert "Redis 경험" in preferred_texts
     assert "Redis 경험" not in required_texts
+
+
+def test_main_tasks_only_remains_analyzable_without_becoming_required():
+    drafts = build_requirement_drafts(_posting(requirements=[], preferred_points=[]))
+
+    assert len(drafts) == 1
+    assert drafts[0].text == "결제 API 개발"
+    assert drafts[0].requirement_type == "unknown"
+    assert drafts[0].source_field == "main_tasks"
+    assert drafts[0].category == "responsibility"
 
 
 def test_tech_tags_are_uniform_across_rows():
@@ -73,4 +92,4 @@ def test_unstructured_posting_raises_extraction_error():
     with pytest.raises(JdExtractionError) as exc_info:
         build_requirement_drafts(posting)
 
-    assert exc_info.value.code == "extraction_failed"
+    assert exc_info.value.code == "jd_extraction_failed"

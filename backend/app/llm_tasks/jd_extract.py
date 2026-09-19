@@ -1,48 +1,67 @@
-"""공고 → jd_requirements 추출. category = required / preferred / responsibility
+"""공고 → jd_requirements 초안. API category와 DB requirement_type을 구분한다.
 원티드는 requirements / preferred_points / main_tasks 가 이미 나뉘어 오고 skill_tags 가
 tech_tags 원천이므로 LLM 추측 불필요. 상한 20개
 
 확정본 §3 jd_requirements / task-09
 
-1차는 원티드(구조화된 어댑터 응답)만 지원하므로 이 파일은 LLM 호출 없음 —
-`PostingContent.is_structured`가 항상 True 인 입력만 들어옴(제너릭 어댑터는 fetch 단계에서
-이미 unsupported_site 로 실패). 비구조화 입력(2차, LLM 기반 추출)은 아직 미구현
+1차는 원티드 구조화 필드를 규칙으로 변환하며 LLM을 호출하지 않는다.
+요구사항 필드가 없는 입력은 jd_extraction_failed로 실패한다.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from app.integrations.jd.base import PostingContent
 
 MAX_REQUIREMENTS = 20
+JdCategory = Literal["required", "preferred", "responsibility"]
 
-# FE·BE 합의: category CHECK 값. 순서가 display_order 우선순위와도 일치
-# (필수 → 우대 → 주요업무 순으로 화면에 그룹핑돼 보이는 게 자연스럽다는 판단)
-_CATEGORY_ORDER: tuple[tuple[str, str], ...] = (
-    ("requirements", "required"),
-    ("preferred_points", "preferred"),
-    ("main_tasks", "responsibility"),
-)
+# API 표시 순서이자 원문 출처. DB에는 category 대신 requirement_type을 사용한다.
+_CATEGORY_SOURCES: dict[JdCategory, str] = {
+    "required": "requirements",
+    "preferred": "preferred_points",
+    "responsibility": "main_tasks",
+}
 
 
 @dataclass(frozen=True, slots=True)
 class JdRequirementDraft:
-    """`jd_requirements` 행 하나를 만들기 위한 값 객체. DB 세션 모름 —
-    실제 INSERT 는 `features/analysis/pipeline/steps/jd_extract.py` 담당"""
+    """요구사항 초안. DB 세션과 API 직렬화는 호출부가 담당한다.
 
-    category: str
-    """"required" | "preferred" | "responsibility" — CHECK 제약과 동일"""
+    저장 시 ``requirement_type``과 ``source_field``를 읽어 분류와 출처를 보존한다.
+    두 값은 계산 속성이므로 ``dataclasses.asdict()`` 결과에는 포함되지 않는다.
+    ``category``는 API 표시용이므로 DB requirement_type에 그대로 넣지 않는다.
+    """
+
+    category: JdCategory
+    """API 표시 분류. 주요 업무는 responsibility로 표시한다."""
 
     text: str
     display_order: int
     tech_tags: list[str]
 
+    @property
+    def requirement_type(self) -> str:
+        """DB/AI 분류. 주요 업무만으로 필수·우대 여부를 추측하지 않는다."""
+        return {
+            "required": "required",
+            "preferred": "preferred",
+            "responsibility": "unknown",
+        }[self.category]
+
+    @property
+    def source_field(self) -> str:
+        """Wanted 원문 필드. unknown만으로 주요 업무를 역추론하지 않는다."""
+        return _CATEGORY_SOURCES[self.category]
+
 
 class JdExtractionError(Exception):
-    """`not_a_job_posting` / `extraction_failed` 등 — docs/error-reasons.md ④
-    현재는 원티드 구조화 입력만 다루므로 requirements/preferred_points/main_tasks 가
-    전부 비어 있을 때만 발생 (LLM 판정이 필요한 2차 케이스는 아직 없음)"""
+    """구조화된 공고에서 요구사항 초안을 만들 수 없을 때 발생.
+
+    현재 추출 함수는 `jd_extraction_failed` 코드로 이 예외를 발생시킨다.
+    """
 
     code: str
 
@@ -59,17 +78,17 @@ def build_requirement_drafts(posting: PostingContent) -> list[JdRequirementDraft
     (W5 완료 기준: "우대를 필수로 바꾸지 않을 것")
 
     tech_tags 는 원티드가 공고 전체 단위로만 주므로(문장별 태깅 없음), 모든 행에
-    동일한 `posting.skill_tags`를 붙임 — 레포 매칭(task-10)은 문장 단위가 아니라
-    공고 전체 vs 레포 tech_stack 비교라 이 정도 해상도로 충분
+    동일한 `posting.skill_tags`를 붙인다. 이 태그는 공고 전체의 기술 목록이며,
+    각 문장에서 해당 기술을 직접 요구한다는 뜻은 아니다.
     """
     if not posting.is_structured:
-        # 2차: 비구조화 텍스트를 LLM 으로 분류하는 경로, 아직 미구현
+        # 구조화된 요구사항 필드가 하나도 없으면 결정적으로 실패한다.
         raise JdExtractionError(
-            "extraction_failed", "구조화되지 않은 공고 추출은 아직 지원하지 않음"
+            "jd_extraction_failed", "구조화되지 않은 공고 추출은 아직 지원하지 않음"
         )
 
     drafts: list[JdRequirementDraft] = []
-    for field_name, category in _CATEGORY_ORDER:
+    for category, field_name in _CATEGORY_SOURCES.items():
         for text in getattr(posting, field_name):
             if len(drafts) >= MAX_REQUIREMENTS:
                 return drafts
@@ -78,11 +97,12 @@ def build_requirement_drafts(posting: PostingContent) -> list[JdRequirementDraft
                     category=category,
                     text=text,
                     display_order=len(drafts),
+                    # 한 초안의 태그 수정이 다른 초안이나 원본 공고에 전파되지 않게 복사한다.
                     tech_tags=list(posting.skill_tags),
                 )
             )
 
     if not drafts:
-        raise JdExtractionError("extraction_failed", "요구사항 0건")
+        raise JdExtractionError("jd_extraction_failed", "요구사항 0건")
 
     return drafts
