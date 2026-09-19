@@ -10,9 +10,9 @@
 
 ## 기능별 검증 위치
 
-작업의 선행 관계는 [구현 작업 지도](pipeline.md)를 따른다. 현재 존재하는 구조 검사는 [test_package.py](../tests/test_package.py), [test_import_boundaries.py](../tests/test_import_boundaries.py), BE의 [설치 연결 검사](../../backend/tests/agents/test_ai_package_imports.py)다.
+작업의 선행 관계는 [구현 작업 지도](pipeline.md)를 따른다. 현재 존재하는 구조 검사는 [test_package.py](../tests/test_package.py), [test_import_boundaries.py](../tests/test_import_boundaries.py), [test_eval_data_boundaries.py](../tests/test_eval_data_boundaries.py)(task-12 loader 범위), BE의 [설치 연결 검사](../../backend/tests/agents/test_ai_package_imports.py)다.
 
-아래는 **추가 예정이며 현재 없는 테스트 파일**이다. 경로를 문서에 적었다는 이유로 이미 테스트가 수집되거나 기능이 구현된 것으로 보고하지 않는다. 해당 기능의 승인된 범위를 구현할 때 생성하고, 각 task에 명시한 정상·실패·보류 사례를 작성한다. 아직 없는 테스트 경로로 실행한 수집 오류는 해당 기능 검증 결과가 아니다.
+아래는 **추가 예정이며 현재 없는 테스트 파일**이다(task-12는 loader 범위만 이미 있고 나머지 항목은 여전히 없음). 경로를 문서에 적었다는 이유로 이미 테스트가 수집되거나 기능이 구현된 것으로 보고하지 않는다. 해당 기능의 승인된 범위를 구현할 때 생성하고, 각 task에 명시한 정상·실패·보류 사례를 작성한다. 아직 없는 테스트 경로로 실행한 수집 오류는 해당 기능 검증 결과가 아니다.
 
 | 작업 | 추가 예정 위치, 저장소 루트 기준 | 주요 검증 경계 |
 | --- | --- | --- |
@@ -26,7 +26,7 @@
 | [09 답변](task-09-answer-analysis.md) | `ai/tests/llm_tasks/test_answer_analysis.py` | 세 축·평가 가능 여부·보완·원문 보존 |
 | [10 Director](task-10-director.md) | `ai/tests/agents/director/test_director.py` | 허용 행동·질문 검증·턴 정책·후속 질문 |
 | [11 리포트](task-11-report.md) | `ai/tests/llm_tasks/test_report.py` | 서술·Persona 관찰·Turn/Evidence 연결·점수 분리 |
-| [12 평가](task-12-evaluation.md) | `ai/tests/test_eval_data_boundaries.py` | source group·입력/정답 분리·결과 기록·채점기 대조 |
+| [12 평가](task-12-evaluation.md) | `ai/tests/test_eval_data_boundaries.py`(loader 범위 존재, 9 cases) | source group·입력/정답 분리·결과 기록·채점기 대조 |
 | [13 BE 연결](task-13-backend-integration.md) | `backend/tests/agents/test_ai_integration.py`, 해당 `backend/tests/features/` | AI 결과 수용·저장·큐·전송·복구; 설치 smoke와 별도 |
 
 제안 fixture는 검토 중인 schema를 production 계약으로 확정하는 수단이 아니다. fixture 검토와 정책 단위 검사는 미합의 BE 연결과 독립적으로 준비할 수 있지만, 실제 DTO·저장·공개 응답을 검사하는 테스트는 해당 계약의 채택 근거를 확인한다. 실제 모델 실행에서는 동일 사례라도 mock 검사와 별도 결과를 기록한다.
