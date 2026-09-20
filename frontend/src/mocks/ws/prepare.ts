@@ -46,29 +46,6 @@ export async function streamPrepare(client: Client, createdAt: number) {
 }
 
 /**
- * 준비 실패 상태로 붙은 연결에 체크리스트와 오류를 재생한다.
- *
- * 성공한 단계는 `completed`, 실패한 단계는 `failed`, 그 뒤는 `pending`으로 남긴다.
- * 화면(5a2-v2)이 체크리스트를 유지한 채 실패 단계만 ✕로 바꾸기 때문이다.
- */
-export function replayPrepareFailure(client: Client, record: InterviewRecord) {
-  const lastError = interviewLastError(record);
-  const failedIndex = lastError?.step ? PREPARE_STEPS.indexOf(lastError.step) : -1;
-
-  PREPARE_STEPS.forEach((key, index) => {
-    if (failedIndex === -1 || index < failedIndex) {
-      send(client, { type: 'prepareStep', key, status: 'completed' });
-    } else if (index === failedIndex) {
-      send(client, { type: 'prepareStep', key, status: 'failed' });
-    } else {
-      send(client, { type: 'prepareStep', key, status: 'pending' });
-    }
-  });
-
-  if (lastError) send(client, { type: 'error', ...lastError });
-}
-
-/**
  * `prepareRetry`. 실패한 단계부터 다시 실행한다. 성공한 단계는 재실행하지 않는다.
  * 세션과 선택 레포는 그대로 유지된다.
  */
