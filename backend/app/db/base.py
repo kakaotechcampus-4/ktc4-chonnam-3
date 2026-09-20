@@ -4,6 +4,7 @@ docs/db-schema.md / task-02
 """
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import DateTime, MetaData, func, text
@@ -60,3 +61,13 @@ class CreatedAtMixin:
         server_default=func.now(),
         nullable=False,
     )
+
+
+def check_in(column: str, values: Sequence[str]) -> str:
+    """CHECK 제약의 `col IN (...)` 문자열을 만든다.
+
+    입력: 컬럼명, 허용 값 목록. 출력: SQL 조건 문자열.
+    파이썬 튜플을 그대로 f-string 에 넣으면 값이 1개일 때 `('text',)` 가 되어 SQL 이 깨진다.
+    """
+    rendered = ", ".join(f"'{value}'" for value in values)
+    return f"{column} IN ({rendered})"
