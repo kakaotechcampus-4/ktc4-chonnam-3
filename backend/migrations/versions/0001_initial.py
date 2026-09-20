@@ -36,6 +36,9 @@ _TABLES_IN_CREATE_ORDER = (
     "analysis_repo_candidates",
     "analysis_repo_candidate_pages",
     "repo_match_scores",
+    "interview_sessions",
+    "session_repositories",
+    "interview_turns",
 )
 
 
@@ -526,6 +529,157 @@ def _create_analysis_tables() -> None:
     )
 
 
+def _create_interview_tables() -> None:
+    """interview_sessions, session_repositories, interview_turns."""
+    op.create_table(
+        "interview_sessions",
+        _uuid_pk(),
+        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("analysis_job_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("job_posting_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("retry_of_interview_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("status", sa.String(length=20), server_default="preparing", nullable=False),
+        sa.Column("answer_mode", sa.String(length=10), server_default="text", nullable=False),
+        sa.Column("total_turns", sa.SmallInteger(), server_default="9", nullable=False),
+        sa.Column("current_turn", sa.SmallInteger(), server_default="0", nullable=False),
+        sa.Column("context_state", postgresql.JSONB(), nullable=True),
+        sa.Column("prepare_steps", postgresql.JSONB(), server_default="[]", nullable=False),
+        sa.Column("last_error", postgresql.JSONB(), nullable=True),
+        sa.Column("model", sa.Text(), nullable=True),
+        sa.Column("prompt_version", sa.Text(), nullable=True),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("abandoned_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("abandoned_at_turn", sa.SmallInteger(), nullable=True),
+        _created_at(),
+        _updated_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_interview_sessions"),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["users.id"],
+            name="fk_interview_sessions_user_id_users",
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["analysis_job_id"],
+            ["analysis_jobs.id"],
+            name="fk_interview_sessions_analysis_job_id_analysis_jobs",
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["job_posting_id"],
+            ["job_postings.id"],
+            name="fk_interview_sessions_job_posting_id_job_postings",
+            ondelete="SET NULL",
+        ),
+        sa.ForeignKeyConstraint(
+            ["retry_of_interview_id"],
+            ["interview_sessions.id"],
+            name="fk_interview_sessions_retry_of_interview_id_interview_sessions",
+            ondelete="SET NULL",
+        ),
+        sa.CheckConstraint(
+            "status IN ('preparing', 'preparing_failed', 'in_progress', 'completed', 'abandoned')",
+            name="ck_interview_sessions_status",
+        ),
+        sa.CheckConstraint("answer_mode IN ('text')", name="ck_interview_sessions_answer_mode"),
+    )
+    # run 당 활성 면접 1개 (session_limit_exceeded 의 근거).
+    op.create_index(
+        "uq_interview_sessions_active_per_run",
+        "interview_sessions",
+        ["analysis_job_id"],
+        unique=True,
+        postgresql_where=sa.text("status IN ('preparing', 'in_progress')"),
+    )
+    op.create_index(
+        "ix_interview_sessions_user_id_created_at",
+        "interview_sessions",
+        ["user_id", "created_at"],
+    )
+
+    op.create_table(
+        "session_repositories",
+        _uuid_pk(),
+        sa.Column("interview_session_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("repository_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("is_primary", sa.Boolean(), server_default="false", nullable=False),
+        # 값 집합은 task-17 에서 확정한다 — 아직 CHECK 를 걸지 않는다.
+        sa.Column("selection_source", sa.String(length=20), nullable=True),
+        sa.Column("display_order", sa.Integer(), nullable=True),
+        _created_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_session_repositories"),
+        sa.ForeignKeyConstraint(
+            ["interview_session_id"],
+            ["interview_sessions.id"],
+            name="fk_session_repositories_interview_session_id_interview_sessions",
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["repository_id"],
+            ["repositories.id"],
+            name="fk_session_repositories_repository_id_repositories",
+            ondelete="CASCADE",
+        ),
+        sa.UniqueConstraint(
+            "interview_session_id",
+            "repository_id",
+            name="uq_session_repositories_session_repo",
+        ),
+    )
+
+    op.create_table(
+        "interview_turns",
+        _uuid_pk(),
+        sa.Column("interview_session_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("turn_no", sa.SmallInteger(), nullable=False),
+        sa.Column("persona", sa.String(length=20), nullable=False),
+        sa.Column("status", sa.String(length=20), server_default="asked", nullable=False),
+        sa.Column("question_text", sa.Text(), nullable=False),
+        sa.Column("answer_text", sa.Text(), nullable=True),
+        sa.Column("depth", sa.SmallInteger(), server_default="1", nullable=False),
+        sa.Column("parent_turn_no", sa.SmallInteger(), nullable=True),
+        # Sprint 1 은 FK 를 걸지 않는다 (topic_taxonomy 확정 후 Sprint 2).
+        sa.Column("topic_code", sa.String(length=50), nullable=True),
+        sa.Column(
+            "jd_requirement_ids",
+            postgresql.ARRAY(postgresql.UUID(as_uuid=True)),
+            server_default="{}",
+            nullable=False,
+        ),
+        sa.Column(
+            "claim_ids",
+            postgresql.ARRAY(postgresql.UUID(as_uuid=True)),
+            server_default="{}",
+            nullable=False,
+        ),
+        sa.Column("analysis", postgresql.JSONB(), nullable=True),
+        sa.Column("decision", postgresql.JSONB(), nullable=True),
+        sa.Column("model", sa.Text(), nullable=True),
+        sa.Column("prompt_version", sa.Text(), nullable=True),
+        sa.Column("asked_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("answered_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("answer_duration_sec", sa.Integer(), nullable=True),
+        _created_at(),
+        _updated_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_interview_turns"),
+        sa.ForeignKeyConstraint(
+            ["interview_session_id"],
+            ["interview_sessions.id"],
+            name="fk_interview_turns_interview_session_id_interview_sessions",
+            ondelete="CASCADE",
+        ),
+        sa.UniqueConstraint(
+            "interview_session_id", "turn_no", name="uq_interview_turns_session_turn"
+        ),
+        sa.CheckConstraint(
+            "persona IN ('tech_lead', 'hr_manager', 'domain_lead')",
+            name="ck_interview_turns_persona",
+        ),
+        sa.CheckConstraint("status IN ('asked', 'answered')", name="ck_interview_turns_status"),
+    )
+
+
 def upgrade() -> None:
     # UUID PK 기본값 gen_random_uuid() 가 이 extension 을 요구한다.
     op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
@@ -534,6 +688,7 @@ def upgrade() -> None:
     _create_posting_tables()
     _create_document_tables()
     _create_analysis_tables()
+    _create_interview_tables()
 
 
 def downgrade() -> None:
