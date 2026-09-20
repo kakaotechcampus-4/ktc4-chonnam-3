@@ -10,6 +10,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import Settings, get_settings
+from app.core.exception_handlers import register_exception_handlers
 from app.core.logging import RequestIdMiddleware, configure_logging, get_logger
 
 logger = get_logger(__name__)
@@ -64,6 +65,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # 모든 4xx/5xx 를 공통 envelope 로 감싼다. FastAPI 기본 detail 응답이 새면 계약 위반이다.
+    register_exception_handlers(app)
 
     app.include_router(health_router, prefix=settings.api_prefix)
     return app
