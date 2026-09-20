@@ -397,15 +397,45 @@
 
   const seen = (got, type) => got.some((m) => m.type === type);
 
-  const wsFailed = await collect(SEED_PREPARING_FAILED_SESSION, (got) => seen(got, 'error'), 3000);
-  const prepareError = wsFailed.got.find((m) => m.type === 'error');
-  check('WS 준비 실패 — 체크리스트', 4, wsFailed.got.filter((m) => m.type === 'prepareStep').length);
-  check('  └ 실패 단계', 'compose_question/failed', prepareError
-    ? `${wsFailed.got.find((m) => m.status === 'failed')?.key}/failed`
-    : '없음');
-  check('  └ error.reason', 'question_gen_timeout', prepareError?.reason);
-  check('  └ error.code', 'ERR_QUESTION_GEN_TIMEOUT', prepareError?.code);
-  check('  └ recoverable', true, prepareError?.recoverable);
+  /**
+   * 준비 실패 세션에 붙어도 서버는 오류를 되보내지 않는다.
+   * 복구 경로는 GET /interviews/{id} 의 lastError 스냅샷이고, WS 연결은 prepareRetry 를 위한 것이다.
+   * 되보내면 화면이 방금 지운 오류가 되살아나 재시도가 끝나도 실패 배너가 남는다(설계 문서 D14).
+   */
+  const failedSnapshot = await call('GET', `/interviews/${SEED_PREPARING_FAILED}`);
+  check('준비 실패 스냅샷 reason', 'question_gen_timeout', failedSnapshot.data.lastError?.reason);
+  check('  └ code', 'ERR_QUESTION_GEN_TIMEOUT', failedSnapshot.data.lastError?.code);
+  check('  └ recoverable', true, failedSnapshot.data.lastError?.recoverable);
+
+  const onConnect = await collect(SEED_PREPARING_FAILED_SESSION, () => false, 1200);
+  check('WS 준비 실패 — 연결 시 무전송', 0, onConnect.got.length);
+
+  const retried = await new Promise((resolve) => {
+    const socket = new WebSocket(wsUrl(SEED_PREPARING_FAILED_SESSION));
+    const got = [];
+    const finish = () => {
+      try {
+        socket.close();
+      } catch {
+        /* 이미 닫힘 */
+      }
+      resolve(got);
+    };
+    socket.onmessage = (event) => {
+      got.push(JSON.parse(event.data));
+      if (seen(got, 'question')) finish();
+    };
+    socket.onopen = () =>
+      setTimeout(() => socket.send(JSON.stringify({ type: 'prepareRetry' })), 200);
+    setTimeout(finish, 6000);
+  });
+  check('WS prepareRetry — 복구', true, seen(retried, 'prepareCompleted') && seen(retried, 'question'));
+  // 성공한 3단계는 재실행하지 않는다. compose_question 만 running 으로 온다.
+  check(
+    '  └ 실패 단계만 재실행',
+    'compose_question',
+    retried.filter((m) => m.status === 'running').map((m) => m.key).join(','),
+  );
 
   check('WS 없는 세션', '1008/not_found', (await collect('sess_없음', () => false, 2000)).closed);
   check(

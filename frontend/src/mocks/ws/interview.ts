@@ -3,7 +3,7 @@ import { ws } from 'msw';
 import { getInterviewBySessionId, interviewStatus } from '../db';
 import { takeFaultFor } from '../faults';
 import { path } from '../http';
-import { handlePrepareRetry, replayPrepareFailure, streamPrepare } from './prepare';
+import { handlePrepareRetry, streamPrepare } from './prepare';
 import { CLOSE_GRACE_MS, parseClientMessage, send, wait, wsError } from './protocol';
 import { handleAnswer, resendPendingQuestion, sendFirstQuestion } from './turns';
 
@@ -57,10 +57,16 @@ export const interviewWsHandlers = [
       if (message.type === 'prepareRetry') void handlePrepareRetry(client, record);
     });
 
-    if (status === 'preparing_failed') {
-      replayPrepareFailure(client, record);
-      return;
-    }
+    /**
+     * 준비 실패 세션에는 오류를 다시 보내지 않는다.
+     *
+     * 계약의 복구 경로는 `GET /interviews/{id}`의 `lastError` 스냅샷이고(#18),
+     * 화면은 그 스냅샷으로 실패를 그린 뒤 "다시 시도"를 눌러야 WS를 연다.
+     * 연결 시점에 오류를 되보내면 화면이 방금 지운 오류가 되살아나 재시도가 끝나도
+     * 실패 배너가 남는다. 실제로 재현했다(설계 문서 D14).
+     * 이 연결은 `prepareRetry`를 받기 위한 것이므로 리스너만 살려 두고 기다린다.
+     */
+    if (status === 'preparing_failed') return;
 
     /**
      * 장애 주입 규칙이 이 연결을 겨냥하면 오류만 보내고 끝낸다.
