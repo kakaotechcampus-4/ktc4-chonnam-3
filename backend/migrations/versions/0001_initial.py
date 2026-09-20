@@ -32,6 +32,10 @@ _TABLES_IN_CREATE_ORDER = (
     "jd_requirements",
     "user_documents",
     "document_claims",
+    "analysis_jobs",
+    "analysis_repo_candidates",
+    "analysis_repo_candidate_pages",
+    "repo_match_scores",
 )
 
 
@@ -346,6 +350,182 @@ def _create_document_tables() -> None:
     op.create_index("ix_document_claims_document_id", "document_claims", ["document_id"])
 
 
+def _create_analysis_tables() -> None:
+    """analysis_jobs, analysis_repo_candidates, analysis_repo_candidate_pages, repo_match_scores."""
+    op.create_table(
+        "analysis_jobs",
+        _uuid_pk(),
+        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("job_type", sa.String(length=30), nullable=False),
+        sa.Column("status", sa.String(length=20), server_default="queued", nullable=False),
+        sa.Column("error_code", sa.Text(), nullable=True),
+        sa.Column("job_posting_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("posting_url", sa.Text(), nullable=True),
+        sa.Column("document_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("fingerprint", sa.Text(), nullable=True),
+        sa.Column("steps", postgresql.JSONB(), server_default="[]", nullable=False),
+        sa.Column("estimated_seconds", sa.Integer(), nullable=True),
+        sa.Column("retry_count", sa.SmallInteger(), server_default="0", nullable=False),
+        sa.Column("queued_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("duration_ms", sa.Integer(), nullable=True),
+        sa.Column("queue_wait_ms", sa.Integer(), nullable=True),
+        _created_at(),
+        _updated_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_analysis_jobs"),
+        sa.ForeignKeyConstraint(
+            ["user_id"], ["users.id"], name="fk_analysis_jobs_user_id_users", ondelete="CASCADE"
+        ),
+        sa.ForeignKeyConstraint(
+            ["job_posting_id"],
+            ["job_postings.id"],
+            name="fk_analysis_jobs_job_posting_id_job_postings",
+            ondelete="SET NULL",
+        ),
+        sa.ForeignKeyConstraint(
+            ["document_id"],
+            ["user_documents.id"],
+            name="fk_analysis_jobs_document_id_user_documents",
+            ondelete="SET NULL",
+        ),
+        sa.CheckConstraint(
+            "job_type IN "
+            "('initial_sync', 'analysis_run', 'candidate_page_analyze', 'interview_prep')",
+            name="ck_analysis_jobs_job_type",
+        ),
+        sa.CheckConstraint(
+            "status IN ('queued', 'running', 'succeeded', 'partial', 'failed', 'canceled')",
+            name="ck_analysis_jobs_status",
+        ),
+    )
+    # 사용자·job_type 당 살아 있는 job 1개 (run_in_progress 의 근거).
+    op.create_index(
+        "uq_analysis_jobs_active_user_job_type",
+        "analysis_jobs",
+        ["user_id", "job_type"],
+        unique=True,
+        postgresql_where=sa.text("status IN ('queued', 'running')"),
+    )
+    op.create_index(
+        "ix_analysis_jobs_user_id_created_at", "analysis_jobs", ["user_id", "created_at"]
+    )
+    op.create_index("ix_analysis_jobs_fingerprint", "analysis_jobs", ["fingerprint"])
+
+    op.create_table(
+        "analysis_repo_candidates",
+        _uuid_pk(),
+        sa.Column("analysis_job_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("repository_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("base_rank", sa.Integer(), nullable=False),
+        sa.Column("batch_no", sa.Integer(), nullable=True),
+        sa.Column("batch_rank", sa.Integer(), nullable=True),
+        sa.Column("selection_reason", sa.String(length=30), nullable=True),
+        sa.Column("ranking_score", sa.Numeric(precision=6, scale=3), nullable=True),
+        sa.Column("ranking_signals", postgresql.JSONB(), nullable=True),
+        sa.Column("filter_status", sa.String(length=20), nullable=False),
+        sa.Column("filter_reason", sa.String(length=20), nullable=True),
+        _created_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_analysis_repo_candidates"),
+        sa.ForeignKeyConstraint(
+            ["analysis_job_id"],
+            ["analysis_jobs.id"],
+            name="fk_analysis_repo_candidates_analysis_job_id_analysis_jobs",
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["repository_id"],
+            ["repositories.id"],
+            name="fk_analysis_repo_candidates_repository_id_repositories",
+            ondelete="CASCADE",
+        ),
+        sa.UniqueConstraint("analysis_job_id", "repository_id", name="uq_candidates_job_repo"),
+        sa.UniqueConstraint("analysis_job_id", "base_rank", name="uq_candidates_job_base_rank"),
+        sa.CheckConstraint(
+            "filter_status IN ('eligible', 'excluded')", name="ck_candidates_filter_status"
+        ),
+        sa.CheckConstraint(
+            "filter_reason IN "
+            "('private', 'fork', 'archived', 'no_language', 'too_small', 'inaccessible')"
+            " OR filter_reason IS NULL",
+            name="ck_candidates_filter_reason",
+        ),
+        sa.CheckConstraint(
+            "selection_reason IN "
+            "('portfolio_mentioned', 'base_rank_top', 'high_contribution', 'other')"
+            " OR selection_reason IS NULL",
+            name="ck_candidates_selection_reason",
+        ),
+    )
+    op.create_index(
+        "ix_candidates_job_batch",
+        "analysis_repo_candidates",
+        ["analysis_job_id", "batch_no", "batch_rank"],
+    )
+
+    op.create_table(
+        "analysis_repo_candidate_pages",
+        _uuid_pk(),
+        sa.Column("analysis_job_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("page_no", sa.Integer(), nullable=False),
+        sa.Column("status", sa.String(length=20), server_default="pending", nullable=False),
+        sa.Column("requested_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("error_code", sa.Text(), nullable=True),
+        _created_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_analysis_repo_candidate_pages"),
+        sa.ForeignKeyConstraint(
+            ["analysis_job_id"],
+            ["analysis_jobs.id"],
+            name="fk_analysis_repo_candidate_pages_analysis_job_id_analysis_jobs",
+            ondelete="CASCADE",
+        ),
+        sa.UniqueConstraint("analysis_job_id", "page_no", name="uq_candidate_pages_job_page"),
+        sa.CheckConstraint(
+            "status IN ('pending', 'running', 'succeeded', 'failed')",
+            name="ck_candidate_pages_status",
+        ),
+    )
+
+    op.create_table(
+        "repo_match_scores",
+        _uuid_pk(),
+        sa.Column("analysis_job_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("repository_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("score", sa.Numeric(precision=5, scale=2), nullable=True),
+        sa.Column(
+            "matched_requirement_ids",
+            postgresql.ARRAY(postgresql.UUID(as_uuid=True)),
+            server_default="{}",
+            nullable=False,
+        ),
+        sa.Column("recommend_reason", sa.Text(), nullable=True),
+        sa.Column("is_recommended", sa.Boolean(), server_default="false", nullable=False),
+        sa.Column("candidate_source", sa.String(length=20), nullable=False),
+        _created_at(),
+        _updated_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_repo_match_scores"),
+        sa.ForeignKeyConstraint(
+            ["analysis_job_id"],
+            ["analysis_jobs.id"],
+            name="fk_repo_match_scores_analysis_job_id_analysis_jobs",
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["repository_id"],
+            ["repositories.id"],
+            name="fk_repo_match_scores_repository_id_repositories",
+            ondelete="CASCADE",
+        ),
+        sa.UniqueConstraint("analysis_job_id", "repository_id", name="uq_match_scores_job_repo"),
+        sa.CheckConstraint(
+            "candidate_source IN ('rule_filter', 'portfolio', 'both')",
+            name="ck_match_scores_candidate_source",
+        ),
+        sa.CheckConstraint("score >= 0 AND score <= 100", name="ck_match_scores_score_range"),
+    )
+
+
 def upgrade() -> None:
     # UUID PK 기본값 gen_random_uuid() 가 이 extension 을 요구한다.
     op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
@@ -353,6 +533,7 @@ def upgrade() -> None:
     _create_github_tables()
     _create_posting_tables()
     _create_document_tables()
+    _create_analysis_tables()
 
 
 def downgrade() -> None:
