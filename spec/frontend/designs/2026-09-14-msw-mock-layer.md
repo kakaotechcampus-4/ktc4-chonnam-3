@@ -3,6 +3,7 @@
 - 상태: Accepted
 - 작성일: 2026-09-14
 - 개정: 2026-09-19 — PR #28 멘토 리뷰 반영, `openapi.yaml` 단일 원본 기준으로 재정렬
+- 개정: 2026-09-21 — 실패 케이스(장애 주입) 추가. WS는 별도 문서로 분리
 - 관련 브랜치: `feature/MSW_handler` → `refactor/mocks`
 - 참조 명세: `spec/shared/contracts/openapi.yaml`, `spec/shared/contracts/migration.md`,
   `spec/backend/features/{analysis-run,documents,interview,report}.md`,
@@ -20,8 +21,8 @@ BE 구현 전에 FE 화면을 실제 네트워크 흐름 위에서 개발할 수
 
 `openapi.yaml`의 operation 16개 전부에 핸들러가 있다. SSE 스트림은 계약 밖(`api-spec.md` #13)이라 별도로 둔다.
 
-제외: 인증/권한 실패, 만료, 네트워크 실패 등 실패 케이스 전반과 WebSocket mock. 다음 작업 범위다.
-WS(`/ws/interviews/{sessionId}`)는 `InterviewPrepare`·`InterviewScreen`이 아직 스텁이라 소비처가 없어 화면 작업과 함께 한다.
+2026-09-21 개정에서 실패 케이스를 포함했다(아래 설계 결정 5).
+WS(`/ws/interviews/{sessionId}`)는 `spec/frontend/designs/2026-09-21-ws-mock.md`로 분리했다.
 
 ## 설계 결정
 
@@ -77,6 +78,30 @@ SSE 스트림과 폴링 응답이 같은 값을 봐야 하는데, 호출 횟수 
 `onUnhandledRequest: 'warn'`은 콘솔 경고만 남기고 요청은 그대로 통과시킨다.
 그래서 핸들러 배열 마지막에 catch-all을 두고 `501`과 함께 누락된 경로를 콘솔에 찍는다.
 실제 서버는 501을 쓰지 않으므로 이 응답은 mock 누락이라는 뜻으로만 읽으면 된다.
+
+### 5. 실패는 핸들러 분기가 아니라 장애 주입으로 만든다 (2026-09-21 신설)
+
+실패 케이스는 "언제든 임의의 요청에" 일어나야 검증할 수 있다.
+핸들러마다 실패 분기를 심으면 정상 경로가 지저분해지고 조합도 만들 수 없다.
+
+그래서 규칙을 `src/mocks/faults.ts`(localStorage)에 두고, 핸들러 배열 맨 앞의 catch-all이
+요청마다 한 번 조회한다. 맞는 규칙이 없으면 `undefined`를 반환해 다음 핸들러로 넘어가므로
+정상 흐름은 그대로다. WebSocket 연결도 같은 저장소를 본다.
+
+```js
+msw.scenario('auth-expired');                      // 이름 붙인 프리셋
+msw.fault({ path: '/me', status: 500, times: 1 }); // 1회만
+msw.clear();
+```
+
+프리셋 11종의 `reason` 값은 전부 `backend/docs/error-reasons.md` 레지스트리와
+`api-spec.md`의 엔드포인트별 실패 표에서 가져왔다. 목이 reason을 지어내면
+화면이 존재하지 않는 값으로 분기하게 된다.
+
+`kind`로 HTTP 실패(`http`)·네트워크 실패(`network`)·응답 없음(`timeout`)을 구분한다.
+HTTP 실패와 네트워크 실패를 화면이 구분하는지는 `spec/frontend/features/api-errors.md`의 요구사항이다.
+
+켜 둔 규칙을 잊는 사고를 막으려고 워커 시작 시 활성 규칙을 콘솔에 경고한다.
 
 ### 4. 개발 서버에서는 기본으로 켠다
 
@@ -229,8 +254,10 @@ mock이 임의로 확정하지 않았다. 루트 `CLAUDE.md`의 "migration.md의
 
 ## 후속
 
-1. D1~D8 결정.
-2. 실패 케이스 핸들러 (인증 실패·만료·네트워크 실패).
-3. WS mock — `InterviewPrepare`·`InterviewScreen` 화면 작업과 함께.
+1. D1~D8 결정. WS 쪽 D9~D13은 `2026-09-21-ws-mock.md`.
+2. ~~실패 케이스 핸들러~~ — 2026-09-21 완료 (설계 결정 5).
+3. ~~WS mock~~ — 2026-09-21 완료. 화면 구현 시 이 목으로 상태머신을 맞춘다.
 4. `/me/interviews?status=` 가 합의되면 목에 반영.
 5. 테스트 러너 선정 — 지금의 수동 스모크 스크립트를 자동 테스트로 옮긴다.
+6. `shared/api.ts`의 401 인터셉터 — `api.refresh`에 "인터셉터가 호출한다"는 주석만 있고 구현이 없다.
+   목의 `refresh-failed` 시나리오는 그 인터셉터가 생기면 바로 쓸 수 있게 준비해 둔 것이다.
