@@ -39,6 +39,16 @@ _TABLES_IN_CREATE_ORDER = (
     "interview_sessions",
     "session_repositories",
     "interview_turns",
+    "evidences",
+    "turn_evidences",
+    "evidence_conflicts",
+    "interview_reports",
+    "report_scores",
+    "report_disagreements",
+    "score_criteria",
+    "prompt_versions",
+    "domain_question_frames",
+    "events",
 )
 
 
@@ -680,6 +690,316 @@ def _create_interview_tables() -> None:
     )
 
 
+def _create_evidence_tables() -> None:
+    """evidences, turn_evidences, evidence_conflicts."""
+    op.create_table(
+        "evidences",
+        _uuid_pk(),
+        sa.Column("interview_session_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("repository_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("source_type", sa.String(length=20), nullable=False),
+        # NOT NULL — 없으면 같은 근거를 다시 꺼낼 수 없다.
+        sa.Column("git_ref", sa.String(length=40), nullable=False),
+        sa.Column("path", sa.Text(), nullable=True),
+        sa.Column("snippet", sa.Text(), nullable=False),
+        sa.Column("tool_name", sa.String(length=50), nullable=True),
+        sa.Column("retrieved_for_turn", sa.SmallInteger(), nullable=True),
+        _created_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_evidences"),
+        sa.ForeignKeyConstraint(
+            ["interview_session_id"],
+            ["interview_sessions.id"],
+            name="fk_evidences_interview_session_id_interview_sessions",
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["repository_id"],
+            ["repositories.id"],
+            name="fk_evidences_repository_id_repositories",
+            ondelete="SET NULL",
+        ),
+        sa.CheckConstraint(
+            "source_type IN ('readme', 'repo_metadata', 'languages', 'commit', 'file')",
+            name="ck_evidences_source",
+        ),
+    )
+    op.create_index("ix_evidences_session_id", "evidences", ["interview_session_id"])
+
+    # PK 에 usage 가 들어간다 — 같은 evidence 가 질문 근거이면서 채점 근거일 수 있다.
+    op.create_table(
+        "turn_evidences",
+        sa.Column("turn_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("evidence_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("usage", sa.String(length=20), nullable=False),
+        _created_at(),
+        sa.PrimaryKeyConstraint("turn_id", "evidence_id", "usage", name="pk_turn_evidences"),
+        sa.ForeignKeyConstraint(
+            ["turn_id"],
+            ["interview_turns.id"],
+            name="fk_turn_evidences_turn_id_interview_turns",
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["evidence_id"],
+            ["evidences.id"],
+            name="fk_turn_evidences_evidence_id_evidences",
+            ondelete="CASCADE",
+        ),
+        sa.CheckConstraint(
+            "usage IN ('question_basis', 'evaluation_basis')", name="ck_turn_evidences_usage"
+        ),
+    )
+
+    # Sprint 1 은 테이블만 만들고 행을 만들지 않는다.
+    op.create_table(
+        "evidence_conflicts",
+        _uuid_pk(),
+        sa.Column("turn_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("evidence_id", postgresql.UUID(as_uuid=True), nullable=False),
+        # FK 없이 둔다. Sprint 2 에서 document_claims FK 를 추가한다.
+        sa.Column("claim_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("source", sa.String(length=30), server_default="answer_vs_code", nullable=False),
+        sa.Column("claim_text", sa.Text(), nullable=False),
+        sa.Column("evidence_text", sa.Text(), nullable=False),
+        sa.Column("verdict", sa.String(length=20), server_default="unresolved", nullable=False),
+        sa.Column("resolution", sa.Text(), nullable=True),
+        _created_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_evidence_conflicts"),
+        sa.ForeignKeyConstraint(
+            ["turn_id"],
+            ["interview_turns.id"],
+            name="fk_evidence_conflicts_turn_id_interview_turns",
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["evidence_id"],
+            ["evidences.id"],
+            name="fk_evidence_conflicts_evidence_id_evidences",
+            ondelete="CASCADE",
+        ),
+        sa.CheckConstraint("source IN ('answer_vs_code')", name="ck_evidence_conflicts_source"),
+        sa.CheckConstraint("verdict IN ('unresolved')", name="ck_evidence_conflicts_verdict"),
+    )
+    op.create_index("ix_evidence_conflicts_turn_id", "evidence_conflicts", ["turn_id"])
+
+
+def _create_report_tables() -> None:
+    """interview_reports, report_scores, report_disagreements."""
+    op.create_table(
+        "interview_reports",
+        _uuid_pk(),
+        sa.Column("interview_session_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("headline", sa.Text(), nullable=False),
+        sa.Column("summary", sa.Text(), nullable=False),
+        sa.Column("total_score", sa.Numeric(precision=5, scale=2), nullable=False),
+        # persona 별 피드백. report_persona_feedbacks 테이블은 만들지 않는다.
+        sa.Column("feedback_json", postgresql.JSONB(), server_default="[]", nullable=False),
+        sa.Column("coverage_json", postgresql.JSONB(), nullable=True),
+        sa.Column("model", sa.Text(), nullable=True),
+        sa.Column("prompt_version", sa.Text(), nullable=True),
+        sa.Column("generated_at", sa.DateTime(timezone=True), nullable=True),
+        _created_at(),
+        _updated_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_interview_reports"),
+        sa.ForeignKeyConstraint(
+            ["interview_session_id"],
+            ["interview_sessions.id"],
+            name="fk_interview_reports_interview_session_id_interview_sessions",
+            ondelete="CASCADE",
+        ),
+        sa.UniqueConstraint(
+            "interview_session_id", name="uq_interview_reports_interview_session_id"
+        ),
+        sa.CheckConstraint(
+            "total_score >= 0 AND total_score <= 100", name="ck_interview_reports_total"
+        ),
+    )
+
+    op.create_table(
+        "report_scores",
+        _uuid_pk(),
+        sa.Column("report_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("score_key", sa.String(length=30), nullable=False),
+        sa.Column("score", sa.Numeric(precision=5, scale=2), nullable=False),
+        sa.Column("reason", sa.Text(), nullable=True),
+        sa.Column(
+            "evidence_turn_ids",
+            postgresql.ARRAY(postgresql.UUID(as_uuid=True)),
+            server_default="{}",
+            nullable=False,
+        ),
+        _created_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_report_scores"),
+        sa.ForeignKeyConstraint(
+            ["report_id"],
+            ["interview_reports.id"],
+            name="fk_report_scores_report_id_interview_reports",
+            ondelete="CASCADE",
+        ),
+        sa.UniqueConstraint("report_id", "score_key", name="uq_report_scores_report_key"),
+        sa.CheckConstraint(
+            "score_key IN "
+            "('project_understanding', 'technical_reasoning', 'problem_solving', "
+            "'communication', 'contribution_clarity', 'company_job_fit')",
+            name="ck_report_scores_key",
+        ),
+        sa.CheckConstraint("score >= 0 AND score <= 100", name="ck_report_scores_range"),
+    )
+
+    # Sprint 1 은 테이블만 만들고 API·row 생성은 Sprint 2 다.
+    op.create_table(
+        "report_disagreements",
+        _uuid_pk(),
+        sa.Column("report_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("persona", sa.String(length=20), nullable=False),
+        sa.Column("reason_type", sa.String(length=30), nullable=False),
+        sa.Column("detail", sa.Text(), nullable=True),
+        _created_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_report_disagreements"),
+        sa.ForeignKeyConstraint(
+            ["report_id"],
+            ["interview_reports.id"],
+            name="fk_report_disagreements_report_id_interview_reports",
+            ondelete="CASCADE",
+        ),
+        # persona 당 1회 — Sprint 2 의 already_submitted 근거.
+        sa.UniqueConstraint("report_id", "persona", name="uq_report_disagreements_report_persona"),
+        sa.CheckConstraint(
+            "persona IN ('tech_lead', 'hr_manager', 'domain_lead')",
+            name="ck_report_disagreements_persona",
+        ),
+        sa.CheckConstraint(
+            "reason_type IN "
+            "('factual_error', 'insufficient_basis', 'overly_harsh', 'unclear_intent', 'other')",
+            name="ck_report_disagreements_reason_type",
+        ),
+    )
+
+
+def _create_knowledge_tables() -> None:
+    """score_criteria, prompt_versions, domain_question_frames."""
+    op.create_table(
+        "score_criteria",
+        _uuid_pk(),
+        sa.Column("score_key", sa.String(length=30), nullable=False),
+        sa.Column("label_ko", sa.Text(), nullable=False),
+        sa.Column("description", sa.Text(), nullable=True),
+        sa.Column("rubric", postgresql.JSONB(), nullable=True),
+        sa.Column("display_order", sa.Integer(), nullable=False),
+        sa.Column("is_active", sa.Boolean(), server_default="true", nullable=False),
+        _created_at(),
+        _updated_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_score_criteria"),
+        sa.UniqueConstraint("score_key", name="uq_score_criteria_score_key"),
+        sa.CheckConstraint(
+            "score_key IN "
+            "('project_understanding', 'technical_reasoning', 'problem_solving', "
+            "'communication', 'contribution_clarity', 'company_job_fit')",
+            name="ck_score_criteria_key",
+        ),
+    )
+
+    op.create_table(
+        "prompt_versions",
+        _uuid_pk(),
+        sa.Column("task_name", sa.String(length=50), nullable=False),
+        sa.Column("version", sa.String(length=20), nullable=False),
+        # 모델명을 코드 상수로 두지 않고 여기서 읽는다.
+        sa.Column("model", sa.Text(), nullable=False),
+        sa.Column("template", sa.Text(), nullable=False),
+        sa.Column("is_active", sa.Boolean(), server_default="false", nullable=False),
+        sa.Column("notes", sa.Text(), nullable=True),
+        _created_at(),
+        _updated_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_prompt_versions"),
+        sa.UniqueConstraint("task_name", "version", name="uq_prompt_versions_task_version"),
+    )
+    # task 당 활성 버전 1개.
+    op.create_index(
+        "uq_prompt_versions_active_per_task",
+        "prompt_versions",
+        ["task_name"],
+        unique=True,
+        postgresql_where=sa.text("is_active"),
+    )
+
+    op.create_table(
+        "domain_question_frames",
+        _uuid_pk(),
+        sa.Column("domain_category", sa.String(length=20), nullable=False),
+        sa.Column("axis", sa.String(length=40), nullable=False),
+        sa.Column("frame_text", sa.Text(), nullable=False),
+        sa.Column("display_order", sa.Integer(), server_default="1", nullable=False),
+        sa.Column("is_active", sa.Boolean(), server_default="true", nullable=False),
+        _created_at(),
+        _updated_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_domain_question_frames"),
+        sa.UniqueConstraint(
+            "domain_category",
+            "axis",
+            "display_order",
+            name="uq_domain_frames_category_axis_order",
+        ),
+        sa.CheckConstraint(
+            "domain_category IN "
+            "('finance', 'game', 'travel', 'shopping', 'medical', 'mobility', 'etc')",
+            name="ck_domain_frames_category",
+        ),
+        sa.CheckConstraint(
+            "axis IN "
+            "('privacy_sensitive_data', 'reliability_operations', 'user_experience_context')",
+            name="ck_domain_frames_axis",
+        ),
+    )
+
+
+def _create_metric_tables() -> None:
+    """events. task-17 이 고정한 10종 event_name 만 허용한다."""
+    op.create_table(
+        "events",
+        _uuid_pk(),
+        sa.Column("event_name", sa.String(length=40), nullable=False),
+        # 이벤트 기록 실패가 핵심 트랜잭션을 실패시키지 않도록 전부 nullable + SET NULL.
+        sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("analysis_job_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("interview_session_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("repository_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("payload", postgresql.JSONB(), server_default="{}", nullable=False),
+        _created_at(),
+        sa.PrimaryKeyConstraint("id", name="pk_events"),
+        sa.ForeignKeyConstraint(
+            ["user_id"], ["users.id"], name="fk_events_user_id_users", ondelete="SET NULL"
+        ),
+        sa.ForeignKeyConstraint(
+            ["analysis_job_id"],
+            ["analysis_jobs.id"],
+            name="fk_events_analysis_job_id_analysis_jobs",
+            ondelete="SET NULL",
+        ),
+        sa.ForeignKeyConstraint(
+            ["interview_session_id"],
+            ["interview_sessions.id"],
+            name="fk_events_interview_session_id_interview_sessions",
+            ondelete="SET NULL",
+        ),
+        sa.ForeignKeyConstraint(
+            ["repository_id"],
+            ["repositories.id"],
+            name="fk_events_repository_id_repositories",
+            ondelete="SET NULL",
+        ),
+        sa.CheckConstraint(
+            "event_name IN "
+            "('analysis_run_started', 'analysis_run_completed', 'analysis_run_failed', "
+            "'repo_recommended', 'repo_selected', 'interview_started', 'turn_asked', "
+            "'turn_answered', 'interview_completed', 'report_viewed')",
+            name="ck_events_event_name",
+        ),
+    )
+    op.create_index("ix_events_event_name_created_at", "events", ["event_name", "created_at"])
+    op.create_index("ix_events_user_id_created_at", "events", ["user_id", "created_at"])
+
+
 def upgrade() -> None:
     # UUID PK 기본값 gen_random_uuid() 가 이 extension 을 요구한다.
     op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
@@ -689,6 +1009,10 @@ def upgrade() -> None:
     _create_document_tables()
     _create_analysis_tables()
     _create_interview_tables()
+    _create_evidence_tables()
+    _create_report_tables()
+    _create_knowledge_tables()
+    _create_metric_tables()
 
 
 def downgrade() -> None:
