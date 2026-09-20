@@ -34,6 +34,10 @@ dev = [
     "mypy",
     "pytest",
     "pytest-asyncio",
+    # tests/contract/ 가 openapi.yaml 을 직접 읽는다.
+    # uvicorn[standard] 로 딸려 오지만 전이 의존에 기대지 않는다.
+    "pyyaml",
+    "types-pyyaml",
 ]
 
 [tool.mypy]
