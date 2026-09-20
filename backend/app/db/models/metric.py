@@ -22,8 +22,9 @@ from app.db.base import Base, CreatedAtMixin, UUIDPrimaryKeyMixin, check_in
 # task-17 이 고정한 10종. 이 목록 밖의 event_name 은 INSERT 가 거부된다.
 #
 # ⚠ docs/pipeline.md 4.2 절은 session_started / session_completed / session_abandoned 로
-#   적혀 있어 이름이 다르다. task-17 이 "Sprint 1 이벤트 목록은 위 10개로 고정한다" 고
-#   명시했으므로 task-17 을 따른다. 명시적 abandoned 가 발생해도 별도 이벤트를 두지 않는다.
+#   적혀 있어 이름이 다르다. task-17 을 따르기로 팀에서 결정했다 (2026-09-21).
+#   명시적 abandoned 가 발생해도 별도 이벤트를 두지 않는다 — 그래서 11종이 아니라 10종이다.
+#   docs/pipeline.md 4.2 표의 이벤트 이름은 문서 쪽 정리가 필요하다.
 EVENT_NAMES = (
     "analysis_run_started",
     "analysis_run_completed",
