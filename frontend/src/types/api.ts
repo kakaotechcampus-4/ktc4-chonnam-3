@@ -14,6 +14,11 @@ export type StepKey =
   | 'match_score';
 export type PrepareStepKey = 'analyze_repo' | 'build_persona' | 'compose_question' | 'set_criteria';
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+/**
+ * 준비 4단계는 모두 필수 실행이라 skipped 가 오지 않는다.
+ * skipped 는 분석 stepKey(#13 · #14) 전용이다. api-spec.md #18.
+ */
+export type PrepareStepStatus = Exclude<StepStatus, 'skipped'>;
 export type AnswerMode = 'text';
 export type Persona = 'tech_lead' | 'hr_manager' | 'domain_lead';
 export type ScoreKey =
@@ -300,12 +305,6 @@ export type InterviewDetailResponse = {
 // 4. WebSocket 메시지 타입 — frontend/docs/api-spec.md #18
 
 /**
- * 준비 단계 4개는 모두 필수 실행이라 `skipped`가 오지 않는다.
- * `skipped`는 분석 StepKey(#13·#14) 전용이다.
- */
-export type PrepareStepStatus = Exclude<StepStatus, 'skipped'>;
-
-/**
  * 1차 스프린트는 텍스트 전용이다(`answerMode: 'text'`).
  * 음성 전환(`answerStart` → 오디오 바이너리 → `answerEnd`, `transcript`)은 2차 범위다.
  *
@@ -316,7 +315,9 @@ export type WsClientMessage = { type: 'prepareRetry' } | { type: 'answer'; text:
 
 /**
  * WS 오류는 `GET /interviews/{id}`의 `lastError`와 같은 형태다.
- * 새로고침으로 WS 메시지를 놓쳐도 조회로 같은 정보를 복구할 수 있어야 하기 때문이다.
+ * 새로고침으로 WS 메시지를 놓쳐도 조회로 같은 정보를 복구할 수 있어야 하므로
+ * 두 타입이 어긋나지 않게 별칭으로 묶는다.
+ * `step`은 준비 단계 오류일 때만 값이 있고 진행 중 오류에서는 `null`이다.
  * `reason` 값 목록과 화면 처리는 api-spec.md #18의 표를 따른다. 계약대로 union으로 고정하지 않는다.
  */
 export type WsErrorMessage = { type: 'error' } & InterviewLastError;
