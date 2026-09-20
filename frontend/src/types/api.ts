@@ -297,20 +297,40 @@ export type InterviewDetailResponse = {
   lastError: InterviewLastError | null;
 };
 
-// 4. WebSocket 메시지 타입
+// 4. WebSocket 메시지 타입 — frontend/docs/api-spec.md #18
 
-export type WsClientMessage = { type: 'answerStart' } | { type: 'answerEnd' };
+/**
+ * 준비 단계 4개는 모두 필수 실행이라 `skipped`가 오지 않는다.
+ * `skipped`는 분석 StepKey(#13·#14) 전용이다.
+ */
+export type PrepareStepStatus = Exclude<StepStatus, 'skipped'>;
+
+/**
+ * 1차 스프린트는 텍스트 전용이다(`answerMode: 'text'`).
+ * 음성 전환(`answerStart` → 오디오 바이너리 → `answerEnd`, `transcript`)은 2차 범위다.
+ *
+ * `answer`는 제출 버튼 클릭 시 1회 전송한다. 초안 저장은 없다.
+ * `prepareRetry`는 준비 실패 후 "다시 시도"에서 보낸다. 성공한 단계는 재실행되지 않는다.
+ */
+export type WsClientMessage = { type: 'prepareRetry' } | { type: 'answer'; text: string };
+
+/**
+ * WS 오류는 `GET /interviews/{id}`의 `lastError`와 같은 형태다.
+ * 새로고침으로 WS 메시지를 놓쳐도 조회로 같은 정보를 복구할 수 있어야 하기 때문이다.
+ * `reason` 값 목록과 화면 처리는 api-spec.md #18의 표를 따른다. 계약대로 union으로 고정하지 않는다.
+ */
+export type WsErrorMessage = { type: 'error' } & InterviewLastError;
 
 export type WsServerMessage =
-  | { type: 'prepareStep'; key: PrepareStepKey; status: StepStatus }
+  | { type: 'prepareStep'; key: PrepareStepKey; status: PrepareStepStatus }
   | { type: 'prepareCompleted' }
-  | { type: 'transcript'; text: string }
+  /** 서버가 답변 수신·저장을 완료했다는 신호. 이때까지 입력창을 잠근다. */
+  | { type: 'answerReceived' }
   | { type: 'thinking' }
   | { type: 'evidenceCheck'; repository: string; file: string }
   | { type: 'question'; persona: Persona; text: string; turn: number }
-  | { type: 'questionEnd' }
   | { type: 'interviewEnd' }
-  | { type: 'error'; reason: string };
+  | WsErrorMessage;
 
 // 5c-v2 면접 리포트 GET /interviews/{id}/report
 
