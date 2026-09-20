@@ -2,72 +2,14 @@
 
 docs/error-reasons.md / task-05
 
-reason 은 클라이언트가 분기하는 안정적인 snake_case 문자열이다. 값을 추가할 때
-spec/shared/contracts/openapi.yaml 과 테스트를 함께 갱신한다.
-task-04 에서 app/shared/enums.py 를 만들 때 이 레지스트리와의 일원화를 정리한다.
+Reason 값 자체는 app/shared/enums.py 가 소유한다 (task-04 에서 일원화했다).
+이 모듈은 HTTP 상태·기본 메시지 매핑과 AppError, 내부 job error_code 를 소유한다.
+reason 을 추가할 때 spec/shared/contracts/openapi.yaml 과 테스트를 함께 갱신한다.
 """
 
-from enum import StrEnum
 from typing import Any
 
-
-class Reason(StrEnum):
-    """API 에러 reason. docs/error-reasons.md 의 HTTP Reason 표와 1:1."""
-
-    # 인증
-    UNAUTHENTICATED = "unauthenticated"
-    TOKEN_INVALID = "token_invalid"
-    ACCOUNT_SUSPENDED = "account_suspended"
-    ACCOUNT_WITHDRAWN = "account_withdrawn"
-
-    # 문서
-    UNSUPPORTED_DOCUMENT_TYPE = "unsupported_document_type"
-    DOCUMENT_TOO_LARGE = "document_too_large"
-    DOCUMENT_EXTRACT_FAILED = "document_extract_failed"
-
-    # 분석 요청
-    POSTING_URL_REQUIRED = "posting_url_required"
-    UNSUPPORTED_SITE = "unsupported_site"
-    RUN_IN_PROGRESS = "run_in_progress"
-
-    # 분석 조회
-    NOT_READY = "not_ready"
-    RUN_EXPIRED = "run_expired"
-
-    # 후보 page
-    CANDIDATE_PAGE_FAILED = "candidate_page_failed"
-
-    # 면접 생성
-    NO_REPOSITORY_SELECTED = "no_repository_selected"
-    TOO_MANY_REPOSITORIES = "too_many_repositories"
-    INVALID_REPOSITORY = "invalid_repository"
-    SESSION_LIMIT_EXCEEDED = "session_limit_exceeded"
-
-    # 면접 준비
-    PREP_FAILED = "prep_failed"
-    REPO_UNREACHABLE = "repo_unreachable"
-
-    # 면접 조회
-    NOT_FOUND = "not_found"
-
-    # 재시도
-    ORIGINAL_NOT_COMPLETED = "original_not_completed"
-    REPOSITORY_UNAVAILABLE = "repository_unavailable"
-
-    # 리포트
-    REPORT_UNAVAILABLE = "report_unavailable"
-
-    # 이의 제출
-    ALREADY_SUBMITTED = "already_submitted"
-
-    # 공통
-    INTERNAL_ERROR = "internal_error"
-    # ⚠ docs/error-reasons.md 와 openapi.yaml 에 없는 BE 추가 값이다 (PENDING_TEAM).
-    #   request body/query 가 스키마를 어겨 RequestValidationError 가 났을 때 쓴다.
-    #   엔드포인트별 도메인 reason(posting_url_required 등)으로 잡히지 않는 경우의 fallback 이라
-    #   계약에 추가할지 팀 확인이 필요하다.
-    INVALID_REQUEST = "invalid_request"
-
+from app.shared.enums import Reason
 
 STATUS_BY_REASON: dict[Reason, int] = {
     Reason.UNAUTHENTICATED: 401,
@@ -166,25 +108,6 @@ JOB_POSTING_PARSE_ERROR_CODES = frozenset(
         "not_a_job_posting",
     }
 )
-
-# DB analysis_jobs.status -> FE RunStatus. partial 은 failed 로 접는다.
-# 단 /analysis-runs/{runId}/result 는 partial 이어도 조회 가능하다.
-RUN_STATUS_BY_JOB_STATUS: dict[str, str] = {
-    "queued": "running",
-    "running": "running",
-    "succeeded": "completed",
-    "partial": "failed",
-    "failed": "failed",
-    "canceled": "failed",
-}
-
-
-def to_run_status(job_status: str) -> str:
-    """DB job status 를 FE RunStatus 3종으로 접는다.
-
-    입력: analysis_jobs.status. 출력: running | completed | failed.
-    """
-    return RUN_STATUS_BY_JOB_STATUS[job_status]
 
 
 class AppError(Exception):
