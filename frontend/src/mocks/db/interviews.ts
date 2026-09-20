@@ -29,6 +29,14 @@ export type InterviewRecord = {
   fixedLastError?: InterviewLastError;
   /** 리포트 lazy generation 시작 시각. 최초 조회 때 기록한다. */
   reportRequestedAt?: number;
+  /**
+   * WS가 진행시킨 턴. 질문을 보낼 때 추가하고 답변을 받을 때 채운다.
+   *
+   * 화면 상태를 WS 연결이 아니라 여기에 둔다. 계약상 재연결 절차가
+   * `GET /interviews/{id}`로 `turns`를 다시 받는 것이라(api-spec #18),
+   * 연결 클로저에 들고 있으면 새로고침 후 조회 응답과 어긋난다.
+   */
+  liveTurns?: InterviewTurn[];
 };
 
 const interviews = new Map<string, InterviewRecord>();
@@ -71,6 +79,14 @@ export function getInterview(id: string) {
   return interviews.get(id);
 }
 
+/** WS 경로는 interviewId 가 아니라 sessionId 로 붙는다. api-spec.md #18 */
+export function getInterviewBySessionId(sessionId: string) {
+  for (const record of interviews.values()) {
+    if (record.sessionId === sessionId) return record;
+  }
+  return undefined;
+}
+
 export function interviewStatus(record: InterviewRecord, now = Date.now()): InterviewStatus {
   if (record.fixedStatus) return record.fixedStatus;
   return now - record.createdAt < PREPARE_DURATION_MS ? 'preparing' : 'in_progress';
@@ -84,9 +100,10 @@ export function interviewLastError(
   if (interviewStatus(record, now) !== 'preparing_failed') return null;
   return (
     record.fixedLastError ?? {
-      reason: '면접 준비에 실패했어요.',
-      code: 'internal_error',
-      step: null,
+      // reason 은 화면 분기용 snake_case, code 는 배너에 노출하는 표시용 식별자다. api-spec.md #18
+      reason: 'question_gen_timeout',
+      code: 'ERR_QUESTION_GEN_TIMEOUT',
+      step: 'compose_question',
       recoverable: true,
       occurredAt: new Date(now).toISOString(),
     }
@@ -94,21 +111,59 @@ export function interviewLastError(
 }
 
 /**
- * 준비 중에는 턴이 없고, 준비가 끝나면 첫 질문 1개가 보인다.
- * 2턴 이후 진행은 WebSocket이 담당하므로 다음 작업 범위다.
+ * 준비 중에는 턴이 없다. 준비가 끝나면 WS가 진행시킨 턴을 보여주고,
+ * 아직 WS가 붙지 않았으면 첫 질문 1개만 보인다.
  */
 export function interviewTurns(record: InterviewRecord, now = Date.now()): InterviewTurn[] {
   const status = interviewStatus(record, now);
-  if (status === 'completed') return completedTurns;
-  if (status === 'in_progress') return [firstTurn];
+  if (status === 'completed') return record.liveTurns ?? completedTurns;
+  if (status === 'in_progress') return record.liveTurns ?? [firstTurn];
   return [];
 }
 
 export function interviewCurrentTurn(record: InterviewRecord, now = Date.now()) {
-  const status = interviewStatus(record, now);
-  if (status === 'completed') return TOTAL_TURNS;
-  if (status === 'in_progress') return 1;
-  return 0;
+  const turns = interviewTurns(record, now);
+  if (turns.length > 0) return turns[turns.length - 1].turn;
+  return interviewStatus(record, now) === 'completed' ? TOTAL_TURNS : 0;
+}
+
+/**
+ * WS가 새 질문을 보낼 때 호출한다. 턴 번호를 매기고 레코드에 남긴다.
+ * 답변은 아직 없으므로 `null`이다.
+ */
+export function appendQuestion(record: InterviewRecord, turn: InterviewTurn) {
+  record.liveTurns = [...(record.liveTurns ?? []), turn];
+  return record.liveTurns;
+}
+
+/** 답변 수신. 마지막 턴의 `answer`를 채운다. 이미 채워져 있으면 덮어쓰지 않는다. */
+export function recordAnswer(record: InterviewRecord, text: string) {
+  const turns = record.liveTurns;
+  if (!turns || turns.length === 0) return null;
+
+  const last = turns[turns.length - 1];
+  if (last.answer !== null) return last;
+
+  const answered = { ...last, answer: text };
+  record.liveTurns = [...turns.slice(0, -1), answered];
+  return answered;
+}
+
+/**
+ * 준비 실패를 풀고 다시 준비 상태로 되돌린다. WS `prepareRetry` 에서 부른다.
+ * `createdAt` 을 옮겨 이미 성공한 단계는 다시 실행되지 않게 한다. api-spec.md #18
+ */
+export function clearPrepareFailure(record: InterviewRecord, createdAt: number) {
+  record.fixedStatus = undefined;
+  record.fixedLastError = undefined;
+  record.createdAt = createdAt;
+  return record;
+}
+
+/** 마지막 턴까지 답변이 끝났으면 면접을 종료 상태로 고정한다. */
+export function finishInterview(record: InterviewRecord) {
+  record.fixedStatus = 'completed';
+  return record;
 }
 
 export function interviewRemainingSeconds(record: InterviewRecord, now = Date.now()) {
@@ -160,8 +215,8 @@ function seedInterviews() {
     companyName: jdCompanyName,
     fixedStatus: 'preparing_failed',
     fixedLastError: {
-      reason: '질문을 만드는 중 문제가 생겼어요. 다시 시도해주세요.',
-      code: 'llm_failed',
+      reason: 'question_gen_timeout',
+      code: 'ERR_QUESTION_GEN_TIMEOUT',
       step: 'compose_question',
       recoverable: true,
       occurredAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
