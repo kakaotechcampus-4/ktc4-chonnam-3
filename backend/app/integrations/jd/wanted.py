@@ -4,9 +4,20 @@ industry_name 이 항목별로 이미 나뉘어 온다. content_form='text'. 헤
 
 확정본 §3 3사 비교 / task-09
 
-⚠ 응답 JSON 의 정확한 중첩 구조는 확인하지 못했다 (외부 호출 없이 개발했다).
-  위 필드 이름만 확정본에 적혀 있어, 중첩 위치에 의존하지 않도록 키 이름으로 깊이 탐색한다.
-  실제 호출로 구조가 확인되면 _find_value 를 걷어내고 경로를 고정하는 편이 낫다.
+실제 응답으로 확인한 구조 (2026-09-21):
+
+    {"application": null,
+     "job": {"id": 123456, "status": "close",
+             "detail": {"position", "intro", "main_tasks", "requirements",
+                        "preferred_points", "benefits", "hire_rounds"},
+             "company": {"id", "name", "industry_name", "company_tags"},
+             "skill_tags": [{"tag_type_id": 1411, "text": "Git"}],
+             "category_tag": {"parent_tag": {"text"}, "child_tags": [{"text"}]}}}
+
+  data 래퍼가 없고 position 은 job.detail 안에 있다. 없는 공고는 404 +
+  {"error_code": 11001, "message": "job not found exception"} 이다.
+  키 이름으로 깊이 탐색하는 방식은 유지한다 — 문서화되지 않은 외부 API 라
+  경로를 고정하면 구조가 조금만 바뀌어도 전부 실패한다.
 """
 
 import re
@@ -51,7 +62,8 @@ def _find_value(payload: object, key: str) -> Any:
     """중첩 dict/list 에서 key 를 처음 만나는 값으로 돌려준다.
 
     입력: 파싱된 JSON, 찾을 키. 출력: 값, 없으면 None.
-    응답 envelope 가 {"data": {"job": {...}}} 인지 확실하지 않아 경로를 고정하지 않는다.
+    구조는 모듈 docstring 에 적어뒀지만 경로를 고정하지 않는다 — 문서화되지 않은
+    외부 API 라 중첩이 조금만 바뀌어도 전부 실패하는 편보다 낫다.
     """
     if isinstance(payload, dict):
         if key in payload:
@@ -99,7 +111,13 @@ def _skill_tags(payload: object) -> list[str]:
         if isinstance(item, str):
             tag = _as_text(item)
         elif isinstance(item, dict):
-            tag = _as_text(item.get("title")) or _as_text(item.get("name"))
+            # 실제 응답은 {"tag_type_id": 1411, "text": "Git"} 이다.
+            # title/name 은 attraction_tags·company_tags 쪽 형태라 폴백으로만 둔다.
+            tag = (
+                _as_text(item.get("text"))
+                or _as_text(item.get("title"))
+                or _as_text(item.get("name"))
+            )
         else:
             tag = None
         if tag is not None and tag not in tags:
@@ -174,9 +192,20 @@ class WantedAdapter:
 
         fetch_url = _DETAILS_URL.format(posting_id=posting_id)
         try:
-            raw = await self._get_json(fetch_url)
-        except (httpx.HTTPError, ValueError):
-            # timeout, 연결 실패, 4xx/5xx, JSON 파싱 실패를 모두 fetch 실패로 본다.
+            response = await self._get(fetch_url)
+        except httpx.HTTPError:
+            # timeout 과 연결 실패.
+            return failure(self.name, JD_ERROR_FETCH_FAILED)
+
+        if response.status_code == httpx.codes.NOT_FOUND:
+            # {"error_code": 11001, "message": "job not found exception"} — 삭제된 공고다.
+            return failure(self.name, JD_ERROR_NOT_A_JOB_POSTING)
+        if response.status_code >= httpx.codes.BAD_REQUEST:
+            return failure(self.name, JD_ERROR_FETCH_FAILED)
+
+        try:
+            raw = response.json()
+        except ValueError:
             return failure(self.name, JD_ERROR_FETCH_FAILED)
 
         if not isinstance(raw, dict):
@@ -210,16 +239,15 @@ class WantedAdapter:
             payload=payload,
         )
 
-    async def _get_json(self, fetch_url: str) -> Any:
-        """details JSON 을 가져온다. 입력: API URL. 출력: 파싱된 JSON."""
+    async def _get(self, fetch_url: str) -> httpx.Response:
+        """details 응답을 가져온다. 입력: API URL. 출력: Response.
+
+        상태코드는 호출부가 본다 — 404 와 나머지 오류의 error_code 가 다르다.
+        """
         if self._client is not None:
-            response = await self._client.get(fetch_url)
-            response.raise_for_status()
-            return response.json()
+            return await self._client.get(fetch_url)
         async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-            response = await client.get(fetch_url)
-            response.raise_for_status()
-            return response.json()
+            return await client.get(fetch_url)
 
     @staticmethod
     def _posting_id(url: str) -> str | None:
