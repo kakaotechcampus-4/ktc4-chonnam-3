@@ -6,6 +6,10 @@
 
 ETag 값 자체는 여기서 보관하지 않는다. 조건부 요청(If-None-Match)만 지원하고
 저장은 호출부(Redis)가 한다 — integrations 는 저장소를 모른다.
+
+응답 모양은 실제 토큰으로 확인했다 (2026-09-21). topics 는 preview Accept 헤더 없이
+기본으로 오고, /user/repos?visibility=public&affiliation=owner 는 private 를 주지 않는다.
+401 응답에는 x-ratelimit-remaining 헤더가 없어 rate limit 분기보다 먼저 판정한다.
 """
 
 import base64

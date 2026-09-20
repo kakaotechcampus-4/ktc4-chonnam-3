@@ -2,8 +2,10 @@
 
 spec/backend/features/analysis-run.md / task-08
 
-⚠ GitHub API 를 실제로 호출해 확인하지는 못했다 (이 환경에서 api.github.com 접근이 막혔다).
-  아래 응답은 GitHub REST v3 공식 문서의 필드 이름을 따른 것이다.
+아래 응답 모양은 실제 토큰으로 GitHub API 를 호출해 확인했다 (2026-09-21).
+확인한 것: /user/repos 의 14개 필드와 타입, Link 헤더 형식, ETag -> 304,
+/languages 의 {언어: int}, /readme 의 encoding=base64, /commits/{branch} 의 sha,
+/commits?per_page=1 의 rel='last', 잘못된 토큰 401, 없는 repo 404.
 """
 
 import base64
@@ -96,6 +98,25 @@ async def test_list_repositories_follows_next_link() -> None:
         repos = await GithubClient("tok", client=client).list_repositories()
 
     assert [repo.full_name for repo in repos] == ["octocat/devon-api", "octocat/devon-web"]
+
+
+async def test_repository_query_excludes_private() -> None:
+    """visibility=public 이 private 를 걸러내는 지점이다.
+
+    실제 호출로 확인했다 — /user 의 public_repos 개수와 이 요청의 결과 개수가 같고
+    private 은 한 건도 오지 않는다. 이 파라미터가 빠지면 private 가 섞여 들어온다.
+    """
+    seen: list[dict[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(dict(request.url.params))
+        return httpx.Response(200, json=[])
+
+    async with _client(handler) as client:
+        await GithubClient("tok", client=client).list_repositories()
+
+    assert seen[0]["visibility"] == "public"
+    assert seen[0]["affiliation"] == "owner"
 
 
 async def test_authorization_header_is_sent() -> None:
