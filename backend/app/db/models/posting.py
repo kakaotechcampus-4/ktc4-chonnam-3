@@ -26,11 +26,10 @@ POSTING_SOURCES = ("wanted",)
 POSTING_PARSE_STATUSES = ("succeeded", "partial", "failed")
 DOMAIN_CATEGORIES = ("finance", "game", "travel", "shopping", "medical", "mobility", "etc")
 
-# ⚠ 미합의: docs/db-schema.md 는 required/preferred/unknown,
-#   spec/shared/contracts/openapi.yaml 의 JdCategory 는 required/preferred/responsibility 다.
-#   spec/shared/contracts/migration.md 에 기록이 없어 임의로 한쪽을 고르지 않고 합집합으로 둔다.
-#   팀 결정 전까지 BE 는 API 에 `unknown` 을 내보내지 않는다.
-JD_CATEGORIES = ("required", "preferred", "responsibility", "unknown")
+# openapi.yaml 의 JdCategory 를 따른다 (팀 결정 2026-09-21).
+#   docs/db-schema.md 의 required/preferred/unknown 과 달랐고, 공통 계약 쪽을 채택했다.
+#   unknown 버킷이 없다. 어느 항목에도 분류되지 않으면 행을 만들지 않는다.
+JD_CATEGORIES = ("required", "preferred", "responsibility")
 
 
 class JobPosting(Base, UUIDPrimaryKeyMixin, TimestampMixin):

@@ -295,9 +295,9 @@ def _create_posting_tables() -> None:
         sa.UniqueConstraint(
             "job_posting_id", "display_order", name="uq_jd_requirements_posting_order"
         ),
-        # 값 집합 미합의 — db-schema.md(unknown) 와 openapi(responsibility) 의 합집합이다.
+        # openapi JdCategory 를 따른다 (팀 결정 2026-09-21).
         sa.CheckConstraint(
-            "category IN ('required', 'preferred', 'responsibility', 'unknown')",
+            "category IN ('required', 'preferred', 'responsibility')",
             name="ck_jd_requirements_category",
         ),
     )
