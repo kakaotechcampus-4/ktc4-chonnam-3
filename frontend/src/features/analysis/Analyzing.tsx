@@ -26,21 +26,22 @@ export default function Analyzing() {
 
   const [sseSteps, setSseSteps] = useState<Partial<StepMap>>({});
   const [sseStatus, setSseStatus] = useState<RunStatus | null>(null);
-  const [ssePending, setSsePending] = useState(true);
   const sseOpenedRef = useRef(false);
 
+  // REST 스냅샷을 기다렸다가 SSE를 열면, "스냅샷을 읽은 시점"과 "SSE가 실제로
+  // 연결된 시점" 사이에 일어난 전환을 영영 놓칠 수 있다. runId를 알자마자(REST
+  // 응답을 기다리지 않고) 바로 구독해서 그 틈 자체를 없앤다.
   const runQuery = useQuery({
     queryKey: queryKeys.analysisRun(runId),
     queryFn: () => api.getAnalysisRun(runId),
     enabled: !!runId,
-    refetchInterval: (query) => (!ssePending && query.state.data?.status === 'running' ? 3000 : false),
+    // SSE 연결 핸드셰이크 구간처럼 순서를 바꿔도 못 막는 틈을 위한 안전장치로,
+    // SSE가 정상 동작 중이어도 계속 폴링해서 놓친 이벤트가 있으면 몇 초 안에 따라잡는다.
+    refetchInterval: (query) => (query.state.data?.status === 'running' ? 3000 : false),
   });
 
-  // SSE는 구독 시점 이후의 델타만 전달하므로, 이미 끝난 뒤 재진입하거나 이벤트를
-  // 놓치면 pending에서 멈출 수 있다. 스냅샷(runQuery)이 running일 때만 구독한다.
   useEffect(() => {
     if (!runId || sseOpenedRef.current) return;
-    if (!runQuery.data || runQuery.data.status !== 'running') return;
     sseOpenedRef.current = true;
 
     const source = new EventSource(api.analysisRunEventsUrl(runId), { withCredentials: true });
@@ -64,11 +65,10 @@ export default function Analyzing() {
 
     source.onerror = () => {
       source.close();
-      setSsePending(false);
     };
 
     return () => source.close();
-  }, [runId, runQuery.data]);
+  }, [runId]);
 
   const steps: StepMap = {
     ...INITIAL_STEPS,
