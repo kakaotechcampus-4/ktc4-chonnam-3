@@ -1,0 +1,12 @@
+devon-chonnam-3.duckdns.org {
+    @backend path /api /api/* /ws /ws/*
+    handle @backend {
+        reverse_proxy api:8000
+    }
+
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+}

@@ -2,19 +2,26 @@ import {
   isApiError,
   type ApiError,
   type MeResponse,
+  type MeProfileResponse,
   type HomeResponse,
   type InterviewListResponse,
+  type DocumentPreviewResponse,
+  type CreateAnalysisRunRequest,
   type CreateAnalysisRunResponse,
   type AnalysisRunResponse,
   type AnalysisResultResponse,
+  type CandidatesResponse,
+  type CandidatesAnalyzingResponse,
   type CreateInterviewRequest,
   type CreateInterviewResponse,
   type InterviewDetailResponse,
   type ReportResponse,
+  type ReportGeneratingResponse,
   type FeedbackDisagreementRequest,
 } from '@/types/api';
 
-const BASE = '/api';
+// MSW 핸들러가 같은 prefix를 참조한다. 값이 바뀌면 mock도 함께 따라간다.
+export const BASE = '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -57,8 +64,11 @@ function requestJson<T>(path: string, method: string, body: unknown): Promise<T>
 }
 
 export const api = {
+  // 401 인터셉터가 single-flight 로 호출한다. 자신은 인터셉터 대상에서 제외한다.
+  refresh: () => request<void>('/auth/refresh', { method: 'POST' }),
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
   getMe: () => request<MeResponse>('/me'),
+  getProfile: () => request<MeProfileResponse>('/me/profile'),
   getHome: () => request<HomeResponse>('/me/home'),
   getInterviews: (params?: { page?: number; size?: number }) => {
     const query = new URLSearchParams();
@@ -67,20 +77,33 @@ export const api = {
     const qs = query.toString();
     return request<InterviewListResponse>(`/me/interviews${qs ? `?${qs}` : ''}`);
   },
-  createAnalysisRun: (formData: FormData) =>
-    request<CreateAnalysisRunResponse>('/analysis-runs', {
+  // Content-Type을 직접 지정하지 않는다. multipart boundary는 브라우저가 생성해야 한다.
+  previewDocument: (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return request<DocumentPreviewResponse>('/documents/preview', {
       method: 'POST',
-      body: formData,
-    }),
+      body: form,
+    });
+  },
+  createAnalysisRun: (body: CreateAnalysisRunRequest) =>
+    requestJson<CreateAnalysisRunResponse>('/analysis-runs', 'POST', body),
   getAnalysisRun: (runId: string) => request<AnalysisRunResponse>(`/analysis-runs/${runId}`),
   getAnalysisRunResult: (runId: string) =>
     request<AnalysisResultResponse>(`/analysis-runs/${runId}/result`),
+  // 200 이면 카드 배열, 202 면 analyzing. 호출부가 status 필드로 구분한다.
+  getAnalysisRunCandidates: (runId: string, page: number) =>
+    request<CandidatesResponse | CandidatesAnalyzingResponse>(
+      `/analysis-runs/${runId}/candidates?page=${page}`,
+    ),
   createInterview: (body: CreateInterviewRequest) =>
     requestJson<CreateInterviewResponse>('/interviews', 'POST', body),
   getInterview: (id: string) => request<InterviewDetailResponse>(`/interviews/${id}`),
-  getInterviewReport: (id: string) => request<ReportResponse>(`/interviews/${id}/report`),
+  getInterviewReport: (id: string) =>
+    request<ReportResponse | ReportGeneratingResponse>(`/interviews/${id}/report`),
   retryInterview: (id: string) =>
     request<CreateInterviewResponse>(`/interviews/${id}/retry`, { method: 'POST' }),
   submitFeedbackDisagreement: (id: string, body: FeedbackDisagreementRequest) =>
-    requestJson<void>(`/reports/${id}/feedback-disagreements`, 'POST', body),
+    requestJson<void>(`/interviews/${id}/feedback-disagreements`, 'POST', body),
+  analysisRunEventsUrl: (runId: string) => `${BASE}/analysis-runs/${runId}/events`,
 };
