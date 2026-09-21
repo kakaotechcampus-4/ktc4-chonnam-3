@@ -11,6 +11,22 @@
 
 문서 없이 공고 URL만으로 분석할 수 있다. 공고는 필수이고, Wanted fetch/extract 실패 또는 unsupported site는 hard blocker다.
 
+## Wanted 공고 수집·분류
+
+공고는 면접 분석의 원문으로 사용한다. 채용이 마감되었더라도 본문을 가져올 수 있으면 분석한다. Wanted의 `status`, `due_time`만으로 수집을 실패 처리하지 않는다. HTTP·네트워크 오류, 잘못된 응답, 빈 본문은 `jd_fetch_failed`, 본문은 있지만 추출 가능한 구조화 항목이 없으면 `jd_extraction_failed`로 처리한다.
+
+API `category`는 화면의 항목 구분이고, DB·AI의 `requirement_type`은 필수·우대 여부다. 기존 [API enum](../../shared/contracts/openapi.yaml)과 [DB enum](../../../backend/docs/db-schema.md)을 각각 유지하며 다음과 같이 변환한다.
+
+| Wanted 원문 필드 (`source_field`) | DB·AI `requirement_type` | API `category` |
+| --- | --- | --- |
+| `requirements` | `required` | `required` |
+| `preferred_points` | `preferred` | `preferred` |
+| `main_tasks` | `unknown` | `responsibility` |
+
+주요 업무만으로 필수·우대 여부를 추측하지 않는다. `unknown`은 `responsibility`의 별칭이 아니며, 원문 출처가 `main_tasks`일 때만 API에서 주요 업무로 표시한다. 다른 출처의 `unknown`을 주요 업무로 바꾸지 않는다.
+
+`JdRequirementDraft`는 API `category`와 함께 계산 속성 `requirement_type`, `source_field`를 제공한다. 저장 호출부는 두 속성을 명시적으로 읽고 원문 출처도 보존해야 재조회 후 같은 화면 분류를 복원할 수 있다. `category`를 DB `requirement_type`에 그대로 저장하지 않는다. 이 변환은 기존 enum을 연결하는 규칙이며 새 DB enum이나 컬럼을 추가하지 않는다.
+
 ## 단계
 
 분석 step key는 7개로 고정한다.

@@ -48,7 +48,7 @@ Wanted의 구조화 필드를 원문으로 사용한다. `jd_requirements.requir
 - `preferred`
 - `unknown`
 
-이 계약에서 `responsibility`를 새 enum 값으로 만들지 않는다. 담당 업무를 별도로 보존해야 하면 기존 Wanted 원문 위치와 데이터 모델 안에서 표현하며, schema 변경은 백엔드 승인을 받는다. `tech_tags`는 Wanted `skill_tags`에서 가져오며 LLM이 누락된 태그를 추측해 채우지 않는다.
+이 계약에서 `responsibility`를 DB·AI `requirement_type`의 새 enum 값으로 만들지 않는다. 주요 업무는 `unknown`과 원문 출처 `main_tasks`로 구분한다. API 표시 분류와의 변환은 [분석 Run의 Wanted 공고 수집·분류](../../backend/features/analysis-run.md#wanted-공고-수집분류)를 따른다. `unknown`만으로 주요 업무라고 판단하지 않는다. 기존 Wanted 원문 위치와 데이터 모델 안에서 출처를 보존하며, schema 변경은 백엔드 승인을 받는다. `tech_tags`는 Wanted `skill_tags`에서 가져오며 LLM이 누락된 태그를 추측해 채우지 않는다.
 
 [0006 결정](../decisions/0006-task-llm-usage-policy.md)에 따라 Sprint 1 Wanted-only 분류는 구조화 필드를 규칙으로 변환하며 LLM을 호출하지 않는다. `jd_extract` 단계와 검증·저장은 유지하고 수집/추출 실패를 LLM 추측으로 메우지 않는다. `jd_extract_v1`은 기존 prompt version 목록에 남기며 deterministic 변환 version·출처 기록의 실제 저장 방식은 AI·BE 검토사항이다. prompt version을 다른 종류의 버전 필드로 재정의하거나 비호출 작업을 LLM 실행으로 기록하지 않는다.
 
