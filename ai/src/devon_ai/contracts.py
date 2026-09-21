@@ -316,3 +316,60 @@ def validate_analysis(
     for request in candidate.verification_requests:
         _quotes((request.claim_text,), answer_text)
     return _checked(candidate)
+
+
+@dataclass(frozen=True)
+class DirectorDecision(_Contract):
+    next_step: Literal["ask", "retrieve", "finish"]
+    intent: str
+    persona: PersonaId | None
+    target: str | None
+    tool_requests: tuple[VerificationRequest, ...]
+    reason_summary: str
+
+
+@dataclass(frozen=True)
+class CandidateFailure(_Contract):
+    stage: FailureStage
+    reason_summary: str
+
+
+@dataclass(frozen=True)
+class CandidateRecovery(_Contract):
+    recovery: Literal["rewrite", "replan", "no_valid_candidate"]
+    reason_summary: str
+
+
+def validate_decision(
+    candidate: DirectorDecision,
+    *,
+    question: ContractChecked[Question] | None,
+    allowed_personas: tuple[PersonaId, ...],
+    finish_allowed: bool,
+    allowed_locations: frozenset[tuple[str, str, str]],
+) -> ContractChecked[DirectorDecision]:
+    """Validate combinations against caller permissions; do not advance any turn."""
+    _convert(DirectorDecision, candidate, "decision", wire=False)
+    _convert(tuple[PersonaId, ...], allowed_personas, "allowed_personas", wire=False)
+    _convert(bool, finish_allowed, "finish_allowed", wire=False)
+    if candidate.next_step == "ask":
+        if question is None:
+            raise ContractError("semantic", "ask question required")
+        value = _checked_data(question, Question)
+        if (
+            candidate.persona not in allowed_personas
+            or candidate.persona != value.persona
+            or candidate.target != value.question_contract.purpose
+            or candidate.tool_requests
+        ):
+            raise ContractError("semantic", "ask consistency")
+    else:
+        if question is not None or candidate.persona is not None:
+            raise ContractError("semantic", "non-question decision")
+        if candidate.next_step == "retrieve":
+            if not candidate.tool_requests or candidate.target is None:
+                raise ContractError("semantic", "retrieve requests required")
+            _requests(candidate.tool_requests, allowed_locations)
+        elif not finish_allowed or candidate.tool_requests or candidate.target is not None:
+            raise ContractError("semantic", "finish permission")
+    return _checked(candidate)

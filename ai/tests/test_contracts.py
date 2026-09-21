@@ -285,3 +285,136 @@ def test_analysis_cannot_consume_raw_question(analysis_data, question_data):
             evidence_refs=frozenset(),
             allowed_locations=frozenset(),
         )
+
+
+@pytest.fixture
+def decision_data():
+    return {
+        "next_step": "ask",
+        "intent": "선정 이유 확인",
+        "persona": "tech_lead",
+        "target": "캐시 선정 근거 확인",
+        "tool_requests": [],
+        "reason_summary": "현재 질문 목적에 연결",
+    }
+
+
+def test_director_ask_requires_matching_checked_question(
+    decision_data, question_data, question_scope
+):
+    question = c.validate_question(c.decode(c.Question, question_data), **question_scope)
+    result = c.validate_decision(
+        c.decode(c.DirectorDecision, decision_data),
+        question=question,
+        allowed_personas=("tech_lead",),
+        finish_allowed=False,
+        allowed_locations=frozenset(),
+    )
+    assert result.data.next_step == "ask"
+    decision_data["target"] = "TTL 값 확인"
+    with pytest.raises(c.ContractError):
+        c.validate_decision(
+            c.decode(c.DirectorDecision, decision_data),
+            question=question,
+            allowed_personas=("tech_lead",),
+            finish_allowed=False,
+            allowed_locations=frozenset(),
+        )
+
+
+@pytest.fixture
+def request_data():
+    return {
+        "claim_text": "캐시했습니다",
+        "purpose": "캐시 구현 확인",
+        "repository_id": "repo-1",
+        "git_ref": "sha-1",
+        "allowed_paths": ["src/cache.py"],
+    }
+
+
+@pytest.mark.parametrize("mode", ["retrieve", "finish"])
+def test_director_non_question_decisions_require_controller_permission(
+    decision_data, request_data, mode
+):
+    decision_data.update(
+        next_step=mode,
+        persona=None,
+        target="캐시 구현 확인" if mode == "retrieve" else None,
+        tool_requests=[request_data] if mode == "retrieve" else [],
+    )
+    kwargs = {
+        "question": None,
+        "allowed_personas": (),
+        "finish_allowed": True,
+        "allowed_locations": frozenset({("repo-1", "sha-1", "src/cache.py")}),
+    }
+    result = c.validate_decision(c.decode(c.DirectorDecision, decision_data), **kwargs)
+    assert result.data.next_step == mode
+    if mode == "retrieve":
+        decision_data["tool_requests"] = []
+    else:
+        kwargs["finish_allowed"] = False
+    with pytest.raises(c.ContractError):
+        c.validate_decision(c.decode(c.DirectorDecision, decision_data), **kwargs)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("repository_id", "other-repo"),
+        ("git_ref", "other-sha"),
+        ("allowed_paths", ["../secret"]),
+        ("allowed_paths", []),
+        ("allowed_paths", ["src/cache.py", "src/cache.py"]),
+    ],
+)
+def test_verification_requests_cannot_expand_be_scope(
+    analysis_data, question_data, question_scope, request_data, field, value
+):
+    analysis_data.update(needs_verification=True, verification_requests=[request_data])
+    assert check_analysis(analysis_data, question_data, question_scope).data.needs_verification
+    request_data[field] = value
+    with pytest.raises(c.ContractError):
+        check_analysis(analysis_data, question_data, question_scope)
+
+
+@pytest.mark.parametrize(
+    "status", ["supported", "partially_supported", "unverified", "conflicting"]
+)
+def test_claims_preserve_support_state_but_require_registered_evidence(
+    analysis_data, question_data, question_scope, status
+):
+    analysis_data["claim_checks"] = [
+        {
+            "claim_text": "캐시했습니다",
+            "status": status,
+            "evidence_refs": ["ev-1"],
+            "limitations": ["개인 기여 미확인"],
+        }
+    ]
+    assert (
+        check_analysis(analysis_data, question_data, question_scope).data.claim_checks[0].status
+        == status
+    )
+    analysis_data["claim_checks"][0]["evidence_refs"] = ["invented"]
+    with pytest.raises(c.ContractError):
+        check_analysis(analysis_data, question_data, question_scope)
+
+
+@pytest.mark.parametrize("stage", ["parse", "schema", "semantic"])
+def test_failure_remains_failure_data_and_never_checked_success(stage):
+    failure = c.decode(c.CandidateFailure, {"stage": stage, "reason_summary": "후보 거절"})
+    assert failure.stage == stage
+    assert not isinstance(failure, c.ContractChecked)
+    with pytest.raises(c.ContractError):
+        c.decode(c.CandidateFailure, {"stage": "success", "reason_summary": "잘못된 분류"})
+
+
+@pytest.mark.parametrize("recovery", ["rewrite", "replan", "no_valid_candidate"])
+def test_recovery_is_not_a_new_director_action(recovery, decision_data):
+    result = c.decode(c.CandidateRecovery, {"recovery": recovery, "reason_summary": "후보 처리"})
+    assert result.recovery == recovery
+    decision_data["next_step"] = recovery
+    with pytest.raises(c.ContractError):
+        c.decode(c.DirectorDecision, decision_data)
