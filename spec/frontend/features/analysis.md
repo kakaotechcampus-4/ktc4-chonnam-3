@@ -8,7 +8,7 @@
 
 | 화면 | 코드 | 구성 |
 | --- | --- | --- |
-| 공고·문서 입력 | — | 공고 URL 입력폼(필수) + 자기소개서 업로더 + 포트폴리오 업로더 + `분석 시작` |
+| 공고·문서 입력 | — | 공고 URL 입력폼(필수) + 포트폴리오 업로더 + `분석 시작` |
 | 분석 진행 | 4-2-v2 | 7단계 체크리스트 + 진행률 |
 | 분석 실패 | 4-3-v2 | 실패 사유 배너 + 재시도/안내 액션 |
 | 레포 확정 | 5a-v2 | 좌측 레포 카드 리스트(체크박스) + 우측 공고 요구사항 리스트 + `내 레포 더 보기` + 확정 버튼 |
@@ -18,8 +18,7 @@
 | 항목 | 필수 | 형식 | 상한 |
 | --- | --- | --- | --- |
 | 공고 URL | ✅ | URL | — |
-| 자기소개서 | ❌ | PDF, DOCX | 10MB |
-| 포트폴리오 | ❌ | PDF 또는 링크 | 20MB |
+| 포트폴리오 | ❌ | PDF, DOCX, TXT, MD | 10MB |
 
 - 라벨에 `* 필수` 배지, 나머지는 `(선택)`
 - URL이 비었거나 URL 형식이 아니면 `분석 시작` 버튼 비활성 (회색). 눌러도 진행되지 않고 입력창 아래 안내 문구
@@ -29,10 +28,10 @@
 
 ### 문서 Preview (BE 설계에 맞춤)
 
-파일 업로더는 `POST /analysis-runs`에 파일을 직접 실어 보내지 않는다. BE는 2단계 구조다.
+Sprint 1에서 preview는 포트폴리오 전용이다. 자소서는 `/documents/preview`로 보내지 않는다. 파일 업로더는 `POST /analysis-runs`에 파일을 직접 실어 보내지 않는다. BE는 2단계 구조다.
 
 1. 파일 선택 즉시 `POST /documents/preview`로 업로드 → 텍스트·GitHub URL 추출 → `documentId` + `status`(`succeeded`/`partial`/`failed`) 반환
-2. `분석 시작` 클릭 시 `POST /analysis-runs`에 `documentId`(선택)만 실어 보낸다
+2. `분석 시작` 클릭 시 `POST /analysis-runs`에 portfolio preview `documentId`(선택)만 실어 보낸다
 
 지원 형식: `.pdf`(텍스트 레이어 있는 PDF만, 스캔 이미지 PDF는 추출 실패), `.docx`, `.txt`, `.md`. 최대 10MB. `.hwp`·이미지·`.ppt/.pptx`는 미지원.
 
@@ -52,7 +51,7 @@
 
 `status === 'failed'`는 hard blocker가 아니다 — "문서 없이 계속 진행" 선택 시 `documentId`를 `analysis-runs` 요청에서 뺀다.
 
-**`PENDING_TEAM`**: BE 계약의 `documentId`는 단수다. 공고 입력 화면은 자기소개서·포트폴리오 업로더가 2개인데 이걸 어떻게 매핑할지(각각 별도 preview 호출 후 한쪽만 채택할지, 병합할지) 미정 — 팀 확인 필요.
+`documentId`는 단수이며 Sprint 1에서는 portfolio preview document ID를 의미한다. 자소서 claim 추출과 자소서 기반 분석은 Sprint 2에서 별도 설계한다.
 
 ### 4-2-v2 체크리스트 7단계
 
@@ -95,7 +94,7 @@ BE 협의(2026-09-11)로 필드명 `category`→`type`, `responsibility` 카테�
 /home [새 면접 시작] → 공고 입력
 
 공고 입력 (공고·문서 입력)
-  ├─ 파일 선택 → POST /documents/preview → documentId (즉시, 백그라운드)
+  ├─ 포트폴리오 파일 선택 → POST /documents/preview → documentId (즉시, 백그라운드)
   └─ [분석 시작] → POST /analysis-runs { postingUrl, documentId? } → 202 { runId } → 4-2-v2
 
 4-2-v2  분석 진행 (EventSource 구독)
@@ -229,8 +228,8 @@ new EventSource(`/api/analysis-runs/${runId}/events`, { withCredentials: true })
 | 상태 | 용도 |
 | --- | --- |
 | `postingUrlInput` | 입력 중인 공고 URL 텍스트 |
-| `selectedDocumentFile` | 선택된 문서 파일 객체 |
-| `documentPreview` | `POST /documents/preview` 결과(`documentId`, `status`, 추출 요약) |
+| `selectedPortfolioFile` | 선택된 포트폴리오 파일 객체 |
+| `documentPreview` | 포트폴리오 `POST /documents/preview` 결과(`documentId`, `status`, 추출 요약) |
 | `isDragging` | 드래그 오버 하이라이트 (업로더별) |
 | `isUrlValid` | `분석 시작` 버튼 활성 여부 (파생값) |
 | `isSubmitting` | 중복 제출 방지 |

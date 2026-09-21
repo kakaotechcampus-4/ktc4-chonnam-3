@@ -18,7 +18,7 @@ WebSocket으로 AI 면접관과 텍스트 면접을 진행한다. 준비 단계�
 
 ### 5a2-v2 준비 체크리스트 4단계
 
-`analyze_repo` → `build_persona` → `compose_question` → `set_criteria`
+`analyze_repo` → `build_persona` → `set_criteria` → `compose_question`
 
 각 단계 `status`: `pending` | `running` | `completed` | `failed`
 
@@ -30,7 +30,7 @@ WebSocket으로 AI 면접관과 텍스트 면접을 진행한다. 준비 단계�
 | --- | --- |
 | 체크리스트 | `prepareStep` — `completed` / `failed` / `pending` |
 | 실패 배너 | `error` — 제목·본문은 `reason`별 문구, 하단에 `code` · `occurredAt` |
-| 1차 액션 | `다시 시도` → `prepareRetry` 전송 |
+| 1차 액션 | `다시 시도` → `POST /interviews/{id}/prepare/retry` |
 | 2차 액션 | `레포 다시 선택하기` → 5a-v2 |
 | 하단 안내 | 고객센터 링크 + "선택한 레포와 공고는 저장되어 있어요" |
 
@@ -60,7 +60,7 @@ WebSocket으로 AI 면접관과 텍스트 면접을 진행한다. 준비 단계�
   └─ error            → 면접 준비 실패
 
 면접 준비 실패
-  ├─ [다시 시도]            → prepareRetry → 5a2-v2 (실패 단계부터 재실행)
+  ├─ [다시 시도]            → POST /interviews/{id}/prepare/retry → 5a2-v2 (실패 단계부터 재실행)
   └─ [레포 다시 선택하기]    → 5a-v2 (새 세션 생성, 기존 세션은 abandoned)
 
 5b-v2  면접 진행 (WS 유지)
@@ -98,6 +98,7 @@ Sprint 1은 이탈 자동 감지 배치/주기 job이 없다(`context/DB.md`: "t
 | --- | --- | --- | --- |
 | 17 | `GET /interviews/{id}` | 5a2-v2, 5b-v2, 면접 준비 실패 | `['interview', id]` |
 | 18 | `GET (Upgrade) /ws/interviews/{sessionId}` | 5a2-v2, 5b-v2 | — |
+| — | `POST /interviews/{id}/prepare/retry` | 면접 준비 실패 | — |
 
 `GET /interviews/{id}` 응답에 `answerMode: "text"`가 포함된다. Sprint 1은 이 값을 항상 `text`로 취급하지만, 화면 로직은 이 값으로 분기하도록 만들어 Sprint 2에서 `voice`가 추가돼도 값을 무시하지 않게 한다.
 
@@ -145,18 +146,16 @@ Cookie: accessToken=<jwt>
 ### 클라이언트 → 서버
 
 ```json
-{ "type": "prepareRetry" }
-{ "type": "answer", "text": "상품 조회 성능을 높이기 위해 캐시로 사용했습니다." }
+{ "type": "answer", "turn": 3, "text": "상품 조회 성능을 높이기 위해 캐시로 사용했습니다." }
 ```
 
 | type | 필드 |
 | --- | --- |
-| `prepareRetry` | — |
-| `answer` | `text` (string, 최대 2000자) |
+| `answer` | `turn` (number), `text` (string, 최대 2000자) |
 
-`prepareRetry`는 준비 단계가 실패한 뒤 "다시 시도"를 눌렀을 때 보낸다. 서버는 실패한 `prepareStepKey`부터 다시 실행하고, 성공한 단계는 재실행하지 않는다.
+준비 단계가 실패한 뒤 "다시 시도"를 누르면 WS 메시지가 아니라 `POST /interviews/{id}/prepare/retry`를 호출한다. 서버는 실패한 `prepareStepKey`부터 다시 실행하고, 성공한 단계는 재실행하지 않는다.
 
-`answer`는 2000자 초과 시 `answer_too_long`.
+`answer`는 현재 답변 가능한 turn과 일치해야 한다. 2000자 초과 시 `answer_too_long`.
 
 ### 서버 → 클라이언트
 
@@ -164,14 +163,14 @@ Cookie: accessToken=<jwt>
 | --- | --- | --- |
 | `prepareStep` | `key`, `status` | 준비 체크리스트 갱신 |
 | `prepareCompleted` | — | 5b-v2 전환 |
-| `answerReceived` | — | 제출 중 상태 해제, 입력창 잠금 해제 |
+| `answerReceived` | — | 제출 중 상태 해제, 입력창은 다음 `question`까지 잠금 유지 |
 | `thinking` | — | 생성 중 인디케이터 |
 | `evidenceCheck` | `repository`, `file` | 근거 확인 배너 |
 | `question` | `persona`, `text`, `turn` | 질문 표시 |
 | `interviewEnd` | — | 5c-v2 이동 |
 | `error` | `reason`, `recoverable`, `code`, `step`, `occurredAt` | 분기 처리 |
 
-`answerReceived`는 서버가 답변 수신·저장을 완료했다는 신호다. `answer` 전송 후 이 메시지를 받기 전까지 제출 중 상태를 유지하고 입력창을 잠근다.
+`answerReceived`는 서버가 답변 수신·저장을 완료했다는 신호다. `answer` 전송 후 이 메시지를 받기 전까지 제출 중 상태를 유지하고 입력창을 잠근다. 수신 뒤에는 제출 중 상태만 해제하고, 다음 `question`이 도착할 때까지 새 답변 입력은 열지 않는다.
 
 `evidenceCheck` 배너는 `evidenceCheck` 외 다른 서버 메시지를 수신하면 해제한다. 30초간 메시지가 없으면 타임아웃 해제.
 
@@ -180,6 +179,7 @@ Cookie: accessToken=<jwt>
 ```
 { "type": "prepareStep", "key": "analyze_repo",     "status": "completed" }
 { "type": "prepareStep", "key": "build_persona",    "status": "completed" }
+{ "type": "prepareStep", "key": "set_criteria",     "status": "completed" }
 { "type": "prepareStep", "key": "compose_question", "status": "failed" }
 { "type": "error", "reason": "question_gen_timeout", "recoverable": true,
   "code": "ERR_QUESTION_GEN_TIMEOUT", "step": "compose_question",
@@ -193,11 +193,11 @@ Cookie: accessToken=<jwt>
 | `answer_too_long` | `ERR_ANSWER_TOO_LONG` | ✅ | 같은 턴 재제출 |
 | `answer_rejected` | `ERR_ANSWER_REJECTED` | ✅ | 같은 턴 재제출 (저장 실패) |
 | `question_failed` | `ERR_QUESTION_FAILED` | ✅ | 자동 1회 재시도 |
-| `question_gen_timeout` | `ERR_QUESTION_GEN_TIMEOUT` | ✅ | 면접 준비 실패 — `prepareRetry` |
-| `persona_build_failed` | `ERR_PERSONA_BUILD_FAILED` | ✅ | 면접 준비 실패 — `prepareRetry` |
-| `criteria_set_failed` | `ERR_CRITERIA_SET_FAILED` | ✅ | 면접 준비 실패 — `prepareRetry` |
-| `repo_analyze_failed` | `ERR_REPO_ANALYZE_FAILED` | ✅ | 면접 준비 실패 — `prepareRetry` |
-| `github_api_rate_limited` | `ERR_GITHUB_RATE_LIMITED` | ✅ | 면접 준비 실패 — 대기 후 `prepareRetry` |
+| `question_gen_timeout` | `ERR_QUESTION_GEN_TIMEOUT` | ✅ | 면접 준비 실패 — `POST /interviews/{id}/prepare/retry` |
+| `persona_build_failed` | `ERR_PERSONA_BUILD_FAILED` | ✅ | 면접 준비 실패 — `POST /interviews/{id}/prepare/retry` |
+| `criteria_set_failed` | `ERR_CRITERIA_SET_FAILED` | ✅ | 면접 준비 실패 — `POST /interviews/{id}/prepare/retry` |
+| `repo_analyze_failed` | `ERR_REPO_ANALYZE_FAILED` | ✅ | 면접 준비 실패 — `POST /interviews/{id}/prepare/retry` |
+| `github_api_rate_limited` | `ERR_GITHUB_RATE_LIMITED` | ✅ | 면접 준비 실패 — 대기 후 `POST /interviews/{id}/prepare/retry` |
 | `repo_unreachable` | `ERR_REPO_UNREACHABLE` | ❌ | 레포 재선택 |
 | `github_token_invalid` | `ERR_GITHUB_TOKEN_INVALID` | ❌ | GitHub 재연동 |
 

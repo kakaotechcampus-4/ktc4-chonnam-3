@@ -1,4 +1,20 @@
 import { expect, test, type Page } from '@playwright/test';
+import { fileURLToPath } from 'node:url';
+import { homeScenarios, interviewPage, meProfile } from '../src/mocks/fixtures/user';
+
+test.beforeEach(async ({ context }) => {
+  // 외부 이미지 서버 상태가 인증 UI 검증에 영향을 주지 않도록 로컬 자산으로 응답한다.
+  await context.route('https://avatars.githubusercontent.com/**', (route) =>
+    route.fulfill({
+      path: fileURLToPath(new URL('../public/favicon.svg', import.meta.url)),
+      contentType: 'image/svg+xml',
+    }),
+  );
+  // 인증만 완성된 실제 BE처럼 상세 API의 미구현을 성공 응답으로 숨기지 않는다.
+  await context.route(/\/api\/me\/(home|profile|interviews)(\?.*)?$/, (route) =>
+    route.fulfill(apiError('not_found', 404)),
+  );
+});
 
 const me = {
   name: '김개발',
@@ -33,7 +49,7 @@ test('the login page is safe for anonymous visitors and preserves denial feedbac
 
   await expect(page.getByRole('heading', { name: 'DEVON' })).toBeVisible();
   await expect(page.getByRole('alert')).toContainText('GitHub 로그인이 취소되었습니다');
-  await expect(page.getByRole('link', { name: 'GitHub으로 로그인' })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'GitHub로 계속하기' })).toHaveAttribute(
     'href',
     '/api/auth/github/login',
   );
@@ -46,7 +62,7 @@ test('the GitHub login control performs a browser navigation', async ({ page }) 
   );
   await page.goto('/login');
 
-  await page.getByRole('link', { name: 'GitHub으로 로그인' }).click();
+  await page.getByRole('link', { name: 'GitHub로 계속하기' }).click();
 
   await expect(page).toHaveURL(/\/login\?error=denied$/);
   await expect(page.getByRole('alert')).toContainText('GitHub 로그인이 취소되었습니다');
@@ -58,7 +74,7 @@ test('an authenticated visitor cannot stay on the login page', async ({ page }) 
   await page.goto('/login');
 
   await expect(page).toHaveURL(/\/home$/);
-  await expect(page.getByRole('heading', { name: '김개발님, 반가워요' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '안녕하세요, 김개발 님!' })).toBeVisible();
 });
 
 test('a revoked GitHub connection is not presented as successfully linked', async ({ page }) => {
@@ -98,7 +114,7 @@ test('a missing access cookie refreshes once and replays the original request on
 
   await page.goto('/home');
 
-  await expect(page.getByRole('heading', { name: '김개발님, 반가워요' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '안녕하세요, 김개발 님!' })).toBeVisible();
   expect(refreshRequests).toBe(1);
   expect(meRequests).toBe(3);
 });
@@ -126,8 +142,8 @@ test('two tabs coordinate an expired access refresh through the devon-auth Web L
 
   await Promise.all([first.goto('/home'), second.goto('/home')]);
 
-  await expect(first.getByRole('heading', { name: '김개발님, 반가워요' })).toBeVisible();
-  await expect(second.getByRole('heading', { name: '김개발님, 반가워요' })).toBeVisible();
+  await expect(first.getByRole('heading', { name: '안녕하세요, 김개발 님!' })).toBeVisible();
+  await expect(second.getByRole('heading', { name: '안녕하세요, 김개발 님!' })).toBeVisible();
   expect(refreshRequests).toBe(1);
 });
 
@@ -180,7 +196,7 @@ test('a service outage preserves the route and offers a working retry', async ({
 
   available = true;
   await page.getByRole('button', { name: '다시 시도' }).click();
-  await expect(page.getByRole('heading', { name: '김개발님, 반가워요' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '안녕하세요, 김개발 님!' })).toBeVisible();
 });
 
 test('a refresh service outage remains recoverable from the guarded route', async ({ page }) => {
@@ -209,7 +225,7 @@ test('a refresh service outage remains recoverable from the guarded route', asyn
 
   refreshAvailable = true;
   await page.getByRole('button', { name: '다시 시도' }).click();
-  await expect(page.getByRole('heading', { name: '김개발님, 반가워요' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '안녕하세요, 김개발 님!' })).toBeVisible();
 });
 
 test('a malformed HTTP error is not reported as a network failure', async ({ page }) => {
@@ -236,7 +252,7 @@ test('a network error keeps authentication recoverable', async ({ page }) => {
 
   available = true;
   await page.getByRole('button', { name: '다시 시도' }).click();
-  await expect(page.getByRole('heading', { name: '김개발님, 반가워요' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '안녕하세요, 김개발 님!' })).toBeVisible();
 });
 
 test('blocked accounts are cleared and shown a stable explanation', async ({ page }) => {
@@ -307,7 +323,7 @@ test('a failed logout keeps cached identity visible and can be retried', async (
   await expect(page.getByRole('dialog').getByRole('alert')).toContainText(
     '로그아웃 서비스를 사용할 수 없습니다',
   );
-  await expect(page.getByRole('heading', { name: '김개발' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '김개발 님의 정보' })).toBeVisible();
   expect(meRequests).toBe(1);
 });
 
@@ -362,9 +378,84 @@ test('the identity and logout controls remain usable on a narrow screen', async 
 
   await page.goto('/mypage');
 
-  await expect(page.getByRole('link', { name: '마이페이지' })).toBeVisible();
+  await expect(page.getByRole('link', { name: '내 계정' })).toBeVisible();
   await expect(page.getByRole('button', { name: '로그아웃' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('detail API failures preserve identity and do not fabricate dashboard data', async ({
+  page,
+}) => {
+  await mockAuthenticated(page);
+  await page.goto('/home');
+  await expect(page.getByRole('heading', { name: '안녕하세요, 김개발 님!' })).toBeVisible();
+  await expect(page.getByText('정보를 불러오지 못했어요.')).toBeVisible();
+  await expect(page.getByText('GitHub 분석', { exact: false })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: '내 계정' }).locator('img')).toHaveAttribute(
+    'src',
+    me.avatarUrl,
+  );
+
+  await page.getByRole('link', { name: '내 계정' }).click();
+  await expect(page.getByRole('heading', { name: '김개발 님의 정보' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '면접 이력', exact: true })).toBeVisible();
+  await expect(page.getByText('이력을 불러오지 못했어요.')).toBeVisible();
+  await expect(page.getByRole('button', { name: '로그아웃' })).toBeVisible();
+  await expect(page).toHaveURL(/\/mypage$/);
+});
+
+test('develop dashboard and profile remain available with their contracted responses', async ({
+  page,
+}, testInfo) => {
+  await mockAuthenticated(page);
+  await page.route('**/api/me/home', (route) => route.fulfill({ json: homeScenarios.completed }));
+  await page.route('**/api/me/profile', (route) => route.fulfill({ json: meProfile }));
+  await page.route('**/api/me/interviews?*', (route) =>
+    route.fulfill({ json: interviewPage(1, 10) }),
+  );
+
+  await page.goto('/home');
+  await expect(page.getByRole('heading', { name: 'GitHub 분석 · 레포 2개 기반' })).toBeVisible();
+  await expect(page.getByText('주로 사용하는 언어')).toBeVisible();
+  await expect(page.getByRole('link', { name: '내 계정' }).locator('img')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('home-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: testInfo.outputPath('home-mobile.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.getByRole('link', { name: '내 계정' }).click();
+  await expect(page.getByRole('heading', { name: '내 정보', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '리포트 보기 →' }).first()).toBeVisible();
+  await expect(page.getByText('정보를 불러오지 못했어요.')).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.locator('main img').evaluate((image) => (image as HTMLImageElement).naturalWidth),
+    )
+    .toBeGreaterThan(0);
+  await page.screenshot({ path: testInfo.outputPath('mypage-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: testInfo.outputPath('mypage-mobile.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+});
+
+test('an expired GitHub connection does not revoke the DEVON login', async ({ page }) => {
+  await mockAuthenticated(page);
+  let refreshRequests = 0;
+  await page.route('**/api/me/home', (route) => route.fulfill(apiError('token_invalid', 401)));
+  await page.route('**/api/auth/refresh', async (route) => {
+    refreshRequests += 1;
+    await route.fulfill({ status: 204 });
+  });
+
+  await page.goto('/home');
+  await expect(page.getByText('GitHub 연동이 만료됐어요. 다시 연동해주세요.')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'GitHub으로 다시 로그인' })).toHaveAttribute(
+    'href',
+    '/api/auth/github/login',
+  );
+  await expect(page).toHaveURL(/\/home$/);
+  await expect(page.getByRole('heading', { name: '안녕하세요, 김개발 님!' })).toBeVisible();
+  expect(refreshRequests).toBe(0);
 });
 
 test.afterEach(async ({ context }) => {

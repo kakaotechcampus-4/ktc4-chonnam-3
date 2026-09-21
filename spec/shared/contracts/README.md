@@ -8,7 +8,16 @@
 - 공통 오류 envelope: `api-error.schema.json`
 - 변경/보류 추적: `migration.md`
 
-FE 문서와 backend docs가 이 계약과 충돌하면 `openapi.yaml`을 우선한다. 단, `PENDING_FE`, `PENDING_AI`, `PENDING_TEAM`으로 표시된 항목은 구현자가 임의 확정하지 않는다.
+실시간 통신의 상세 메시지 계약은 `frontend/docs/api-spec.md`를 함께 따른다(`openapi.yaml`의 `info.description` 참고).
+
+| 대상 | 경로 | api-spec.md 번호 |
+| --- | --- | --- |
+| WebSocket 업그레이드 | `/ws/interviews/{sessionId}` | #18 |
+| SSE 스트림 | `/analysis-runs/{runId}/events` | #13 |
+
+구현된 브라우저 이동 경로 `/auth/github/login`, `/auth/github/callback`은 OpenAPI가 원본이다. `/auth/github/link*`는 후속 범위이며, FE 문서의 #7·#8 설명만으로 구현 완료나 계약 승인을 뜻하지 않는다.
+
+이 범위 밖에서 FE 문서와 backend docs가 이 계약과 충돌하면 `openapi.yaml`을 우선한다. 단, `PENDING_FE`, `PENDING_AI`, `PENDING_TEAM`으로 표시된 항목은 구현자가 임의 확정하지 않는다.
 
 ## 공통 규약
 

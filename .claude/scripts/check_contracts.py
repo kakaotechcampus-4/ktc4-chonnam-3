@@ -26,7 +26,7 @@ def inline_refs(value, contracts, trail=()):
         return value
     if '$ref' in value:
         reference = value['$ref']
-        if reference.startswith('#/components/'):
+        if reference.startswith('#/'):
             # 내부 참조는 원본 OpenAPI 문서를 기준으로 해석해야 한다.
             return {
                 key: item if key == '$ref' else inline_refs(item, contracts, trail)

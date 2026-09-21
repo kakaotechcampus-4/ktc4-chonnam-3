@@ -2,7 +2,11 @@ import type {
   AnalysisResultResponse,
   AnalysisRunResponse,
   ApiError,
+  CreateAnalysisRunRequest,
   CreateAnalysisRunResponse,
+  CandidatesResponse,
+  CandidatesAnalyzingResponse,
+  DocumentPreviewResponse,
   CreateInterviewRequest,
   CreateInterviewResponse,
   FeedbackDisagreementRequest,
@@ -10,13 +14,17 @@ import type {
   InterviewDetailResponse,
   InterviewListResponse,
   MeResponse,
+  MeProfileResponse,
   ReportResponse,
+  ReportGeneratingResponse,
 } from '@/types/api';
 import { AUTH_LOCK_NAME, getAuthEpoch, publishAuthChange } from '@/shared/authEvents';
 
-const BASE = '/api';
+// MSW 핸들러도 같은 API prefix를 사용한다.
+export const BASE = '/api';
 const REFRESHABLE_REASONS = new Set(['unauthenticated', 'access_token_expired']);
 const BLOCKED_REASONS = new Set(['account_suspended', 'account_withdrawn']);
+const GITHUB_AUTH_REASONS = new Set(['token_invalid', 'github_token_invalid']);
 
 type RequestOptions = RequestInit & {
   anonymous?: boolean;
@@ -79,6 +87,7 @@ async function responseError(response: Response) {
       return new ApiRequestError(response.status, {
         reason: body.error.reason,
         message: body.error.message,
+        ...(typeof body.error.retryAfter === 'number' ? { retryAfter: body.error.retryAfter } : {}),
         details:
           body.error.details && typeof body.error.details === 'object' ? body.error.details : {},
       });
@@ -124,8 +133,10 @@ async function rawRequest<T>(path: string, options: RequestInit = {}, epoch?: nu
 }
 
 function isTerminalAuthError(error: unknown) {
+  // GitHub API용 토큰의 폐기는 DEVON 로그인 세션의 폐기와 다르다.
   return (
     error instanceof ApiRequestError &&
+    !GITHUB_AUTH_REASONS.has(error.error.reason) &&
     (error.status === 401 || BLOCKED_REASONS.has(error.error.reason))
   );
 }
@@ -238,6 +249,7 @@ export const api = {
   logout,
   getMe: (options?: { anonymous?: boolean; signal?: AbortSignal }) =>
     request<MeResponse>('/me', options),
+  getProfile: () => request<MeProfileResponse>('/me/profile'),
   getHome: () => request<HomeResponse>('/me/home'),
   getInterviews: (params?: { page?: number; size?: number }) => {
     const query = new URLSearchParams();
@@ -246,17 +258,30 @@ export const api = {
     const qs = query.toString();
     return request<InterviewListResponse>(`/me/interviews${qs ? `?${qs}` : ''}`);
   },
-  createAnalysisRun: (formData: FormData) =>
-    request<CreateAnalysisRunResponse>('/analysis-runs', { method: 'POST', body: formData }),
+  // multipart boundary는 브라우저가 생성하므로 Content-Type을 직접 지정하지 않는다.
+  previewDocument: (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return request<DocumentPreviewResponse>('/documents/preview', { method: 'POST', body: form });
+  },
+  createAnalysisRun: (body: CreateAnalysisRunRequest) =>
+    requestJson<CreateAnalysisRunResponse>('/analysis-runs', 'POST', body),
   getAnalysisRun: (runId: string) => request<AnalysisRunResponse>(`/analysis-runs/${runId}`),
   getAnalysisRunResult: (runId: string) =>
     request<AnalysisResultResponse>(`/analysis-runs/${runId}/result`),
+  // 200은 카드 목록, 202는 분석 중 응답이며 호출부가 status로 구분한다.
+  getAnalysisRunCandidates: (runId: string, page: number) =>
+    request<CandidatesResponse | CandidatesAnalyzingResponse>(
+      `/analysis-runs/${runId}/candidates?page=${page}`,
+    ),
   createInterview: (body: CreateInterviewRequest) =>
     requestJson<CreateInterviewResponse>('/interviews', 'POST', body),
   getInterview: (id: string) => request<InterviewDetailResponse>(`/interviews/${id}`),
-  getInterviewReport: (id: string) => request<ReportResponse>(`/interviews/${id}/report`),
+  getInterviewReport: (id: string) =>
+    request<ReportResponse | ReportGeneratingResponse>(`/interviews/${id}/report`),
   retryInterview: (id: string) =>
     request<CreateInterviewResponse>(`/interviews/${id}/retry`, { method: 'POST' }),
   submitFeedbackDisagreement: (id: string, body: FeedbackDisagreementRequest) =>
-    requestJson<void>(`/reports/${id}/feedback-disagreements`, 'POST', body),
+    requestJson<void>(`/interviews/${id}/feedback-disagreements`, 'POST', body),
+  analysisRunEventsUrl: (runId: string) => `${BASE}/analysis-runs/${runId}/events`,
 };

@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -37,6 +38,24 @@ class RefTests(unittest.TestCase):
         self.assertEqual(response_ref, {'$ref': '#/components/schemas/MeResponse'})
         schema = result['components']['schemas']['MeResponse']
         self.assertEqual(schema['properties']['githubLinked']['type'], 'boolean')
+    def test_real_partial_contract_internal_refs_are_preserved(self):
+        document = module.load_yaml_document(module.CONTRACTS/'openapi.yaml')
+        result = module.inline_refs(document, module.CONTRACTS)
+        schema = result['components']['responses']['Error']['content']['application/json']['schema']
+        self.assertEqual(schema['$ref'], '#/components/schemas/ApiError')
+        self.assertIn('ApiError', result['components']['schemas'])
+
+    def test_external_schema_file_ref_is_inlined(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/'me-response.schema.json').write_text(json.dumps({
+                '$schema': 'https://json-schema.org/draft/2020-12/schema',
+                'type': 'object',
+                'properties': {'githubLinked': {'type': 'boolean'}},
+            }))
+            result = module.inline_refs({'$ref': './me-response.schema.json'}, root)
+        self.assertEqual(result['properties']['githubLinked']['type'], 'boolean')
+        self.assertNotIn('$schema', result)
 
     def test_auth_surface_and_cookie_schemes_are_complete(self):
         document = module.load_yaml_document(module.CONTRACTS/'openapi.yaml')
@@ -53,6 +72,18 @@ class RefTests(unittest.TestCase):
             'RefreshTokenCookie',
             'OAuthStateCookie',
         })
+
+    def test_auth_and_frontend_contracts_coexist(self):
+        document = module.load_yaml_document(module.CONTRACTS/'openapi.yaml')
+        schemas = module.inline_refs(document, module.CONTRACTS)['components']['schemas']
+        for path in ('/me/profile', '/me/home', '/me/interviews'):
+            self.assertIn(path, document['paths'])
+        self.assertIn('details', schemas['ApiError']['properties']['error']['required'])
+        self.assertIn('retryAfter', schemas['ApiError']['properties']['error']['properties'])
+        self.assertEqual(schemas['MeResponse']['properties']['avatarUrl']['type'], ['string', 'null'])
+        self.assertIn('extractStatus', schemas['DocumentPreviewResponse']['required'])
+        self.assertIn('id', schemas['RepositoryCard']['required'])
+        self.assertIn('skipped', schemas['StepStatus']['enum'])
 
     def test_remote_ref_is_rejected_without_network(self):
         with self.assertRaises(ValueError):

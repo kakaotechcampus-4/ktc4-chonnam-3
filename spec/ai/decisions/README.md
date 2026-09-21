@@ -23,6 +23,7 @@
 - [0007 평가자료 분리와 검수·결과 기록 원칙](0007-evaluation-design-policy.md): Accepted, 2026-09-12. 자료 분리·독립 검수·전체 결과 기록의 원칙을 유지한다. 로컬 합성 자료와 검수 방법은 0009를 함께 따르며 실제 자료 검수·수치 목표·실측·출시는 대기.
 - [0008 AI 후보 검증·근거 선택·질문 복구](0008-ai-candidate-policy.md): Accepted, 2026-09-12. 출력 오류 구분, L2 관찰 한계, 제한 범위 내 근거 우선순위, 질문 복구 판단, 도메인 프레임 선택을 확정한다. 실제 계약·실행·저장·서비스 상태는 승인 범위 밖이다.
 - [0009 AI 평가자료·검수·재평가 방법](0009-ai-evaluation-method.md): Accepted, 2026-09-12. 로컬 합성 JSON 쌍, 검수 불일치·채점기 검사, 통제된 모델·검색 비교 방법을 확정한다. 실제 자료 운영·수치 기준·도입·출시는 별도 결정이다.
+- [0010 Sprint 1 인터페이스와 런타임 보류 해소](0010-sprint1-interface-runtime-decisions.md): Accepted, 2026-09-15. 리포트 점수, WS/sessionId, 준비 retry, 문서 preview, JD 신호, L2 partial success, LLM/ARQ retry, lazy report, profile summary, worker 분리 정책의 Sprint 1 결정을 기록한다. provider/model, 내부 저장 schema, 실행 budget, Evidence 상한, profile 중복 제거는 대기.
 
 ## 결정 대기
 

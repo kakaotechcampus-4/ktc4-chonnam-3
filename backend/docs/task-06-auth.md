@@ -30,6 +30,7 @@ GitHub OAuth 로그인과 서버의 GitHub token 갱신, DEVON cookie 인증, re
 - refresh/logout은 요청 `Origin`이 정확한 `FRONTEND_ORIGIN`과 일치해야 한다.
 - callback은 신규/기존 GitHub 사용자를 수렴시켜 로그인만 완료한다. `initial_sync`를 enqueue하거나 link API를 만들지 않는다.
 - GitHub 갱신용 공개 API·cron·worker를 만들지 않는다. 저장소 수집 pipeline 연결은 후속 범위다. GitHub rotation과 DB commit 사이 장애로 재로그인이 필요할 수 있음을 운영 문서에 기록한다.
+- WS handshake는 DEVON `accessToken` HttpOnly cookie로 인증한다.
 - private repo scope는 요청하지 않는다.
 
 ## 완료 조건

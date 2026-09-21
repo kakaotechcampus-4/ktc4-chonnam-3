@@ -31,17 +31,14 @@
 doc_extract -> repo_select -> repo_detail -> jd_fetch -> jd_extract -> repo_analyze -> match_score
 ```
 
-### 단계 순서 보류
+### 단계 순서와 JD 신호
 
-상태: Proposed, BE 파이프라인 검토 필요. 공통 API에 새로운 상태값을 추가하는 뜻은 아니다.
+외부 7개 step 순서는 그대로 유지한다. 첫 candidate batch의 `repo_select`는 `jd_fetch`와 `jd_extract`보다 먼저 실행되므로 JD 기반 신호를 사용할 수 없다. 구현자는 step key를 임의로 재배열하거나 아직 없는 JD 신호를 생성하면 안 된다.
 
-첫 candidate batch 규칙은 JD 신호를 사용할 수 있다고 되어 있으나, 고정된 표시 순서에서는 `repo_select`가 `jd_fetch`와 `jd_extract`보다 먼저다. 구현자는 이 모순을 숨기기 위해 step key를 임의로 재배열하거나 아직 없는 JD 신호를 생성하면 안 된다. 다음 중 하나를 백엔드 계약 결정으로 확정한 뒤 구현한다.
-
-- 실제 JD 확보를 먼저 수행하되 외부 7개 key의 의미와 진행률 규칙을 별도로 정의한다.
-- 첫 batch의 `jd_signal` 몫을 사용하지 않고, JD 확보 뒤 후속 page/ranking에만 적용한다.
-- 7개 step의 순서 자체를 계약 migration으로 변경한다.
-
-결정 전 테스트는 현재 불일치를 명시적으로 보류하고, JD 신호를 사용했다고 보고하지 않는다.
+- 첫 batch에서는 `jd_signal`을 사용하지 않는다.
+- 첫 batch candidate source는 `portfolio_mentioned`, `base_rank_top`, `high_contribution`, `other`만 사용한다.
+- JD 확보 뒤에는 `match_score` 단계와 후속 candidate page/ranking에서 JD requirement 기반 점수와 추천 이유를 계산할 수 있다.
+- 외부 진행 상태에는 새로운 step key를 추가하지 않는다.
 
 ## Wanted 요구사항
 
@@ -51,7 +48,7 @@ Wanted의 구조화 필드를 원문으로 사용한다. `jd_requirements.requir
 - `preferred`
 - `unknown`
 
-이 계약에서 `responsibility`를 새 enum 값으로 만들지 않는다. 담당 업무를 별도로 보존해야 하면 기존 Wanted 원문 위치와 데이터 모델 안에서 표현하며, schema 변경은 백엔드 승인을 받는다. `tech_tags`는 Wanted `skill_tags`에서 가져오며 LLM이 누락된 태그를 추측해 채우지 않는다.
+이 계약에서 `responsibility`를 DB·AI `requirement_type`의 새 enum 값으로 만들지 않는다. 주요 업무는 `unknown`과 원문 출처 `main_tasks`로 구분한다. API 표시 분류와의 변환은 [분석 Run의 Wanted 공고 수집·분류](../../backend/features/analysis-run.md#wanted-공고-수집분류)를 따른다. `unknown`만으로 주요 업무라고 판단하지 않는다. 기존 Wanted 원문 위치와 데이터 모델 안에서 출처를 보존하며, schema 변경은 백엔드 승인을 받는다. `tech_tags`는 Wanted `skill_tags`에서 가져오며 LLM이 누락된 태그를 추측해 채우지 않는다.
 
 [0006 결정](../decisions/0006-task-llm-usage-policy.md)에 따라 Sprint 1 Wanted-only 분류는 구조화 필드를 규칙으로 변환하며 LLM을 호출하지 않는다. `jd_extract` 단계와 검증·저장은 유지하고 수집/추출 실패를 LLM 추측으로 메우지 않는다. `jd_extract_v1`은 기존 prompt version 목록에 남기며 deterministic 변환 version·출처 기록의 실제 저장 방식은 AI·BE 검토사항이다. prompt version을 다른 종류의 버전 필드로 재정의하거나 비호출 작업을 LLM 실행으로 기록하지 않는다.
 
@@ -72,7 +69,7 @@ Wanted의 구조화 필드를 원문으로 사용한다. `jd_requirements.requir
 5. 깨진 전체 JSON은 공통 LLM 규칙에 따라 한 번만 재시도한다. 두 번째 실패 결과는 downstream에 전달하지 않는다.
 6. 허용된 저장 위치에 raw output, 실제 model 문자열, prompt version, token 사용량과 latency를 남긴다. 비밀키나 GitHub token은 남기지 않는다.
 
-[0008 결정](../decisions/0008-ai-candidate-policy.md)에 따라 전체 parse 실패, 항목의 schema 실패와 안정 식별자·근거·범위를 어긴 semantic 실패를 구분한다. invalid 항목을 빈 성공이나 추측한 기본값으로 보충하지 않으며 유효 항목은 보존한다. semantic 실패의 실제 재호출과 attempt 계산은 이 정책이 정하지 않는다.
+[0008 결정](../decisions/0008-ai-candidate-policy.md)에 따라 전체 parse 실패, 항목의 schema 실패와 안정 식별자·근거·범위를 어긴 semantic 실패를 구분한다. invalid 항목을 빈 성공이나 추측한 기본값으로 보충하지 않으며 유효 항목은 보존한다. semantic 실패는 Sprint 1에서 재호출하지 않고 해당 item 또는 task 결과를 실패로 분리한다. parse/schema 재시도는 공통 LLM gateway 규칙을 따른다.
 
 `repo_shallow_v1`과 `repo_deep_v1`은 서로 다른 prompt version이다. 모델이나 의미 있는 출력 계약을 바꿔 기존 결과를 재사용할 수 없게 되면 해당 task의 prompt version을 올린다.
 
@@ -86,9 +83,11 @@ Wanted의 구조화 필드를 원문으로 사용한다. `jd_requirements.requir
 
 `model`은 결과에 저장하지만 UNIQUE에는 넣지 않는다. 따라서 provider, model 또는 출력 의미가 바뀌어 캐시를 분리해야 할 때는 prompt version을 올려야 한다. 분석 대상 SHA와 다르면 캐시를 사용하지 않는다. 이미 준비한 면접은 `snapshot_head_sha`를 유지하므로, 원격 기본 branch에 새 push가 생겼다는 이유만으로 면접 중 분석과 근거를 교체하지 않는다. 별도의 전체 저장소 snapshot·복원 기능은 만들지 않는다.
 
-L2의 `notable_areas`가 없거나 path가 해당 분석의 고정 SHA에서 확인되지 않으면 L2 준비 성공으로 처리하지 않는다. 실패와 검증 한계를 남기고 해당 항목을 Evidence Retriever의 출발점으로 넘기지 않는다. 분석 run의 partial과 필수 L2가 미완료인 면접의 `preparing_failed`를 구분한다. 유효한 일부 항목만으로 준비 성공을 허용할 조건은 AI·BE 검토 대상이다.
+L2의 `notable_areas`가 없거나 path가 해당 분석의 고정 SHA에서 확인되지 않으면 해당 항목을 L2 준비 성공 근거로 쓰지 않는다. 실패와 검증 한계를 남기고 해당 항목을 Evidence Retriever의 출발점으로 넘기지 않는다. 분석 run의 partial과 필수 L2가 미완료인 면접의 `preparing_failed`를 구분한다.
 
-0008에 따라 L2 관찰은 고정 SHA의 실제 source와 읽은 내용이 주장을 뒷받침할 때만 사용한다. source는 유효하지만 언어·도구 기능이나 읽은 범위가 부족하면 확인 가능한 관찰과 한계를 함께 남기며, 읽지 않은 경로의 동작·아키텍처를 추론하지 않는다. 사용 가능한 관찰과 제한되거나 무효인 관찰은 구분하되 지원 언어·parser 목록, 정확한 필드와 일부 결과의 준비 성공 여부는 계속 AI·BE 검토 대상이다.
+면접 준비는 primary repo 1~2개 중 최소 1개 repo에 검증된 notable area가 1개 이상 있으면 성공할 수 있다. 검증된 notable area가 총 0개면 `preparing_failed`다. 실패 repo/path/area는 질문 근거에서 제외하고 내부 context limitations에 남긴다. Director와 report는 limitations에 포함된 미관찰 범위를 관찰 사실처럼 사용하지 않는다.
+
+0008에 따라 L2 관찰은 고정 SHA의 실제 source와 읽은 내용이 주장을 뒷받침할 때만 사용한다. source는 유효하지만 언어·도구 기능이나 읽은 범위가 부족하면 확인 가능한 관찰과 한계를 함께 남기며, 읽지 않은 경로의 동작·아키텍처를 추론하지 않는다. 사용 가능한 관찰과 제한되거나 무효인 관찰은 구분하되 지원 언어·parser 목록과 context limitations의 정확한 저장 필드는 계속 AI·BE 검토 대상이다.
 
 근거: [기획 결정](../../../report.md), [AI L1 task 골격](../../../ai/src/devon_ai/llm_tasks/repo_shallow.py), [AI L2 task 골격](../../../ai/src/devon_ai/llm_tasks/repo_deep.py). 기존 BE task 파일은 연결 경계로 남으며 수집·저장은 BE가 맡는다.
 

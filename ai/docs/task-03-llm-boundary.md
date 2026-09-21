@@ -23,7 +23,7 @@ AI 로직은 주입된 모델 호출 경계만 소비하고, 구체 transport·�
 - provider 독립 fake와 순수 성공·실패 fixture는 AI-L01 전에 작성할 수 있다.
 - 주입 callable의 정확한 signature, 요청/응답 타입 또는 Protocol은 AI-L02에서 채택된 계약만 사용한다.
 - 실제 provider, 호출 가능한 model ID, 인증 설정과 기능은 AI-L01 확인 전 코드·seed·문서 기본값으로 만들지 않는다.
-- parse/schema/semantic 실패 구분과 invalid 후보의 fail-closed 처리는 Accepted다. 실제 재시도 주체·횟수, semantic 재호출, timeout과 task별 budget은 AI-L04에서 확정해야 production 호출을 연결할 수 있다.
+- parse/schema/semantic 실패 구분과 invalid 후보의 fail-closed 처리는 Accepted다. attempt는 공통 LLM gateway/task 호출 계층에서만 관리하며 timeout/provider/parse/schema 실패는 총 2회까지 호출하고 semantic 실패는 재호출하지 않는다. timeout과 task별 token/context/tool budget은 AI-L04에 남아 있다.
 - 사용자 원문·raw output·호출 metadata의 production 보존은 AI-L18의 위치·권한·마스킹·보존 결정 뒤 연결한다.
 
 ## 대상 파일과 책임
@@ -42,7 +42,8 @@ AI 로직은 주입된 모델 호출 경계만 소비하고, 구체 transport·�
 - [ ] `prompt_loader`가 task 이름에 맞는 prompt 문자열과 version을 로드하고 task에 DB session을 넘기지 않게 한다.
 - [ ] prompt, model ID, credential을 AI 소스나 task 상수로 하드코딩하지 않는다.
 - [ ] AI-L02에서 채택한 task 계약과 ADR 0008의 semantic 검증을 통과하기 전에는 어느 계층도 provider 응답을 downstream 성공으로 확정하지 않게 한다.
-- [ ] timeout/provider 오류/JSON parse 실패의 FIX 재시도 1회를 정책 fixture로 표현하되 관리 계층과 운영값은 AI-L04 전 확정하지 않는다.
+- [ ] timeout/provider 오류/JSON parse/schema 실패의 공통 호출 계층 재시도 1회를 정책 fixture로 표현한다.
+- [ ] semantic 실패는 재호출하지 않고 typed failure로 반환한다.
 - [ ] SDK·client·task·worker의 중복 재시도로 총 호출 수가 곱해지는 시나리오를 실패 사례로 둔다.
 - [ ] 어떤 invalid 후보도 빈 성공·추측한 기본값·누락값 보충·ad hoc repair로 바꾸지 않고 task 범위 typed failure로 반환한다.
 - [ ] token 값을 provider가 주지 않으면 0으로 추정하지 않고 미수집 상태를 보존한다.
@@ -75,6 +76,6 @@ AI 로직은 주입된 모델 호출 경계만 소비하고, 구체 transport·�
 
 - AI-L01은 AI·BE가 provider, 실제 model ID, 인증 설정, 지원 기능과 버전 기록 방식을 검증하면 실제 transport 연결을 재개한다.
 - AI-L02는 AI·BE가 정확한 task 입력·출력·실패 계약과 schema version을 채택하면 해당 계약의 runtime 검증을 재개한다.
-- AI-L04는 AI·BE가 attempt 관리 주체와 횟수, semantic 재호출 여부, timeout·token·Context·동시성 budget과 소진 처리를 기록하면 production retry와 제한을 재개한다.
+- AI-L04는 attempt 관리 주체와 semantic 재호출 여부는 0010으로 해소했다. AI·BE가 timeout·token·Context·동시성 budget과 소진 처리를 기록하면 production 제한 연결을 재개한다.
 - AI-L18은 운영 담당과 저장 위치, 접근권한, 마스킹, 보존·삭제, metadata 범위를 승인하면 실제 원문·raw output 기록을 재개한다.
 - 이 결정들 전에도 Proposed fixture 기반 fake, 설정값 양수·일관성 검사, 중복 retry 차단 시나리오는 계속 진행한다.

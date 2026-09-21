@@ -13,9 +13,9 @@ WebSocket 기반 텍스트 면접 준비~진행 화면을 구현한다. 음성(S
 - 세션 상태 store (라이브러리 미확정 — store 또는 Context + reducer)
 - 5a2-v2 준비 체크리스트 4단계
 - 면접 준비 실패 화면
-- `prepareRetry` 전송
+- 면접 준비 실패 `다시 시도`는 `POST /interviews/{id}/prepare/retry` REST 호출
 - 답변 입력창 (최대 2000자) + 제출 버튼
-- `answer` 전송 → `answerReceived` 수신까지 입력창 잠금
+- `answer` 전송(`turn`, `text`) → `answerReceived` 수신까지 제출 중 상태 유지, 다음 `question`까지 입력창 잠금
 - `error.reason` 9종 분기 (Sprint 1 목록) + `recoverable` 처리
 - `status === 'preparing_failed'` 복구: `GET /interviews/{id}`의 `lastError`로 WS 재연결 없이 면접 준비 실패 배너 렌더
 - `onclose` 재연결 순서 (GET → 갱신 → 재연결)
@@ -34,9 +34,9 @@ Sprint 2 대상이라 이번에 만들지 않는 것: 마이크·스피커 점�
 - [ ] 세션 상태 store
 - [ ] 5a2-v2 준비 체크리스트 4단계
 - [ ] 면접 준비 실패 화면
-- [ ] `prepareRetry` 전송
+- [ ] `POST /interviews/{id}/prepare/retry` 호출
 - [ ] 답변 입력창 (2000자 제한) + 제출
-- [ ] `answer` 전송 → `answerReceived` 잠금 해제
+- [ ] `answer` 전송(`turn`, `text`) → `answerReceived` 제출 상태 해제, 다음 `question`까지 입력 잠금
 - [ ] `error.reason` 9종 분기 + `recoverable` 처리
 - [ ] `preparing_failed` 새로고침 복구 — `lastError`만으로 면접 준비 실패 배너 렌더
 - [ ] `onclose` 재연결 순서 (GET → 갱신 → 재연결)

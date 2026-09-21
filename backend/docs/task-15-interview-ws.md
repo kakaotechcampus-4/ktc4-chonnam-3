@@ -9,9 +9,9 @@ Sprint 1 텍스트 WS, turn loop, Redis context snapshot, evidence/conflict 흐�
 
 ## 작업
 
-- Sprint 1 client message는 `{type:"answer", text:"..."}`.
+- Sprint 1 client message는 `{type:"answer", turn, text:"..."}`.
 - server message는 `answerReceived`, `thinking`, `evidenceCheck`, `question`, `interviewEnd`, `error`.
-- `answerStart`, audio chunk, `answerEnd`, `transcript`, `stt_failed`, `tts_failed`, TTS audio는 Sprint 2.
+- `answerStart`, audio chunk, `answerEnd`, `transcript`, `questionEnd`, `stt_failed`, `tts_failed`, TTS audio는 Sprint 2.
 - 첫 질문은 `hr_manager` 고정이며 question evidence 없이 허용한다.
 - 2턴부터 Director가 persona를 선택한다.
 - 총 9턴 종료를 유지한다.
@@ -24,5 +24,6 @@ Sprint 1 텍스트 WS, turn loop, Redis context snapshot, evidence/conflict 흐�
 ## 완료 조건
 
 - WS 텍스트 프로토콜과 9턴 흐름을 테스트한다.
+- `turn` mismatch와 이미 답변된 turn의 중복 저장 차단을 테스트한다.
 - Redis context snapshot 만료 시 Postgres 재구성이 가능하다.
 - `evidence_conflicts(source='answer_vs_code')` 생성과 follow-up 후보화를 테스트한다.

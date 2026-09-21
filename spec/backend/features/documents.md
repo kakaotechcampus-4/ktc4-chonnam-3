@@ -4,7 +4,7 @@
 
 ## 목적
 
-문서는 Sprint 1에서 보조 신호다. 자소서/포트폴리오 claim을 추출하지 않고, 텍스트와 GitHub URL만 저장한다. `document_claims` 테이블은 Sprint 1 migration에 포함하지만 row는 생성하지 않는다.
+문서는 Sprint 1에서 보조 신호다. `/documents/preview`는 포트폴리오 파일에서 GitHub URL을 추출하기 위한 경로로 사용한다. 자소서는 Sprint 1에서 preview POST 대상이 아니며, 자소서/포트폴리오 claim을 추출하지 않는다. `document_claims` 테이블은 Sprint 1 migration에 포함하지만 row는 생성하지 않는다.
 
 ## API
 
@@ -42,7 +42,7 @@
 - `partial`: 일부 텍스트만 추출 또는 길이 초과 축약.
 - `failed`: 추출 실패.
 
-문서 추출 실패는 hard blocker가 아니다. FE는 사용자에게 계속 진행 여부를 묻고, 계속 진행하면 `POST /analysis-runs`에 `documentId` 없이 진행할 수 있다.
+포트폴리오 추출 실패는 hard blocker가 아니다. FE는 사용자에게 계속 진행 여부를 묻고, 계속 진행하면 `POST /analysis-runs`에 `documentId` 없이 진행할 수 있다. `POST /analysis-runs.documentId`는 Sprint 1에서 portfolio preview document ID를 의미한다.
 
 ## GitHub URL 정규화
 

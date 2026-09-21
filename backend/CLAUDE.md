@@ -21,14 +21,14 @@
 - GitHub OAuth App의 만료형 access/refresh token을 사용한다. 새 OAuth 응답에는 유효한 token pair와 TTL, `token_type=bearer`, `read:user` scope가 모두 필요하다.
 - GitHub access/refresh token은 AES-GCM으로 암호화한다. `github_accounts`의 `token_expires_at`, `refresh_token_encrypted`, `refresh_token_expires_at`는 `0003`으로 추가하며 세 필드는 모두 NULL인 기존 비만료 token 또는 모두 값이 있는 만료형 pair만 허용한다. `token_type` 컬럼은 만들지 않는다.
 - GitHub API 호출은 `app.state.github.get(user_id, path)`를 사용한다. access 만료 60초 전부터 요청 시 갱신하며 callback과 갱신은 같은 GitHub account row를 잠그고 최신 값을 다시 확인한다. GitHub token 폐기는 DEVON JWT session을 폐기하지 않는다. 상세 오류·동시성 기준은 `spec/shared/decisions/0002-github-oauth.md`를 따른다.
-- DEVON 자체 JWT는 `accessToken`/`refreshToken` HttpOnly cookie로만 전달한다. 상세 계약은 `spec/shared/decisions/0002-github-oauth.md`를 따른다.
+- DEVON 자체 JWT는 `accessToken`/`refreshToken` HttpOnly cookie로만 전달한다. WS handshake는 같은 `accessToken` cookie를 사용한다. 상세 계약은 `spec/shared/decisions/0002-github-oauth.md`를 따른다.
 - DEVON Refresh 유효·폐기 기록은 PostgreSQL의 `users.refresh_generation`과 `auth_sessions`에서만 관리한다. Redis는 OAuth state에 사용하며 Refresh 이중 기록/fallback은 금지한다.
 - DEVON JWT payload에는 GitHub access token을 넣지 않는다.
 - API 요청/응답은 camelCase, Python/DB는 snake_case.
 - DB enum은 PostgreSQL ENUM이 아니라 `VARCHAR + CHECK`.
 - Redis는 ARQ broker, lock, SSE mirror, 면접 context snapshot 같은 짧은 상태에 쓴다. 영구 원본은 Postgres.
 - LLM 모델은 Sprint 1에서 `5.5 Luna`로 고정한다. 코드에 모델명을 하드코딩하지 말고 설정/seed에서 읽어 실제 사용값을 DB에 저장한다.
-- LLM 구조화 JSON parsing 실패는 자동 1회 재시도 후 실패 처리한다. 깨진 JSON을 downstream에 넘기지 않는다.
+- LLM timeout/provider 오류와 구조화 JSON parse/schema 실패는 공통 호출 계층에서 자동 1회 재시도 후 실패 처리한다. semantic 실패는 재호출하지 않는다. 깨진 JSON을 downstream에 넘기지 않는다.
 - `document_claims`는 Sprint 1에 테이블만 만들고 row 생성/claim 추출은 하지 않는다.
 - `evidence_conflicts`는 Sprint 1에 만들며 `answer_vs_code` 용도로만 사용한다. `claim_id` FK는 Sprint 2.
 - `report_persona_feedbacks`, `topic_taxonomy`, `interview_personas`, `probe_patterns`, `feedback_signals`, `eval_cases`, `eval_runs`는 Sprint 1 DB에서 제외한다.

@@ -1,41 +1,32 @@
 # 배포 · 쿠키 · CI
 
-## 1. 배포 구조 — DuckDNS + Caddy + EC2
+## 1. 현재 배포 점검 구조
 
-FE·BE 를 **하나의 DuckDNS 도메인** 뒤에 둔다. 브라우저가 보는 호스트는 하나뿐이고, EC2 안에서는
-Docker Compose 로 `caddy`, `api`, `worker`, `db`, `redis` 를 같이 띄운다.
+저장소의 `compose.deploy.yaml`과 `frontend/Caddyfile.deploy`는 EC2에서 DuckDNS + Caddy로
+FE 정적 파일과 API를 한 origin으로 제공한다. 실제 실행 앱은 `app.deploy_check:app`이며
+`/api/health`만 제공하는 배포 점검용이다. `ops/deploy.sh`의 health 성공은 GitHub 로그인,
+DB migration, worker 또는 전체 서비스의 배포 성공을 뜻하지 않는다.
 
+```text
+브라우저 -> https://devon-chonnam-3.duckdns.org -> EC2 / Caddy
+                                                /       -> FE 정적 파일
+                                                /api/*  -> api:8000
+                                                api     -> app.deploy_check:app
+                                                db / redis
 ```
-브라우저 ── https://{name}.duckdns.org ──▶ EC2
-                                      ┌─ Caddy :80/:443
-                                      │  /          → FE 정적 파일
-                                      │  /api/*     → api:8000
-                                      │  /api/ws/*  → api:8000 (WebSocket Upgrade)
-                                      └─ Docker Compose network
-                                         api / worker / postgres / redis
-```
 
-### 왜 FE·BE 분리를 피하나
+인증 API는 별도 실행 진입점 `app.main:app`에 있다. 인증 앱으로 배포를 전환하려면 환경변수,
+DB 연결·migration, OAuth App의 callback과 배포 검증을 함께 준비해야 한다. 이번 병합은
+배포 점검 앱을 인증 앱으로 바꾸거나 운영 로그인을 활성화하지 않는다.
 
-FE 가 Vercel, BE 가 EC2 처럼 **도메인이 갈리면** BE 가 심는 인증 쿠키가 브라우저 기준
-**서드파티 쿠키**로 분류된다.
+이전 문서의 CloudFront + S3 + ALB는 검토 구조이며 현재 compose가 구현한 배포는 아니다.
+후속 도입 시 3절의 CDN 주의사항을 적용하고 실제 인프라 계약을 다시 확인한다.
 
-| | 분리 배포 | 단일 도메인 배포 |
-|---|---|---|
-| 쿠키 분류 | 서드파티 | 퍼스트파티 |
-| Safari · iOS | 기본 차단 가능 | 정상 |
-| Firefox | Total Cookie Protection 으로 분리 저장 | 정상 |
-| 필요한 설정 | `SameSite=None; Secure` + CORS allowlist | `SameSite=Lax` |
-| CSRF 방어 | `SameSite` 방어 약화 | `SameSite=Lax` 유지 |
+### 같은 origin을 유지하는 이유
 
-`SameSite=None` 은 서드파티 쿠키 정책 자체를 우회하지 못한다. 따라서 무료 도메인이더라도
-DuckDNS 로 FE·BE 를 한 origin 아래 묶고, Caddy 가 TLS 와 reverse proxy 를 맡는다.
-
-### 이 구조가 없애는 것
-
-- prod CORS 설정
-- `SameSite=None` · 브라우저별 서드파티 쿠키 예외 처리
-- WS 만 다른 도메인에 붙는 예외
+서로 다른 사이트의 FE·BE로 나누면 인증 쿠키가 서드파티 쿠키 제한의 영향을 받을 수 있다.
+`SameSite=None`만으로 브라우저의 서드파티 쿠키 정책을 우회할 수는 없다. FE·API·WS를 같은
+HTTPS origin으로 제공하면 `SameSite=Lax`를 유지하고 CORS와 별도 WS 호스트를 피할 수 있다.
 
 ## 2. 쿠키
 
@@ -47,22 +38,22 @@ DuckDNS 로 FE·BE 를 한 origin 아래 묶고, Caddy 가 TLS 와 reverse proxy
 
 세 쿠키는 HttpOnly, SameSite=Lax, Domain 미설정이다. `Secure`는 prod에서 true이고 local HTTP에서는 false다.
 
-| 환경 | Secure | SameSite | CORS |
-|---|---|---|---|
-| local (vite 프록시) | false | lax | 불필요 |
-| prod (DuckDNS + Caddy) | true | lax | 불필요 |
+| 환경                | Secure | SameSite | CORS       |
+| ------------------- | ------ | -------- | ---------- |
+| local (vite 프록시) | false  | lax      | 불필요     |
+| prod (같은 HTTPS origin) | true | lax | 불필요 |
 
-`Secure` 는 prod 에서 유지한다. same-origin 이어도 HTTPS 전용 쿠키여야 한다.
+`Secure` 는 prod 에서 유지한다 — same-origin 이어도 HTTPS 전용 쿠키여야 한다.
 
 `FRONTEND_ORIGIN`은 refresh/logout의 `Origin`을 exact match하는 보안 경계다. local은
 `http://localhost:5173`, prod는 실제 HTTPS origin 하나를 trailing slash 없이 설정한다.
 
-## 3. Caddy 설정 — 반드시 지킬 것 4가지
+## 3. 프록시 설정
 
-### ① SPA 폴백을 API 라우트에 적용하지 않는다
+### ① SPA 폴백은 FE 정적 파일에만 적용한다
 
-SPA fallback(`try_files {path} /index.html`)은 FE 정적 파일 라우트에만 적용한다. `/api/*` 에까지
-fallback 이 걸리면 BE 의 404 JSON 이 HTML 200 으로 바뀐다.
+Caddy에서 API 라우트를 먼저 분기하고, `try_files {path} /index.html`은 FE 블록에만 둔다.
+API 오류를 HTML 200으로 바꾸면 공통 오류 계약이 깨진다.
 
 ```
 GET /api/interviews/{없는id}
@@ -71,69 +62,50 @@ GET /api/interviews/{없는id}
   → FE: res.ok === true → JSON 파싱 실패
 ```
 
-[error-reasons.md](error-reasons.md) 의 reason 체계가 무력화되므로 Caddy 라우트는 API를 먼저
-분기하고, SPA fallback 은 마지막 FE 정적 파일 블록에만 둔다.
+[error-reasons.md](error-reasons.md)의 오류 reason과 HTTP 상태를 그대로 전달한다.
 
-```caddyfile
-{name}.duckdns.org {
-  handle /api/* {
-    reverse_proxy api:8000
-  }
+### ② `/api/*`는 쿠키·헤더·쿼리를 전달한다
 
-  handle {
-    root * /srv/frontend/dist
-    try_files {path} /index.html
-    file_server
-  }
-}
-```
+인증, SSE와 WS의 브라우저 경로는 `/api` 아래에 둔다. 현재 Caddy 설정은 `/api/*`와 `/ws/*`를
+API로 전달하지만 면접의 공개 WS 경로는 `/api/ws/interviews/{sessionId}`다. `reverse_proxy`의
+WebSocket Upgrade 지원을 사용하며 별도 브라우저 포트나 호스트를 노출하지 않는다.
 
-### ② `/api/*` 는 쿠키·헤더를 그대로 전달한다
+OAuth callback의 `code`·`state` 쿼리, 인증 쿠키, refresh/logout의 `Origin`을 보존한다.
+인증 응답을 캐시하거나 민감한 쿼리·쿠키·헤더를 로그에 남기지 않는다.
 
-브라우저가 보는 API, SSE, WS 경로는 모두 `/api` 아래에 둔다. `shared/api.ts` 의 fetch 래퍼는
-자동으로 `/api` 를 붙이고, EventSource·WebSocket 은 래퍼를 거치지 않으므로 예시처럼 직접 붙인다.
+### ③ SSE — 압축을 끈다
 
-| 브라우저 경로 | backend 역할 |
-|---|---|
-| `/api/auth/...` | 인증 API |
-| `/api/analysis-runs/{runId}/events` | SSE |
-| `/api/ws/interviews/{sessionId}` | WebSocket |
+[pipeline.md](pipeline.md) 3절의 프록시 버퍼링 경고를 따른다. Caddy의 API 라우트에는
+FE 정적 파일용 압축·캐시를 섞지 않는다. 응답은 `Cache-Control: no-store`와 15초 keep-alive
+코멘트(`: ping`)를 유지한다. `X-Accel-Buffering: no`는 Nginx 전용이므로 이것만으로 다른
+프록시의 버퍼링이 꺼졌다고 판단하지 않는다.
 
-Caddy `reverse_proxy` 는 WebSocket Upgrade 를 지원한다. 별도 도메인이나 별도 포트를 브라우저에
-노출하지 않는다.
+### ④ WS 연결 종료와 사용자 이탈을 구분한다
 
-### ③ SSE — API 라우트에서 압축·버퍼링을 피한다
+텍스트 답변을 입력하는 동안에도 연결을 유지할 수 있도록 실제 프록시의 idle timeout을
+검증한다. 연결 유지용 ping을 사용하더라도 이를 면접 상태의 자동 폐기 조건으로 쓰지 않는다.
+Sprint 1은 [pipeline.md](pipeline.md) 4.3과 같이 disconnect·heartbeat·timeout만으로
+`abandoned`를 설정하지 않는다.
 
-[pipeline.md](pipeline.md) 3절의 프록시 버퍼링 경고가 Caddy 환경에도 그대로 적용된다.
+### CloudFront를 추후 도입하는 경우
 
-- `encode gzip` 같은 압축 설정은 FE 정적 파일 블록에만 둔다.
-- `/api/*` 블록에는 불필요한 압축·캐시 설정을 넣지 않는다.
-- 응답 헤더는 `Cache-Control: no-store`, 15초 keep-alive 코멘트(`: ping`)를 유지한다.
-- `X-Accel-Buffering: no` 는 Nginx 전용이지만, 프록시 교체 가능성을 위해 남겨도 무해하다.
-
-### ④ WS idle timeout 은 앱 레벨 ping 으로 방어한다
-
-스프린트1 은 텍스트 면접이라 **사용자가 답을 타이핑하는 동안 클라→서버 트래픽이 없다.**
-기술 질문에 60초 넘게 쓰는 것은 정상 동작인데, 프록시나 네트워크 유휴 타임아웃과 겹치면
-[pipeline.md](pipeline.md) 4.3 에 따라 `abandoned` 후보가 된다. 그러면 North Star(완주율)가
-오염된다.
-
-대응은 둘을 같이 한다.
-
-- 앱 레벨 ping 을 유휴 타임아웃보다 짧은 주기로 보낸다.
-- `ws:lock` 60초 하트비트를 그대로 쓰면 경계에서 아슬아슬하므로, ping 주기와 lock TTL 사이에
-  여유를 둔다.
+- SPA fallback은 기본 정적 behavior의 viewer-request rewrite로 한정한다. 배포 전체의 404를 HTML 200으로 바꾸지 않는다.
+- `/api/*`는 `CachingDisabled`로 설정하고 쿠키·쿼리·Origin 및 WS Upgrade에 필요한 헤더를 전달한다. ALB의 Host 라우팅 여부에 따라 `AllViewer` 또는 `AllViewerExceptHostHeader`를 검토한다.
+- SSE behavior의 자동 압축을 끄고 이벤트가 실제로 즉시 전달되는지 확인한다.
+- CloudFront와 ALB 양쪽의 유휴 동작을 검증한다. timeout 조정이나 연결 유지가 자동 `abandoned` 정책 도입을 뜻하지는 않는다.
 
 ## 4. OAuth 콜백
 
-`GITHUB_REDIRECT_URI` 는 prod 에서 **DuckDNS 도메인**을 가리켜야 한다.
+`GITHUB_REDIRECT_URI`는 인증 앱 배포 시 **브라우저가 사용하는 HTTPS origin**을 가리켜야 한다.
+현재 배포 점검 도메인을 인증에도 사용할 경우의 등록 예시는 다음과 같다. 점검 앱에는
+callback API가 없으므로 이 주소 등록만으로 운영 로그인이 동작하지 않는다.
 
 ```
-https://{name}.duckdns.org/api/auth/github/callback
+https://devon-chonnam-3.duckdns.org/api/auth/github/callback
 ```
 
-EC2 public DNS, public IP, 컨테이너 포트를 직접 넣으면 쿠키가 그 호스트에 심겨 1절의 문제가
-재발한다. GitHub OAuth App 설정의 Callback URL 도 같이 맞춘다.
+EC2 public IP·내부 API 호스트를 직접 넣으면 쿠키 origin이 달라진다.
+GitHub OAuth App 설정의 Callback URL 도 같이 맞춘다.
 
 콜백 URL 은 요청의 `Host` 헤더가 아니라 **`core/config.py` 의 설정값으로 만든다**
 ([layer-rules.md](layer-rules.md) — `os.environ` 단일 진입점).
@@ -150,7 +122,8 @@ server: {
 }
 ```
 
-WS 도 브라우저에서 `/api/ws/interviews/{sessionId}` 로 붙으므로 위 `/api` 프록시에 같이 걸린다.
+WS도 `/api/ws/interviews/{sessionId}`를 사용한다. 실제 WS 기능을 연결할 때는 Vite 프록시의
+WebSocket 전달 설정도 함께 확인한다.
 로컬도 prod 와 같은 same-origin 구조가 되어 CORS 설정이 필요 없고 `SameSite=lax` 로 충분하다.
 GitHub OAuth App의 local callback과 `GITHUB_REDIRECT_URI`는 브라우저 origin을 거치는
 `http://localhost:5173/api/auth/github/callback`으로 맞춘다.
@@ -195,10 +168,10 @@ GitHub 토큰은 `BYTEA` + AES-GCM 으로 암호화해 저장한다 (`app/core/c
 
 | 항목 | 내용 |
 |---|---|
-| DuckDNS 이름 | 최종 도메인 이름 확정 필요 |
-| FE 빌드 배치 | Caddy 이미지에 FE dist 를 포함할지, EC2 배포 스크립트가 volume 으로 둘지 결정 필요 |
-| compose 위치 | 현재 `backend/docker-compose.yml` 은 BE 로컬 개발 중심이다. prod compose 는 FE/Caddy 포함 형태로 별도 작성 필요 |
-| CD | GitHub Actions 사용 확정. EC2 배포 방식 확정 후 작성 |
+| 인증 앱 운영 전환 | 현재 compose는 `app.deploy_check:app`이다. `app.main:app` 전환, 환경값·migration·OAuth 실검증은 후속 배포 작업 |
+| Worker 운영 | 현재 compose에는 worker가 없다. 분석 기능과 함께 구현·등록·관측 검증 필요 |
+| CDN·로드밸런서 | CloudFront·ALB·ECS 검토안은 현재 Caddy compose의 구현 완료 범위가 아님 |
+| 배포 완료 기준 | deploy workflow·health 점검과 실제 서비스 기능 검증을 구분하며 운영 환경의 실행 결과를 별도 확인 |
 
 ## 10. Refresh 저장소 전환과 정리
 

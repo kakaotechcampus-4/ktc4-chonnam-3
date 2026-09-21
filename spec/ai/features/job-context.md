@@ -43,9 +43,11 @@ Context는 현재 작업에 필요한 자료와 상태를 선별한 입력 묶�
 | `report_generate` | `interview_id` | 완료 session, 확정 turns, evaluation evidence |
 | `profile_summary` | `user_id` | 완료 면접에서 사용된 저장소와 생성된 report |
 
-정확한 ARQ 함수 signature와 payload serialization은 Proposed다. 구현 전 [AI 계약](../contracts.md)에서 Python 함수명, 인자 타입, job timeout, retry 주체를 고정한다. `deep_analysis`는 현재 고정 job 목록에 별도 등록하지 않고 `interview_prep`이 호출하는 pipeline 단계로 본다. 이를 독립 queue로 바꾸려면 backend pipeline 결정을 갱신한다.
+정확한 ARQ 함수 signature와 payload serialization은 Proposed다. 구현 전 Python 함수명, 인자 타입, job timeout을 고정한다. Sprint 1은 기본 queue 1개와 단일 ARQ worker 프로세스에 위 6개 job을 등록하며, ARQ `max_tries=1`을 사용한다. `deep_analysis`는 현재 고정 job 목록에 별도 등록하지 않고 `interview_prep`이 호출하는 pipeline 단계로 본다. 이를 독립 queue로 바꾸려면 backend pipeline 결정을 갱신한다.
 
-면접 답변별 처리를 별도 ARQ job으로 보낼지는 현재 고정되지 않았다. Sprint 1 고정 WebSocket 흐름에는 전용 turn job 이름이 없으므로 구현자가 임의로 추가하지 않는다.
+면접 답변별 처리는 Sprint 1 WebSocket turn loop 안에서 처리한다. Sprint 1 고정 job 목록에는 전용 turn job 이름이 없으므로 구현자가 임의로 추가하지 않는다.
+
+Sprint 1은 worker/queue를 물리적으로 분리하지 않는다. 대신 `queued_at`, `started_at`, `completed_at`, `duration_ms`, `queue_wait_ms`, `job_type`, `status`, `error_code`를 수집해 Sprint 2에서 `analysis`, `interview`, `report` queue 분리 여부를 판단한다.
 
 근거: [비동기 pipeline](../../../backend/docs/pipeline.md), [ARQ skeleton](../../../backend/app/workers/arq_app.py).
 
@@ -126,7 +128,7 @@ Context의 evidence는 최소한 다음을 구분한다.
 
 ## 멱등성과 stale 결과 차단
 
-ARQ 작업은 재실행될 수 있다고 가정한다. 각 job은 시작과 결과 확정 직전에 PostgreSQL 원본을 다시 확인한다.
+ARQ 작업은 reaper 재등록이나 비정상 종료 경계에서 중복 실행될 수 있다고 가정한다. 각 job은 시작과 결과 확정 직전에 PostgreSQL 원본을 다시 확인한다. Sprint 1에서는 ARQ 자동 retry를 사용하지 않으며, `running` worker lost 자동 재실행은 하지 않는다.
 
 1. job 대상이 같은 사용자와 허용 범위인지 확인한다.
 2. 이미 같은 identity로 성공한 결과가 있으면 재사용한다.

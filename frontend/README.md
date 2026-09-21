@@ -37,11 +37,16 @@ npm run dev
 src/
 ├─ features/      # 도메인별 화면·로직 (auth, home, interview, analysis, report, mypage)
 ├─ shared/        # API 클라이언트(api.ts), React Query 키(queryKeys.ts)
+├─ mocks/         # MSW mock API (개발 서버 전용)
 ├─ types/         # API 타입
 ├─ routes.tsx     # 라우트 정의
 ├─ providers.tsx  # 전역 Provider (QueryClient 등)
 └─ main.tsx       # 엔트리 포인트
 ```
+
+기본 실행은 `/api` 프록시로 실제 백엔드에 연결한다. 화면 미리보기용 MSW mock API는 개발 환경에서 `.env.local`에 `VITE_USE_MSW=true`를 설정했을 때만 켜진다. 실제 GitHub 로그인 검증은 이 값을 제거하거나 `false`로 설정한 뒤 진행한다. 자세한 내용은 [`docs/task-07-msw.md`](docs/task-07-msw.md) 참고.
+
+mock은 고정된 로그인 사용자 정보를 반환하므로 로그아웃 후에도 홈으로 돌아온다. 실제 로그인·로그아웃 검증에는 mock을 사용하지 않는다.
 
 API 요청은 `src/shared/api.ts`에서 `/api` prefix로 호출. 응답/요청 타입은 `src/types/api.ts`, API 스펙은 [`docs/api-spec.md`](../docs/api-spec.md) 참고.
 

@@ -4,18 +4,22 @@
 
 AI 원본은 [ai/src/devon_ai](../ai/src/devon_ai/)의 로컬 Python 패키지로 분리한다. backend의 API·ARQ worker가 같은 프로세스 안에서 import하며 별도 AI 서버는 없다. [승인 설계](../spec/ai/designs/2026-09-12-ai-package-structure.md)와 [AI 개발 안내](../ai/README.md)를 함께 읽는다. 현재 실행 범위는 GitHub 가입·로그인, 인증 갱신·로그아웃, `/api/me`다. AI·분석·대시보드·프로필 API와 worker는 아직 골격이며, 인증 완료가 저장소 수집 완료를 뜻하지 않는다.
 
+위 인증 기능의 실행 진입점은 `app.main:app`이다. 루트 `compose.deploy.yaml`은 별도의
+`app.deploy_check:app`으로 `/api/health`만 제공한다. 배포 점검 성공을 인증 앱의 운영 배포 완료로
+해석하지 않으며, 전환 전제는 [배포 가이드](docs/deploy.md)를 따른다.
+
 설계 문서는 [`docs/`](docs/) 안에 있다.
 
-| 문서 | 내용 |
-| --- | --- |
-| [layer-rules.md](docs/layer-rules.md) | 폴더 경계 · 레이어 규칙 · 금지 목록 · 네이밍 · 직렬화 |
-| [db-schema.md](docs/db-schema.md) | 테이블 목록 · 제약 · 1차/2차 경계 · 미결 |
-| [error-reasons.md](docs/error-reasons.md) | 에러 봉투 · 3계층 reason 레지스트리 |
-| [redis-keys.md](docs/redis-keys.md) | Redis 키 설계표 |
-| [pipeline.md](docs/pipeline.md) | ARQ · run 실행 흐름 · SSE · WebSocket |
-| [testing.md](docs/testing.md) | 테스트 전략 · 필수 테스트 4개 · Eval |
-| [deploy.md](docs/deploy.md) | DuckDNS · Caddy · 쿠키 · CI |
-| [api-spec.md](docs/api-spec.md) | FE 계약 링크 + 합의된 변경 |
+| 문서                                      | 내용                                                  |
+| ----------------------------------------- | ----------------------------------------------------- |
+| [layer-rules.md](docs/layer-rules.md)     | 폴더 경계 · 레이어 규칙 · 금지 목록 · 네이밍 · 직렬화 |
+| [db-schema.md](docs/db-schema.md)         | 테이블 목록 · 제약 · 1차/2차 경계 · 미결              |
+| [error-reasons.md](docs/error-reasons.md) | 에러 봉투 · 3계층 reason 레지스트리                   |
+| [redis-keys.md](docs/redis-keys.md)       | Redis 키 설계표                                       |
+| [pipeline.md](docs/pipeline.md)           | ARQ · run 실행 흐름 · SSE · WebSocket                 |
+| [testing.md](docs/testing.md)             | 테스트 전략 · 필수 테스트 4개 · Eval                  |
+| [deploy.md](docs/deploy.md)               | EC2 배포 점검 · 인증 운영 전제 · 쿠키 · CI            |
+| [api-spec.md](docs/api-spec.md)           | FE 계약 링크 + 합의된 변경                            |
 
 ## 기술 스택
 
@@ -168,9 +172,13 @@ router → service → { queries | agents | llm_tasks | integrations | realtime 
 
 ## API 스펙
 
-API 표면의 유일한 진실은 [`spec/shared/contracts/openapi.yaml`](../spec/shared/contracts/openapi.yaml)이고,
+API 표면의 원본은 [`spec/shared/contracts/openapi.yaml`](../spec/shared/contracts/openapi.yaml) 이다.
+WebSocket · SSE 메시지와 브라우저 이동 흐름은
+[`frontend/docs/api-spec.md`](../frontend/docs/api-spec.md) 를 함께 따른다
+(범위는 [`spec/shared/contracts/README.md`](../spec/shared/contracts/README.md) 참고).
 응답 타입은 [`frontend/src/types/api.ts`](../frontend/src/types/api.ts)와 맞춘다. 이관 상태는
 [`spec/shared/contracts/migration.md`](../spec/shared/contracts/migration.md)를 따른다.
+`tests/contract/`와 공통 계약 검사는 구현된 범위만 검증하며 전체 서비스 검증을 뜻하지 않는다.
 
 - 에러 봉투와 reason 목록 → [`docs/error-reasons.md`](docs/error-reasons.md)
 - Redis 키 → [`docs/redis-keys.md`](docs/redis-keys.md)

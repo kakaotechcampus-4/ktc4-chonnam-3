@@ -13,7 +13,7 @@
 | 계층 | 내용 | 결정 상태 |
 | --- | --- | --- |
 | 공개 REST | OpenAPI의 요청·응답 | 기존 FIX, 명시된 PENDING 제외 |
-| 공개 WS | 텍스트 답변과 기존 이벤트 의미 | FIX와 PENDING_FE 혼재 |
+| 공개 WS | 텍스트 답변, `turn`, `answerReceived`, `sessionId` 경로와 기존 이벤트 의미 | Sprint 1 FIX. 사용자 종료 wire는 별도 확인 |
 | 저장 책임 방향 | turn 중심 분석·결정, evidence 관계, report feedback | 테이블 책임은 기존 방향; 정확한 analysis/decision 컬럼·JSON key는 Proposed |
 | 내부 데이터의 정확한 필드 | 이 문서의 Context·Question·Evaluation 등 | Proposed |
 | 모델 원시 출력 | task별 schema에 맞는 후보 결과 | 신뢰 전 검증 대상 |
@@ -138,19 +138,19 @@ L1의 생성 요약은 0006에 따라 프로젝트의 기능·역할을 설명�
 
 입력은 `task_name`, 실제 provider/model 설정, prompt/version, schema/version, 검증된 task input, timeout·호출 budget이다. 출력은 검증된 data 또는 typed failure와 호출 metadata다. token을 받지 못했을 때 0으로 추정하지 않는다.
 
-기존 FIX: timeout/provider 오류/JSON parsing 실패는 **자동 1회 재시도**, 총 2회 실패하면 중단한다. 내부 error_code는 `llm_timeout`, `llm_parse_failed`, `llm_failed`를 사용하고 외부 flow reason으로 매핑한다.
+기존 FIX: timeout/provider 오류/JSON parsing 실패는 **자동 1회 재시도**, 총 2회 실패하면 중단한다. schema 실패도 같은 공통 호출 계층에서 최대 1회 재시도할 수 있다. 내부 error_code는 `llm_timeout`, `llm_parse_failed`, `llm_failed`를 사용하고 외부 flow reason으로 매핑한다.
 
-[0008 결정](decisions/0008-ai-candidate-policy.md)에 따라 후보 실패는 parse, schema, semantic 실패로 구분한다. 어떤 invalid 결과도 성공 빈 객체, 추측한 기본값, 누락값 보충이나 ad hoc repair로 통과시키지 않는다. L1 batch의 유효한 항목은 보존하고 잘못된 항목만 실패로 분리하며, 실패는 현재 task에 한정하고 자료·문답 원문을 보존한다.
+[0008 결정](decisions/0008-ai-candidate-policy.md)에 따라 후보 실패는 parse, schema, semantic 실패로 구분한다. 어떤 invalid 결과도 성공 빈 객체, 추측한 기본값, 누락값 보충이나 ad hoc repair로 통과시키지 않는다. L1 batch의 유효한 항목은 보존하고 잘못된 항목만 실패로 분리하며, 실패는 현재 task에 한정하고 자료·문답 원문을 보존한다. semantic 실패는 Sprint 1에서 재호출하지 않는다.
 
-같은 논리 작업의 attempt는 한 계층에서 관리해 SDK·client·task·worker의 재시도가 곱해지지 않아야 한다. 다만 관리 계층, 운영 상한, semantic 실패의 실제 재호출 여부와 실패 item의 attempt 계산은 0008이 정하지 않았으며 AI·BE가 별도로 합의한다. 깨진 JSON을 위한 별도 repair prompt는 Sprint 1에 추가하지 않는다.
+같은 논리 작업의 attempt는 공통 LLM gateway/task 호출 계층에서만 관리한다. SDK·provider retry와 ARQ retry가 곱해지지 않도록 SDK/provider retry는 끄거나 최소화하고, ARQ `max_tries=1`을 사용한다. 깨진 JSON을 위한 별도 repair prompt는 Sprint 1에 추가하지 않는다. task별 timeout·token·context·tool budget은 별도 설정으로 남는다.
 
 raw output·model·prompt_version·schema_version·input/output tokens·latency·attempt·error를 필요한 범위에서 보존한다. task별 실패 원문의 DB 저장 위치·접근권한·보존기간은 미결정이다. 공개 로그에 원문을 출력하는 것으로 저장 요구사항을 대신하지 않는다.
 
 ## public 변환과 합의 경계
 
 - FE 면접 명세의 `question` payload는 `persona`, `text`, `turn`을 사용한다. 이는 소비자 측 문서의 요구이며 공통 WS payload schema와 검수해 확정할 부분이다. 내부 Question 전체를 그대로 직렬화하지 않는다.
-- 답변 wire는 `{ "type": "answer", "text": "..." }`다. stale 응답 검사를 위해 필요하더라도 `turnId`나 idempotency key를 승인 없이 추가하지 않는다. 현 계약으로 보장 가능한 범위와 한계는 [면접 명세](features/interviewer.md)에 따른다.
-- 현재 리포트 200 schema는 숫자 점수를 필수로 요구한다. 미합의 점수를 null/0으로 채우지 않는다. 피드백 내부 구현과 점수 포함 공개 성공 응답의 완료 조건을 구분한다.
+- 답변 wire는 `{ "type": "answer", "turn": 3, "text": "..." }`다. 별도 `clientSubmissionId`는 Sprint 1에 추가하지 않는다. 현 계약으로 보장 가능한 범위와 한계는 [면접 명세](features/interviewer.md)에 따른다.
+- 현재 리포트 200 schema는 숫자 점수를 필수로 요구한다. Sprint 1은 0~100 score 6개와 단순 평균 `totalScore`를 공개한다. 가중치와 nullable/status 표현은 사용하지 않는다.
 - Question Contract, 자세한 평가, 근거 위치·품질, model metadata를 저장하는 정확한 JSONB 구조와 새 공개 필드는 AI·BE/FE 검토 대상이다.
 
 ## 계약 검토 완료 조건

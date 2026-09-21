@@ -41,7 +41,8 @@ Prepare step:
 - DB `interview_sessions.status='preparing_failed'`.
 - `abandoned`와 구분한다.
 - WS 진입은 차단한다.
-- FE status 매핑은 `PENDING_FE`.
+- `GET /interviews/{id}`는 `lastError`, `prepareSteps`, `answerMode`, `sessionId`를 포함해 새로고침 후 실패 화면을 복구할 수 있어야 한다.
+- 복구 가능한 준비 실패는 `POST /interviews/{id}/prepare/retry`로 실패 단계부터 재실행한다. 성공한 단계는 재실행하지 않는다.
 
 ## WebSocket
 
@@ -50,7 +51,7 @@ Sprint 1은 양방향 텍스트다.
 클라이언트 -> 서버:
 
 ```json
-{ "type": "answer", "text": "답변 내용" }
+{ "type": "answer", "turn": 3, "text": "답변 내용" }
 ```
 
 서버 -> 클라이언트:
@@ -62,10 +63,14 @@ Sprint 1은 양방향 텍스트다.
 - `interviewEnd`
 - `error`
 
-`answerStart`, audio chunk, `answerEnd`, `transcript`, `stt_failed`, `tts_failed`, TTS audio는 Sprint 2.
-텍스트 Sprint 1에서 `questionEnd`를 유지할지는 `PENDING_FE`.
+`answerStart`, audio chunk, `answerEnd`, `transcript`, `questionEnd`, `stt_failed`, `tts_failed`, TTS audio는 Sprint 2.
+Sprint 1에서는 `question` 이벤트가 질문 전달 완료를 의미한다.
 
-WS path가 `interviewId` 기준인지 별도 `sessionId` 기준인지는 `PENDING_FE`.
+WS path는 realtime `sessionId` 기준 `/api/ws/interviews/{sessionId}`다. REST route와 report는 영구 `interviewId`를 사용한다. `POST /interviews`와 `GET /interviews/{id}`는 재연결용 `sessionId`를 응답에 포함한다.
+
+`answerReceived`는 답변 수신·저장 완료 신호다. 이 신호를 받으면 제출 중 상태는 해제하되, 새 답변 입력은 다음 `question` 이벤트가 올 때까지 열지 않는다.
+
+연결 끊김·새로고침·재연결 실패만으로 `abandoned`로 전환하지 않는다. Sprint 1의 `abandoned`는 사용자가 이탈 확인 모달에서 명시적으로 나가거나, 레포 재선택으로 새 세션을 만들 때만 설정한다. heartbeat/timeout 기반 자동 abandoned 판정은 Sprint 2다.
 
 ## Turn 정책
 

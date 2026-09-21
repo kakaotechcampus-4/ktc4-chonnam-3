@@ -24,7 +24,7 @@ Director는 현재 문답·평가·근거·남은 턴으로 다음 질문의 관
 
 여기서 Question Contract의 상세 필드·저장은 Proposed 내부 설계다. AI·BE가 해당 계약을 채택한 뒤 아래 저장·평가 흐름에 적용한다. 합의 전에는 fixture로 설계를 검증하고, 임의의 DB 컬럼·테이블을 추가하거나 Contract 기반 평가 완료를 선언하지 않는다.
 
-준비 실패는 `preparing_failed`이며 `abandoned`와 다르다. 실패를 숨기고 일반 질문으로 면접을 시작하지 않는다. `analyze_repo`, `build_persona`, `set_criteria`, `compose_question`의 실행 의존성을 만족해야 하며, FE의 표시 순서와 차이는 [원본 검토](../source-audit.md)에 남긴다. 점수 산식 미합의를 임의 rubric으로 메우지 않는다.
+준비 실패는 `preparing_failed`이며 `abandoned`와 다르다. 실패를 숨기고 일반 질문으로 면접을 시작하지 않는다. 준비 단계 순서는 `analyze_repo`, `build_persona`, `set_criteria`, `compose_question`이다. 점수 산식 미합의를 임의 rubric으로 메우지 않는다.
 
 ## 고정 9턴 정책
 
@@ -78,13 +78,13 @@ DB 변경의 정확한 transaction 분리와 row lock/CAS 방식은 BE와 맞춘
 
 ## 공개 메시지와 보류 항목
 
-확정 입력은 `{ "type": "answer", "text": "답변 내용" }`다. 서버 메시지 이름은 `answerReceived`, `thinking`, `evidenceCheck`, `question`, `interviewEnd`, `error`다. FE 면접 명세는 `question`에 `persona`, `text`, `turn`을 요구하므로 이를 소비자 요구로 삼아 공통 WS payload를 검수한다. 예전 타입의 `role`, `answerStart`, `answerEnd`, `transcript`를 Sprint 1 기준으로 쓰지 않는다.
+확정 입력은 `{ "type": "answer", "turn": 3, "text": "답변 내용" }`다. 서버는 `turn`이 현재 답변 가능한 turn과 일치할 때만 저장한다. 서버 메시지 이름은 `answerReceived`, `thinking`, `evidenceCheck`, `question`, `interviewEnd`, `error`다. `question`은 `persona`, `text`, `turn`을 포함하며 질문 전달 완료를 의미한다. 예전 타입의 `role`, `answerStart`, `answerEnd`, `transcript`, `questionEnd`를 Sprint 1 기준으로 쓰지 않는다.
 
-FE 명세가 요구하는 `answerReceived`는 저장 완료 신호이지 다음 질문에 답해도 된다는 뜻은 아니다. 이 의미와 FE 입력 잠금·새 질문 도착 조건을 BE와 함께 확정한다. 내부 판단·raw output을 WS로 그대로 내보내지 않는다.
+`answerReceived`는 저장 완료 신호이지 다음 질문에 답해도 된다는 뜻은 아니다. FE는 제출 중 상태를 해제하되 입력창은 다음 `question` 도착 전까지 잠근다. 내부 판단·raw output을 WS로 그대로 내보내지 않는다.
 
-현 answer 메시지에는 `turnId`·제출 ID가 없다. 같은 연결의 진행 중 중복은 service 상태/lock으로 막을 수 있지만, 다음 질문 후 도착한 이전 제출을 완전히 식별하는 보장은 현재 계약만으로는 부족하다. 동일 본문이라는 이유로 모든 반복 답변을 중복 처리하지 않는다. 식별자 확장은 FE·BE 공통 결정으로 남긴다.
+별도 `clientSubmissionId`는 Sprint 1에 추가하지 않는다. 같은 연결의 진행 중 중복은 service 상태/lock으로 막고, turn mismatch나 이미 답변된 turn의 메시지는 저장하지 않는다. 동일 본문이라는 이유로 모든 반복 답변을 중복 처리하지 않는다.
 
-WS 경로의 interviewId/sessionId, 준비 재시도 메시지·준비 실패 snapshot, disconnect/heartbeat/재연결, 텍스트 `questionEnd`는 `PENDING_FE`다. FE 문서에 예시가 있다는 이유로 공통 합의 완료로 표시하지 않는다.
+WS 경로는 `/api/ws/interviews/{sessionId}`이며 REST route는 `interviewId`를 사용한다. `POST /interviews`와 `GET /interviews/{id}`는 `sessionId`를 반환한다. WS 인증은 HttpOnly `accessToken` cookie handshake다. 준비 실패 snapshot은 `GET /interviews/{id}`의 `lastError`와 `prepareSteps`로 복구하고, 준비 재시도는 `POST /interviews/{id}/prepare/retry` REST endpoint로 처리한다. Sprint 1에서는 연결 끊김·재연결 실패만으로 `abandoned`를 설정하지 않는다.
 
 사용자 종료 요청의 정확한 wire도 별도 확인한다. 내부 Controller에서 종료 이후 결과 차단을 검사할 수 있지만, 승인되지 않은 종료 메시지·endpoint를 새로 만들어 공개 완료를 주장하지 않는다.
 

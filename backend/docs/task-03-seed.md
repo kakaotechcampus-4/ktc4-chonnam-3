@@ -14,7 +14,7 @@ prompt version, domain question frame, score criteria 초기 데이터를 넣는
 - frame 축은 개인정보/민감정보, 장애/신뢰성/운영, 사용자 경험/서비스 사용 맥락이다.
 - Sprint 1 LLM model은 모든 prompt version에서 `5.5 Luna`.
 - prompt version은 작업별로 둔다: `repo_shallow_v1`, `repo_deep_v1`, `jd_extract_v1`, `answer_analysis_v1`, `director_v1`, `report_v1`, `profile_summary_v1`.
-- score criteria는 Sprint 1에 사용하되 점수 공식/세부 기준은 `PENDING_TEAM`이라 seed 수정 가능성을 열어둔다.
+- score criteria는 Sprint 1에 사용한다. 공개 점수는 0~100 score 6개와 단순 평균 `totalScore`이며, 항목별 세부 기준 seed 문구는 평가 담당 자료 보강에 따라 수정 가능성을 열어둔다.
 - persona, topic taxonomy, probe pattern은 별도 테이블/seed로 만들지 않는다.
 - 질문 frame과 score criteria는 코드에 하드코딩하지 않는다.
 

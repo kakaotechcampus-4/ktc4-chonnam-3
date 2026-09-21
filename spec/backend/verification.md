@@ -33,7 +33,7 @@
 - GitHub API 서비스 검증은 후속 저장소 수집·분석 pipeline·worker 검증과 구분한다. `/api/me` 조회나 cron으로 GitHub 갱신을 실행하지 않는다.
 - DB 기능은 SQLite로 대체하지 않고 PostgreSQL 기준으로 검증한다.
 - LLM JSON parsing 실패는 1회 재시도 후 실패 처리하고 raw output을 남긴다.
-- 리포트 점수 산정은 `PENDING_TEAM`이므로 shape와 상태 중심으로 검증한다.
+- 리포트 점수는 0~100 score 6개와 단순 평균 `totalScore`를 검증한다. 항목별 세부 기준 seed 문구는 평가 담당 자료 보강에 따라 수정될 수 있다.
 
 ## 완료 보고
 
