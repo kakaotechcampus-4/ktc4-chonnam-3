@@ -172,3 +172,116 @@ def test_hr_question_accepts_empty_code_references():
         jd_requirement_ids=frozenset(),
     )
     assert result.data.evidence_refs == ()
+
+
+@pytest.fixture
+def analysis_data():
+    return {
+        "evaluation_status": "evaluated",
+        "sufficiency": "partial",
+        "covered_points": [
+            {"key": "reads", "answer_quotes": ["조회가 많아서"]},
+            {"key": "choice", "answer_quotes": ["DB 부하를 줄이려고"]},
+        ],
+        "missing_points": ["writes"],
+        "technical_assessment": {
+            "explanation": "캐시 선정 목적을 설명함",
+            "answer_quotes": ["캐시했습니다"],
+            "evidence_refs": [],
+            "limitations": ["구현 근거 미확인"],
+        },
+        "contribution_scope": "unknown",
+        "contribution_quotes": [],
+        "claim_checks": [],
+        "needs_verification": False,
+        "verification_requests": [],
+        "limitations": [],
+    }
+
+
+def check_analysis(data, question, scope):
+    checked_question = c.validate_question(c.decode(c.Question, question), **scope)
+    return c.validate_analysis(
+        c.decode(c.AnswerAnalysis, data),
+        question=checked_question,
+        answer_text="조회가 많아서 DB 부하를 줄이려고 캐시했습니다",
+        evidence_refs=frozenset({"ev-1"}),
+        allowed_locations=frozenset({("repo-1", "sha-1", "src/cache.py")}),
+    )
+
+
+def test_partial_answer_preserves_three_axes_and_only_actual_missing_point(
+    analysis_data, question_data, question_scope
+):
+    result = check_analysis(analysis_data, question_data, question_scope).data
+    assert result.sufficiency == "partial"
+    assert result.missing_points == ("writes",)
+    assert result.covered_points[0].answer_quotes == ("조회가 많아서",)
+    assert result.contribution_scope == "unknown"
+    assert result.technical_assessment.limitations == ("구현 근거 미확인",)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda a: a.update(missing_points=["ttl"]),
+        lambda a: a.update(missing_points=["writes", "writes"]),
+        lambda a: a["covered_points"][0].update(answer_quotes=["존재하지 않는 답변"]),
+        lambda a: a["covered_points"].append(a["covered_points"][0].copy()),
+        lambda a: a.update(sufficiency="sufficient"),
+        lambda a: a.update(evaluation_status="not_evaluable"),
+        lambda a: a.update(contribution_scope="self"),
+        lambda a: a.update(needs_verification=True),
+        lambda a: a["technical_assessment"].update(evidence_refs=["unknown-evidence"]),
+    ],
+)
+def test_analysis_rejects_unasked_missing_points_false_quotes_and_inconsistent_results(
+    analysis_data, question_data, question_scope, change
+):
+    change(analysis_data)
+    with pytest.raises(c.ContractError) as failure:
+        check_analysis(analysis_data, question_data, question_scope)
+    assert failure.value.stage == "semantic"
+
+
+def test_not_evaluable_requires_reason_and_does_not_manufacture_missing_points(
+    analysis_data, question_data, question_scope
+):
+    analysis_data.update(
+        evaluation_status="not_evaluable",
+        sufficiency=None,
+        covered_points=[],
+        missing_points=[],
+        limitations=["질문 전제 오류"],
+    )
+    assert check_analysis(analysis_data, question_data, question_scope).data.sufficiency is None
+    analysis_data["limitations"] = []
+    with pytest.raises(c.ContractError):
+        check_analysis(analysis_data, question_data, question_scope)
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("sufficiency", "high"),
+        ("contribution_scope", None),
+        ("evaluation_status", "done"),
+        ("needs_verification", 1),
+    ],
+)
+def test_analysis_schema_rejects_new_enum_null_and_boolean_coercion(analysis_data, field, value):
+    analysis_data[field] = value
+    with pytest.raises(c.ContractError) as failure:
+        c.decode(c.AnswerAnalysis, analysis_data)
+    assert failure.value.stage == "schema"
+
+
+def test_analysis_cannot_consume_raw_question(analysis_data, question_data):
+    with pytest.raises(c.ContractError):
+        c.validate_analysis(
+            c.decode(c.AnswerAnalysis, analysis_data),
+            question=c.decode(c.Question, question_data),
+            answer_text="답변",
+            evidence_refs=frozenset(),
+            allowed_locations=frozenset(),
+        )

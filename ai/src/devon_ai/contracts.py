@@ -6,7 +6,7 @@ Structural decoding alone does not establish semantic validity or BE acceptance.
 
 from dataclasses import dataclass, fields, is_dataclass
 from types import UnionType
-from typing import Literal, cast, get_args, get_origin, get_type_hints
+from typing import Literal, Union, cast, get_args, get_origin, get_type_hints
 
 PersonaId = Literal["tech_lead", "hr_manager", "domain_lead"]
 FailureStage = Literal["parse", "schema", "semantic"]
@@ -31,7 +31,7 @@ def _convert(annotation: object, value: object, field: str, *, wire: bool) -> ob
     if origin is Literal:
         if any(type(value) is type(option) and value == option for option in args):
             return value
-    elif origin is UnionType:
+    elif origin is UnionType or origin is Union:
         for option in args:
             try:
                 return _convert(option, value, field, wire=wire)
@@ -189,4 +189,130 @@ def validate_question(
     _references(candidate.question_contract.basis_refs, basis_refs, "basis_refs")
     if candidate.text != review.text or candidate.question_contract != review.question_contract:
         raise ContractError("semantic", "question requirements")
+    return _checked(candidate)
+
+
+@dataclass(frozen=True)
+class CoveredPoint(_Contract):
+    key: str
+    answer_quotes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class TechnicalAssessment(_Contract):
+    explanation: str
+    answer_quotes: tuple[str, ...]
+    evidence_refs: tuple[str, ...]
+    limitations: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ClaimCheck(_Contract):
+    claim_text: str
+    status: Literal["supported", "partially_supported", "unverified", "conflicting"]
+    evidence_refs: tuple[str, ...]
+    limitations: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class VerificationRequest(_Contract):
+    claim_text: str
+    purpose: str
+    repository_id: str
+    git_ref: str
+    allowed_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class AnswerAnalysis(_Contract):
+    evaluation_status: Literal["evaluated", "needs_clarification", "not_evaluable"]
+    sufficiency: Literal["sufficient", "partial", "insufficient"] | None
+    covered_points: tuple[CoveredPoint, ...]
+    missing_points: tuple[str, ...]
+    technical_assessment: TechnicalAssessment
+    contribution_scope: Literal["self", "shared", "teammate", "unknown"]
+    contribution_quotes: tuple[str, ...]
+    claim_checks: tuple[ClaimCheck, ...]
+    needs_verification: bool
+    verification_requests: tuple[VerificationRequest, ...]
+    limitations: tuple[str, ...]
+
+
+def _checked_data[T](value: ContractChecked[T], expected: type[T]) -> T:
+    if type(value) is not ContractChecked or type(value.data) is not expected:
+        raise ContractError("schema", "contract checked input")
+    return value.data
+
+
+def _quotes(quotes: tuple[str, ...], text: str) -> None:
+    if any(quote not in text for quote in quotes):
+        raise ContractError("semantic", "answer quotes")
+
+
+def _requests(
+    requests: tuple[VerificationRequest, ...],
+    allowed_locations: frozenset[tuple[str, str, str]],
+) -> None:
+    if len(set(requests)) != len(requests):
+        raise ContractError("semantic", "duplicate requests")
+    for request in requests:
+        _unique(request.allowed_paths, "allowed_paths")
+        if not request.allowed_paths or any(
+            (request.repository_id, request.git_ref, path) not in allowed_locations
+            for path in request.allowed_paths
+        ):
+            raise ContractError("semantic", "verification scope")
+
+
+def validate_analysis(
+    candidate: AnswerAnalysis,
+    *,
+    question: ContractChecked[Question],
+    answer_text: str,
+    evidence_refs: frozenset[str],
+    allowed_locations: frozenset[tuple[str, str, str]],
+) -> ContractChecked[AnswerAnalysis]:
+    """Validate links and consistency, without generating or changing assessments."""
+    _convert(AnswerAnalysis, candidate, "analysis", wire=False)
+    _convert(str, answer_text, "submitted answer", wire=False)
+    contract = _checked_data(question, Question).question_contract
+    keys = frozenset(point.key for point in contract.required_points)
+    covered = tuple(point.key for point in candidate.covered_points)
+    _references(covered, keys, "covered_points")
+    _references(candidate.missing_points, keys, "missing_points")
+    if candidate.sufficiency is None:
+        if not candidate.limitations or covered or candidate.missing_points:
+            raise ContractError("semantic", "unevaluable sufficiency")
+    elif set(covered) | set(candidate.missing_points) != keys:
+        raise ContractError("semantic", "point coverage")
+    if candidate.evaluation_status != "evaluated" and not candidate.limitations:
+        raise ContractError("semantic", "evaluation limitations")
+    if candidate.evaluation_status == "not_evaluable" and candidate.sufficiency is not None:
+        raise ContractError("semantic", "evaluation_status")
+    if candidate.sufficiency == "sufficient" and candidate.missing_points:
+        raise ContractError("semantic", "sufficiency")
+    if set(covered).intersection(candidate.missing_points) and not candidate.limitations:
+        raise ContractError("semantic", "partially covered point limitations")
+    for point in candidate.covered_points:
+        if not point.answer_quotes:
+            raise ContractError("semantic", "covered point quotes")
+        _quotes(point.answer_quotes, answer_text)
+    technical = candidate.technical_assessment
+    _quotes(technical.answer_quotes, answer_text)
+    _references(technical.evidence_refs, evidence_refs, "technical evidence")
+    _quotes(candidate.contribution_quotes, answer_text)
+    if candidate.contribution_scope != "unknown" and not candidate.contribution_quotes:
+        raise ContractError("semantic", "contribution quotes")
+    for claim in candidate.claim_checks:
+        _quotes((claim.claim_text,), answer_text)
+        _references(claim.evidence_refs, evidence_refs, "claim evidence")
+        if claim.status != "unverified" and not claim.evidence_refs:
+            raise ContractError("semantic", "claim evidence required")
+        if claim.status == "unverified" and not claim.limitations:
+            raise ContractError("semantic", "claim limitations")
+    if candidate.needs_verification != bool(candidate.verification_requests):
+        raise ContractError("semantic", "needs_verification")
+    _requests(candidate.verification_requests, allowed_locations)
+    for request in candidate.verification_requests:
+        _quotes((request.claim_text,), answer_text)
     return _checked(candidate)
