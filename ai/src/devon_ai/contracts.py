@@ -114,3 +114,79 @@ class QuestionContract(_Contract):
             raise ContractError("schema", "required_points")
         _unique(tuple(point.key for point in self.required_points), "required_points")
         _unique(self.basis_refs, "basis_refs")
+
+
+@dataclass(frozen=True)
+class Question(_Contract):
+    persona: PersonaId
+    text: str
+    topic_code: str
+    question_contract: QuestionContract
+    evidence_refs: tuple[str, ...]
+    jd_requirement_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class QuestionReview:
+    """Trusted caller's semantic review bound to exact wording, not model output.
+
+    The caller must independently check the actual requirements, premises and
+    evaluation scope. This module does not perform natural-language judgement.
+    """
+
+    text: str
+    question_contract: QuestionContract
+
+    def __post_init__(self) -> None:
+        _convert(str, self.text, "review text", wire=False)
+        _convert(QuestionContract, self.question_contract, "review contract", wire=False)
+
+
+@dataclass(frozen=True, init=False)
+class ContractChecked[T]:
+    """Pure contract checks passed; NOT persisted, authorized or ready to publish."""
+
+    data: T
+
+    def __init__(self) -> None:
+        raise TypeError("Use a contract validation function")
+
+
+def _checked[T](candidate: T) -> ContractChecked[T]:
+    result: ContractChecked[T] = object.__new__(ContractChecked)
+    object.__setattr__(result, "data", candidate)
+    return result
+
+
+def _references(values: tuple[str, ...], registered: frozenset[str], field: str) -> None:
+    if type(registered) is not frozenset or any(
+        type(ref) is not str or not ref.strip() for ref in registered
+    ):
+        raise ContractError("schema", "reference registry")
+    _unique(values, field)
+    if not set(values).issubset(registered):
+        raise ContractError("semantic", field)
+
+
+def validate_question(
+    candidate: Question,
+    *,
+    review: QuestionReview,
+    allowed_personas: tuple[PersonaId, ...],
+    evidence_refs: frozenset[str],
+    basis_refs: frozenset[str],
+    jd_requirement_ids: frozenset[str],
+) -> ContractChecked[Question]:
+    """Check the candidate against caller-reviewed wording, scope and BE refs."""
+    _convert(Question, candidate, "question", wire=False)
+    _convert(tuple[PersonaId, ...], allowed_personas, "allowed_personas", wire=False)
+    if type(review) is not QuestionReview:
+        raise ContractError("schema", "question review")
+    if candidate.persona not in allowed_personas:
+        raise ContractError("semantic", "persona")
+    _references(candidate.evidence_refs, evidence_refs, "evidence_refs")
+    _references(candidate.jd_requirement_ids, jd_requirement_ids, "jd_requirement_ids")
+    _references(candidate.question_contract.basis_refs, basis_refs, "basis_refs")
+    if candidate.text != review.text or candidate.question_contract != review.question_contract:
+        raise ContractError("semantic", "question requirements")
+    return _checked(candidate)

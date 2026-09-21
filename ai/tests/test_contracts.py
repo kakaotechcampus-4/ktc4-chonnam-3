@@ -76,3 +76,99 @@ def test_persona_rejects_unknown_or_coerced_identity(value):
                 "avoided_assumptions": ["전제"],
             },
         )
+
+
+@pytest.fixture
+def question_data(contract_data):
+    return {
+        "persona": "tech_lead",
+        "text": "조회·수정 특성과 캐시 선정 이유는 무엇인가요?",
+        "topic_code": "cache_choice",
+        "question_contract": contract_data,
+        "evidence_refs": ["ev-1"],
+        "jd_requirement_ids": ["jd-1"],
+    }
+
+
+@pytest.fixture
+def question_scope(contract_data):
+    return {
+        "review": c.QuestionReview(
+            "조회·수정 특성과 캐시 선정 이유는 무엇인가요?",
+            c.decode(c.QuestionContract, contract_data),
+        ),
+        "allowed_personas": ("tech_lead", "domain_lead"),
+        "evidence_refs": frozenset({"ev-1"}),
+        "basis_refs": frozenset({"source-1"}),
+        "jd_requirement_ids": frozenset({"jd-1"}),
+    }
+
+
+def test_question_matches_independently_reviewed_requirements(question_data, question_scope):
+    candidate = c.decode(c.Question, question_data)
+    checked = c.validate_question(candidate, **question_scope)
+    assert checked.data.text == "조회·수정 특성과 캐시 선정 이유는 무엇인가요?"
+    assert tuple(point.key for point in checked.data.question_contract.required_points) == (
+        "reads",
+        "writes",
+        "choice",
+    )
+    assert not isinstance(candidate, c.ContractChecked)
+    with pytest.raises(TypeError):
+        c.ContractChecked(candidate)
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda q: q["question_contract"]["required_points"].append(
+            {"key": "ttl", "description": "질문하지 않은 TTL"}
+        ),
+        lambda q: q.update(text="TTL은 몇 분인가요?"),
+        lambda q: q["question_contract"].update(purpose="다른 목적"),
+        lambda q: q.update(persona="hr_manager"),
+        lambda q: q.update(evidence_refs=["fabricated-id"]),
+        lambda q: q.update(evidence_refs=["ev-1", "ev-1"]),
+        lambda q: q.update(jd_requirement_ids=["other-jd"]),
+        lambda q: q["question_contract"].update(basis_refs=["other-source"]),
+    ],
+)
+def test_question_rejects_unasked_points_stale_review_and_invalid_refs(
+    question_data, question_scope, change
+):
+    change(question_data)
+    with pytest.raises(c.ContractError) as failure:
+        c.validate_question(c.decode(c.Question, question_data), **question_scope)
+    assert failure.value.stage == "semantic"
+
+
+@pytest.mark.parametrize("field", ["question_id", "turn_id", "turn_no", "status"])
+def test_question_never_accepts_model_generated_service_identifiers(question_data, field):
+    question_data[field] = "model-generated"
+    with pytest.raises(c.ContractError) as failure:
+        c.decode(c.Question, question_data)
+    assert failure.value.stage == "schema"
+
+
+def test_raw_or_decoded_review_cannot_masquerade_as_trusted_review(question_data, question_scope):
+    with pytest.raises(c.ContractError):
+        c.validate_question(question_data, **question_scope)
+    question_scope["review"] = question_data
+    with pytest.raises(c.ContractError):
+        c.validate_question(c.decode(c.Question, question_data), **question_scope)
+
+
+def test_hr_question_accepts_empty_code_references():
+    contract = c.QuestionContract(
+        "자기소개", (c.RequiredPoint("intro", "자기소개"),), (), (), "자기소개 내용"
+    )
+    question = c.Question("hr_manager", "자기소개를 부탁드립니다", "introduction", contract, (), ())
+    result = c.validate_question(
+        question,
+        review=c.QuestionReview(question.text, contract),
+        allowed_personas=("hr_manager",),
+        evidence_refs=frozenset(),
+        basis_refs=frozenset(),
+        jd_requirement_ids=frozenset(),
+    )
+    assert result.data.evidence_refs == ()
