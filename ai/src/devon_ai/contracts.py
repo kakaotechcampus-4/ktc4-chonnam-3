@@ -253,6 +253,13 @@ def _requests(
     requests: tuple[VerificationRequest, ...],
     allowed_locations: frozenset[tuple[str, str, str]],
 ) -> None:
+    if type(allowed_locations) is not frozenset or any(
+        type(location) is not tuple
+        or len(location) != 3
+        or any(type(part) is not str or not part.strip() for part in location)
+        for location in allowed_locations
+    ):
+        raise ContractError("schema", "allowed_locations")
     if len(set(requests)) != len(requests):
         raise ContractError("semantic", "duplicate requests")
     for request in requests:
@@ -291,6 +298,10 @@ def validate_analysis(
         raise ContractError("semantic", "evaluation_status")
     if candidate.sufficiency == "sufficient" and candidate.missing_points:
         raise ContractError("semantic", "sufficiency")
+    if candidate.sufficiency in ("partial", "insufficient") and not candidate.missing_points:
+        raise ContractError("semantic", "missing points required")
+    if candidate.sufficiency == "partial" and not covered:
+        raise ContractError("semantic", "partial coverage required")
     if set(covered).intersection(candidate.missing_points) and not candidate.limitations:
         raise ContractError("semantic", "partially covered point limitations")
     for point in candidate.covered_points:
@@ -303,6 +314,12 @@ def validate_analysis(
     _quotes(candidate.contribution_quotes, answer_text)
     if candidate.contribution_scope != "unknown" and not candidate.contribution_quotes:
         raise ContractError("semantic", "contribution quotes")
+    if (
+        candidate.contribution_scope == "unknown"
+        and not candidate.contribution_quotes
+        and not candidate.limitations
+    ):
+        raise ContractError("semantic", "contribution limitations")
     for claim in candidate.claim_checks:
         _quotes((claim.claim_text,), answer_text)
         _references(claim.evidence_refs, evidence_refs, "claim evidence")

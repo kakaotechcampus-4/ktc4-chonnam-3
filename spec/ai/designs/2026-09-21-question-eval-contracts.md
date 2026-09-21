@@ -1,9 +1,9 @@
 # 질문·평가 내부 계약 채택안
 
-- 상태: **Proposed** — AI-L02 승인 요청용이며 runtime·저장 계약 채택 기록이 아니다.
+- 상태: **부분 Accepted** — 2026-09-21 사용자의 “1번 항목에 대해 진행” 지시에 따라 11절의 내부 Python 계약만 채택한다. 저장·공개·호출 계약과 나머지 미결정은 Proposed/보류다.
 - 작성일: 2026-09-21. 범위: Sprint 1 텍스트 면접의 Persona, Question, QuestionContract, AnswerAnalysis, DirectorDecision과 실패·복구 경계.
 - 기준 브랜치: `develop` (`854e2aa`) → `docs/ai-question-eval-contracts`. 선행 구현 브랜치 없음.
-- 산출물은 이 문서 하나다. [task-02](../../../ai/docs/task-02-contracts.md)에 따라 `ai/src/devon_ai/contracts.py`는 AI-L02 승인 전까지 docstring 상태를 유지한다.
+- 0번 산출물은 이 문서 하나였으며 당시 `contracts.py`는 docstring 상태로 유지했다. 1번 구현 승인의 범위와 이후 상태는 11절에 기록한다. 아래 1~10절은 당시 검토안·검증 이력이다.
 
 ## 1. 목적과 원본
 
@@ -222,3 +222,53 @@ quota 검사 시 후보를 현재 Persona 횟수에 1회 더한 뒤, 남은 질�
 | `git diff --exit-code develop -- ai frontend backend CLAUDE.md CODEOWNERS .github/workflows` | 통과: 코드·테스트·의존성·보호 파일 변경 없음 |
 | 이번 계약·기능의 새 테스트, 실제 모델·DB·WS 통합 | 미실행. 위 pytest는 기존 패키지 구조·import 경계 검사에 한정 |
 | AI-L02 채택, AI-L01·04·09·10·18·21 잔여 항목 | 보류. FE/BE 구현·음성·점수 구현·배포는 범위 밖 |
+
+## 11. 1번 내부 Python 계약 채택 범위
+
+2026-09-21 사용자의 구현 지시로 `feature/ai-contracts`를 선행 문서 브랜치 `docs/ai-question-eval-contracts`의 `9ca7f21`에서 분기했다. `develop`에는 선행 문서가 아직 병합되지 않았다. 이 승인은 DB·공개 API·운영 모델·Protocol 전체의 채택을 의미하지 않는다.
+
+- 표현: 표준 라이브러리 frozen dataclass와 tuple, 기존 후보 문자열의 Literal을 채택한다. `decode`는 이미 파싱된 dict/list를 누락값 보충·암묵 스칼라 변환 없이 후보 DTO로 변환한다. JSON parsing·재호출은 2번 작업이다.
+- 채택 DTO: Persona, RequiredPoint, QuestionContract, Question, CoveredPoint, TechnicalAssessment, ClaimCheck, VerificationRequest, AnswerAnalysis, DirectorDecision, CandidateFailure, CandidateRecovery. 기존 표의 필드명을 유지한다. 아래 보조 입력은 내부 검증에만 사용한다.
+- 필수/null: 모든 키는 명시적으로 필요하다. `AnswerAnalysis.sufficiency`와 `DirectorDecision.persona/target`만 각 조건에 따라 null을 허용한다. 빈 문자열은 금지하며, 비어 있는 목록은 명시적 빈 tuple로 보존한다. Persona 책임·금지 전제와 required_points는 비어 있을 수 없다.
+- 참조: 내부 참조는 BE가 공급하는 불투명한 비어 있지 않은 str로 채택한다. 이를 DB PK 형식으로 해석하거나 모델 생성값으로 보충하지 않는다. UUID 등 실제 저장 타입으로의 매핑은 BE 합의 대상이다.
+- 검증: `validate_personas`, `validate_question`, `validate_analysis`, `validate_decision`은 구조·참조·필드 간 일관성만 검사한다. 실제 충분성·정확성·기여 판정, 자연어 전제·목적 검수, 조회 필요성 세 조건의 판단은 3·4번 작업에 남는다.
+- `ContractChecked`는 위 순수 검사 결과이며 BE 권한 검증·저장·질문 발행 성공을 뜻하지 않는다. raw dict·후보 DTO·직접 생성한 래퍼를 검증된 입력 대신 받지 않는다. Python 내부의 악의적 reflection을 막는 보안 경계는 아니다.
+
+| 보조 필드/입력 | 채택 의미·검사 | 근거·상태 | 소유자 | 저장·공개 영향 | 남은 미결정 |
+| --- | --- | --- | --- | --- | --- |
+| `QuestionReview.text` | 독립 검토한 실제 질문 문장; 후보와 정확히 일치 | C/I의 문장 대조, 내부 표현 Accepted | AI 검토 호출자 | 저장/공개 안 함 | 4번 자연어 검토 실행 |
+| `QuestionReview.question_contract` | 그 문장에서 실제 요구한 내용·목적·범위를 독립 검토한 Contract | C/I/R4, 내부 표현 Accepted | AI 검토 호출자 | 저장/공개 안 함 | 검토 품질의 모델 평가 |
+| `ContractChecked.data` | 순수 계약 검증을 통과한 불변 후보 | C의 raw/검증 분리, 내부 표현 Accepted | AI | BE의 최종 수용 별도 | AI-L02 durable 결과 포장 |
+| `VerificationRequest.claim_text` | 확인할 주장 원문; 답변 분석에서는 제출 원문과 대조 | C/E/R3, 내부 표현 Accepted | AI 제안 | I/O·Claim row 생성 없음 | AI-L02 Tool transport |
+| `VerificationRequest.purpose` | 조회 목적, 비어 있지 않은 str | C/E/R3, 내부 표현 Accepted | AI 제안 | 공개 안 함 | AI-L04·08 실행 연결 |
+| `VerificationRequest.repository_id` | BE 허용 저장소의 불투명 str | C/E, 내부 표현 Accepted | BE 공급, AI 대조 | 새 ID 생성 없음 | BE 실제 ID 매핑 |
+| `VerificationRequest.git_ref` | BE가 고정한 ref와 정확히 일치 | C/E, 내부 표현 Accepted | BE 공급, AI 대조 | 최신 branch로 치환 없음 | BE ref 원본 검증 |
+| `VerificationRequest.allowed_paths` | 허용 위치의 중복 없는 비어 있지 않은 tuple | C/E, 내부 표현 Accepted | BE 범위, AI 대조 | 탐색·열거 없음 | AI-L04·08 운영 상한 |
+| `allowed_personas` | BE가 계산한 현재 허용 Persona tuple | C/I, 내부 표현 Accepted | BE | quota 계산은 5번 | BE 상태 재검사 |
+| `evidence_refs`, `basis_refs`, `jd_requirement_ids` 검증 인수 | 현재 사용자·선택·ref에 대해 BE가 검증한 str의 frozenset | C/E/J, 내부 표현 Accepted | BE 공급, AI 대조 | 원문·권한 검증을 대체하지 않음 | BE 조회·durable 연결 |
+| `allowed_locations` | `(repository_id, git_ref, path)`의 frozenset | C/E, 내부 표현 Accepted | BE 공급, AI 대조 | Tool 실행 없음 | AI-L04·08 실제 허용 범위 |
+| `finish_allowed` | Controller가 이미 확인한 종료 허용 bool | C/I, 내부 표현 Accepted | BE | AI가 턴 수·종료 상태를 결정하지 않음 | 5번·BE 종료 연결 |
+
+QuestionReview는 raw 모델 응답에서 디코드하는 DTO가 아니다. 호출자가 같은 모델 후보를 검토 없이 그대로 복제해 전달하면 자연어 검수 조건을 만족하지 않는다. 이번 테스트는 실제 질문에 맞게 독립 작성한 fixture와 후보의 차이를 검사하며, 자연어 의미를 자동 판단했다고 보고하지 않는다. Persona 문구의 정책 검수도 BE 운영 입력의 선행 조건이다.
+
+분석은 현재 Contract의 key만 참조하며 covered/missing의 합으로 평가한 범위를 설명한다. 부분 충족 key는 양쪽에 나타날 수 있으나 남은 범위를 limitations에 명시한다. 전체 충분성 보류는 `sufficiency=null`, 빈 covered/missing, 이유를 요구한다. `not_evaluable`은 충분성 판정값을 갖지 않는다. 기여 진술은 인용으로 연결하되 개인 기여의 외부 확인과 동일시하지 않는다.
+
+Director는 ask에 검증된 질문·동일 Persona·목적을, retrieve에 허용 위치의 요청을, finish에 Controller 허용과 null Persona/target을 요구한다. 복구 문자열은 next_step에 들어갈 수 없다. 재작성·재계획·조회·모델 호출을 실행하지 않는다.
+
+BE 식별 문맥(`interview_id`, `current_turn_id`, `turn_no`, `depth`, `parent_turn_no`)의 결과 포장·저장 연결은 계속 보류다. 모델 Question payload에 `question_id`, `turn_id`, `turn_no`, `status` 등을 넣는 경로는 여분 필드로 거절한다. BE가 호출·반환과 현재 질문을 연결하는 책임은 유지하며 stale 결과 차단 완료를 주장하지 않는다.
+
+### 1번 구현 검증 기록
+
+| 검사 | 상태·결과 |
+| --- | --- |
+| `uv --directory ai sync --locked --python 3.12` | 통과, 의존성 선언·lock 변경 없음 |
+| `uv --directory ai run --locked ruff check .` | 통과 |
+| `uv --directory ai run --locked ruff format --check .` | 통과, 33개 파일 |
+| `uv --directory ai run --locked mypy src` | 통과, 소스 11개 |
+| `uv --directory ai run --locked pytest` | 통과, 전체 99개(신규 계약 73개·기존 경계 26개). Windows 임시 폴더 권한 때문에 샌드박스 밖 실행 |
+| 계약 검사 | 통과, 스키마 2개·부분 OpenAPI·정상/실패 fixture 7개. `uv run --offline --no-project --python 3.12 --with-requirements .claude/scripts/requirements-checks.txt python .claude/scripts/check_contracts.py`로 실행. 최초 온라인 의존성 조회는 네트워크 제한으로 실패했고 기존 캐시로 재실행 |
+| 독립 코드 리뷰 | 허용 위치 registry 타입 누락·충분성/항목 조합 모순·기여 미확인 사유 누락을 재현 테스트 후 수정. 수정 전 실패 10건 확인, 수정 후 전체 통과 |
+| 300줄 변경 단위 | 코드·테스트 변경량 194/172/243/190/95줄로 나눠 로컬 스냅샷 보존. 문서 변경은 마지막 단위에 포함 가능하며 커밋은 사용자 확인 전 보류 |
+| 실제 모델·질문/평가 생성·DB·WS 통합 | 미실행. 2~5번 구현, 운영 설정·provider 선택·BE/FE 변경·음성·점수 구현은 이번 범위 밖 |
+
+충분성 검사 보완: `partial`은 확인한 항목과 미확인 항목을 모두 요구하며 `insufficient`에도 미확인 항목이 있어야 한다. 기여 진술과 인용이 모두 없는 `unknown`에는 limitations가 필요하다. 이 검사는 반환값 사이의 모순을 차단하며 실제 답변의 평가를 대신하지 않는다.

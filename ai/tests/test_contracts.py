@@ -195,7 +195,7 @@ def analysis_data():
         "claim_checks": [],
         "needs_verification": False,
         "verification_requests": [],
-        "limitations": [],
+        "limitations": ["기여 진술 없음"],
     }
 
 
@@ -418,3 +418,79 @@ def test_recovery_is_not_a_new_director_action(recovery, decision_data):
     decision_data["next_step"] = recovery
     with pytest.raises(c.ContractError):
         c.decode(c.DirectorDecision, decision_data)
+
+
+@pytest.mark.parametrize(
+    "registry",
+    [
+        None,
+        [("repo-1", "sha-1", "src/cache.py")],
+        {("repo-1", "sha-1", "src/cache.py"): False},
+        frozenset({("repo-1", "sha-1", "src/cache.py"), ("bad",)}),
+        frozenset({("repo-1", "sha-1", 42)}),
+        frozenset({("repo-1", " ", "src/cache.py")}),
+    ],
+)
+def test_location_registry_is_strict_even_if_membership_would_pass(
+    decision_data, request_data, registry
+):
+    decision_data.update(next_step="retrieve", persona=None, tool_requests=[request_data])
+    with pytest.raises(c.ContractError) as failure:
+        c.validate_decision(
+            c.decode(c.DirectorDecision, decision_data),
+            question=None,
+            allowed_personas=(),
+            finish_allowed=False,
+            allowed_locations=registry,
+        )
+    assert failure.value.stage == "schema"
+
+
+@pytest.mark.parametrize("sufficiency", ["partial", "insufficient"])
+def test_complete_coverage_rejects_inconsistent_sufficiency(
+    analysis_data, question_data, question_scope, sufficiency
+):
+    analysis_data.update(sufficiency=sufficiency, missing_points=[])
+    analysis_data["covered_points"].append({"key": "writes", "answer_quotes": ["캐시했습니다"]})
+    with pytest.raises(c.ContractError) as failure:
+        check_analysis(analysis_data, question_data, question_scope)
+    assert failure.value.stage == "semantic"
+
+
+def test_no_observed_point_cannot_be_partial(analysis_data, question_data, question_scope):
+    analysis_data.update(covered_points=[], missing_points=["reads", "writes", "choice"])
+    with pytest.raises(c.ContractError):
+        check_analysis(analysis_data, question_data, question_scope)
+
+
+def test_unknown_contribution_without_statement_requires_limitation(
+    analysis_data, question_data, question_scope
+):
+    analysis_data["limitations"] = []
+    with pytest.raises(c.ContractError):
+        check_analysis(analysis_data, question_data, question_scope)
+
+
+def test_valid_do_not_know_answer_is_insufficient_not_a_false_claim(
+    analysis_data, question_data, question_scope
+):
+    analysis_data.update(
+        sufficiency="insufficient",
+        covered_points=[],
+        missing_points=["reads", "writes", "choice"],
+        limitations=["기여 진술 없음"],
+    )
+    analysis_data["technical_assessment"].update(
+        explanation="검토할 기술 주장 없음", answer_quotes=[], limitations=["기술 판단 보류"]
+    )
+    question = c.validate_question(c.decode(c.Question, question_data), **question_scope)
+    result = c.validate_analysis(
+        c.decode(c.AnswerAnalysis, analysis_data),
+        question=question,
+        answer_text="모르겠습니다",
+        evidence_refs=frozenset(),
+        allowed_locations=frozenset(),
+    ).data
+    assert result.evaluation_status == "evaluated"
+    assert result.sufficiency == "insufficient"
+    assert result.claim_checks == ()
