@@ -4,6 +4,8 @@
 
 현재 상태는 설치 가능한 패키지 골격이다. `task-01`의 구조 검사와 별개로 `task-02`부터 `task-13`의 기능·통합·평가 구현은 완료되지 않았다. [레이어 규칙](layer-rules.md)과 [검증 안내](testing.md)를 공통으로 적용한다.
 
+Director의 정의·검토 산출물은 [계약 제안서](../../spec/ai/designs/2026-09-21-director-contract-and-flow.md)와 [개발용 검사](testing.md#현재-실행-가능한-director-정의-검사)에 있다. 이 부분 진행으로 task-02/10/12의 production 구현을 완료 처리하지 않는다.
+
 ## 작업을 선택하는 순서
 
 1. [루트 지침](../../CLAUDE.md), [AI 지침](../CLAUDE.md), [README의 보호 지침 안내](../README.md)를 읽는다. BE 파일을 수정할 작업은 [BE 지침](../../backend/CLAUDE.md)도 읽는다.

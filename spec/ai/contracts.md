@@ -6,6 +6,8 @@
 
 아래 필드 표와 enum은 모두 fixture로 검토할 후보이며, 이 문서만으로 migration·공개 API·WS enum 추가를 승인하지 않는다. 기존 FIX와 [0008 후보 정책](decisions/0008-ai-candidate-policy.md) 등 명시된 Accepted 정책만 승인 범위에서 확정된 요구사항이다.
 
+[2026-09-21 Director 계약 제안](designs/2026-09-21-director-contract-and-flow.md)은 이 초안의 최소 Question, 배타적 행동 결과와 제한 Tool 요청 참조 방식을 실행 가능한 합성 사례로 구체화한다. 기존 필드와의 차이도 제안서에 기록했으며 AI-L02 채택 또는 이 문서 전체의 대체를 뜻하지 않는다.
+
 원본: [아키텍처](architecture.md), [레이어 규칙](../../backend/docs/layer-rules.md), [DB 명세](../../backend/docs/db-schema.md), [ForAI](../../ForAI.md), [미결정 기록](decisions/0001-ai-baseline.md).
 
 ## 계약 계층

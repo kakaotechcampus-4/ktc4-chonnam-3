@@ -35,7 +35,7 @@ W4~W7 핵심, W8~W9 후속, W12~W13 검증·배포라는 일정은 배경 계획
 | ID | 대상 | 통과 조건 |
 | --- | --- | --- |
 | AI-01 | L1 batch | 순서 변경·중복/누락 ID를 감지하고 유효 repo 결과를 보존 |
-| AI-02 | L2 | primary repo, 고정 ref, notable areas 1~5와 실제 위치 일치 |
+| AI-02 | L2 | primary repo 1~2개를 고정 ref에서 검사; 최소 1개 repo에 검증된 notable area가 1개 이상이면 준비 성공, 총 0개면 `preparing_failed`; 유효한 repo의 notable areas 1~5와 실제 위치 일치 |
 | AI-03 | 분석 캐시 | repo/level/SHA/prompt version 일치 때만 재사용 |
 | AI-04 | Wanted | structured field 원문 연결, required/preferred/unknown, 미지원·실패 구분 |
 | AI-05 | 추천 | 최대 5개, 이유와 JD/분석 연결, 실패 repo를 저점수로 변환하지 않음 |
@@ -47,7 +47,7 @@ W4~W7 핵심, W8~W9 후속, W12~W13 검증·배포라는 일정은 배경 계획
 | AI-11 | 답변 판정 | 충분성·정확성·기여 구분, 묻지 않은 내용 감점 없음 |
 | AI-12 | Evidence | ref·원문·위치·usage 일치, 미발견/분석 부족/장애 구분 |
 | AI-13 | Conflict | 실제 answer_vs_code 연결, unresolved, claim_id NULL, 단정하지 않는 후속 |
-| AI-14 | 모델 실패 | 최대 1회 자동 재시도, 실패 JSON 전달 없음, 원문 보호 |
+| AI-14 | 모델 실패 | 공통 gateway/task 계층에서 timeout·provider·parse·schema 실패만 자동 1회 재호출해 총 2회, semantic 실패는 재호출 없음, 실패 JSON 전달 없음, 원문 보호 |
 | AI-15 | 상태·멱등성 | 중복 질문/답변 확정 없음, DB 이후 알림, 종료 후 결과 차단 |
 | AI-16 | Redis | snapshot 누락·만료·손상 시 PostgreSQL 기반 복구 |
 | AI-17 | 리포트 | 실제 문답·근거, 후속 보완, 미관찰 인정, 원문 불변 |
@@ -55,7 +55,7 @@ W4~W7 핵심, W8~W9 후속, W12~W13 검증·배포라는 일정은 배경 계획
 | AI-19 | 프로필 | report 성공 후 enqueue, 완료 면접 사용 repo만 집계, 실패 독립 |
 | AI-20 | 범위·보호 | private 조회·코드 실행·외부 지시·token 노출 없음 |
 
-WS 제출에 식별자가 없는 상태의 지연 중복, WS 복구·준비 실패 snapshot, JD 신호와 분석 단계 순서, L2 일부 항목 검증 실패의 준비 상태, 리포트 실패 attempt의 durable 소유권, 점수 계약은 합의 전에는 보류로 기록한다. 이러한 한계를 단순 mock 통과로 지우지 않는다.
+WS 제출에 식별자가 없는 상태의 지연 중복과 저장·큐·알림 멱등성, 기존 6개 job의 runtime 세부 계약, 명시적 사용자 종료 wire, 리포트 실패 attempt의 durable 소유권, 점수 세부 기준은 합의 전에는 보류로 기록한다. L2 일부 항목이 실패한 경우의 준비 상태는 [0010 결정](decisions/0010-sprint1-interface-runtime-decisions.md)의 readiness 기준을 적용하고, context limitations의 저장 계약은 별도 보류로 남긴다. 이러한 한계를 단순 mock 통과로 지우지 않는다.
 
 ## 테스트 위치
 
@@ -86,8 +86,9 @@ WS 제출에 식별자가 없는 상태의 지연 중복, WS 복구·준비 실�
 ### 후보 검증·선택 정책 확인
 
 [0008 결정](decisions/0008-ai-candidate-policy.md)이 승인한 다섯 후보 정책을 구현 후
-검사한다. 아래 의미 분류는 Accepted이지만 runtime 재호출·상태·schema·quota·budget은
-계속 별도 계약 대상이다.
+검사한다. runtime attempt는 [0010 결정](decisions/0010-sprint1-interface-runtime-decisions.md)에
+따르며, 상태·저장 schema·quota와 task별 timeout·token·Context·Tool·재작성·재계획 budget,
+budget 소진 후 실패 복구는 계속 별도 계약 대상이다.
 
 | 후보 사례 | 기대 결과 |
 | --- | --- |
@@ -111,7 +112,7 @@ WS 제출에 식별자가 없는 상태의 지연 중복, WS 복구·준비 실�
 | 코드 존재 또는 README/commit 수만 있는 개인 기여 주장 | 구현 존재와 개인 기여 확인을 분리 |
 | 후속 답변에서 설명 보완 또는 기여 정정 | 이후 질문·최종 피드백에 반영하며 원문·최초 분석 보존 |
 
-질문 후보의 재작성·재계획·유효 후보 없음 분류는 [0008](decisions/0008-ai-candidate-policy.md)을 따른다. 실제 저장 enum·JSONB, runtime 재호출·사용자 복구와 상태 매핑, 턴 배분, 공개 점수·수치 통과율은 이 검사표가 확정하지 않는다. 아직 실행하지 않은 모델·DB 검사는 미실행으로 남긴다.
+질문 후보의 재작성·재계획·유효 후보 없음 분류는 [0008](decisions/0008-ai-candidate-policy.md)을 따른다. 이 분류가 자동 재작성·재계획 호출을 승인하지 않는다. 실제 저장 enum·JSONB, 사용자 복구와 상태 매핑, 턴 배분, 재작성·재계획 budget과 budget 소진 후 실패 복구, 공개 점수·수치 통과율은 이 검사표가 확정하지 않는다. 아직 실행하지 않은 모델·DB 검사는 미실행으로 남긴다.
 
 ### 도메인 질문 생성 정책 확인
 
@@ -126,7 +127,7 @@ WS 제출에 식별자가 없는 상태의 지연 중복, WS 복구·준비 실�
 | JD 자격요건 검사·경력 단정·법률/의료 정답 보증·전용 점수화 후보 | 승인된 생성 정책을 위반하는 후보로 식별 |
 | 기존 후보 표 | category별 3개·총 21개와 원문 유지; 운영 승인·설치와 구분 |
 
-후보 복구와 frame 선택 의미는 [0008](decisions/0008-ai-candidate-policy.md)을 따른다. 실제 신뢰도 수치 기준·runtime 재호출과 사용자 상태 복구·턴 배분·활성 version·저장 계약은 별도 합의 대상이다. 문서 검사와 실제 모델 정책 준수 검사를 구분한다.
+후보 복구와 frame 선택 의미는 [0008](decisions/0008-ai-candidate-policy.md)을 따른다. 자동 재작성·재계획 호출은 하지 않는다. 실제 신뢰도 수치 기준·사용자 상태 복구·턴 배분·활성 version·저장 계약과 task별 timeout·token·Context·Tool·재작성·재계획 budget, budget 소진 후 실패 복구는 별도 합의 대상이다. 문서 검사와 실제 모델 정책 준수 검사를 구분한다.
 
 ### 작업별 LLM 사용 정책 확인
 
@@ -155,7 +156,7 @@ WS 제출에 식별자가 없는 상태의 지연 중복, WS 복구·준비 실�
 | 저장·큐·WS·리포트 | `backend/tests/features/` | PostgreSQL, Redis, 외부 GitHub/Wanted/LLM mock |
 | 공개 직렬화 | `backend/tests/contract/` | camelCase·enum·required/null, 실제 serializer |
 
-현재 작성된 것은 패키지 구조·설치 경계 테스트다. 위 표의 Director·task·저장·공개 직렬화 동작을 모두 구현했다는 뜻이 아니다. 테스트가 실제 작성·수집·실행됐을 때만 해당 결과를 보고한다. SQLite 대체로 PostgreSQL JSONB·배열·CHECK·UNIQUE 검증을 주장하지 않는다. 실행 명령은 [AI 개발 안내](../../ai/README.md)를 따른다.
+현재 작성된 것은 패키지 구조·설치 경계와 [Director 제안 검사기](../../ai/scripts/review_director_contract.py)의 테스트다. 제안 검사는 구조·참조·공급된 Controller 제약만 다루며, 위 표의 실제 Director·task·저장·공개 직렬화 동작을 구현했다는 뜻이 아니다. 테스트가 실제 작성·수집·실행됐을 때만 해당 결과를 보고한다. SQLite 대체로 PostgreSQL JSONB·배열·CHECK·UNIQUE 검증을 주장하지 않는다. 실행 명령은 [AI 개발 안내](../../ai/README.md)를 따른다.
 
 ## 모델 평가 자료 정책
 
@@ -180,8 +181,9 @@ orphan 쌍을 거부한다.
 정보와 모든 loader control metadata는 prompt, retrieval query, tool input에서 제외한다.
 
 이 최소 계약은 AI 로컬 합성 fixture만 대상으로 하며 파일명 규칙, 운영 파일/DB/공개
-API schema를 정하지 않는다. 실제 JSON 사례와 loader·harness는 아직 없다. 원문에
-확인되지 않는 사실을 기대 정답으로 쓰지 않으며 Question Contract처럼 실제 실행에
+API schema를 정하지 않는다. 현재 [Director 제안 사례](../../ai/evals/README.md)는 합성 JSON
+4쌍과 전용 로컬 검사기로 검토하며, 실제 사용자 자료·독립 검수 정답과 모델 평가 harness는 없다.
+원문에 확인되지 않는 사실을 기대 정답으로 쓰지 않으며 Question Contract처럼 실제 실행에
 필요한 정보는 실행 payload에 유지한다.
 
 ## 사례 구성과 판정

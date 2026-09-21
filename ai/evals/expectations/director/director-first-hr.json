@@ -1,0 +1,25 @@
+{
+  "case_id": "director-first-hr",
+  "version": 1,
+  "candidate": {
+    "next_step": "ask",
+    "question": {
+      "persona": "hr_manager",
+      "text": "진행했던 프로젝트에서 본인이 맡은 역할을 중심으로 자기소개해 주세요.",
+      "question_contract": {
+        "purpose": "본인 소개와 프로젝트 역할의 초기 확인",
+        "required_points": [
+          {
+            "key": "focus",
+            "description": "사용자가 직접 설명한 역할"
+          }
+        ],
+        "assumptions": [],
+        "basis_refs": [],
+        "evaluation_scope": "사용자가 직접 설명한 역할"
+      }
+    }
+  },
+  "expected_stage": "valid",
+  "review_notes": "첫 HR 질문은 코드 Evidence 없이 허용한다. 역할은 사용자 답변 전에 추측하지 않는다. 독립 검수 전이며 출시 품질 분모에 포함하지 않는다."
+}

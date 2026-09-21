@@ -65,7 +65,9 @@ export default function MyPage() {
           </div>
 
           {profileQuery.isLoading && <p className="text-sm text-muted">불러오는 중...</p>}
-          {profileQuery.isError && <p className="text-sm text-error">정보를 불러오지 못했어요.</p>}
+          {profileQuery.isError && (
+            <p className="text-sm text-error">정보를 불러오지 못했어요.</p>
+          )}
 
           {profile && (
             <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
@@ -216,13 +218,17 @@ export default function MyPage() {
         <span>이용약관 · 개인정보처리방침</span>
       </footer>
 
-      <dialog ref={dialogRef} className="logout-dialog" aria-labelledby="logout-title">
+      <dialog
+        ref={dialogRef}
+        className="m-auto w-[calc(100%_-_2rem)] max-w-sm rounded-card bg-surface p-6 text-ink backdrop:bg-ink/40"
+        aria-labelledby="logout-title"
+      >
         <h2 id="logout-title" className="text-base font-bold">
           로그아웃 하시겠어요?
         </h2>
         <p className="mt-2 text-sm text-muted">다시 로그인하려면 GitHub 인증이 필요해요.</p>
         {logoutMutation.error && (
-          <p className="error-banner mt-4" role="alert">
+          <p className="mt-4 rounded-md border border-error-soft bg-error-soft px-4 py-3 text-sm text-error" role="alert">
             {errorMessage(logoutMutation.error)}
           </p>
         )}

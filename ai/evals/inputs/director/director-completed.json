@@ -1,0 +1,33 @@
+{
+  "case_id": "director-completed",
+  "version": 1,
+  "source_group": "director-synthetic-demo-v1",
+  "split": "development",
+  "payload": {
+    "controller": {
+      "questions_asked": 9,
+      "answers_completed": 9,
+      "question_allowed": false,
+      "completion_allowed": true,
+      "allowed_personas": [],
+      "repositories": {
+        "repo-demo": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "evidence": {},
+      "tool_requests": {},
+      "tool_calls_remaining": 0
+    },
+    "context": {
+      "history": [],
+      "answer_analysis": {
+        "status": "synthetic_review_only",
+        "limitations": []
+      },
+      "limitations": [
+        "9번째 답변 처리 완료는 BE가 공급한 사실로 가정한다. DB 종료 처리는 실행하지 않는다."
+      ],
+      "domain_category": null,
+      "domain_frames": []
+    }
+  }
+}

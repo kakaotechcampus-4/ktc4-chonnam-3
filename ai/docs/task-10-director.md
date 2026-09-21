@@ -36,7 +36,8 @@
 - [ ] 첫 질문 전 준비 조건과 `preparing_failed` 처리가 BE에서 검증됐는지 확인한다.
 - [ ] Question, AnswerAnalysis, Evidence fixture의 출처와 미확인 범위를 구분한다.
 - [ ] Controller가 계산한 허용 Persona와 남은 질문 수를 입력으로 받을 수 있게 한다.
-- [ ] 실제 계약 채택이 필요하면 AI-L02, 호출 budget이 필요하면 AI-L04를 먼저 결정한다.
+- [ ] 실제 계약 채택이 필요하면 AI-L02, task별 timeout·token·Context·Tool·재작성·재계획
+  budget과 실패 복구가 필요하면 AI-L04의 남은 항목을 먼저 결정한다.
 
 ## 대상 파일과 책임
 
@@ -67,6 +68,7 @@ Persona마다 별도 Agent나 class를 만들지 않는다. `hr_manager`, `tech_
 - [ ] 전제·목적·필수 확인내용이 유효하고 표현만 복합적·유도적이면 의미를 보존한 rewrite 후보로 분류한다.
 - [ ] 거짓·stale 전제나 이미 확인한 목적의 반복은 새로운 목적·근거의 replan 후보로 분류한다.
 - [ ] 허용 Persona·맥락·근거 안에서 안전한 후보가 없으면 failure를 반환하고 invalid fallback이나 정상 `finish`로 바꾸지 않는다.
+- [ ] rewrite·replan은 분류 결과로만 반환하며 Director가 자동으로 재작성·재계획 호출을 실행하지 않는다.
 - [ ] 한 질문에 중심 목적 하나만 남기고 복합 질문, 정답 유도, 표현만 바꾼 반복을 막는다.
 - [ ] 보완 질문은 이전 답변의 부족한 부분, 심화 질문은 새로운 판단 조건에 연결한다.
 - [ ] 후속 보완과 기여 정정을 반영하되 이전 답변 원문과 최초 분석을 바꾸지 않는다.
@@ -81,6 +83,8 @@ Persona마다 별도 Agent나 class를 만들지 않는다. `hr_manager`, `tech_
 ## 검증
 
 추가 예정, 현재 없음: `ai/tests/agents/director/test_director.py`.
+
+현재는 [Director 계약 제안](../../spec/ai/designs/2026-09-21-director-contract-and-flow.md), [합성 사례](../evals/README.md), [제안 검사기 테스트](../tests/agents/director/test_director_contract_proposal.py)가 있다. 이 개발용 검사는 아래 runtime 수용 검사의 일부 구조·참조·공급된 Turn 제약만 다룬다. 실제 Director 호출, BE 상태/배분, 자연어 품질과 재시도 검증은 완료되지 않았다.
 
 - [ ] 첫 질문 HR, 9번째 답변 후 종료, 10번째 질문 없음의 대조 사례를 둔다.
 - [ ] 남은 턴으로 quota를 불가능하게 하는 Persona 후보가 Controller에서 제외되는지 검사한다.
@@ -107,9 +111,11 @@ Mock과 policy fixture 통과는 실제 provider 품질, DB 저장, WS 전달이
 | 항목 | 지금 가능한 작업 | production 연결 재개 조건 |
 | --- | --- | --- |
 | AI-L02 내부 계약 | Proposed fixture와 의미 검증 | 필드·enum·null·저장 위치 공동 채택 |
-| AI-L04 실행 상한 | ADR 0008 실패 분류·복구 선택 fixture | 실제 재호출 여부·횟수, Tool·재작성·재계획 budget과 책임 확정 |
+| AI-L04 실행 상한 | 공통 gateway/task 계층의 timeout·provider·parse·schema 실패 자동 1회 재호출(총 2회)과 semantic 실패 무재호출 검사 | task별 timeout·token·Context·Tool·재작성·재계획 budget과 budget 소진 후 실패 복구 확정 |
 | AI-L09 서비스 복구·턴 배분 | rewrite/replan/failure 선택 검사 | 실제 반환 계약, 사용자 입력·서비스 상태 복구, HR/domain 배분과 공개 동작 확정 |
 | AI-L10 domain 운영 | `etc`, 맥락 관련성·목적 비반복 fixture | 운영 문구·검수·version·저장 방식 승인 |
-| AI-L11~L14 BE/WS | 순수 후보와 단일 연결 fixture | worker, 멱등성, WS 식별·복구 계약을 각 담당과 확정 |
+| AI-L11 worker runtime | 단일 queue·worker와 ARQ `max_tries=1` 경계 검사 | 기존 6개 job의 함수 signature·직렬화 인수·job별 timeout 확정 |
+| AI-L12 저장·큐·알림 멱등성 | 순수 후보와 단일 연결 fixture | transaction·lock/CAS·입력 version·enqueue 복구·중복 방지 계약 확정 |
+| AI-L13 사용자 종료 wire | 확정된 `sessionId`·cookie 인증·질문/답변 메시지 경계 검사 | 명시적 사용자 종료·이탈 wire 또는 endpoint 확정 |
 
 대기 항목의 현재 상태는 [later.md](../../later.md)에서 확인한다.

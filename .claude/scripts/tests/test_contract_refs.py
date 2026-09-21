@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from jsonschema import Draft202012Validator
 from yaml.constructor import ConstructorError
 
 spec = importlib.util.spec_from_file_location('check_contracts', Path(__file__).resolve().parents[1]/'check_contracts.py')
@@ -38,6 +39,7 @@ class RefTests(unittest.TestCase):
         self.assertEqual(response_ref, {'$ref': '#/components/schemas/MeResponse'})
         schema = result['components']['schemas']['MeResponse']
         self.assertEqual(schema['properties']['githubLinked']['type'], 'boolean')
+
     def test_real_partial_contract_internal_refs_are_preserved(self):
         document = module.load_yaml_document(module.CONTRACTS/'openapi.yaml')
         result = module.inline_refs(document, module.CONTRACTS)
@@ -57,30 +59,28 @@ class RefTests(unittest.TestCase):
         self.assertEqual(result['properties']['githubLinked']['type'], 'boolean')
         self.assertNotIn('$schema', result)
 
-    def test_auth_surface_and_cookie_schemes_are_complete(self):
+    def test_auth_fetch_surface_keeps_browser_routes_separate(self):
         document = module.load_yaml_document(module.CONTRACTS/'openapi.yaml')
         auth_paths = {path for path in document['paths'] if path.startswith('/auth') or path == '/me'}
         self.assertEqual(auth_paths, {
-            '/auth/github/login',
-            '/auth/github/callback',
             '/auth/refresh',
             '/auth/logout',
             '/me',
         })
-        self.assertEqual(set(document['components']['securitySchemes']), {
-            'AccessTokenCookie',
-            'RefreshTokenCookie',
-            'OAuthStateCookie',
-        })
+        self.assertEqual(document['paths']['/auth/refresh']['post']['operationId'], 'refreshToken')
+        self.assertIn('frontend/docs/api-spec.md', document['info']['description'])
+        self.assertNotIn('401', document['paths']['/auth/logout']['post']['responses'])
 
     def test_auth_and_frontend_contracts_coexist(self):
         document = module.load_yaml_document(module.CONTRACTS/'openapi.yaml')
         schemas = module.inline_refs(document, module.CONTRACTS)['components']['schemas']
         for path in ('/me/profile', '/me/home', '/me/interviews'):
             self.assertIn(path, document['paths'])
-        self.assertIn('details', schemas['ApiError']['properties']['error']['required'])
+        self.assertNotIn('details', schemas['ApiError']['properties']['error']['required'])
         self.assertIn('retryAfter', schemas['ApiError']['properties']['error']['properties'])
-        self.assertEqual(schemas['MeResponse']['properties']['avatarUrl']['type'], ['string', 'null'])
+        Draft202012Validator(schemas['MeResponse']).validate({
+            'name': 'User', 'avatarUrl': None, 'githubLinked': True,
+        })
         self.assertIn('extractStatus', schemas['DocumentPreviewResponse']['required'])
         self.assertIn('id', schemas['RepositoryCard']['required'])
         self.assertIn('skipped', schemas['StepStatus']['enum'])

@@ -22,8 +22,7 @@
       },
       "required": [
         "reason",
-        "message",
-        "details"
+        "message"
       ],
       "additionalProperties": true
     }

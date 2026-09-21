@@ -4,6 +4,8 @@
 
 현재 런타임은 **설치 가능한 docstring 스켈레톤**이다. 모듈 import와 패키지 경계 검사는 가능하지만 callable facade, Director·분석·평가·리포트 함수, 내부 DTO·Protocol, 실제 provider 연결은 아직 없다. import 성공을 기능 구현이나 서비스 연결 완료로 해석하지 않는다.
 
+Director 정의 작업에는 [계약 제안서](../spec/ai/designs/2026-09-21-director-contract-and-flow.md), 합성 사례 4쌍과 [개발용 검사기](scripts/review_director_contract.py)가 있다. `ai/`에서 `uv run --locked python scripts/review_director_contract.py`로 구조·참조·Controller 제약을 검토한다. AI-L02는 계속 Proposed이며 실제 모델·DB·WS 동작은 이 검사에 포함되지 않는다.
+
 ## 프로젝트 구조
 
 ```text
@@ -17,6 +19,9 @@ ai/
       repo_shallow.py, repo_deep.py, answer_analysis.py, report.py
   tests/
     test_package.py, test_import_boundaries.py
+    agents/director/test_director_contract_proposal.py
+  scripts/
+    review_director_contract.py
   evals/
     README.md, inputs/, expectations/
   docs/
@@ -30,7 +35,7 @@ ai/
     pipeline.md, layer-rules.md, testing.md
 ```
 
-배포명은 `devon-ai`, import 이름은 `devon_ai`다. `src/devon_ai/`만 런타임 패키지에 포함하고 테스트·평가자료는 배포물에서 제외한다. 임시 실행 결과는 Git 제외 경로인 `ai/report/`에 둔다. `evals/`에는 아직 실제 사례, 검수 정답, loader, harness가 없다.
+배포명은 `devon-ai`, import 이름은 `devon_ai`다. `src/devon_ai/`만 런타임 패키지에 포함하고 tests·evals·scripts는 배포물에서 제외한다. 임시 실행 결과는 Git 제외 경로인 `ai/report/`에 둔다. `evals/`에는 Director 합성 제안 사례가 있으며 실제 사용자 자료, 독립 검수 정답과 실제 모델 평가 harness는 아직 없다.
 
 ## 개발 문서
 

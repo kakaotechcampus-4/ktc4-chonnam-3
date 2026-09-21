@@ -1,0 +1,27 @@
+{
+  "case_id": "director-domain-etc",
+  "version": 1,
+  "candidate": {
+    "next_step": "ask",
+    "question": {
+      "persona": "domain_lead",
+      "text": "서비스의 대상 사용자가 아직 정해지지 않았다면, 사용 맥락을 확인하기 위해 어떤 관찰부터 하시겠어요?",
+      "question_contract": {
+        "purpose": "미확인 사용자 맥락의 확인 방법",
+        "required_points": [
+          {
+            "key": "focus",
+            "description": "가정한 상황에서 필요한 관찰"
+          }
+        ],
+        "assumptions": [
+          "대상 사용자가 아직 정해지지 않은 상황을 가정한다."
+        ],
+        "basis_refs": [],
+        "evaluation_scope": "가정한 상황에서 필요한 관찰"
+      }
+    }
+  },
+  "expected_stage": "valid",
+  "review_notes": "category 미확인에 대한 etc/가정형 질문 검수 후보. checker는 언어 품질이나 frame 선택을 판정하지 않는다. 독립 검수 전이며 출시 품질 분모에 포함하지 않는다."
+}

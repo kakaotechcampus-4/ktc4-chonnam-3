@@ -18,6 +18,7 @@ import type {
   ReportResponse,
   ReportGeneratingResponse,
 } from '@/types/api';
+import { isApiError } from '@/types/api';
 import { AUTH_LOCK_NAME, getAuthEpoch, publishAuthChange } from '@/shared/authEvents';
 
 // MSW 핸들러도 같은 API prefix를 사용한다.
@@ -28,7 +29,6 @@ const GITHUB_AUTH_REASONS = new Set(['token_invalid', 'github_token_invalid']);
 
 type RequestOptions = RequestInit & {
   anonymous?: boolean;
-  canRefresh?: boolean;
 };
 
 export class ApiRequestError extends Error implements ApiError {
@@ -69,21 +69,10 @@ function assertAuthEpoch(epoch: number) {
   if (epoch !== getAuthEpoch()) throw new StaleAuthRequestError();
 }
 
-function isErrorEnvelope(value: unknown): value is { error: ApiError['error'] } {
-  if (!value || typeof value !== 'object' || !('error' in value)) return false;
-  const error = (value as { error?: unknown }).error;
-  return Boolean(
-    error &&
-    typeof error === 'object' &&
-    typeof (error as { reason?: unknown }).reason === 'string' &&
-    typeof (error as { message?: unknown }).message === 'string',
-  );
-}
-
 async function responseError(response: Response) {
   try {
     const body: unknown = await response.json();
-    if (isErrorEnvelope(body)) {
+    if (isApiError(body)) {
       return new ApiRequestError(response.status, {
         reason: body.error.reason,
         message: body.error.message,
@@ -186,12 +175,11 @@ async function request<T>(
   options: RequestOptions = {},
   requestEpoch = getAuthEpoch(),
 ): Promise<T> {
-  const { anonymous = false, canRefresh = true, ...fetchOptions } = options;
+  const { anonymous = false, ...fetchOptions } = options;
   try {
     return await rawRequest<T>(path, fetchOptions, requestEpoch);
   } catch (error) {
     if (
-      canRefresh &&
       error instanceof ApiRequestError &&
       error.status === 401 &&
       REFRESHABLE_REASONS.has(error.error.reason)
@@ -200,11 +188,8 @@ async function request<T>(
         assertAuthEpoch(requestEpoch);
         await refreshAccess(error, requestEpoch);
         assertAuthEpoch(requestEpoch);
-        return await request<T>(
-          path,
-          { ...fetchOptions, anonymous, canRefresh: false },
-          requestEpoch,
-        );
+        // 재시도는 직접 요청으로 끝내 갱신 재진입과 인증 종료 이벤트의 중복 발행을 막는다.
+        return await rawRequest<T>(path, fetchOptions, requestEpoch);
       } catch (refreshError) {
         if (refreshError instanceof ApiRequestError) invalidate(refreshError, anonymous);
         throw refreshError;

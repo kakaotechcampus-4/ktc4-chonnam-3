@@ -1,0 +1,57 @@
+{
+  "case_id": "director-bounded-retrieval",
+  "version": 1,
+  "source_group": "director-synthetic-demo-v1",
+  "split": "development",
+  "payload": {
+    "controller": {
+      "questions_asked": 1,
+      "answers_completed": 1,
+      "question_allowed": true,
+      "completion_allowed": false,
+      "allowed_personas": [
+        "tech_lead",
+        "domain_lead",
+        "hr_manager"
+      ],
+      "repositories": {
+        "repo-demo": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "evidence": {
+        "e-demo": {
+          "repository_id": "repo-demo",
+          "git_ref": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "tool_requests": {
+        "read-main": {
+          "tool_name": "read_file",
+          "repository_id": "repo-demo",
+          "git_ref": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "src/main.py"
+        }
+      },
+      "tool_calls_remaining": 1
+    },
+    "context": {
+      "history": [
+        {
+          "question": "프로젝트에서 본인이 맡은 역할을 소개해 주세요.",
+          "answer": "요청 처리를 담당했지만 잠금 방식은 정확히 기억나지 않습니다."
+        }
+      ],
+      "answer_analysis": {
+        "status": "synthetic_review_only",
+        "missing_points": [
+          "잠금 구현과 선택 근거"
+        ],
+        "verification_reason": "기존 근거 부족·후속 판단 영향·허용 고정 SHA에서 확인 가능이라는 세 조건을 가정한 합성 사례."
+      },
+      "limitations": [
+        "합성 자료. 준비 성공과 실제 사용자 권한은 이 사례로 검증하지 않는다."
+      ],
+      "domain_category": null,
+      "domain_frames": []
+    }
+  }
+}

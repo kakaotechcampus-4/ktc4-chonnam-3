@@ -17,7 +17,8 @@ export default function Home() {
   const homeQuery = useQuery({
     queryKey: queryKeys.home,
     queryFn: api.getHome,
-    refetchInterval: (query) => (query.state.data?.analysisStatus === 'syncing' ? 3000 : false),
+    refetchInterval: (query) =>
+      query.state.data?.analysisStatus === 'syncing' ? 3000 : false,
   });
 
   const home = homeQuery.data;

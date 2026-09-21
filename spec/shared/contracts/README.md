@@ -8,14 +8,13 @@
 - 공통 오류 envelope: `api-error.schema.json`
 - 변경/보류 추적: `migration.md`
 
-실시간 통신의 상세 메시지 계약은 `frontend/docs/api-spec.md`를 함께 따른다(`openapi.yaml`의 `info.description` 참고).
+다음 세 가지는 `frontend/docs/api-spec.md`에서 별도로 정의한다(`openapi.yaml`의 `info.description` 참고).
 
 | 대상 | 경로 | api-spec.md 번호 |
 | --- | --- | --- |
 | WebSocket 업그레이드 | `/ws/interviews/{sessionId}` | #18 |
 | SSE 스트림 | `/analysis-runs/{runId}/events` | #13 |
-
-구현된 브라우저 이동 경로 `/auth/github/login`, `/auth/github/callback`은 OpenAPI가 원본이다. `/auth/github/link*`는 후속 범위이며, FE 문서의 #7·#8 설명만으로 구현 완료나 계약 승인을 뜻하지 않는다.
+| 브라우저 이동 경로 | `/auth/github/login`, `/auth/github/callback`, `/auth/github/link`, `/auth/github/link/callback` | #1 · #2 · #7 · #8 |
 
 이 범위 밖에서 FE 문서와 backend docs가 이 계약과 충돌하면 `openapi.yaml`을 우선한다. 단, `PENDING_FE`, `PENDING_AI`, `PENDING_TEAM`으로 표시된 항목은 구현자가 임의 확정하지 않는다.
 
@@ -38,14 +37,7 @@
 - `reason`은 FE 분기용 stable string이다.
 - 내부 job/LLM 실패는 DB `error_code`에 남기고 API 표면에서는 flow별 reason으로 매핑한다.
 
-## 인증 계약
-
-- 현재 인증 API는 `/api/auth/github/login`, `/api/auth/github/callback`, `/api/auth/refresh`, `/api/auth/logout`, `/api/me` 다섯 개다.
-- DEVON access/refresh JWT는 HttpOnly cookie로만 전달하며 body나 브라우저 저장소에 노출하지 않는다.
-- `/api/me`는 `name`, nullable `avatarUrl`, `githubLinked`를 항상 반환한다. `githubLinked`는 GitHub account가 있고 `token_status=valid`이며 access 또는 refresh가 사용 가능할 때 true다. 기존 비만료 token은 valid이면 true다. 이 판정은 DB만 읽으며 GitHub API 호출·갱신을 실행하지 않는다.
-- GitHub token의 갱신·폐기는 BE 내부에서 처리하며 DEVON JWT session과 별개다. GitHub token·만료 시각을 응답에 추가하거나 새 공개 갱신 경로를 만들지 않는다.
-- refresh/logout은 `Origin`이 정확한 `FRONTEND_ORIGIN`과 같아야 한다. PostgreSQL만 Refresh 유효·폐기의 원본이며 DB 장애를 성공으로 숨기지 않는다. Redis 장애는 OAuth state에 영향을 주지만 기존 session의 refresh/logout에는 영향을 주지 않는다.
-- 상세 보안·저장 결정은 [0002 GitHub OAuth와 DEVON 세션](../decisions/0002-github-oauth.md)을 따른다.
+인증의 저장·보안 결정은 [0002 GitHub OAuth와 DEVON 세션](../decisions/0002-github-oauth.md)을 따른다. `/auth/github/link*`와 초기 저장소 동기화는 현재 로그인 구현에 포함하지 않는다. 오류의 `details`는 선택 필드이며 현재 인증 서버는 빈 객체라도 반환한다.
 
 ## 보류 표시
 

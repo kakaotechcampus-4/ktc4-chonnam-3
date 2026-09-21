@@ -48,7 +48,7 @@ GitHub token 응답, refresh 요청, rotation과 만료 규칙의 근거는 [Git
 
 ## 영향
 
-정확한 wire shape는 [OpenAPI](../contracts/openapi.yaml), DB column은 [backend DB 문서](../../../backend/docs/db-schema.md), Redis key는 [backend Redis 문서](../../../backend/docs/redis-keys.md)를 따른다. FE는 token을 읽지 않고 인증 오류의 HTTP status와 reason을 함께 보존한다. GitHub App/환경 변수 설정은 [backend README](../../../backend/README.md)에 둔다.
+fetch API의 wire shape는 [OpenAPI](../contracts/openapi.yaml), 로그인·콜백의 브라우저 이동은 기존 [FE API 문서](../../../frontend/docs/api-spec.md)를 따른다. 공통 오류의 `details`는 기존 선택 필드 계약을 유지하며, 현재 인증 API는 항상 객체를 반환한다. DB column은 [backend DB 문서](../../../backend/docs/db-schema.md), Redis key는 [backend Redis 문서](../../../backend/docs/redis-keys.md)를 따른다. FE는 token을 읽지 않고 인증 오류의 HTTP status와 reason을 함께 보존한다. GitHub App/환경 변수 설정은 [backend README](../../../backend/README.md)에 둔다.
 
 ## 대체 관계
 

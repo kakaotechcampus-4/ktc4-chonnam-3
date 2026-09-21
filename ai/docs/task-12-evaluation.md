@@ -1,6 +1,6 @@
 # task-12 - 평가 체계 준비
 
-상태: 구현 가이드. 현재 실제 평가자료와 loader·harness·채점기는 미구현이다.
+상태: 구현 가이드. Director 합성 제안의 전용 loader·검사기는 있으며 실제 평가자료·모델 평가 harness·채점기는 미구현이다.
 
 ## 목표
 
@@ -8,9 +8,9 @@
 경계를 구현한다. 이 가이드 작성만으로 실제 사용자 자료나 holdout 정답을 추가하거나 현재
 AI 기능의 품질 통과를 선언하지 않는다.
 
-현재 loader·harness 파일은 없지만, 향후 구현에서는 합성·비식별 fixture와 후보 로컬
-loader·harness로 분리·누출·채점기 검사를 먼저 만들 수 있다. 운영 자료와 수치 출시 기준은
-별도 결정까지 보류한다.
+현재 [Director 제안 검사기](../scripts/review_director_contract.py)는 합성 JSON 쌍과
+구조·참조·공급된 Controller 제약만 검사한다. 전체 평가 loader/harness와 모델 호출의
+입력 격리·채점기 신뢰성은 별도 구현 대상이다. 운영 자료와 수치 출시 기준은 별도 결정까지 보류한다.
 
 전체 순서는 [AI 구현 파이프라인](pipeline.md)을 따른다. 기능별 policy fixture가 준비된 뒤
 진행하며 [task-08 근거 도구](task-08-evidence-tools.md),

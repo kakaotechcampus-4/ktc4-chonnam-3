@@ -1,6 +1,6 @@
 # auth
 
-상태: Sprint 1 FIX. 공통 원본은 `spec/shared/contracts/openapi.yaml`과 `spec/shared/decisions/0002-github-oauth.md`다.
+상태: Sprint 1 FIX. fetch API는 `spec/shared/contracts/openapi.yaml`, 로그인·콜백은 기존 `frontend/docs/api-spec.md`, 인증 정책은 `spec/shared/decisions/0002-github-oauth.md`를 따른다.
 
 ## 목표 + 화면 구성
 
@@ -79,6 +79,8 @@ GET /me 또는 보호 요청
 
 ### 에러 reason 분기
 
+아래 4xx/5xx는 일반 API 응답 코드다. OAuth 콜백에서 발생한 실패는 정지·탈퇴·서비스 장애·내부 오류를 포함해 모두 `302 /login?error=<reason>`으로 전달하며, 로그인 화면은 query의 `error`로 안내를 구분한다.
+
 | reason | 코드 | 처리 |
 | --- | --- | --- |
 | `unauthenticated` | 401 | `/login` |
@@ -87,9 +89,9 @@ GET /me 또는 보호 요청
 | `refresh_token_invalid` | 401 | clear → `/login` |
 | `account_suspended` | 403 | 정지 안내 |
 | `account_withdrawn` | 403 | 재가입 불가 안내 |
-| `invalid_state` / `invalid_code` | 400 | 로그인 재시도 안내 |
+| `invalid_state` / `invalid_code` | 302 redirect | 로그인 재시도 안내 |
 | `invalid_origin` | 403 | 요청 중단 후 로그인 상태 확인 |
-| `provider_unavailable` | OAuth redirect | GitHub 장애 안내 |
+| `provider_unavailable` | 302 redirect | GitHub 장애 안내 |
 | `service_unavailable` | 503 | auth 상태 유지, 재시도 |
 | `internal_error` | 500 | auth 상태 유지, 재시도 |
 

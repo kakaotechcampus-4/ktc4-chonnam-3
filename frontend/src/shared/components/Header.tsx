@@ -26,14 +26,10 @@ export default function Header({ active, githubLinked, name, avatarUrl }: Header
   return (
     <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line-soft bg-surface px-4 py-3 sm:px-6">
       <div className="flex min-w-0 items-center gap-3 sm:gap-8">
-        <Link to="/home" className="shrink-0 text-lg font-bold">
-          DEVON
-        </Link>
+        <span className="shrink-0 text-lg font-bold">DEVON</span>
         <nav className="flex items-center gap-1 text-sm" aria-label="주요 메뉴">
           {active === 'home' ? (
-            <span className="rounded-full bg-accent-soft px-3 py-1.5 font-medium text-accent">
-              홈
-            </span>
+            <span className="rounded-full bg-accent-soft px-3 py-1.5 font-medium text-accent">홈</span>
           ) : (
             <Link to="/home" className="rounded-full px-3 py-1.5 text-muted hover:bg-paper">
               홈
@@ -44,10 +40,7 @@ export default function Header({ active, githubLinked, name, avatarUrl }: Header
               모의면접
             </span>
           ) : (
-            <Link
-              to="/interview/new"
-              className="rounded-full px-3 py-1.5 text-muted hover:bg-paper"
-            >
+            <Link to="/interview/new" className="rounded-full px-3 py-1.5 text-muted hover:bg-paper">
               모의면접
             </Link>
           )}

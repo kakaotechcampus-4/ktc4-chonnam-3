@@ -21,10 +21,7 @@ export function errorResponse(
   message: string,
   extra?: { details?: Record<string, unknown>; retryAfter?: number },
 ) {
-  return HttpResponse.json<ApiErrorBody>(
-    { error: { reason, message, ...extra, details: extra?.details ?? {} } },
-    { status },
-  );
+  return HttpResponse.json<ApiErrorBody>({ error: { reason, message, ...extra } }, { status });
 }
 
 /**

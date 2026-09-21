@@ -4,10 +4,11 @@ info:
   version: 1.0.0-sprint1
   description: >-
     Sprint 1 FE/BE API contract source, aligned with frontend/docs/api-spec.md.
-    Fetch-based endpoints and the implemented GitHub login/callback redirects
-    are specified here. The SSE stream (GET /analysis-runs/{runId}/events) and
-    WebSocket upgrade (/ws/interviews/{sessionId}) have detailed wire contracts
-    in frontend/docs/api-spec.md. GitHub link endpoints remain follow-up work.
+    Only fetch-based endpoints appear here. Browser-navigation endpoints
+    (GET /auth/github/login, /auth/github/callback, /auth/github/link,
+    /auth/github/link/callback), the SSE stream (GET /analysis-runs/{runId}/events)
+    and the WebSocket upgrade (/ws/interviews/{sessionId}) are documented separately
+    in frontend/docs/api-spec.md.
     PENDING_FE items are explicit and must not be guessed by implementers.
 servers:
   - url: /api
@@ -15,80 +16,19 @@ x-contract-status: sprint1-fix
 x-pending:
   - documentId is singular while the job-input screen has two uploaders (PENDING_TEAM)
 paths:
-  /auth/github/login:
-    get:
-      operationId: startGitHubLogin
-      summary: Start GitHub OAuth login
-      responses:
-        '302':
-          description: Redirect to GitHub after storing a browser-bound, single-use OAuth state
-          headers:
-            Location:
-              required: true
-              schema:
-                type: string
-                format: uri
-            Set-Cookie:
-              description: HttpOnly oauthState cookie scoped to /api/auth/github
-              schema:
-                type: string
-        '503':
-          $ref: '#/components/responses/Error'
-        '500':
-          $ref: '#/components/responses/Error'
-  /auth/github/callback:
-    get:
-      operationId: completeGitHubLogin
-      summary: Complete GitHub OAuth login
-      description: Redirects to /home on success or /login?error=<safe_reason> on failure. Codes and tokens never appear in the final URL.
-      security:
-        - OAuthStateCookie: []
-        - {}
-      parameters:
-        - name: code
-          in: query
-          schema:
-            type: string
-        - name: state
-          in: query
-          schema:
-            type: string
-        - name: error
-          in: query
-          description: GitHub denial is mapped to the safe frontend reason denied.
-          schema:
-            type: string
-      responses:
-        '302':
-          description: Browser redirect after success or any safely mapped OAuth failure
-          headers:
-            Location:
-              required: true
-              schema:
-                type: string
-                format: uri-reference
-            Set-Cookie:
-              description: On success, sets DEVON cookies and clears oauthState; on failure, clears oauthState.
-              schema:
-                type: string
   /auth/refresh:
     post:
-      operationId: refreshSession
-      summary: Atomically rotate the DEVON refresh session
-      description: PostgreSQL is the sole refresh authority. Rotation updates the current identifier and sliding 14-day expiry in one transaction. Same-generation replay commits user-wide refresh revocation before returning 401. Missing, expired, or stale-generation sessions are rejected without invalidating newer logins. Redis is not used by this endpoint.
-      security:
-        - RefreshTokenCookie: []
-      parameters:
-        - $ref: '#/components/parameters/FrontendOrigin'
+      operationId: refreshToken
+      summary: Rotate the refresh token and issue a new access token
+      description: >-
+        Called by the 401 interceptor as a single-flight request. This endpoint is
+        itself excluded from the interceptor. Requires the refreshToken cookie
+        and an Origin matching FRONTEND_ORIGIN.
       responses:
         '204':
-          description: Tokens rotated; response has no body
+          description: New cookies set
         '401':
-          description: Missing, expired, invalid, or replayed refresh token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiError'
+          $ref: '#/components/responses/Error'
         '403':
           $ref: '#/components/responses/Error'
         '503':
@@ -98,16 +38,14 @@ paths:
   /auth/logout:
     post:
       operationId: logout
-      summary: Revoke the current refresh session and clear auth cookies
-      description: Deletes only the matching PostgreSQL session, including after its identifier rotated. A missing or invalid refresh cookie only clears cookies idempotently. Database failure for a valid token is service_unavailable without clearing cookies, never a successful revocation. Redis is not used. Issued access JWTs remain valid for up to 15 minutes.
-      security:
-        - RefreshTokenCookie: []
-        - {}
-      parameters:
-        - $ref: '#/components/parameters/FrontendOrigin'
+      summary: Clear auth cookies and revoke the refresh token
+      description: >-
+        Requires an Origin matching FRONTEND_ORIGIN. Missing or invalid refresh
+        cookies are cleared idempotently. On a session-store failure, returns 503
+        without clearing cookies. Issued access tokens remain valid until expiry.
       responses:
         '204':
-          description: Current session revoked when present; auth cookies cleared; response has no body
+          description: Logged out
         '403':
           $ref: '#/components/responses/Error'
         '503':
@@ -117,12 +55,10 @@ paths:
   /me:
     get:
       operationId: getMe
-      summary: Get the authenticated DEVON identity
-      security:
-        - AccessTokenCookie: []
+      summary: Minimal identity for the global header
       responses:
         '200':
-          description: Current user identity and usable GitHub-link status
+          description: Current user
           content:
             application/json:
               schema:
@@ -433,31 +369,7 @@ paths:
         '409':
           $ref: '#/components/responses/Error'
 components:
-  securitySchemes:
-    AccessTokenCookie:
-      type: apiKey
-      in: cookie
-      name: accessToken
-      description: HttpOnly SameSite=Lax DEVON access JWT; Path=/; 15-minute lifetime.
-    RefreshTokenCookie:
-      type: apiKey
-      in: cookie
-      name: refreshToken
-      description: HttpOnly SameSite=Lax DEVON refresh JWT; Path=/api/auth; 14-day rotating lifetime.
-    OAuthStateCookie:
-      type: apiKey
-      in: cookie
-      name: oauthState
-      description: HttpOnly SameSite=Lax browser binding; Path=/api/auth/github; 10-minute lifetime.
   parameters:
-    FrontendOrigin:
-      name: Origin
-      in: header
-      required: true
-      description: Must exactly equal the configured FRONTEND_ORIGIN.
-      schema:
-        type: string
-        format: uri
     RunId:
       name: runId
       in: path
@@ -479,7 +391,24 @@ components:
             $ref: '#/components/schemas/ApiError'
   schemas:
     ApiError:
-      $ref: './api-error.schema.json'
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [reason, message]
+          properties:
+            reason:
+              type: string
+              description: Stable snake_case string the client branches on.
+            message:
+              type: string
+            retryAfter:
+              type: integer
+              description: Optional. Distinct from the top-level retryAfter of 202 bodies.
+            details:
+              type: object
+              additionalProperties: true
 
     AnalysisStatus:
       type: string
@@ -544,7 +473,15 @@ components:
           type: number
 
     MeResponse:
-      $ref: './me-response.schema.json'
+      type: object
+      required: [name, avatarUrl, githubLinked]
+      properties:
+        name:
+          type: string
+        avatarUrl:
+          type: [string, 'null']
+        githubLinked:
+          type: boolean
 
     MeProfileResponse:
       type: object

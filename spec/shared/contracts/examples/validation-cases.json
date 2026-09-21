@@ -76,7 +76,7 @@
   {
     "name": "error-missing-details",
     "schema": "api-error.schema.json",
-    "valid": false,
+    "valid": true,
     "data": {
       "error": {
         "reason": "internal_error",

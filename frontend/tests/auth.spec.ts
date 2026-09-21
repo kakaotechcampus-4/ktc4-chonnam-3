@@ -269,6 +269,19 @@ test('blocked accounts are cleared and shown a stable explanation', async ({ pag
 test('an unsuccessful replay does not start a second refresh loop', async ({ page }) => {
   let refreshRequests = 0;
   let meRequests = 0;
+  let terminalEvents = 0;
+  await page.exposeFunction('recordTerminalAuthChange', () => {
+    terminalEvents += 1;
+  });
+  await page.addInitScript(() => {
+    window.addEventListener('devon:auth-change', (event) => {
+      if ((event as CustomEvent<{ redirect: boolean }>).detail.redirect) {
+        void (
+          window as Window & { recordTerminalAuthChange: () => Promise<void> }
+        ).recordTerminalAuthChange();
+      }
+    });
+  });
   await page.route('**/api/me', async (route) => {
     meRequests += 1;
     await route.fulfill(apiError('access_token_expired', 401));
@@ -281,8 +294,12 @@ test('an unsuccessful replay does not start a second refresh loop', async ({ pag
   await page.goto('/home');
 
   await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole('heading', { name: 'DEVON' })).toBeVisible();
+  // URL만 바뀐 시점에는 새 로그인 화면의 자동 갱신이 아직 시작되지 않을 수 있다.
+  await page.waitForLoadState('networkidle');
   expect(refreshRequests).toBe(1);
   expect(meRequests).toBe(3);
+  expect(terminalEvents).toBe(1);
 });
 
 test('logout requires confirmation and sends one coordinated request', async ({ page }) => {
@@ -456,6 +473,72 @@ test('an expired GitHub connection does not revoke the DEVON login', async ({ pa
   await expect(page).toHaveURL(/\/home$/);
   await expect(page.getByRole('heading', { name: '안녕하세요, 김개발 님!' })).toBeVisible();
   expect(refreshRequests).toBe(0);
+});
+
+test('a direct login visit still restores an expired access cookie', async ({ page }) => {
+  let authenticated = false;
+  let refreshRequests = 0;
+  await page.route('**/api/me', (route) => route.fulfill(
+    authenticated
+      ? { status: 200, json: me }
+      : apiError('access_token_expired', 401),
+  ));
+  await page.route('**/api/auth/refresh', (route) => {
+    refreshRequests += 1;
+    authenticated = true;
+    return route.fulfill({ status: 204 });
+  });
+
+  await page.goto('/login');
+  await expect(page).toHaveURL(/\/home$/);
+  await expect(page.getByRole('heading', { name: '안녕하세요, 김개발 님!' })).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  expect(refreshRequests).toBe(1);
+});
+
+test('browser back cannot restore a logged-out page or restart refresh', async ({ page }) => {
+  let loggedOut = false;
+  let refreshRequests = 0;
+  await page.route('**/api/me', (route) => route.fulfill(
+    loggedOut ? apiError('access_token_invalid', 401) : { status: 200, json: me },
+  ));
+  await page.route('**/api/auth/logout', (route) => {
+    loggedOut = true;
+    return route.fulfill({ status: 204 });
+  });
+  await page.route('**/api/auth/refresh', (route) => {
+    refreshRequests += 1;
+    return route.fulfill(apiError('refresh_token_invalid', 401));
+  });
+  await page.goto('/home');
+  await page.getByRole('link', { name: '내 계정' }).click();
+  await page.getByRole('button', { name: '로그아웃', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: '로그아웃', exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole('link', { name: 'GitHub로 계속하기' })).toBeVisible();
+  await expect(page.getByText('김개발', { exact: true })).toHaveCount(0);
+  await page.waitForLoadState('networkidle');
+  expect(refreshRequests).toBe(0);
+});
+
+test('the logout dialog keeps the existing theme and native keyboard behavior', async ({ page }, testInfo) => {
+  await mockAuthenticated(page);
+  await page.goto('/mypage');
+  const logoutButton = page.getByRole('button', { name: '로그아웃', exact: true });
+  await logoutButton.click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toHaveCSS('border-radius', '10px');
+  await expect(dialog.getByRole('button', { name: '취소' })).toBeFocused();
+  await page.screenshot({ path: testInfo.outputPath('logout-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: testInfo.outputPath('logout-mobile.png'), fullPage: true });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  await expect(logoutButton).toBeFocused();
 });
 
 test.afterEach(async ({ context }) => {

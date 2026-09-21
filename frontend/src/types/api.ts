@@ -34,7 +34,7 @@ export type ApiErrorBody = {
     reason: string;
     message: string;
     retryAfter?: number;
-    details: Record<string, unknown>;
+    details?: Record<string, unknown>;
   };
 };
 

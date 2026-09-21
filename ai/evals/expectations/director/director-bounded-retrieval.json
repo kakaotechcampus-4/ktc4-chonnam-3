@@ -1,0 +1,12 @@
+{
+  "case_id": "director-bounded-retrieval",
+  "version": 1,
+  "candidate": {
+    "next_step": "retrieve",
+    "tool_requests": [
+      "read-main"
+    ]
+  },
+  "expected_stage": "valid",
+  "review_notes": "Tool ID는 BE가 사전 검증해 공급한 요청만 가리킨다. budget=1은 사례 값이며 운영 상한이나 실제 조회 성공이 아니다. 독립 검수 전이며 출시 품질 분모에 포함하지 않는다."
+}

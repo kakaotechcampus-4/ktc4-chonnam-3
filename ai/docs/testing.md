@@ -6,7 +6,7 @@
 
 모든 검사는 `통과`, `실패`, `보류`, `미실행`, `범위 밖`으로 구분한다. 빈 테스트 수집, import 성공, README 명령 예시, 정적 형식 검사만으로 AI 기능·모델 품질·서비스 흐름이 통과했다고 기록하지 않는다.
 
-현재 작성된 테스트는 패키지 구조·설치 경계를 대상으로 한다. callable facade와 실제 Director·task·모델 호출이 없으므로 DB·Redis·API·worker·실제 모델 평가는 별도 근거가 없는 한 미실행이다.
+현재 작성된 테스트는 패키지 구조·설치 경계와 개발용 Director 제안 검사기를 대상으로 한다. callable facade와 실제 Director·task·모델 호출이 없으므로 DB·Redis·API·worker·실제 모델 평가는 별도 근거가 없는 한 미실행이다.
 
 ## 기능별 검증 위치
 
@@ -30,6 +30,18 @@
 | [13 BE 연결](task-13-backend-integration.md) | `backend/tests/agents/test_ai_integration.py`, 해당 `backend/tests/features/` | AI 결과 수용·저장·큐·전송·복구; 설치 smoke와 별도 |
 
 제안 fixture는 검토 중인 schema를 production 계약으로 확정하는 수단이 아니다. fixture 검토와 정책 단위 검사는 미합의 BE 연결과 독립적으로 준비할 수 있지만, 실제 DTO·저장·공개 응답을 검사하는 테스트는 해당 계약의 채택 근거를 확인한다. 실제 모델 실행에서는 동일 사례라도 mock 검사와 별도 결과를 기록한다.
+
+## 현재 실행 가능한 Director 정의 검사
+
+[계약 제안서](../../spec/ai/designs/2026-09-21-director-contract-and-flow.md)의 개발용 [검사기](../scripts/review_director_contract.py)와 [테스트](../tests/agents/director/test_director_contract_proposal.py)는 위 표의 예정 production 테스트와 별개다. `ai/`에서 실행한다.
+
+```text
+uv run --locked python scripts/review_director_contract.py
+uv run --locked pytest tests/agents/director/test_director_contract_proposal.py
+uv run --locked mypy scripts/review_director_contract.py
+```
+
+실제 검사 범위는 엄격한 JSON/제안 구조, 입력·기대 쌍, 허용 Persona·Evidence/Tool 참조·고정 SHA·조회 budget과 Controller가 공급한 Turn/종료 제약이다. runtime 타입 채택, BE quota/권한/상태 재확인, 자연어 rewrite/replan/failure 판별과 provider 재시도는 구현·검증하지 않는다. 입력/기대 분리는 로컬 자료 경계 검사이며 실제 모델 호출의 누출 방지 검증은 아직 없다.
 
 ## AI 패키지 검사
 
@@ -90,7 +102,7 @@ BE smoke test는 editable 설치와 실제 `devon_ai` package 경로를 확인�
 
 평가자료·실행 체계를 구현할 때는 [task-12](task-12-evaluation.md)의 단계별 작업과 결정 대기 조건을 적용한다. 이 문서는 공통 실행 안내이며 실제 dataset과 평가 harness의 존재를 선언하지 않는다.
 
-`evals/inputs/`와 `evals/expectations/`는 작업 위치만 준비되어 있으며 실제 JSON, dataset, 운영 schema, loader, harness는 아직 없다. 향후 합성 로컬 JSON은 같은 `case_id`와 `version`의 입력/기대 쌍으로 읽고 mismatch, duplicate, orphan을 거부한다. 모델에는 입력 파일의 실행 payload만 보내며 식별·분류·split·source group 제어 정보와 기대값·검수·control 정보는 prompt, retrieval query, tool input에서 제외한다. 같은 원본의 파생 사례는 같은 source group으로 유지하고 development와 holdout에 나누지 않는다.
+`evals/inputs/director/`와 `evals/expectations/director/`에는 합성 제안 4쌍과 전용 로컬 검사기가 있다. 운영 dataset/schema, 독립 검수 정답과 실제 모델 평가 harness는 아직 없다. 같은 `case_id`와 `version`으로 짝을 읽고 mismatch, duplicate, orphan과 source group의 split 혼합을 거부한다. 향후 모델에는 입력 파일의 실행 payload만 보내며 식별·분류·split·source group 제어 정보와 기대값·검수·control 정보는 prompt, retrieval query, tool input에서 제외한다. 같은 원본의 파생 사례는 같은 source group으로 유지하고 development와 holdout에 나누지 않는다.
 
 검수자 불일치는 양쪽 근거를 가진 `pending`으로 보존한다. 전체 사례 수·coverage와 독립 검수가 끝난 판정 가능 사례의 품질 분모를 구분하고 제외 수와 이유를 함께 보고한다. grader는 허용·금지·모호·유효하지 않은 참조·tool 실패 control에서 false accept와 false reject를 종류별로 확인한다. 실제 검수자와 조정 결과, control 사례, 수치 기준은 아직 정하지 않았다.
 

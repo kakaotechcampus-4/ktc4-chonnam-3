@@ -3,7 +3,7 @@
 > 필드: camelCase · URL: kebab-case · 에러 reason·enum: snake_case
 >
 
-공통 API 원본은 `spec/shared/contracts/openapi.yaml`이다. 이번 인증 구현 범위는 login, callback, refresh, logout, `/me` 다섯 개이며 link와 initial sync는 후속 범위다. dashboard/profile API 계약은 OpenAPI를 따르지만 이번 인증 백엔드 구현에 포함되지는 않는다. 브라우저의 실제 public 경로에는 `/api` prefix가 붙는다.
+fetch API는 `spec/shared/contracts/openapi.yaml`, 브라우저 이동은 이 문서를 따른다. 실제 요청 경로에는 `/api` prefix가 붙는다. 이번 인증 구현은 1~5이며, 재연동·초기 저장소 동기화·dashboard/profile API 구현은 별도 범위다.
 
 각 엔드포인트는 **Endpoint / Request / Response / UI states / Failure** 5단 구조로 기술한다. `UI states`는 이 API가 어느 화면에서 어떻게 쓰이는지(분기·배지·버튼 노출), `Failure`는 실패 응답 코드·reason만 담는다.
 
@@ -38,7 +38,7 @@ Access Token 클레임
 { "iss": "devon", "aud": "devon-api", "type": "access", "sub": "user-uuid", "iat": 1757300000, "exp": 1757300900, "jti": "at_9f2c1b" }
 ```
 
-리프레시 JWT에는 위 claim과 `type=refresh`, `sid`, `generation`이 있다. PostgreSQL의 `users.refresh_generation`과 `auth_sessions`가 유효·폐기의 유일한 원본이며 현재 `refresh_jti`와 만료 시각을 갱신 트랜잭션에서 교체한다. raw JWT는 저장하지 않는다. 같은 generation의 유효 session에서 이전 `jti` 재사용은 기존 모든 Refresh를 무효화하지만 이미 무효인 generation이나 누락·만료 session은 새 로그인을 폐기하지 않는다. Redis는 OAuth state에만 사용하며 Refresh 이중 기록·fallback은 없다.
+리프레시 토큰은 서버 DB에서 갱신·폐기 기록을 관리하며 갱신 시 로테이션한다. 저장·재사용 탐지 기준은 [인증 결정](../../spec/shared/decisions/0002-github-oauth.md)을 따른다. 프론트는 HttpOnly 토큰을 직접 읽거나 저장하지 않는다.
 
 GitHub 토큰(`github_accounts.access_token_encrypted`)은 JWT에 담지 않는다. 서버가 조회한다.
 
@@ -79,15 +79,14 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
 {
   "error": {
     "reason": "github_token_invalid",
-    "message": "로그인이 필요합니다.",
-    "details": {},
+    "message": "GitHub 재연동이 필요해요.",
     "retryAfter": 30
   }
 }
 ```
 
 `reason`은 종류가 많으므로 union으로 고정하지 않고 `string`으로 둔다.
-`details`는 빈 객체여도 항상 존재하고 `retryAfter`는 optional이다. 클라이언트는 HTTP status를 보존한다.
+`retryAfter`와 `details`는 optional이다. 현재 인증 서버는 `details`를 항상 반환하지만 클라이언트는 누락된 응답도 허용한다.
 
 > `error.retryAfter`(4xx·5xx 공통 에러 객체)와, `202 Accepted` 응답 본문의 최상위 `retryAfter`(#19 · #22)는 위치가 다르다. 타입 정의 시 혼동하지 않는다.
 >
@@ -98,12 +97,13 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
 
 | reason | 코드 | 의미 | 프론트 처리 |
 | --- | --- | --- | --- |
-| `unauthenticated` | 401 | `accessToken` 쿠키 없음 | `/login` 이동 |
+| `unauthenticated` | 401 | `accessToken` 쿠키 없음 | `/auth/refresh` 1회 → 실패 시 `/login` |
 | `access_token_expired` | 401 | 서명 유효, `exp` 초과 | `/auth/refresh` 1회 → 원 요청 재시도 |
 | `access_token_invalid` | 401 | 서명 불일치·변조 | 전체 clear → `/login` |
 | `refresh_token_invalid` | 401 | 리프레시 누락·만료·변조·재사용 | 전체 clear → `/login` |
 | `account_suspended` | 403 | `users.status = 'suspended'` | 정지 안내 |
 | `account_withdrawn` | 403 | `users.status = 'withdrawn'` | 재가입 불가 안내 |
+| `github_token_invalid` | 403 | GitHub API 연결이 유효하지 않음 | GitHub 재연동 유도(후속) |
 | `invalid_origin` | 403 | refresh/logout Origin 불일치 또는 누락 | 요청 중단 |
 | `service_unavailable` | 503 | DB 장애; 새 OAuth 시작·완료에는 Redis도 필요 | auth 상태 유지, 재시도 |
 | `internal_error` | 500 | 내부 오류 | auth 상태 유지, 재시도 |
@@ -138,6 +138,11 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
 | 3 | POST | `/auth/refresh` | fetch |
 | 4 | POST | `/auth/logout` | fetch |
 | 5 | GET | `/me` | fetch |
+| 6 | GET | `/me/profile` | fetch |
+| 7 | GET | `/auth/github/link` | 브라우저 이동 |
+| 8 | GET | `/auth/github/link/callback` | 프론트 무관 |
+| 9 | GET | `/me/home` | fetch |
+| 10 | GET | `/me/interviews` | fetch |
 | 11 | POST | `/documents/preview` | fetch (multipart) |
 | 12 | POST | `/analysis-runs` | fetch |
 | 13 | GET | `/analysis-runs/{runId}/events` | EventSource |
@@ -151,12 +156,12 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
 | 20 | POST | `/interviews/{id}/retry` | fetch |
 | 21 | POST | `/interviews/{id}/feedback-disagreements` | fetch |
 
-번호는 아래 "최종 엔드포인트 목록"·`shared/queryKeys.ts` 참조 번호와 같다. 22번은 `analysis-runs` 계열끼리 묶어 읽도록 15번 뒤에 배치했다. 이번 인증 구현은 1~5이며, 전체 번호가 구현 완료를 뜻하지 않는다. 현재 API 계약은 OpenAPI를 따른다.
+총 22개. 번호는 아래 "최종 엔드포인트 목록"·`shared/queryKeys.ts` 참조 번호와 같다. 22번은 `analysis-runs` 계열끼리 묶어 읽도록 15번 뒤에 배치했다.
 
 > 브라우저 이동 경로는 `shared/api.ts`에 넣지 않는다. `<a href>` 또는 `window.location`으로 처리한다.
 >
 
-> `sessionId`·`session_limit_exceeded`·`already_connected`의 "세션"은 면접 관련 식별자·상태를 뜻하며 인증용 `auth_sessions` 및 Refresh JWT의 `sid`와 구분한다. REST/route는 `interviewId`, WS는 `/api/ws/interviews/{sessionId}`를 사용한다.
+> `sessionId`·`session_limit_exceeded`·`already_connected`의 "세션"은 면접 세션(`interview_sessions`)을 뜻한다. 로그인 유지용 `auth_sessions`와 구분한다.
 
 ---
 
@@ -225,7 +230,7 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/api/auth/github
 Location: /login?error=denied
 ```
 
-callback은 사용자와 GitHub account를 transaction-safe하게 수렴시키고 로그인만 완료한다. `initial_sync`를 enqueue하지 않는다.
+성공 시 로그인만 완료하고 302한다. `initial_sync`는 아직 enqueue하지 않는다.
 
 > 반드시 쿼리를 제거한 주소로 302한다. `?code=`가 남으면 새로고침 시 재사용이 발생하고, GitHub은 code 재사용을 탈취로 판단해 이미 발급한 토큰까지 무효화한다.
 >
@@ -255,7 +260,7 @@ Set-Cookie: accessToken=<new_jwt>;  HttpOnly; Secure; SameSite=Lax; Path=/;     
 Set-Cookie: refreshToken=<new_jwt>; HttpOnly; Secure; SameSite=Lax; Path=/api/auth; Max-Age=1209600
 ```
 
-갱신 시 PostgreSQL session의 현재 `refresh_jti`와 만료 시각을 한 트랜잭션에서 교체하고 새 JWT cookie를 발급한다. refresh 만료는 다시 14일로 연장한다. 누락 cookie나 누락·만료 session은 401 `refresh_token_invalid`다. Redis 조회는 없으므로 Redis 장애가 기존 로그인 갱신을 막지 않는다.
+갱신 시 리프레시 토큰도 새로 발급하고 이전 `jti`는 폐기한다. 새 Refresh의 유효기간은 갱신 시점부터 14일이다.
 
 **UI states**
 
@@ -286,7 +291,7 @@ Set-Cookie: accessToken=;  Max-Age=0; Path=/
 Set-Cookie: refreshToken=; Max-Age=0; Path=/api/auth
 ```
 
-유효 refresh가 있으면 PostgreSQL에서 현재 `sid`·사용자·generation의 session만 삭제한다. 직전 갱신으로 `jti`가 바뀌어도 같은 로그인은 폐기하며 다른 로그인은 유지한다. access JWT는 무효화하지 않아 최대 15분간 남는다. refresh cookie가 없거나 검증 실패이면 쿠키만 멱등 삭제하고 `204`를 반환한다. GitHub token은 삭제하지 않는다.
+현재 로그인만 서버 DB에서 폐기한다. 액세스 토큰은 남은 유효기간(최대 15분)까지 유효하다. Refresh가 없거나 무효여도 쿠키를 삭제하고 `204`로 응답한다(멱등). GitHub 토큰은 삭제하지 않는다.
 
 **UI states**
 
@@ -294,7 +299,7 @@ Set-Cookie: refreshToken=; Max-Age=0; Path=/api/auth
 
 **Failure**
 
-Origin 누락/불일치는 403 `invalid_origin`, 유효 토큰의 DB 처리 장애는 503 `service_unavailable`이다. DB 장애에서는 쿠키를 지우거나 revocation 성공으로 응답하지 않는다. Redis는 사용하지 않는다.
+Origin 누락/불일치는 403 `invalid_origin`, 저장소 장애는 503 `service_unavailable`이다. 장애 시 쿠키를 지우거나 로그아웃 성공으로 처리하지 않는다.
 
 ---
 
@@ -319,11 +324,11 @@ Origin 누락/불일치는 403 `invalid_origin`, 유효 토큰의 DB 처리 장�
 | `githubLinked` | boolean | ❌ |
 
 `name`은 `users.display_name` (GitHub `name`, 없으면 `login`).
-`githubLinked`는 `github_accounts`가 존재하고 `token_status=valid`일 때만 true다.
+`githubLinked`는 GitHub 연결이 valid이며 access 또는 refresh가 사용 가능할 때 true다. 기존 비만료 토큰도 valid이면 true다. 이 조회는 GitHub API 호출 없이 DB만 읽는다.
 
 **UI states**
 
-전역 인증 가드와 헤더 identity용이다. 이 인증 범위에서는 별도 dashboard/profile API를 호출하지 않는다.
+전역 인증 가드와 헤더 identity용이다. 홈·프로필의 상세 데이터는 `/me/home`, `/me/profile` 담당이며 인증 API와 별도다.
 
 **Failure**
 
@@ -391,7 +396,7 @@ Origin 누락/불일치는 403 `invalid_origin`, 유효 토큰의 DB 처리 장�
 
 ---
 
-## 7. GET /auth/github/link (후속, 현재 계약 아님)
+## 7. GET /auth/github/link
 
 GitHub 토큰 무효 시 재연동. DEVON 로그인 상태는 유지되고 GitHub 토큰만 갱신된다.
 
@@ -423,7 +428,7 @@ JSON 에러 없음 — 실패는 `/login` 302로 표현된다.
 
 ---
 
-## 8. GET /auth/github/link/callback (후속, 현재 계약 아님)
+## 8. GET /auth/github/link/callback
 
 **Request** (Query) — `code`, `state` (login 콜백과 동일)
 
@@ -1494,6 +1499,7 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 | `POST /interviews/{id}/retry` | `interviews` |
 | 면접 완료 (리포트 생성) | `home`, `interviews` |
 | 피드백 이의 제출 | `interview(id).report` |
+| `GET /auth/github/link/callback` 복귀 | `me`, `home` |
 | `POST /auth/logout` | 전체 `clear()` |
 | `POST /auth/refresh` 성공 | 없음 |
 | `POST /auth/refresh` terminal 401/403 | 인증 cache 무효화 |
@@ -1501,9 +1507,7 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 
 ---
 
-## 기존 전체 설계 엔드포인트 목록
-
-이번 인증 구현은 1~5이며, 6·9·10의 데이터 API는 별도 백엔드 구현 범위다. 7·8은 후속 재연동 설계 기록이다. 전체 canonical surface는 OpenAPI를 따른다.
+## 최종 엔드포인트 목록
 
 | # | 메서드 | 경로 | 구현 방식 | 인증 |
 | --- | --- | --- | --- | --- |
@@ -1513,8 +1517,8 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 | 4 | POST | `/auth/logout` | fetch | Origin + optional `refreshToken` |
 | 5 | GET | `/me` | fetch | `accessToken` |
 | 6 | GET | `/me/profile` | fetch | `accessToken` |
-| 7 | GET | `/auth/github/link` | 후속 | `accessToken` |
-| 8 | GET | `/auth/github/link/callback` | 후속 | `accessToken` |
+| 7 | GET | `/auth/github/link` | 브라우저 이동 | `accessToken` |
+| 8 | GET | `/auth/github/link/callback` | 프론트 무관 | `accessToken` |
 | 9 | GET | `/me/home` | fetch | `accessToken` |
 | 10 | GET | `/me/interviews` | fetch | `accessToken` |
 | 11 | POST | `/documents/preview` | fetch (multipart) | `accessToken` |
@@ -1530,17 +1534,17 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 | 21 | POST | `/interviews/{id}/feedback-disagreements` | fetch | `accessToken` |
 | 22 | GET | `/analysis-runs/{runId}/candidates` | fetch | `accessToken` |
 
-22개 번호는 기존 전체 설계를 보존한 것이다. 현재 구현 완료를 뜻하지 않는다.
+총 22개.
 
-`shared/api.ts`에 넣지 않는 것: 1, 2 (브라우저 이동 또는 프론트 무관). 3은 인증 복구 내부에서만 호출한다.
+`shared/api.ts`에 넣지 않는 것: 1, 2, 7, 8 (브라우저 이동 또는 프론트 무관). 3은 인터셉터 내부에서만 호출한다.
 
 ### 구현 방식별 분류
 
 | 방식 | 엔드포인트 |
 | --- | --- |
-| 브라우저 이동 | 1 |
-| 프론트 무관 (서버 302) | 2 |
-| `fetch` GET | 5, 14, 15, 17, 19, 22 |
+| 브라우저 이동 | 1, 7 |
+| 프론트 무관 (서버 302) | 2, 8 |
+| `fetch` GET | 5, 6, 9, 10, 14, 15, 17, 19, 22 |
 | `fetch` POST | 3, 4, 12, 16, 20, 21 |
 | `fetch` POST (multipart) | 11 |
 | `EventSource` | 13 |
@@ -1559,7 +1563,7 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 | 마이페이지 | 1a | `/me/profile` R · `/me/interviews` R · `/auth/logout` W |
 | 공고·문서 입력 | 1c / 4-1-v2 | `/documents/preview` W (파일 선택 시) · `/analysis-runs` W |
 | 분석 진행 | 4-2-v2 | `/analysis-runs/{runId}` R (스냅샷) · `/analysis-runs/{runId}/events` S |
-| 분석 실패 | 4-3-v2 | `/analysis-runs/{runId}` R · `/analysis-runs` W (재시도) · `/auth/github/link` (후속 이동 경로) |
+| 분석 실패 | 4-3-v2 | `/analysis-runs/{runId}` R · `/analysis-runs` W (재시도) · `/auth/github/link` (이동) |
 | 레포 확정 | 5a-v2 | `/analysis-runs/{runId}/result` R · `/analysis-runs/{runId}/candidates` R (더보기) · `/interviews` W |
 | 면접 준비 | 5a2-v2 | `/interviews/{id}` R · `/ws/interviews/{sessionId}` S |
 | 면접 준비 실패 | 1b | `/interviews/{id}` R (`lastError`·`runId`) · `/ws/interviews/{sessionId}` S (`prepareRetry`) · `/analysis-runs/{runId}/result` R (레포 재선택) |
@@ -1626,7 +1630,7 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 | 일자 | 변경 |
 | --- | --- |
 | 2026-09-15 | Refresh 유효·폐기 원본을 PostgreSQL `auth_sessions`로 변경. JWT·cookie·API·FE 흐름 유지. 이전 Redis 로그인은 다음 갱신 때 재로그인 |
-| 2026-09-14 | 인증 5개 endpoint를 OpenAPI 원본으로 확정. cookie Path, Redis refresh record(2026-09-15 대체), exact Origin, `/me.avatarUrl`, no link/initial sync 범위 반영 |
+| 2026-09-14 | 인증 5개 endpoint 구현. 브라우저 이동은 이 문서, fetch API는 OpenAPI로 관리. cookie Path, exact Origin, `/me.avatarUrl`, no link/initial sync 범위 반영 |
 | 2026-09-08 | `stepKey` 4개 → **7개** (`doc_extract` · `repo_select` · `repo_detail` · `jd_fetch` · `jd_extract` · `repo_analyze` · `match_score`) |
 | 2026-09-08 | `agentRole` → **`persona`**, 값 `senior_developer`/`manager` → **`hr_manager`/`domain_lead`** |
 | 2026-09-08 | 에러 reason `jd_parse_failed` → **`jd_fetch_failed`/`jd_extraction_failed`** |

@@ -64,7 +64,7 @@ Sprint 1에는 문서 Claim 추출이 없으므로 `document_claims`를 답변 �
 
 ## 실패와 확인 기준
 
-구조화 출력의 parse/schema/semantic 실패는 [공통 계약](../contracts.md)과 0008을 따라 구분한다. invalid 결과를 부분 JSON·비어 있는 성공·추측한 기본값으로 Director에 넘기지 않는다. 실제 재시도 주체·횟수와 semantic 실패의 재호출 여부는 별도 합의하며, 이미 저장한 답변은 실패해도 보존한다.
+구조화 출력의 parse/schema/semantic 실패는 [공통 계약](../contracts.md)과 0008을 따라 구분한다. invalid 결과를 부분 JSON·비어 있는 성공·추측한 기본값으로 Director에 넘기지 않는다. [0010 결정](../decisions/0010-sprint1-interface-runtime-decisions.md)에 따라 attempt는 공통 LLM gateway/task 호출 계층에서만 관리하며 timeout/provider 오류/parse/schema 실패는 자동 1회 재호출해 총 2회까지만 호출하고 semantic 실패는 재호출하지 않는다. task별 timeout·token·Context·Tool·재작성·재계획 budget과 budget 소진 후 실패 복구는 계속 미정이며, 이미 저장한 답변은 실패해도 보존한다.
 
 필수 대조 사례:
 

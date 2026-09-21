@@ -14,14 +14,14 @@
 
 등록 태스크 6종.
 
-| 태스크 | job_type | 시점 |
-|---|---|---|
-| `initial_sync` | `initial_sync` | M1 — 후속 동기화 시작점에서 실행; OAuth callback에서는 enqueue하지 않음 |
-| `analysis_run` | `analysis_run` | M2 — 공고 입력 후 7단계 분석 |
-| `candidate_page_analyze` | `candidate_page_analyze` | M3 — 추천 후보 더 보기 page 분석 |
-| `interview_prep` | `interview_prep` | M4-a — 면접 준비 |
-| `report_generate` | — | M6 — lazy report 생성 |
-| `profile_summary` | — | report 생성 성공 후 사용자 프로필 집계 |
+| 태스크                   | job_type                 | 시점                                   |
+| ------------------------ | ------------------------ | -------------------------------------- |
+| `initial_sync`           | `initial_sync`           | M1 — 후속 동기화 시작점에서 실행; OAuth callback에서는 enqueue하지 않음 |
+| `analysis_run`           | `analysis_run`           | M2 — 공고 입력 후 7단계 분석           |
+| `candidate_page_analyze` | `candidate_page_analyze` | M3 — 추천 후보 더 보기 page 분석       |
+| `interview_prep`         | `interview_prep`         | M4-a — 면접 준비                       |
+| `report_generate`        | —                        | M6 — lazy report 생성                  |
+| `profile_summary`        | —                        | report 생성 성공 후 사용자 프로필 집계 |
 
 Sprint 1에서는 기본 queue 1개와 단일 ARQ worker 프로세스에 위 6개 job을 모두 등록한다. worker/queue 물리 분리는 Sprint 1 운영 지표를 보고 Sprint 2에서 판단한다. 각 job은 `queued_at`, `started_at`, `completed_at`, `duration_ms`, `queue_wait_ms`, `job_type`, `status`, `error_code`를 남긴다.
 
