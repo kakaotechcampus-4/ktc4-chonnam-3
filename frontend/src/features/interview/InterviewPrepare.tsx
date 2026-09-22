@@ -124,6 +124,9 @@ export default function InterviewPrepare() {
   const [error, setError] = useState<InterviewLastError | null>(null);
   const [retried, setRetried] = useState(false);
   const [ready, setReady] = useState(false);
+  const [starting, setStarting] = useState(false);
+  /** 시작을 눌렀지만 서버가 아직 in_progress가 아니거나 조회에 실패했다. */
+  const [startFailed, setStartFailed] = useState(false);
   const [showQuestionText, setShowQuestionText] = useState(readQuestionText);
   /** WS를 다시 열기 위한 카운터. 다시 시도와 재연결이 함께 올린다. */
   const [attempt, setAttempt] = useState(0);
@@ -236,6 +239,25 @@ export default function InterviewPrepare() {
       socket.close();
     };
   }, [sessionId, status, attempt, retried, id, queryClient]);
+
+  /**
+   * prepareCompleted는 WS로만 오므로 React Query 캐시의 status는 아직 preparing이다.
+   * 진행 화면이 같은 쿼리키를 읽으면 낡은 값을 보고 준비 화면으로 되돌린다.
+   * 이동 전에 다시 조회해 in_progress를 확인한다.
+   */
+  const handleStart = async () => {
+    setStarting(true);
+    setStartFailed(false);
+
+    const { data } = await refetchInterview();
+    if (data?.status === 'in_progress') {
+      navigate(`/interview/${id}/session`);
+      return;
+    }
+
+    setStarting(false);
+    setStartFailed(true);
+  };
 
   const handleRetry = () => {
     setError(null);
@@ -512,25 +534,13 @@ export default function InterviewPrepare() {
           )}
           <button
             type="button"
-            onClick={() => navigate(`/interview/repos/${interview!.runId}`)}
-            className={
-              displayError.recoverable
-                ? 'h-10 text-[13px] font-bold text-muted'
-                : 'h-12 rounded-lg bg-accent text-sm font-bold text-surface'
-            }
+            disabled={!ready || starting}
+            onClick={() => void handleStart()}
+            className="h-12 rounded-lg bg-accent text-sm font-bold text-surface disabled:bg-line-soft disabled:text-muted"
           >
-            레포 다시 선택하기
+            {starting ? '면접을 여는 중...' : '면접 시작하기'}
           </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          disabled={!ready}
-          onClick={() => navigate(`/interview/${id}/session`)}
-          className="h-12 rounded-lg bg-accent text-sm font-bold text-surface disabled:bg-line-soft disabled:text-muted"
-        >
-          면접 시작하기
-        </button>
+        </>
       )}
     </Shell>
   );
