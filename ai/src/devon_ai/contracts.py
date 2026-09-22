@@ -379,6 +379,31 @@ class AnalysisToolResult(_Contract):
     error_code: str | None
 
 
+@dataclass(frozen=True)
+class AnalysisHistory:
+    """Original checked records, never a replacement or retrospective evaluation."""
+
+    question: ContractChecked[Question] = field(repr=False)
+    answer: SubmittedAnswer = field(repr=False)
+    analysis: ContractChecked[AnswerAnalysis] = field(repr=False)
+
+    def __post_init__(self) -> None:
+        question = _checked_data(self.question, Question)
+        analysis = _checked_data(self.analysis, AnswerAnalysis)
+        _convert(SubmittedAnswer, self.answer, "history answer", wire=False)
+        keys = frozenset(point.key for point in question.question_contract.required_points)
+        _references(tuple(point.key for point in analysis.covered_points), keys, "history coverage")
+        _references(analysis.missing_points, keys, "history missing points")
+        for quotes in (
+            *(point.answer_quotes for point in analysis.covered_points),
+            analysis.technical_assessment.answer_quotes,
+            analysis.contribution_quotes,
+            tuple(claim.claim_text for claim in analysis.claim_checks),
+            tuple(request.claim_text for request in analysis.verification_requests),
+        ):
+            _quotes(quotes, self.answer.text)
+
+
 def _checked_data[T](value: ContractChecked[T], expected: type[T]) -> T:
     if type(value) is not ContractChecked or type(value.data) is not expected:
         raise ContractError("schema", "contract checked input")

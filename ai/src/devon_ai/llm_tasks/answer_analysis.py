@@ -7,6 +7,26 @@ from devon_ai import contracts as c
 from devon_ai.llm_tasks import ModelCall, call_model
 
 
+def _question_payload(question: c.Question) -> dict[str, object]:
+    return {"text": question.text, "question_contract": asdict(question.question_contract)}
+
+
+def _history_payload(history: tuple[c.AnalysisHistory, ...], turn: int) -> list[dict[str, object]]:
+    if type(history) is not tuple or any(type(item) is not c.AnalysisHistory for item in history):
+        raise c.ContractError("schema", "analysis history")
+    turns = [item.answer.turn for item in history]
+    if turns != sorted(set(turns)) or any(previous >= turn for previous in turns):
+        raise c.ContractError("semantic", "history turn order")
+    return [
+        {
+            "question": _question_payload(item.question.data),
+            "answer": asdict(item.answer),
+            "analysis": asdict(item.analysis.data),
+        }
+        for item in history
+    ]
+
+
 def _current_evidence(
     evidence: tuple[c.AnalysisEvidence, ...],
     tool_results: tuple[c.AnalysisToolResult, ...],
@@ -39,6 +59,7 @@ async def analyze_answer(
     tool_results: tuple[c.AnalysisToolResult, ...] = (),
     evidence_refs: frozenset[str] = frozenset(),
     allowed_locations: frozenset[tuple[str, str, str]] = frozenset(),
+    history: tuple[c.AnalysisHistory, ...] = (),
 ) -> c.ModelSuccess[c.AnswerAnalysis] | c.ModelFailed:
     """Use BE's common rubric/config and build input from confirmed task arguments.
 
@@ -57,11 +78,9 @@ async def analyze_answer(
     selected = _current_evidence(evidence, tool_results, evidence_refs, allowed_locations)
     payload = {
         "question_turn": question_turn,
-        "question": {
-            "text": value.text,
-            "question_contract": asdict(value.question_contract),
-        },
+        "question": _question_payload(value),
         "answer": asdict(answer),
+        "history": _history_payload(history, question_turn),
         "evidence": [asdict(item) for item in selected],
         "tool_results": [asdict(result) for result in tool_results],
         "allowed_locations": sorted(allowed_locations),
