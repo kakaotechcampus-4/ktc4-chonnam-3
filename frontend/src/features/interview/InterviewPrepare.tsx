@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BASE, api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
+import { isApiError } from '@/types/api';
 import type {
   AnswerMode,
   InterviewLastError,
@@ -73,6 +74,13 @@ const FAILURE_TITLE: Record<string, string> = {
   github_token_invalid: 'GitHub 연동이 만료됐어요',
 };
 
+/** #23 Failure의 reason별 문구. 없는 reason은 기본 문구로 떨어진다. */
+const RETRY_REJECTED_MESSAGE: Record<string, string> = {
+  prep_in_progress: '이미 다시 준비하고 있어요 · 잠시만 기다려주세요',
+  prep_failed: '지금은 다시 시도할 수 없어요 · 상태를 다시 확인할게요',
+  session_expired: '면접 세션이 만료됐어요 · 레포를 다시 선택해주세요',
+};
+
 const AUDIO_DEVICES = [
   { label: '스피커', hint: '기본 스피커', action: '테스트 재생' },
   // 감지 상태 표시만 두고 테스트 버튼은 없다. 실제 감지는 Sprint 2.
@@ -124,6 +132,9 @@ export default function InterviewPrepare() {
   const [error, setError] = useState<InterviewLastError | null>(null);
   const [retried, setRetried] = useState(false);
   const [ready, setReady] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  /** 서버가 재시도를 거절한 reason. api-spec.md #23 Failure. */
+  const [retryRejected, setRetryRejected] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   /** 시작을 눌렀지만 서버가 아직 in_progress가 아니거나 조회에 실패했다. */
   const [startFailed, setStartFailed] = useState(false);
@@ -134,7 +145,6 @@ export default function InterviewPrepare() {
   const [wsStatus, setWsStatus] = useState<'connecting' | 'open' | 'reconnecting'>('connecting');
 
   const socketRef = useRef<WebSocket | null>(null);
-  const retryOnOpenRef = useRef(false);
   /** recoverable: false면 서버가 세션을 닫는다. 그때는 재연결하지 않는다. */
   const sessionClosedRef = useRef(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -174,9 +184,6 @@ export default function InterviewPrepare() {
 
     socket.onopen = () => {
       setWsStatus('open');
-      if (!retryOnOpenRef.current) return;
-      retryOnOpenRef.current = false;
-      socket.send(JSON.stringify({ type: 'prepareRetry' }));
     };
 
     socket.onmessage = (event) => {
@@ -216,7 +223,6 @@ export default function InterviewPrepare() {
       if (disposed || sessionClosedRef.current) return;
 
       setWsStatus('reconnecting');
-      retryOnOpenRef.current = false;
       /**
        * 재연결 전에 GET /interviews/{id}를 먼저 호출한다. 이 요청이 401 인터셉터를 타면서
        * 토큰이 갱신된다. 순서를 바꾸면 만료 토큰으로 핸드셰이크를 시도해 401이 반복된다.
@@ -259,7 +265,25 @@ export default function InterviewPrepare() {
     setStartFailed(true);
   };
 
-  const handleRetry = () => {
+  /**
+   * 준비 재시도는 REST다 (api-spec.md #23, spec/ai/decisions/0010:32).
+   * 소켓은 닫지 않는다 — 열려 있으면 그대로 두고, 없으면 응답을 확인한 뒤 연다.
+   * 진행 상황은 이 응답이 아니라 WS prepareStep 으로 온다.
+   */
+  const handleRetry = async () => {
+    setRetryRejected(null);
+    setRetrying(true);
+    try {
+      await api.retryPrepare(id);
+    } catch (e) {
+      const reason = isApiError(e) ? e.error.reason : 'unknown_error';
+      setRetryRejected(reason);
+      setRetrying(false);
+      // 이미 재실행 중이면 그대로 진행을 기다린다. 그 외에는 서버 상태를 다시 읽는다.
+      if (reason !== 'prep_in_progress') void refetchInterview();
+      return;
+    }
+    setRetrying(false);
     setError(null);
     setRetried(true);
     setReady(false);
@@ -272,20 +296,6 @@ export default function InterviewPrepare() {
         ]),
       ) as StepMap,
     );
-
-    // 예약된 재연결과 이미 떠 있는 GET을 모두 무효화한다. attempt가 두 번 오르면
-    // 새로 연 소켓이 곧바로 닫히면서 prepareRetry가 유실된다.
-    reconnectSeqRef.current += 1;
-    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-    reconnectTimerRef.current = null;
-
-    const socket = socketRef.current;
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: 'prepareRetry' }));
-      return;
-    }
-    retryOnOpenRef.current = true;
-    setAttempt((count) => count + 1);
   };
 
   if (interviewFailed) {
@@ -489,14 +499,23 @@ export default function InterviewPrepare() {
 
       {displayError ? (
         <div className="flex flex-col gap-2">
-          {/* recoverable: false면 재시도 없이 레포 재선택만 남긴다. */}
-          {displayError.recoverable && (
+          {retryRejected && (
+            <p className="text-[11px] font-bold text-error">
+              {RETRY_REJECTED_MESSAGE[retryRejected] ?? '다시 시도하지 못했어요 · 잠시 후 눌러주세요'}
+            </p>
+          )}
+          {/*
+            recoverable: false면 재시도 없이 레포 재선택만 남긴다.
+            session_expired는 세션이 사라진 것이라 재시도 자체가 불가능하다 (#23 Failure).
+          */}
+          {displayError.recoverable && retryRejected !== 'session_expired' && (
             <button
               type="button"
-              onClick={handleRetry}
-              className="h-12 rounded-lg bg-accent text-sm font-bold text-surface"
+              disabled={retrying}
+              onClick={() => void handleRetry()}
+              className="h-12 rounded-lg bg-accent text-sm font-bold text-surface disabled:bg-line-soft disabled:text-muted"
             >
-              다시 시도
+              {retrying ? '다시 시도하는 중...' : '다시 시도'}
             </button>
           )}
           {/*

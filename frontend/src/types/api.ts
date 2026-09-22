@@ -296,7 +296,9 @@ export type InterviewDetailResponse = {
 
 // 4. WebSocket 메시지 타입
 
-export type WsClientMessage = { type: 'prepareRetry' } | { type: 'answer'; text: string };
+// Sprint 1 클라이언트 메시지는 answer 하나다. 준비 재시도는 REST #23으로 처리한다
+// (spec/ai/decisions/0010:32). turn 은 :30 에 따라 싣는다.
+export type WsClientMessage = { type: 'answer'; turn: number; text: string };
 
 export type WsServerMessage =
   | { type: 'prepareStep'; key: PrepareStepKey; status: PrepareStepStatus }
