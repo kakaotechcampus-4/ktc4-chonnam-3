@@ -316,3 +316,30 @@ def test_independent_concurrent_calls_have_separate_attempt_budgets(model_reques
     results = asyncio.run(run_both())
     assert all(isinstance(result, c.ModelSuccess) for result in results)
     assert [len(result.attempts) for result in results] == [1, 2]
+
+
+@pytest.mark.parametrize(
+    ("raw", "stages"),
+    [("[" * 2000 + "]" * 2000, {"parse", "schema"}), ('{"value":' + "9" * 5000 + "}", {"parse"})],
+    ids=["deep-nesting", "large-integer"],
+)
+def test_parser_resource_limits_remain_typed_failures(model_request, raw, stages):
+    response = c.ModelResponse(raw, "actual")
+    result = invoke(model_request, FakeClient(response, response))
+    assert isinstance(result, c.ModelFailed) and result.failure.stage in stages
+    assert len(result.attempts) == 2
+
+
+def test_client_cannot_turn_an_expired_timeout_into_success(model_request, decision_data):
+    calls = []
+
+    async def suppressing_client(value):
+        calls.append(value)
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            return c.ModelResponse(json.dumps(decision_data), "late-model")
+
+    result = invoke(replace(model_request, timeout_seconds=0.01), suppressing_client)
+    assert isinstance(result, c.ModelFailed) and result.failure.stage == "timeout"
+    assert len(calls) == 2

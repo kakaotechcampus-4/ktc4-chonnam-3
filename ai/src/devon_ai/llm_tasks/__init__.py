@@ -40,6 +40,14 @@ def _invalid_constant(value: str) -> Never:
     raise json.JSONDecodeError("non-JSON constant", "", 0)
 
 
+def _parse_output(raw: str) -> object:
+    try:
+        return json.loads(raw, object_pairs_hook=_json_object, parse_constant=_invalid_constant)
+    except (ValueError, RecursionError):
+        # Python's JSON decoder also rejects overlarge integers/deep nesting.
+        raise ContractError("parse", "model output") from None
+
+
 async def call_model[T: _Contract](
     request: ModelRequest,
     *,
@@ -80,25 +88,21 @@ async def _call_model[T: _Contract](
         failure = None
         checked = None
         try:
-            async with asyncio.timeout(request.timeout_seconds):
+            async with asyncio.timeout(request.timeout_seconds) as deadline:
                 response = await client(request)
+            if deadline.expired() or perf_counter() - started >= request.timeout_seconds:
+                raise TimeoutError
         except TimeoutError:
             failure = ModelFailure("timeout")
         except ModelProviderError:
             failure = ModelFailure("provider")
         else:
             try:
-                payload = json.loads(
-                    response.raw_output,
-                    object_pairs_hook=_json_object,
-                    parse_constant=_invalid_constant,
-                )
+                payload = _parse_output(response.raw_output)
                 candidate = decode(contract_type, payload)
                 checked = validate(candidate)
                 if not isinstance(checked, ContractChecked) or checked.data is not candidate:
                     raise ContractError("semantic", "validator result")
-            except json.JSONDecodeError:
-                failure = ModelFailure("parse")
             except ContractError as exc:
                 failure = ModelFailure(exc.stage)
         attempts.append(
