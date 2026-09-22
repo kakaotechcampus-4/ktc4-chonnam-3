@@ -116,11 +116,15 @@ export default function InterviewPrepare() {
   const displayError = retried ? error : (error ?? snapshotError);
   const displaySteps = steps ?? stepsFromSnapshot(snapshotError?.step);
 
+  // preparing_failed 진입은 스냅샷으로 충분하다. 다시 시도를 누른 뒤에만 연결한다.
+  // 연결 안내도 이 값으로 건다. 연결을 포기한 화면에서 wsStatus가 reconnecting으로
+  // 남아 "다시 연결하는 중"이 굳는 것을 막는다.
+  const socketEnabled = status === 'preparing' || (status === 'preparing_failed' && retried);
+
   const { wsStatus, send } = useInterviewSocket({
     interviewId: id,
     sessionId,
-    // preparing_failed 진입은 스냅샷으로 충분하다. 다시 시도를 누른 뒤에만 연결한다.
-    enabled: status === 'preparing' || (status === 'preparing_failed' && retried),
+    enabled: socketEnabled,
     onMessage: (message) => {
       if (message.type === 'prepareStep') {
         setSteps((prev) => ({ ...(prev ?? INITIAL_STEPS), [message.key]: message.status }));
@@ -277,8 +281,11 @@ export default function InterviewPrepare() {
         })}
       </ul>
 
-      {/* 연결이 끊겨도 세션 상태는 바꾸지 않는다. 안내만 띄우고 재연결을 계속 시도한다. */}
-      {wsStatus === 'reconnecting' && (
+      {/*
+        연결이 끊겨도 세션 상태는 바꾸지 않는다. 안내만 띄우고 재연결을 계속 시도한다.
+        socketEnabled이 false면 재연결을 걸지 않으므로 안내도 띄우지 않는다.
+      */}
+      {socketEnabled && wsStatus === 'reconnecting' && (
         <p className="text-[11px] font-bold text-error">연결이 끊겼어요 · 다시 연결하는 중이에요</p>
       )}
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
-import { api } from '@/shared/api';
+import { BASE, api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
 import { PERSONA_IMAGES, PERSONA_LABELS, PERSONA_ORDER } from '@/shared/persona';
@@ -239,6 +239,22 @@ export default function InterviewScreen() {
   /** 재연결되면 실패 안내를 내린다. 다시 누를 수 있는 상태가 됐다는 뜻이다. */
   const showSendFailed = sendFailed && wsStatus !== 'open';
 
+  /**
+   * 조건부로 나타나는 요소에 aria-live를 달면 삽입 시점을 놓치는 조합이 있다.
+   * 항상 떠 있는 영역 하나에 현재 상태를 넣어 변화만 읽히게 한다.
+   */
+  const liveStatus = error
+    ? '' // 오류 배너가 role="alert"로 읽는다. 여기서 또 읽으면 두 번 들린다.
+    : ackLost
+      ? '답변이 전달되지 못했어요. 고쳐서 다시 보낼 수 있어요'
+      : showSendFailed
+        ? '연결이 끊겨 답변을 보내지 못했어요'
+        : wsStatus === 'reconnecting'
+          ? '연결이 끊겼어요. 다시 연결하는 중이에요'
+          : thinking
+            ? '다음 질문을 만들고 있어요'
+            : '';
+
   function handleSubmit() {
     // 첫 제출과 재전송이 같은 경로를 쓴다. 버튼 disabled와 별개로 내용을 한 번 더 본다.
     if (!question || answerDraft.trim() === '' || overLength) return;
@@ -336,6 +352,10 @@ export default function InterviewScreen() {
         })}
       </div>
 
+      <p role="status" aria-live="polite" className="sr-only">
+        {liveStatus}
+      </p>
+
       {wsStatus === 'reconnecting' && (
         <p className="text-[11px] font-bold text-error">연결이 끊겼어요 · 다시 연결하는 중이에요</p>
       )}
@@ -352,7 +372,7 @@ export default function InterviewScreen() {
         <div className="flex items-center gap-3">
           <span className="rounded-full bg-accent-soft px-3 py-1 text-[11px] font-bold text-accent">
             {question
-              ? `질문 ${question.turn} · ${PERSONA_LABELS[question.persona]}`
+              ? `질문 ${question.turn}${interview?.totalTurns ? ` / ${interview.totalTurns}` : ''} · ${PERSONA_LABELS[question.persona]}`
               : '다음 질문 준비 중'}
           </span>
           <span className="flex-1" />
@@ -399,7 +419,7 @@ export default function InterviewScreen() {
       )}
 
       {error && (
-        <div className="rounded-card border border-error/30 bg-error-soft px-3 py-2.5">
+        <div role="alert" className="rounded-card border border-error/30 bg-error-soft px-3 py-2.5">
           <p className="text-[12px] font-bold text-error">
             {ERROR_MESSAGE[error.reason] ?? '면접 중 문제가 생겼어요.'}
           </p>
@@ -439,13 +459,35 @@ export default function InterviewScreen() {
           </span>
           <span className="flex-1" />
           {fatal ? (
-            <button
-              type="button"
-              onClick={() => navigate('/home')}
-              className="h-10 rounded-lg bg-accent px-5 text-[13px] font-bold text-surface"
-            >
-              홈으로
-            </button>
+            /*
+              recoverable: false의 복구 경로는 reason마다 다르다
+              (spec/frontend/features/interview.md:201-202). 홈으로만 보내면 같은 오류를
+              다시 만난다. 레포 재선택은 새 세션을 만들고 이 세션은 abandoned가 된다(:64).
+            */
+            error?.reason === 'github_token_invalid' ? (
+              <a
+                href={`${BASE}/auth/github/link`}
+                className="flex h-10 items-center rounded-lg bg-accent px-5 text-[13px] font-bold text-surface"
+              >
+                GitHub 다시 연동하기
+              </a>
+            ) : error?.reason === 'repo_unreachable' && interview ? (
+              <button
+                type="button"
+                onClick={() => navigate(`/interview/repos/${interview.runId}`)}
+                className="h-10 rounded-lg bg-accent px-5 text-[13px] font-bold text-surface"
+              >
+                레포 다시 선택하기
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigate('/home')}
+                className="h-10 rounded-lg bg-accent px-5 text-[13px] font-bold text-surface"
+              >
+                홈으로
+              </button>
+            )
           ) : ackLost ? (
             <button
               type="button"
