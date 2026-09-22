@@ -24,6 +24,9 @@ const ERROR_MESSAGE: Record<string, string> = {
 /** 30초간 다른 메시지가 없으면 근거 확인 배너를 내린다. */
 const EVIDENCE_TIMEOUT_MS = 30_000;
 
+/** 이 간격으로 answerReceived가 없는 턴의 저장 여부를 다시 확인한다. */
+const ACK_RECHECK_MS = 30_000;
+
 function formatRemaining(seconds: number) {
   const minutes = Math.floor(seconds / 60);
   return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
@@ -71,6 +74,8 @@ export default function InterviewScreen() {
   const [sendFailed, setSendFailed] = useState(false);
   /** 답변을 보낸 시점의 표식. 그 뒤에 끊겼는지, 서버가 저장했는지 판단한다. */
   const [sentMark, setSentMark] = useState<{ at: number; drops: number } | null>(null);
+  /** ack을 기다리며 스냅샷을 다시 받아본 횟수. 0보다 크면 끊김과 같게 취급한다. */
+  const [ackAttempt, setAckAttempt] = useState(0);
   const [error, setError] = useState<InterviewLastError | null>(null);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   const leaveDialogRef = useRef<HTMLDialogElement>(null);
@@ -124,7 +129,9 @@ export default function InterviewScreen() {
         setSendFailed(false);
       } else if (message.type === 'answerReceived') {
         // 제출 중 표시만 푼다. 입력창은 다음 턴이 와야 열린다.
-        setAckedTurn(submittedTurnRef.current);
+        // 재연결 직후 서버가 지난 턴 ack을 다시 보내면 ref가 비어 있을 수 있다.
+        // 그때 null로 덮으면 이미 확인된 턴이 다시 미확인으로 뒤집힌다.
+        if (submittedTurnRef.current !== null) setAckedTurn(submittedTurnRef.current);
       } else if (message.type === 'thinking') {
         setThinking(true);
       } else if (message.type === 'evidenceCheck') {
@@ -181,23 +188,46 @@ export default function InterviewScreen() {
   /** recoverable: false면 서버가 세션을 닫는다. 더 보낼 수 없으므로 입력을 막는다. */
   const fatal = !!error && !error.recoverable;
   const answerDraft = draft.turn === question?.turn ? draft.text : '';
-  const pendingAck = submittedTurn !== null && submittedTurn !== ackedTurn;
-  const overLength = answerDraft.length > ANSWER_MAX_LENGTH;
-
   /**
-   * 보낸 뒤 연결이 끊겼고, 그 뒤 받은 스냅샷에도 "그 턴"의 답변이 없다.
-   * 마지막 턴이 아니라 제출한 턴을 직접 찾아야 한다 — 서버가 저장하고 다음 턴으로
-   * 넘어간 경우에도 마지막 턴은 answer가 null이라 오판한다.
-   * 이미 다음 턴으로 넘어갔다면 되돌릴 게 없으므로 같은 턴일 때만 권한다.
-   * 자동 재전송은 하지 않는다 — 중복 저장을 서버가 걸러낼 수단이 없다.
+   * 제출한 턴의 스냅샷. 마지막 턴이 아니라 제출한 턴을 직접 찾는다 — 서버가 저장하고
+   * 다음 턴으로 넘어간 경우에도 마지막 턴은 answer가 null이라 오판한다.
    */
   const submittedEntry =
     submittedTurn === null ? undefined : turns.find((entry) => entry.turn === submittedTurn);
+  /**
+   * 스냅샷에 그 턴 답변이 있으면 서버가 저장한 것이다. answerReceived를 놓쳤어도
+   * 확인된 것과 같게 본다. 그러지 않으면 "전송 중..." 표시가 다음 질문까지 남는다.
+   */
+  const ackedBySnapshot = submittedEntry?.answer != null;
+  const pendingAck =
+    submittedTurn !== null && submittedTurn !== ackedTurn && !ackedBySnapshot;
+
+  /**
+   * 소켓이 끊기지 않아도 서버가 응답을 멈출 수 있다. 그때는 dropCount가 오르지 않아
+   * 재연결도 GET도 일어나지 않고 입력창이 잠긴 채로 남는다. ack을 기다리는 동안
+   * 스냅샷을 주기적으로 다시 받아 그 턴이 저장됐는지 확인한다. 조회가 실패해도
+   * ackAttempt가 올라 다음 주기가 예약되므로 판단 기회를 잃지 않는다.
+   * 자동 재전송은 하지 않는다.
+   */
+  useEffect(() => {
+    if (!pendingAck || sentMark === null) return;
+    const timer = setTimeout(() => {
+      void refetchInterview().finally(() => setAckAttempt((count) => count + 1));
+    }, ACK_RECHECK_MS);
+    return () => clearTimeout(timer);
+  }, [pendingAck, sentMark, refetchInterview, ackAttempt]);
+  const overLength = answerDraft.length > ANSWER_MAX_LENGTH;
+
+  /**
+   * 보낸 뒤 연결이 끊겼거나 응답이 없었고, 그 뒤 받은 스냅샷에도 "그 턴"의 답변이 없다.
+   * 이미 다음 턴으로 넘어갔다면 되돌릴 게 없으므로 같은 턴일 때만 권한다.
+   * 자동 재전송은 하지 않는다 — 중복 저장을 서버가 걸러낼 수단이 없다.
+   */
   const ackLost =
     pendingAck &&
     submittedTurn === question?.turn &&
     sentMark !== null &&
-    dropCount > sentMark.drops &&
+    (dropCount > sentMark.drops || ackAttempt > 0) &&
     dataUpdatedAt > sentMark.at &&
     submittedEntry?.answer === null;
 
@@ -216,9 +246,6 @@ export default function InterviewScreen() {
     setError(null);
     // 연결이 없으면 보내지 않는다. 큐에 담아 두면 재연결이 늦어졌을 때
     // 지난 턴 답변이 다음 질문에 붙는다.
-    // turn은 싣지 않는다. WS 원본인 frontend/docs/api-spec.md:1152가 { type, text }다.
-    // features:154는 turn을 포함하고 :158이 서버 turn 검증을 요구해 서로 다르다.
-    // spec/shared/contracts/migration.md의 `answer`의 `turn` 행 참고 (PENDING_BE).
     if (!send({ type: 'answer', text: answerDraft })) {
       // 보내지 못했으니 제출한 적 없는 상태로 되돌린다. 입력창과 초안이 유지된다.
       setSendFailed(true);
@@ -228,6 +255,7 @@ export default function InterviewScreen() {
     }
 
     setSendFailed(false);
+    setAckAttempt(0);
     setSentMark({ at: Date.now(), drops: dropCount });
     submittedTurnRef.current = question.turn;
     setSubmittedTurn(question.turn);
