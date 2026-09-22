@@ -236,3 +236,83 @@ def test_programming_errors_are_not_misclassified_as_provider_failures(model_req
     with pytest.raises(TypeError, match="adapter implementation bug"):
         invoke(model_request, client)
     assert len(client.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"next_step":"ask","next_step":"finish","intent":"종료","persona":null,'
+        '"target":null,"tool_requests":[],"reason_summary":"done"}',
+        '{"extra": NaN}',
+        '{"extra": Infinity}',
+        '{"extra": -Infinity}',
+        "```json\n{}\n```",
+        "",
+        '{"truncated":',
+    ],
+)
+def test_invalid_json_is_rejected_without_repair(model_request, raw):
+    response = c.ModelResponse(raw, "actual")
+    client = FakeClient(response, response)
+    result = invoke(model_request, client)
+    assert isinstance(result, c.ModelFailed) and result.failure.stage == "parse"
+    assert len(result.attempts) == len(client.requests) == 2
+
+
+def test_retry_preserves_failed_raw_output_and_does_not_log_secrets(
+    model_request,
+    decision_data,
+    caplog,
+    capsys,
+):
+    raw = "private failed output credential=synthetic-secret"
+    client = FakeClient(
+        c.ModelResponse(raw, "actual-v1"), c.ModelResponse(json.dumps(decision_data), "actual-v2")
+    )
+    result = invoke(model_request, client)
+    assert isinstance(result, c.ModelSuccess)
+    assert result.attempts[0].response.raw_output == raw
+    assert result.attempts[0].response.input_tokens is None
+    assert result.attempts[1].response.model == "actual-v2"
+    assert raw not in repr(result) and raw not in caplog.text
+    assert capsys.readouterr() == ("", "")
+
+
+def test_nested_retry_layers_are_rejected_before_the_inner_transport(model_request, decision_data):
+    inner = FakeClient(c.ModelResponse(json.dumps(decision_data), "actual"))
+
+    async def nested_client(value):
+        return await llm_tasks.call_model(
+            value,
+            client=inner,
+            contract_type=c.DirectorDecision,
+            validate=check_decision,
+        )
+
+    with pytest.raises(ValueError, match="nested"):
+        invoke(model_request, nested_client)
+    assert inner.requests == []
+    # A failed invocation must release the guard for the next independent call.
+    assert isinstance(invoke(model_request, inner), c.ModelSuccess)
+
+
+def test_independent_concurrent_calls_have_separate_attempt_budgets(model_request, decision_data):
+    good = c.ModelResponse(json.dumps(decision_data), "actual")
+    first, second = FakeClient(good), FakeClient(TimeoutError(), good)
+
+    async def run_both():
+        return await asyncio.gather(
+            *[
+                llm_tasks.call_model(
+                    model_request,
+                    client=client,
+                    contract_type=c.DirectorDecision,
+                    validate=check_decision,
+                )
+                for client in (first, second)
+            ]
+        )
+
+    results = asyncio.run(run_both())
+    assert all(isinstance(result, c.ModelSuccess) for result in results)
+    assert [len(result.attempts) for result in results] == [1, 2]
