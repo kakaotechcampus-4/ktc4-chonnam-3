@@ -379,10 +379,15 @@ export default function InterviewPrepare() {
       {/* code·occurredAt은 표시용 식별자라 그대로 노출한다. */}
       {displayError && (
         <p className="text-[11px] text-muted">
-          {displayError.code} · {displayError.occurredAt} · 선택한 레포와 공고는 저장되어 있어요.{' '}
-          <a href="/help" className="underline">
-            고객센터
-          </a>
+          {/*
+            고객센터 페이지는 추후 추가 예정이다. 지금은 /help 라우트가 없어
+            링크로 두면 routes.tsx:27의 * 규칙에 걸려 홈으로 튄다. 같은 안내를 쓰는
+            MyPage.tsx:203도 텍스트다 (spec/frontend/features/mypage.md:33 "API 없음").
+            ponytail: 페이지가 생기면 <Link to="/help">고객센터</Link>로 되돌린다.
+            MyPage 쪽도 같이 바꾼다.
+          */}
+          {displayError.code} · {displayError.occurredAt} · 선택한 레포와 공고는 저장되어 있어요.
+          문의는 고객센터로 부탁드려요.
         </p>
       )}
 
