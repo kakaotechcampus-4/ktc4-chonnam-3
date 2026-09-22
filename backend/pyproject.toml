@@ -21,7 +21,6 @@ dependencies = [
     "httpx",
     "structlog",
     "python-multipart",
-    "anthropic",
     "devon-ai",
 ]
 
