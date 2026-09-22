@@ -560,6 +560,14 @@ class QuestionPlan(_Contract):
 
 
 @dataclass(frozen=True)
+class ReferenceText(_Contract):
+    """BE-selected JD/context source excerpt; not a new DB or public schema."""
+
+    reference_id: str
+    content: str = field(repr=False)
+
+
+@dataclass(frozen=True)
 class QuestionCandidateReview:
     """Trusted independent assessment; never decoded from the generator's output."""
 

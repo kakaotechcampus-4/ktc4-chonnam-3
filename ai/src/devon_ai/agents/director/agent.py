@@ -6,6 +6,7 @@ from dataclasses import asdict, replace
 
 from devon_ai import contracts as c
 from devon_ai.llm_tasks import ModelCall, call_model
+from devon_ai.llm_tasks.answer_analysis import _current_evidence, _history_payload
 
 type QuestionReviewer = Callable[[c.QuestionPlan, c.Question], c.QuestionCandidateReview]
 
@@ -46,6 +47,11 @@ async def generate_question(
     evidence_refs: frozenset[str] = frozenset(),
     basis_refs: frozenset[str] = frozenset(),
     jd_requirement_ids: frozenset[str] = frozenset(),
+    evidence: tuple[c.AnalysisEvidence, ...] = (),
+    tool_results: tuple[c.AnalysisToolResult, ...] = (),
+    allowed_locations: frozenset[tuple[str, str, str]] = frozenset(),
+    reference_texts: tuple[c.ReferenceText, ...] = (),
+    history: tuple[c.AnalysisHistory, ...] = (),
 ) -> c.QuestionReady | c.QuestionRejected:
     """Generate once from a prepared plan; no automatic semantic repair or finish.
 
@@ -65,12 +71,42 @@ async def generate_question(
         return c.QuestionRejected(
             plan.question_id, c.ModelFailed(c.ModelFailure("semantic"), ()), recovery
         )
+    selected = _current_evidence(evidence, tool_results, evidence_refs, allowed_locations)
+    c._convert(tuple[c.ReferenceText, ...], reference_texts, "reference text", wire=False)
+    source_ids = tuple(source.reference_id for source in reference_texts)
+    c._unique(source_ids, "reference text identity")
+    c._references(tuple(jd_requirement_ids), frozenset(source_ids), "JD source required")
+    c._references(tuple(basis_refs), frozenset(source_ids) | evidence_refs, "basis source required")
+    _history_payload(history, plan.turn)
     payload = {
         "plan": asdict(plan),
         "personas": [asdict(persona) for persona in personas],
         "evidence_refs": sorted(evidence_refs),
         "basis_refs": sorted(basis_refs),
         "jd_requirement_ids": sorted(jd_requirement_ids),
+        "reference_texts": [
+            asdict(source)
+            for source in reference_texts
+            if source.reference_id in basis_refs | jd_requirement_ids
+        ],
+        "evidence": [asdict(item) for item in selected],
+        "tool_results": [
+            {
+                **asdict(result),
+                "items": [
+                    asdict(item) for item in result.items if item.evidence_id in evidence_refs
+                ],
+            }
+            for result in tool_results
+        ],
+        "history": [
+            {
+                "question": asdict(item.question.data),
+                "answer": asdict(item.answer),
+                "analysis": asdict(item.analysis.data),
+            }
+            for item in history
+        ],
     }
 
     def validate(candidate: c.Question) -> c.ContractChecked[c.Question]:
