@@ -47,7 +47,7 @@ interviewStatus:  preparing | in_progress | completed | preparing_failed | aband
 runStatus:        running | completed | failed
 stepKey:          doc_extract | repo_select | repo_detail | jd_fetch
                   | jd_extract | repo_analyze | match_score
-prepareStepKey:   analyze_repo | build_persona | compose_question | set_criteria
+prepareStepKey:   analyze_repo | build_persona | set_criteria | compose_question
 stepStatus:       pending | running | completed | failed | skipped
 answerMode:       text            (2차에 voice 추가)
 repoStatus:       succeeded | partial | failed
