@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { api } from '@/shared/api';
+import { BASE, api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
 import type {
@@ -59,6 +59,14 @@ const FAILURE_TITLE: Record<string, string> = {
   persona_build_failed: '면접관 페르소나를 준비하지 못했어요',
   criteria_set_failed: '답변 평가 기준을 만들지 못했어요',
   question_gen_timeout: '첫 질문을 준비하지 못했어요',
+  /*
+    compose_question 실패로 이 화면에도 온다. 준비/진행 구분은 reason이 아니라 step이다
+    (frontend/docs/api-spec.md:1222 — 진행 중 오류는 step이 null).
+    명세(:195)의 "자동 1회 재시도"는 서버 몫이다. spec/ai/decisions/0010:68이 자동 1회
+    재호출을 AI 함수 내부로 정했고, :72는 retry_count를 사용자 수동 retry 횟수로만
+    한정한다 — FE가 prepare/retry를 자동으로 부르면 그 값이 오염된다.
+    그래서 이 화면은 수동 재시도만 둔다.
+  */
   question_failed: '첫 질문을 준비하지 못했어요',
   github_api_rate_limited: 'GitHub 요청 한도를 넘었어요',
   repo_unreachable: '선택한 레포에 접근할 수 없어요',
@@ -468,6 +476,39 @@ export default function InterviewPrepare() {
             >
               다시 시도
             </button>
+          )}
+          {/*
+            github_token_invalid는 레포를 다시 골라도 같은 오류로 돌아온다.
+            명세(spec/frontend/features/interview.md:202)대로 GitHub 재연동으로 보낸다.
+            OAuth 리다이렉트라 SPA 라우팅이 아닌 <a>가 맞다 (Home.tsx:35과 같은 경로).
+          */}
+          {displayError.reason === 'github_token_invalid' ? (
+            <a
+              href={`${BASE}/auth/github/link`}
+              className="flex h-12 items-center justify-center rounded-lg bg-accent text-sm font-bold text-surface"
+            >
+              GitHub 다시 연동하기
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate(`/interview/repos/${interview!.runId}`)}
+              className={
+                displayError.recoverable
+                  ? 'h-10 text-[13px] font-bold text-muted'
+                  : 'h-12 rounded-lg bg-accent text-sm font-bold text-surface'
+              }
+            >
+              레포 다시 선택하기
+            </button>
+          )}
+        </div>
+      ) : (
+        <>
+          {startFailed && (
+            <p className="text-[11px] font-bold text-error">
+              면접을 열지 못했어요 · 잠시 후 다시 눌러주세요
+            </p>
           )}
           <button
             type="button"
