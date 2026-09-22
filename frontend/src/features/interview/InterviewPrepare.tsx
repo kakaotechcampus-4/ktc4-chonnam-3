@@ -354,8 +354,12 @@ export default function InterviewPrepare() {
         })}
       </ul>
 
-      {/* 연결이 끊겨도 세션 상태는 바꾸지 않는다. 안내만 띄우고 재연결을 계속 시도한다. */}
-      {wsStatus === 'reconnecting' && (
+      {/*
+        연결이 끊겨도 세션 상태는 바꾸지 않는다. 안내만 띄우고 재연결을 계속 시도한다.
+        실패 배너가 떠 있으면 숨긴다. 재연결 중 조회한 상태가 preparing_failed면 위 가드가
+        소켓을 다시 열지 않아 wsStatus가 reconnecting으로 남고, 두 메시지가 함께 굳는다.
+      */}
+      {!displayError && wsStatus === 'reconnecting' && (
         <p className="text-[11px] font-bold text-error">연결이 끊겼어요 · 다시 연결하는 중이에요</p>
       )}
 
