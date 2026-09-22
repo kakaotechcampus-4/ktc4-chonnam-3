@@ -149,8 +149,8 @@ export default function InterviewPrepare() {
   const sessionClosedRef = useRef(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
-   * 예약된 재연결의 일련번호. 사용자가 다시 시도를 누르면 번호를 올려
-   * 이미 떠 있는 GET 응답이 돌아와도 attempt를 올리지 못하게 막는다.
+   * 예약된 재연결의 일련번호. 끊김이 연달아 나면 이전 GET 응답이 뒤늦게 돌아와도
+   * 지난 예약이 attempt를 올리지 못하게 막는다.
    */
   const reconnectSeqRef = useRef(0);
 
@@ -176,6 +176,8 @@ export default function InterviewPrepare() {
     if (!sessionId) return;
     // preparing_failed 진입은 스냅샷으로 충분하다. 다시 시도를 누른 뒤에만 연결한다.
     // attempt는 재연결로도 올라가므로 조건에 쓰지 않는다.
+    // 재시도 성공 시 setRetried(true)가 이 effect를 다시 돌려 소켓을 연다 —
+    // 새로고침으로 실패 화면에 들어와 소켓이 없는 경우의 연결 경로가 이것이다.
     if (status !== 'preparing' && !(status === 'preparing_failed' && retried)) return;
 
     let disposed = false;
@@ -197,6 +199,9 @@ export default function InterviewPrepare() {
 
       if (message.type === 'prepareStep') {
         setSteps((prev) => ({ ...(prev ?? INITIAL_STEPS), [message.key]: message.status }));
+        // 단계가 다시 도는 게 보이면 거절 안내도 무효다. prep_in_progress로 거절당한 뒤
+        // 서버가 실제로 진행하는 경우가 여기다.
+        setRetryRejected(null);
         // 재연결 시 이전 시도의 error가 늦게 도착하면 방금 지운 배너가 되살아난다.
         // 단계가 다시 도는 게 보이면 이전 오류는 무효다. 같은 단계의 failed 뒤에는
         // 곧바로 error가 따라오므로 실패 표시가 지워지지는 않는다.
@@ -285,8 +290,12 @@ export default function InterviewPrepare() {
     }
     setRetrying(false);
     setError(null);
-    setRetried(true);
     setReady(false);
+    // retried는 소켓을 여는 트리거다. 이미 열려 있으면 올리지 않는다 — effect deps가
+    // 바뀌면 cleanup이 멀쩡한 소켓을 닫고 새로 열어 그 사이 prepareStep을 놓친다.
+    // 소켓이 열려 있다는 건 status가 preparing이라는 뜻이라 snapshotError가 null이고,
+    // displayError는 retried 값과 무관하게 error가 된다.
+    if (socketRef.current?.readyState !== WebSocket.OPEN) setRetried(true);
     // 성공한 단계는 서버가 재실행하지 않는다. 실패 단계만 pending으로 되돌린다.
     setSteps(
       Object.fromEntries(
