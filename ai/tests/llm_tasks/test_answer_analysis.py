@@ -384,3 +384,20 @@ def test_analysis_uses_only_the_common_retry_boundary(analysis, run_analysis, ra
     result, calls = run_analysis(raw, analysis)
     assert isinstance(result, c.ModelSuccess)
     assert len(calls) == 2 and [item.attempt for item in result.attempts] == [1, 2]
+
+
+def test_unselected_tool_items_do_not_bypass_the_evidence_selection(
+    analysis,
+    run_analysis,
+    evidence,
+    locations,
+):
+    tool = c.AnalysisToolResult("found", (evidence,), ("src/cache.py",), (), None)
+    result, calls = run_analysis(analysis, tool_results=(tool,), allowed_locations=locations)
+    assert isinstance(result, c.ModelSuccess)
+    payload = json.loads(calls[0].input_json)
+    assert payload["evidence"] == [] and payload["tool_results"][0]["items"] == []
+    assert payload["tool_results"][0]["status"] == "found"
+    assert payload["tool_results"][0]["searched_scope"] == ["src/cache.py"]
+    assert evidence.content not in calls[0].input_json
+    assert tool.items == (evidence,)

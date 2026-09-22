@@ -82,7 +82,15 @@ async def analyze_answer(
         "answer": asdict(answer),
         "history": _history_payload(history, question_turn),
         "evidence": [asdict(item) for item in selected],
-        "tool_results": [asdict(result) for result in tool_results],
+        "tool_results": [
+            {
+                **asdict(result),
+                "items": [
+                    asdict(item) for item in result.items if item.evidence_id in evidence_refs
+                ],
+            }
+            for result in tool_results
+        ],
         "allowed_locations": sorted(allowed_locations),
     }
 
