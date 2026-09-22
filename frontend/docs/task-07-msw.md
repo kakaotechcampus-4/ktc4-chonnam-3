@@ -6,7 +6,7 @@
 ## 목표
 
 BE 없이 화면을 개발할 수 있도록 Service Worker 기반 mock API를 붙인다.
-응답은 `spec/shared/contracts/openapi.yaml`(Sprint 1 FIX)을 기준으로 한다.
+일반 HTTP 응답은 [OpenAPI](../../spec/shared/contracts/openapi.yaml), SSE·WS·브라우저 이동은 [공통 계약 안내](../../spec/shared/contracts/README.md)의 예외 원본을 따른다. mock이 응답한다는 사실과 현재 Sprint 1 제공 범위·실서버 구현 완료는 구분한다.
 
 ## 1. 설치
 
@@ -23,7 +23,7 @@ npx msw init public --save
 src/mocks/
 ├─ browser.ts            setupWorker
 ├─ start.ts              워커 시작 (동적 import 전용)
-├─ db.ts                 상태를 가진 in-memory 저장소
+├─ db/                   상태를 가진 in-memory 저장소 (config.ts, runs.ts, interviews.ts, index.ts)
 ├─ http.ts               경로·에러 envelope·시나리오 스위치
 ├─ handlers/
 │  ├─ index.ts           핸들러 집합 + 미등록 경로 catch-all
@@ -32,7 +32,7 @@ src/mocks/
 │  ├─ analysis.ts        /analysis-runs (+ SSE, result, candidates)
 │  └─ interview.ts       /interviews (+ report, retry)
 └─ fixtures/             도메인별 응답 데이터
-src/types/contract.ts    Sprint 1 FIX 계약 타입
+src/types/api.ts         FE·mock이 함께 사용하는 계약 타입
 ```
 
 ## 3. 실행
@@ -66,11 +66,9 @@ VITE_USE_MSW=false
 ### 전체 흐름 한 번에
 
 [`docs/msw-smoke-check.js`](msw-smoke-check.js) 전체를 devtools 콘솔에 붙여넣는다.
-등록된 핸들러를 순서대로 호출하고 PASS/FAIL 표를 출력한다. 약 15초 걸린다.
+일부 등록 핸들러를 순서대로 호출하고 PASS/FAIL 표를 출력한다. 응답 키·일부 값과 상태 전이를 코드에 적힌 기대값으로 비교하며 OpenAPI를 직접 읽어 전체 스키마를 검증하지 않는다. 총 검사 수와 성공 여부는 실행 결과로 확인한다. 설계 문서의 과거 통과 횟수를 현재 실행 결과로 사용하지 않는다.
 
-```
-전체 31 · PASS 31 · FAIL 0
-```
+현재 스크립트에는 Sprint 2로 이관된 `/auth/refresh` 검사와 당시 mock 전제가 남아 있다. [task-07-auth](task-07-auth.md)의 정리 대상이며, 전체 PASS도 Redis 세션의 생성·만료·로그아웃이나 WS·실서버 동작을 검증했다는 뜻은 아니다.
 
 mock 상태가 메모리에 남으므로 페이지당 한 번만 유효하다. 다시 돌리려면 새로고침한다.
 
@@ -105,7 +103,7 @@ localStorage.setItem('msw.home', 'no_repository');
 
 ## 6. 시간이 지나야 바뀌는 흐름
 
-`src/mocks/db.ts`가 `createdAt` 기준 경과 시간으로 상태를 계산한다. 속도는 파일 상단 상수로 조정한다.
+`src/mocks/db/`가 `createdAt` 기준 경과 시간으로 상태를 계산한다. 속도는 `db/config.ts` 상수로 조정한다.
 
 | 흐름 | 동작 |
 | --- | --- |
@@ -131,8 +129,10 @@ localStorage.setItem('msw.home', 'no_repository');
 
 ## 완료 조건
 
+아래 체크는 2026-09-19 작업 당시 기록이다. 이후 0003 인증 결정과 0017의 `matchScore: null` 기준 등은 별도 반영·검증 대상이며, 이 표를 현재 계약 전체 준수의 증거로 사용하지 않는다.
+
 - [x] 개발 서버에서 워커가 시작되고 `/api/*`를 가로챈다
-- [x] `openapi.yaml`의 Sprint 1 엔드포인트 정상 흐름을 모두 응답한다
+- [x] 당시 `openapi.yaml`에 있던 엔드포인트의 정상 흐름 핸들러 구성
 - [x] 분석 run·면접 준비·리포트·후보 page의 상태 전이가 동작한다
 - [x] SSE가 step 이벤트를 흘려보내고 `completed`로 끝난다
 - [x] 미등록 `/api` 경로가 조용히 통과하지 않는다

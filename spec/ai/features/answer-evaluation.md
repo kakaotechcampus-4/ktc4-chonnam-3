@@ -1,8 +1,8 @@
 # 답변 분석과 평가
 
-상태: Sprint 1 답변 분석은 FIX. 추가 근거 조회·결과 해석은 0003, 세 축 정성 평가·후속 보완은 0004, 질문 후보 복구 선택은 0008에서 Accepted인 AI 정책이다. 출력·저장·사용자 복구 계약은 Proposed이며 공개 점수 산식이 아니다.
+상태: Sprint 1 답변 분석은 FIX. 추가 근거 조회·결과 해석은 0003, 세 축 정성 평가·후속 보완은 0004, 질문 후보 복구 선택은 0008에서 Accepted인 AI 정책이다. 기존 분석 필드·값·저장 위치는 [0014](../decisions/0014-minimal-change-revision.md)에서 채택했으며 미채택 상세 형식·사용자 복구 계약은 Proposed다. 공개 점수 산식이 아니다.
 
-원본: [BE 면접](../../backend/features/interview.md), [LLM task 작업](../../../backend/docs/task-14-agents.md), [ForAI 2·4·5](../../../ForAI.md), [context AI 4장](../../../context/AI.md). 계약은 [AnswerAnalysis 제안](../contracts.md)을 따른다.
+원본: [BE 면접](../../backend/features/interview.md), [LLM task 작업](../../../backend/docs/task-14-agents.md). 과거 원본 `ForAI.md` 2·4·5항과 `context/AI.md` 4장은 현재 저장소에 없다. 당시 검토 내역은 [원본 감사 기록](../source-audit.md)을 참고하고, 현행 계약은 [AnswerAnalysis](../contracts.md#answeranalysis)을 따른다.
 
 ## 목적과 경계
 
@@ -20,7 +20,7 @@
 
 설명하지 못한 내용은 실제 질문의 충분성 판단에 반영할 수 있지만, “모르겠습니다”를 기술적으로 틀린 주장이나 거짓말로 자동 판정하지 않는다.
 
-초기 조건을 확인할 수 없으면 `needs_clarification` 또는 `not_evaluable` 제안 상태와 이유를 남긴다. [0008 결정](../decisions/0008-ai-candidate-policy.md)의 재작성·재계획·유효 후보 없음 구분은 다음 질문 후보에 적용한다. 사용자 재입력, service 복구·상태 매핑과 실제 저장 enum은 BE·FE와 함께 확정한다.
+초기 조건을 확인할 수 없으면 기존 `needs_clarification` 또는 `not_evaluable` 상태와 이유를 남긴다. [0008 결정](../decisions/0008-ai-candidate-policy.md)의 재작성·재계획·유효 후보 없음 구분은 다음 질문 후보에 적용한다. 사용자 재입력, service 복구·상태 매핑은 BE·FE와 함께 확정한다. 평가상태 채택을 새로운 서비스 상태나 복구 호출 승인으로 확대하지 않는다.
 
 ## 세 가지 판단을 분리
 
@@ -30,7 +30,7 @@
 | 기술적 정확성 | 주어진 조건·버전에서 설명이 타당한가 | 적용 조건, 검토 자료, 오류 또는 판단 보류 이유 |
 | 기여·근거 정합성 | 본인·공동·타인·미확인 중 진술된 범위와 자료가 지원하는 범위를 구분 | 사용자 발언, 원문, 확인 한계 |
 
-충분·부분·불충분의 의미 분류와 세 축 분리는 0004에서 승인했다. `sufficient/partial/insufficient` 등의 실제 enum·필드·저장 채택은 [내부 계약](../contracts.md)의 검토안으로 남긴다. 긴 답변·전문용어 수를 대리 점수로 쓰거나 정성 분류를 임의 숫자로 환산하지 않는다. `specificity`라는 오래된 필드 하나에 세 판단을 합치지 않는다.
+충분·부분·불충분의 의미 분류와 세 축 분리는 0004에서 승인했다. [0014](../decisions/0014-minimal-change-revision.md)에 따라 기존 `sufficient/partial/insufficient`, `covered_points/missing_points`와 다른 평면 분석 필드를 유지·채택한다. 축별 보류는 해당 판단 필드와 `limitations`에 남기며 별도 공통 평가 객체·부분 평가 상태는 추가하지 않는다. 충분성 자체를 판단할 수 없을 때만 판정값을 null로 두고 이미 확인한 내용은 보존한다. 상세 객체·참조 표현은 [내부 계약](../contracts.md#answeranalysis)의 잔여 검토 범위다. 긴 답변·전문용어 수를 대리 점수로 쓰거나 정성 분류를 임의 숫자로 환산하지 않는다. `specificity`라는 오래된 필드 하나에 세 판단을 합치지 않는다.
 
 사용자가 본인 역할이라고 설명한 것과 외부 자료로 확인된 것은 별개다. 구현·README·commit 수만으로 개인 작성·담당 업무를 확정하지 않는다.
 
@@ -64,7 +64,7 @@ Sprint 1에는 문서 Claim 추출이 없으므로 `document_claims`를 답변 �
 
 ## 실패와 확인 기준
 
-구조화 출력의 parse/schema/semantic 실패는 [공통 계약](../contracts.md)과 0008을 따라 구분한다. invalid 결과를 부분 JSON·비어 있는 성공·추측한 기본값으로 Director에 넘기지 않는다. 실제 재시도 주체·횟수와 semantic 실패의 재호출 여부는 별도 합의하며, 이미 저장한 답변은 실패해도 보존한다.
+구조화 출력의 parse/schema/semantic 실패는 [공통 계약](../contracts.md)과 0008을 따라 구분한다. invalid 결과를 부분 JSON·비어 있는 성공·추측한 기본값으로 Director에 넘기지 않는다. 재시도는 기존 공통 Gateway에서 최대 1회이며 semantic 실패는 재호출하지 않는다. 이미 저장한 답변과 최초 분석은 실패해도 보존한다. 실제 조회의 실패·중단 사유 보존과 그 미정인 영구 저장 경계는 [분석과 판단의 저장](../contracts.md#분석과-판단의-저장)을 따른다.
 
 필수 대조 사례:
 
