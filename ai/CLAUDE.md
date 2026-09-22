@@ -6,17 +6,20 @@
 명세 내용을 이 파일에 복제하지 않고 관련 spec 문서를 갱신한다.
 
 ## 실행 환경
-작업 디렉터리: backend — 현재 AI 구현 영역
-```text
-별도 ai 서비스 실행 명령 없음. backend 런타임 상태 확인.
-```
+AI 소스와 단독 검증의 작업 디렉터리는 `ai`이며 소스 원본은 `ai/src/devon_ai/`다. 기존 API·ARQ worker가 이 패키지를 import한다. 서비스 실행·통합 연결은 `backend`가 맡으며 별도 AI 서버는 없다.
+
+현재 구조·설치 상태와 명령은 `ai/README.md`, `ai/docs/testing.md`, `spec/ai/verification.md`를 따른다. 패키지 import 성공을 Director·분석·평가 기능 구현 완료로 취급하지 않는다.
 
 ## 실행할 검증
 ```text
-backend/tests의 해당 Agent·LLM task 테스트를 확인 후 실행.
+ai: uv run --locked ruff check .
+ai: uv run --locked ruff format --check .
+ai: uv run --locked mypy
+ai: uv run --locked pytest
+backend: uv run --locked pytest tests/agents/test_ai_package_imports.py
 모델 기반 평가는 데이터셋·모델 버전·비용·지표를 지정한 뒤 수행.
 ```
-AI 코드는 backend/app 아래에 있으므로 수정 시 backend/CLAUDE.md도 읽는다. 의존성 선언만으로 모델·provider·RAG 저장소 선정을 확정하지 않는다.
+`backend/app/agents/`와 `backend/app/llm_tasks/`의 연결 계층을 수정할 때는 `backend/CLAUDE.md`도 읽는다. BE import 검사는 패키지 연결 범위만 검증한다. 실제 모델·저장·작업 실행은 해당 구현과 테스트가 준비된 범위에서 확인한다. 의존성 선언만으로 모델·provider·RAG 저장소 선정을 확정하지 않는다.
 미구현·도구 미설치·테스트 없음은 미실행으로 보고한다.
 
 ## 산출물 위치
