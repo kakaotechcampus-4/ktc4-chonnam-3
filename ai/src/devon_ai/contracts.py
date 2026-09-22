@@ -45,6 +45,8 @@ def _convert(annotation: object, value: object, field: str, *, wire: bool) -> ob
             return value
     elif annotation is bool and type(value) is bool:
         return value
+    elif annotation is int and type(value) is int:
+        return value
     elif origin is tuple and len(args) == 2 and args[1] is Ellipsis:
         if type(value) is (list if wire else tuple):
             return tuple(_convert(args[0], item, field, wire=wire) for item in value)
@@ -337,6 +339,20 @@ class AnswerAnalysis(_Contract):
     needs_verification: bool
     verification_requests: tuple[VerificationRequest, ...]
     limitations: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SubmittedAnswer(_Contract):
+    """Validated text payload; BE still verifies receipt and persistence."""
+
+    type: Literal["answer"]
+    turn: int
+    text: str = field(repr=False)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not 1 <= self.turn <= 9:
+            raise ContractError("schema", "answer turn")
 
 
 def _checked_data[T](value: ContractChecked[T], expected: type[T]) -> T:
