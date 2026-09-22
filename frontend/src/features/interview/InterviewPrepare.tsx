@@ -6,6 +6,7 @@ import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
 import type {
+  AnswerMode,
   InterviewLastError,
   MeResponse,
   PrepareStepKey,
@@ -134,6 +135,10 @@ export default function InterviewPrepare() {
 
   const status = interview?.status;
   const sessionId = interview?.sessionId;
+  // Sprint 1은 항상 'text'라 음성 UI가 뜨지 않는다. Sprint 2에서 'voice'가 추가되면
+  // 이 값만으로 마이크·스피커 점검이 살아난다. spec/frontend/features/interview.md:103
+  // 스냅샷 도착 전에는 'text'로 본다. 안 그러면 로딩 중 한 프레임 동안 음성 UI가 스친다.
+  const answerMode: AnswerMode = interview?.answerMode ?? 'text';
 
   // status 별 도달 화면. 준비 화면에 머무는 건 preparing / preparing_failed 뿐이다.
   useEffect(() => {
@@ -371,44 +376,46 @@ export default function InterviewPrepare() {
       )}
 
       {/*
-        마이크 · 스피커 점검. 실제 장치 접근·재생·녹음은 Sprint 2(음성) 범위다.
-        Sprint 1은 answerMode가 항상 'text'라 화면만 두고 버튼은 비활성으로 남긴다.
+        마이크 · 스피커 점검. Sprint 2(음성) 범위라 Sprint 1 화면에는 뜨지 않는다.
+        (spec/frontend/features/interview.md:17) 실제 장치 접근·재생·녹음도 Sprint 2다.
       */}
-      <div className="border-t border-line-soft pt-5">
-        <h2 className="text-[13px] font-bold">마이크 · 스피커 점검</h2>
+      {answerMode !== 'text' && (
+        <div className="border-t border-line-soft pt-5">
+          <h2 className="text-[13px] font-bold">마이크 · 스피커 점검</h2>
 
-        {AUDIO_DEVICES.map(({ label, hint, action, badge }) => (
-          <div key={label} className="mt-4 flex items-center gap-3">
-            <div className="flex-1">
-              <p className="text-[13px] font-bold">{label}</p>
-              <p className="text-[11px] text-muted">{hint}</p>
+          {AUDIO_DEVICES.map(({ label, hint, action, badge }) => (
+            <div key={label} className="mt-4 flex items-center gap-3">
+              <div className="flex-1">
+                <p className="text-[13px] font-bold">{label}</p>
+                <p className="text-[11px] text-muted">{hint}</p>
+              </div>
+              {badge ? (
+                <span className="rounded-full bg-accent-soft px-3 py-1.5 text-[12px] font-bold text-accent">
+                  {badge}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="h-9 rounded-lg border border-line px-4 text-[12px] font-bold text-muted"
+                >
+                  {action}
+                </button>
+              )}
             </div>
-            {badge ? (
-              <span className="rounded-full bg-accent-soft px-3 py-1.5 text-[12px] font-bold text-accent">
-                {badge}
-              </span>
-            ) : (
-              <button
-                type="button"
-                disabled
-                className="h-9 rounded-lg border border-line px-4 text-[12px] font-bold text-muted"
-              >
-                {action}
-              </button>
-            )}
-          </div>
-        ))}
-
-        <div className="mt-4 flex h-12 items-center justify-center gap-1 rounded-card border border-line-soft">
-          {IDLE_LEVELS.map((level, index) => (
-            <span
-              key={index}
-              className="w-[3px] rounded-full bg-accent"
-              style={{ height: `${Math.round(level * 28)}px` }}
-            />
           ))}
+
+          <div className="mt-4 flex h-12 items-center justify-center gap-1 rounded-card border border-line-soft">
+            {IDLE_LEVELS.map((level, index) => (
+              <span
+                key={index}
+                className="w-[3px] rounded-full bg-accent"
+                style={{ height: `${Math.round(level * 28)}px` }}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 준비 중·실패 어느 쪽이든 항상 보인다. 값은 5b-v2가 읽는다. */}
       <label className="flex items-center gap-3">
