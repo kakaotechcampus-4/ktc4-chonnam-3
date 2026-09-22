@@ -1136,13 +1136,12 @@ data: {"type":"failed","reason":"github_token_invalid"}
 
 **UI states**
 
-1b(준비 실패) `다시 시도` 버튼 클릭 시 호출. 성공하면 실패 배너를 유지한 채 `prepareStep`을 기다리고, 첫 `prepareStep`이 오면 배너를 내린다.
+1b(준비 실패) `다시 시도` 버튼 클릭 시 호출. 성공하면 실패 배너를 내리고 실패 단계만 `pending`으로 되돌린 뒤 `prepareStep`을 기다린다. 재연결로 이전 시도의 `error`가 늦게 도착할 수 있으므로, 새 시도의 첫 `prepareStep`을 받으면 배너를 한 번 더 비운다.
 
 **Failure**
 
 | 코드 | reason | 화면 처리 |
 | --- | --- | --- |
-| 401 | `unauthenticated` | `/login` |
 | 409 | `prep_in_progress` | 이미 재실행 중. 배너 없이 진행 화면 유지 |
 | 409 | `prep_failed` | `preparing_failed` 상태가 아님. `GET /interviews/{id}`로 상태 재확인 |
 | 410 | `session_expired` | 재시도 버튼을 내리고 `레포 다시 선택하기`만 남긴다 |
