@@ -46,6 +46,23 @@ export async function streamPrepare(client: Client, createdAt: number) {
 }
 
 /**
+ * 준비 단계 실패를 체크리스트로 알린다.
+ *
+ * 실패한 단계 앞은 `completed`, 그 단계는 `failed`, 뒤는 `pending`.
+ * 화면(5a2-v2)이 체크리스트를 유지한 채 실패 칸만 ✕로 바꾸기 때문에
+ * 이 메시지 없이 `error`만 보내면 실패한 칸이 pending 인 채로 배너만 뜬다.
+ */
+export function sendPrepareFailure(client: Client, failedStep: PrepareStepKey) {
+  const failedIndex = PREPARE_STEPS.indexOf(failedStep);
+
+  PREPARE_STEPS.forEach((key, index) => {
+    if (index < failedIndex) send(client, { type: 'prepareStep', key, status: 'completed' });
+    else if (index === failedIndex) send(client, { type: 'prepareStep', key, status: 'failed' });
+    else send(client, { type: 'prepareStep', key, status: 'pending' });
+  });
+}
+
+/**
  * 준비 재시도. 실패한 단계부터 다시 실행하도록 시계를 되돌린다.
  * 성공한 단계는 재실행하지 않고 세션·선택 레포는 유지한다.
  *

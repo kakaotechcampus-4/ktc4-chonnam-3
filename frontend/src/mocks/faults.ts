@@ -1,3 +1,4 @@
+import type { PrepareStepKey } from '@/types/api';
 import { BASE } from '@/shared/api';
 
 /**
@@ -34,6 +35,14 @@ export type FaultRule = {
   code?: string;
   /** WebSocket 오류 전용. `false`면 서버가 세션을 닫는다. 생략하면 `true`. */
   recoverable?: boolean;
+  /**
+   * WebSocket 준비 단계 오류 전용. 어느 단계에서 실패했는지.
+   *
+   * 주입 규칙이 오류의 유일한 입력 통로다. 이 값이 없으면 `error.step`이 항상 `null`이 되고,
+   * 화면은 체크리스트의 어느 칸을 ✕로 칠지 알 수 없다(api-spec.md #18 UI states).
+   * 진행 중 오류에는 넣지 않는다. 계약상 `step`은 준비 단계 오류일 때만 값이 있다.
+   */
+  step?: PrepareStepKey;
   /** `timeout`일 때 지연 시간. 생략하면 30초. */
   delayMs?: number;
   /** 남은 적용 횟수. 생략하면 해제할 때까지 계속 적용된다. */

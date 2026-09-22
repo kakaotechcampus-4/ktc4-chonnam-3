@@ -18,6 +18,7 @@ export type ScenarioName =
   | 'report-unavailable'
   | 'session-limit'
   | 'server-error'
+  | 'ws-prepare-failed'
   | 'ws-question-failed'
   | 'ws-repo-unreachable'
   | 'offline'
@@ -120,7 +121,24 @@ export const scenarios: Record<ScenarioName, Scenario> = {
   },
 
   /**
-   * WS 연결 직후 오류. `recoverable: true`라 같은 세션에서 재시도할 수 있다.
+   * 준비 단계 오류. `step`이 있어야 화면이 체크리스트의 실패 칸을 ✕로 바꾼다.
+   * 재시도는 `POST /interviews/{id}/prepare/retry` 로 한다(0010 결정).
+   */
+  'ws-prepare-failed': {
+    describe: 'WS 준비 중 compose_question 실패. 체크리스트 ✕ + 재시도 경로를 본다.',
+    rules: [
+      {
+        path: '/ws/interviews/*',
+        reason: 'question_gen_timeout',
+        code: 'ERR_QUESTION_GEN_TIMEOUT',
+        step: 'compose_question',
+        recoverable: true,
+      },
+    ],
+  },
+
+  /**
+   * 진행 중 오류. 계약상 `step`은 `null`이다.
    * 준비 실패 화면은 seed 면접(`SEED_PREPARING_FAILED_INTERVIEW_ID`)으로도 열 수 있다.
    */
   'ws-question-failed': {

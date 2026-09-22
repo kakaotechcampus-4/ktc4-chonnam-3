@@ -3,7 +3,7 @@ import { ws } from 'msw';
 import { getInterviewBySessionId, interviewStatus } from '../db';
 import { takeFaultFor } from '../faults';
 import { path } from '../http';
-import { streamPrepare } from './prepare';
+import { sendPrepareFailure, streamPrepare } from './prepare';
 import { CLOSE_GRACE_MS, parseClientMessage, send, wait, wsError } from './protocol';
 import { handleAnswer, resendPendingQuestion, sendFirstQuestion } from './turns';
 
@@ -86,7 +86,12 @@ export const interviewWsHandlers = [
     const fault = takeFaultFor(new URL(client.url).pathname);
     if (fault?.reason) {
       const recoverable = fault.recoverable !== false;
-      send(client, wsError(fault.reason, fault.code ?? 'ERR_UNKNOWN', { recoverable }));
+      // 준비 단계 오류면 체크리스트부터 맞춰 준다. 그래야 화면이 실패 칸을 ✕로 바꾼다.
+      if (fault.step) sendPrepareFailure(client, fault.step);
+      send(
+        client,
+        wsError(fault.reason, fault.code ?? 'ERR_UNKNOWN', { recoverable, step: fault.step }),
+      );
       if (!recoverable) {
         // 같은 틱에 닫으면 클라이언트가 error 를 받기 전에 연결이 끊긴다.
         await wait(CLOSE_GRACE_MS);
