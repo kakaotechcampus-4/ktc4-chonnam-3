@@ -9,7 +9,7 @@ import type {
   InterviewLastError,
   MeResponse,
   PrepareStepKey,
-  StepStatus,
+  PrepareStepStatus,
   WsServerMessage,
 } from '@/types/api';
 
@@ -21,15 +21,14 @@ const PREPARE_STEPS: { key: PrepareStepKey; label: string }[] = [
   { key: 'compose_question', label: '첫 질문 구성' },
 ];
 
-const STATUS_SUFFIX: Record<StepStatus, string> = {
+const STATUS_SUFFIX: Record<PrepareStepStatus, string> = {
   pending: '',
   running: ' 중',
   completed: ' 완료',
   failed: ' 실패',
-  skipped: '',
 };
 
-type StepMap = Record<PrepareStepKey, StepStatus>;
+type StepMap = Record<PrepareStepKey, PrepareStepStatus>;
 
 const INITIAL_STEPS: StepMap = {
   analyze_repo: 'pending',
@@ -328,7 +327,7 @@ export default function InterviewPrepare() {
                   !
                 </span>
               )}
-              {(stepStatus === 'pending' || stepStatus === 'skipped') && (
+              {stepStatus === 'pending' && (
                 <span className="h-5 w-5 shrink-0 rounded-full bg-line-soft" />
               )}
               <span

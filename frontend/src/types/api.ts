@@ -14,6 +14,8 @@ export type StepKey =
   | 'match_score';
 export type PrepareStepKey = 'analyze_repo' | 'build_persona' | 'compose_question' | 'set_criteria';
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+/** prepareStepKey 4단계는 모두 필수 실행이라 skipped 가 오지 않는다. skipped 는 stepKey 전용. */
+export type PrepareStepStatus = Exclude<StepStatus, 'skipped'>;
 export type AnswerMode = 'text';
 export type Persona = 'tech_lead' | 'hr_manager' | 'domain_lead';
 export type ScoreKey =
@@ -294,17 +296,15 @@ export type InterviewDetailResponse = {
 
 // 4. WebSocket 메시지 타입
 
-export type WsClientMessage =
-  { type: 'prepareRetry' } | { type: 'answerStart' } | { type: 'answerEnd' };
+export type WsClientMessage = { type: 'prepareRetry' } | { type: 'answer'; text: string };
 
 export type WsServerMessage =
-  | { type: 'prepareStep'; key: PrepareStepKey; status: StepStatus }
+  | { type: 'prepareStep'; key: PrepareStepKey; status: PrepareStepStatus }
   | { type: 'prepareCompleted' }
-  | { type: 'transcript'; text: string }
+  | { type: 'answerReceived' }
   | { type: 'thinking' }
   | { type: 'evidenceCheck'; repository: string; file: string }
   | { type: 'question'; persona: Persona; text: string; turn: number }
-  | { type: 'questionEnd' }
   | { type: 'interviewEnd' }
   // step 은 준비 단계 오류일 때만 값이 있고, 진행 중 오류에서는 null 이다.
   | {
