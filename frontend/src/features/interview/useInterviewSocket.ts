@@ -52,6 +52,15 @@ export function useInterviewSocket({ interviewId, sessionId, enabled, onMessage 
     onMessageRef.current = onMessage;
   });
 
+  /**
+   * 닫힘 표시는 그 세션에만 해당한다. 레포 재선택 등으로 sessionId가 바뀌면 새 세션이므로
+   * 풀어준다. 그러지 않으면 이 훅이 살아 있는 한 새 세션에도 연결하지 못한다.
+   * 아래 연결 effect보다 먼저 선언해야 같은 커밋에서 이 리셋이 먼저 돈다.
+   */
+  useEffect(() => {
+    sessionClosedRef.current = false;
+  }, [sessionId]);
+
   useEffect(() => {
     if (!enabled || !sessionId) return;
     // 서버가 닫은 세션이나 명시적 이탈 이후에는 다시 열지 않는다.
@@ -82,7 +91,10 @@ export function useInterviewSocket({ interviewId, sessionId, enabled, onMessage 
     };
 
     socket.onclose = () => {
-      socketRef.current = null;
+      // close 이벤트는 비동기라 새 소켓이 이미 socketRef에 들어온 뒤 도착할 수 있다.
+      // 자기 소켓일 때만 비운다. 아니면 살아 있는 연결의 참조를 지워, 재시도·제출이
+      // OPEN 분기 대신 재연결 경로를 타면서 멀쩡한 소켓을 한 번 더 끊는다.
+      if (socketRef.current === socket) socketRef.current = null;
       if (disposed || sessionClosedRef.current) return;
 
       setDropCount((count) => count + 1);

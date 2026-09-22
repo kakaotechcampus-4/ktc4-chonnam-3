@@ -216,6 +216,9 @@ export default function InterviewScreen() {
     setError(null);
     // 연결이 없으면 보내지 않는다. 큐에 담아 두면 재연결이 늦어졌을 때
     // 지난 턴 답변이 다음 질문에 붙는다.
+    // turn은 싣지 않는다. WS 원본인 frontend/docs/api-spec.md:1152가 { type, text }다.
+    // features:154는 turn을 포함하고 :158이 서버 turn 검증을 요구해 서로 다르다.
+    // spec/shared/contracts/migration.md의 `answer`의 `turn` 행 참고 (PENDING_BE).
     if (!send({ type: 'answer', text: answerDraft })) {
       // 보내지 못했으니 제출한 적 없는 상태로 되돌린다. 입력창과 초안이 유지된다.
       setSendFailed(true);
