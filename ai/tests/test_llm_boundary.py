@@ -103,11 +103,14 @@ class FakeClient:
 
 def invoke(model_request, client, validator=check_decision):
     return asyncio.run(
-        llm_tasks.call_model(
-            model_request,
-            client=client,
-            contract_type=c.DirectorDecision,
-            validate=validator,
+        asyncio.wait_for(
+            llm_tasks.call_model(
+                model_request,
+                client=client,
+                contract_type=c.DirectorDecision,
+                validate=validator,
+            ),
+            timeout=1.0,
         )
     )
 
@@ -137,11 +140,14 @@ def test_success_requires_contract_checks_and_records_actual_metadata(model_requ
     ],
 )
 def test_invalid_output_never_becomes_success(model_request, raw, stage, code):
-    result = invoke(model_request, FakeClient(c.ModelResponse(raw, "actual")))
+    response = c.ModelResponse(raw, "actual")
+    client = FakeClient(response, response)
+    result = invoke(model_request, client)
     assert isinstance(result, c.ModelFailed)
     assert result.failure.stage == stage and result.failure.error_code == code
     assert not hasattr(result, "data")
     assert result.attempts[0].response.raw_output == raw
+    assert len(client.requests) == 2
 
 
 def test_semantic_failure_is_closed_without_exposing_error_values(model_request, decision_data):
@@ -164,3 +170,69 @@ def test_validator_cannot_return_an_unchecked_candidate(model_request, decision_
     )
     assert isinstance(result, c.ModelFailed)
     assert result.failure.stage == "semantic"
+
+
+@pytest.mark.parametrize("stage", ["timeout", "provider", "parse", "schema"])
+@pytest.mark.parametrize("recover", [True, False])
+def test_retryable_failures_have_exactly_two_attempts(model_request, decision_data, stage, recover):
+    bad = {
+        "timeout": TimeoutError("private transport error"),
+        "provider": llm_tasks.ModelProviderError("private transport error"),
+        "parse": c.ModelResponse("broken", "actual-v1"),
+        "schema": c.ModelResponse("{}", "actual-v1"),
+    }[stage]
+    good = c.ModelResponse(json.dumps(decision_data), "actual-v2", 5, 7)
+    client = FakeClient(bad, good if recover else bad)
+    result = invoke(model_request, client)
+    assert len(client.requests) == 2
+    assert client.requests[0] is client.requests[1] is model_request
+    assert [a.attempt for a in result.attempts] == [1, 2]
+    assert result.attempts[0].failure.stage == stage
+    assert all(a.latency_ms >= 0 for a in result.attempts)
+    assert "private transport error" not in repr(result)
+    if recover:
+        assert isinstance(result, c.ModelSuccess)
+        assert result.attempts[1].response is good
+    else:
+        assert isinstance(result, c.ModelFailed)
+        assert result.failure.stage == stage
+    if stage in ("timeout", "provider"):
+        assert result.attempts[0].response is None
+
+
+def test_semantic_failure_does_not_consume_a_second_response(model_request, decision_data):
+    bad = c.ModelResponse(json.dumps(dict(decision_data, persona="tech_lead")), "actual")
+    client = FakeClient(bad, c.ModelResponse(json.dumps(decision_data), "actual"))
+    result = invoke(model_request, client)
+    assert isinstance(result, c.ModelFailed) and result.failure.stage == "semantic"
+    assert len(client.requests) == 1
+
+
+def test_injected_timeout_cancels_each_hanging_attempt(model_request):
+    started, cancelled = [], []
+
+    async def hanging_client(value):
+        started.append(value)
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.append(True)
+
+    result = invoke(replace(model_request, timeout_seconds=0.01), hanging_client)
+    assert isinstance(result, c.ModelFailed)
+    assert result.failure.stage == "timeout" and result.failure.error_code == "llm_timeout"
+    assert len(started) == len(cancelled) == 2
+
+
+def test_external_cancellation_is_not_retried(model_request):
+    client = FakeClient(asyncio.CancelledError())
+    with pytest.raises(asyncio.CancelledError):
+        invoke(model_request, client)
+    assert len(client.requests) == 1
+
+
+def test_programming_errors_are_not_misclassified_as_provider_failures(model_request):
+    client = FakeClient(TypeError("adapter implementation bug"))
+    with pytest.raises(TypeError, match="adapter implementation bug"):
+        invoke(model_request, client)
+    assert len(client.requests) == 1
