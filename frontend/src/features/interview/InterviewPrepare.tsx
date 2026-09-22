@@ -179,6 +179,10 @@ export default function InterviewPrepare() {
 
       if (message.type === 'prepareStep') {
         setSteps((prev) => ({ ...(prev ?? INITIAL_STEPS), [message.key]: message.status }));
+        // 재연결 시 이전 시도의 error가 늦게 도착하면 방금 지운 배너가 되살아난다.
+        // 단계가 다시 도는 게 보이면 이전 오류는 무효다. 같은 단계의 failed 뒤에는
+        // 곧바로 error가 따라오므로 실패 표시가 지워지지는 않는다.
+        setError(null);
       } else if (message.type === 'prepareCompleted') {
         setReady(true);
       } else if (message.type === 'error') {
