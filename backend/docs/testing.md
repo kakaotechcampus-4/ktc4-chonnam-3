@@ -25,7 +25,7 @@
 | Interview create | repo 1~5개, L1 succeeded만 허용, 활성 면접 1개 제한 |
 | Prep | primary repo 1~2개, notable_areas 필수, preparing_failed 분리 |
 | WS | `{type:"answer", turn, text}` 수신, turn mismatch 차단, answerReceived/thinking/question/interviewEnd/error 송신 |
-| Turn | 첫 turn hr_manager, persona별 tech_lead 6턴·domain_lead 2턴·hr_manager 1턴, 9턴 종료 |
+| Turn | 첫 turn hr_manager, tech_lead 목표 6턴·최소 5턴, domain_lead+hr_manager 합산 최소 3턴, 개별 배분 비고정·HR 재선택, 9턴 종료 |
 | Evidence | evaluation_basis 보강, answer_vs_code conflict 생성 |
 | Redis | `iv:ctx` 만료 시 Postgres에서 재구성 |
 | Report | lazy generation 202/200/409, `feedback_json`, profile summary enqueue |

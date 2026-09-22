@@ -14,7 +14,8 @@
 
 ## 관련 공통 결정
 
-- [0002 로컬 정책 기준 채택](../../shared/decisions/0002-local-policy-baseline.md): 2026-09-22 사용자 결정. 포트폴리오 20MB, 공고 재사용 7일, 정상 9턴의 기술/도메인/HR 6/2/1을 채택한다. 기존 설정 예시를 유지하고 관련 명세를 맞추며 실제 BE 연결·검증은 구현 작업으로 남긴다.
+- [0002 로컬 정책 기준 채택](../../shared/decisions/0002-local-policy-baseline.md): 2026-09-22 사용자 결정. 포트폴리오 20MB와 공고 재사용 7일은 유지하며 면접 배분은 후속 0004로 대체한다. 실제 BE 연결·검증은 구현 작업으로 남긴다.
+- [0004 면접 질문 배분의 기존 기준 복원](../../shared/decisions/0004-flexible-persona-allocation-restoration.md): 2026-09-22 사용자 결정. 정상 9턴·첫 HR을 유지하고 기술 목표 6턴·최소 5턴, 도메인·HR 합산 최소 3턴과 개별 배분 비고정을 복원한다. DB·공개 API 구조는 유지하며 실제 횟수 제어는 구현·검증 대기다.
 - [0003 Sprint 1 세션 인증](../../shared/decisions/0003-sprint1-session-auth.md): 2026-09-22 사용자 결정. Redis `auth:sess:{sid}`·HttpOnly `devon_session`·14일 sliding 세션을 사용하고 JWT·refresh는 Sprint 2로 넘긴다. SQL `auth_sessions` 제외와 GitHub token의 암호화 DB 저장을 유지하며 실제 인증 연결은 구현·검증 대기다.
 
 ## 관련 AI 결정

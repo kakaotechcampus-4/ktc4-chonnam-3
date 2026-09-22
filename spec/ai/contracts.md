@@ -39,7 +39,7 @@
 | `interview_id`, `current_turn_id` | 서버가 식별한 현재 면접과 Turn; 첫 질문 전 Turn ID는 없음 |
 | `turn_no`, `total_turns` | 현재 질문 번호와 FIX 상한 9 |
 | `persona_counts` | 이미 확정·제시된 질문의 Persona별 횟수 |
-| `allowed_personas` | 정상 9턴의 `tech_lead` 6회·`domain_lead` 2회·`hr_manager` 1회 중 잔여 횟수가 있는 후보; 첫 질문은 HR로 제한하며 Controller가 계산 |
+| `allowed_personas` | [공통 0004](../shared/decisions/0004-flexible-persona-allocation-restoration.md)에 따라 남은 턴으로 기술 최소 5턴·도메인과 HR 합산 최소 3턴을 충족할 수 있는 후보; 기술 목표는 6턴이며 첫 질문은 HR로 제한하고 Controller가 계산 |
 | `jd_requirements` | 저장된 ID, 원문, requirement_type, source field, tech_tags |
 | `repositories` | 선택 repo ID, 고정 ref, primary 여부, 성공 분석과 분석 범위 |
 | `history` | 질문·Persona·제출 답변·판정·참조 ID; 사실과 요약 구분 |

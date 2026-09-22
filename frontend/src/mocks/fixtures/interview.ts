@@ -3,7 +3,8 @@ import { REQ_MONITORING, REQ_PAYMENT_DOMAIN, jdRequirements } from './jd';
 
 /**
  * 면접 턴 구성은 `spec/backend/features/interview.md`의 Turn 정책을 따른다.
- * 기본 9턴, 1턴은 `hr_manager` 고정, `tech_lead` 6턴, `domain_lead`+`hr_manager` 합산 3턴.
+ * 아래 예시는 9턴·첫 HR·기술 6턴·도메인 1턴·HR 2턴이며, 역할별 고정 배분을 뜻하지 않는다.
+ * 실제 정책은 기술 목표 6턴·최소 5턴, 도메인·HR 합산 최소 3턴이고 개별 배분은 유동적이다.
  */
 export const TOTAL_TURNS = 9;
 

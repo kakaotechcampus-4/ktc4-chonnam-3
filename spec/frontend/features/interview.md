@@ -8,7 +8,7 @@
 
 WebSocket으로 AI 면접관과 텍스트 면접을 진행한다. 준비 단계와 진행 단계가 같은 WS 연결을 공유한다.
 
-[공통 0002](../../shared/decisions/0002-local-policy-baseline.md)에 따라 정상 완료 9턴은 `tech_lead:6`, `domain_lead:2`, `hr_manager:1`이다. 첫 질문 HR은 이 1턴에 포함하며 이후 고정 질문 순서를 추가하지 않는다. 역할 배분 로직의 구현 완료를 뜻하지 않는다.
+[공통 0004](../../shared/decisions/0004-flexible-persona-allocation-restoration.md)에 따라 정상 완료는 9턴이며 첫 질문은 HR이다. 기술 질문은 목표 6턴·최소 5턴, 도메인·HR 질문은 첫 HR을 포함해 합산 최소 3턴이다. 도메인·HR의 개별 배분과 첫 질문 이후의 순서는 고정하지 않으며 HR을 다시 선택할 수 있다. 역할 배분 로직의 구현 완료를 뜻하지 않는다.
 
 | 화면 | 코드 | 구성 |
 | --- | --- | --- |

@@ -19,7 +19,7 @@
 
 - [Director와 텍스트 면접](../../spec/ai/features/interviewer.md)의 역할과 입력, 고정 9턴
   정책, 질문 생성과 검증, 답변부터 다음 질문까지를 따른다.
-- Persona 횟수는 [공통 0002 결정](../../spec/shared/decisions/0002-local-policy-baseline.md)의 기술 6·domain 2·HR 1회를 따른다.
+- Persona 횟수는 [공통 0004 결정](../../spec/shared/decisions/0004-flexible-persona-allocation-restoration.md)의 기술 목표 6턴·최소 5턴, 도메인·HR 합산 최소 3턴을 따른다. 도메인과 HR의 개별 횟수는 고정하지 않는다.
 - [내부 계약](../../spec/ai/contracts.md)의 질문 기준·기존 DirectorDecision은 [0014](../../spec/ai/decisions/0014-minimal-change-revision.md), Context·Question·Evidence 기본 구성과 ToolResult 부분 오류 처리는 [0015](../../spec/ai/decisions/0015-existing-contracts-and-tool-results.md)를 따른다.
   미채택 상세 타입·행동별 표현·Tool 인수는 기존 구조에 맞춰 구체화하고 fixture로 검토한다.
 - [도메인 질문 정책](../../spec/ai/decisions/0005-domain-question-policy.md)과
@@ -61,8 +61,8 @@ Persona마다 별도 Agent나 class를 만들지 않는다. `hr_manager`, `tech_
 - [ ] 첫 질문은 `hr_manager`로 고정하고, 코드 Evidence 없이 자기소개를 물을 수 있게 한다.
 - [ ] 2번째 질문부터 Controller가 준 허용 Persona 안에서만 후보를 선택한다.
 - [ ] 정상 흐름은 9번째 답변 처리 뒤 종료하며 9번째 질문 전송만으로 끝내지 않는다.
-- [ ] 정상 9턴의 `tech_lead` 6회·`domain_lead` 2회·`hr_manager` 1회를 지킨다.
-- [ ] 첫 HR 질문 외의 고정 질문 순서·교대는 추가하지 않고, 2번째 질문부터 잔여 횟수가 있는 Persona 안에서 선택한다.
+- [ ] 정상 9턴에서 `tech_lead` 목표 6턴·최소 5턴과 `domain_lead + hr_manager` 합산 최소 3턴을 지킨다.
+- [ ] 도메인·HR의 개별 횟수와 질문 순서를 고정하지 않고, 2번째 질문부터 허용 Persona 중 답변 맥락에 맞춰 선택한다. 첫 HR 질문 뒤에도 HR을 선택할 수 있다.
 - [ ] 질문 목적, 필수 확인내용, 가정과 유효한 근거 참조를 먼저 구성한다.
 - [ ] ID·Persona·남은 턴·참조 유효성처럼 결정 가능한 조건은 Controller 검사로 남긴다.
 - [ ] 전제·목적·필수 확인내용이 유효하고 표현만 복합적·유도적이면 의미를 보존한 rewrite 후보로 분류한다.
@@ -84,7 +84,7 @@ Persona마다 별도 Agent나 class를 만들지 않는다. `hr_manager`, `tech_
 추가 예정, 현재 없음: `ai/tests/agents/director/test_director.py`.
 
 - [ ] 첫 질문 HR, 9번째 답변 후 종료, 10번째 질문 없음의 대조 사례를 둔다.
-- [ ] Controller가 6·2·1에서 이미 확정·제시한 횟수를 빼고 잔여 횟수가 없는 Persona를 제외하는지 검사한다. 첫 HR 질문 뒤 HR 재선택과 정상 9턴의 분포 불일치를 거절한다.
+- [ ] Controller가 이미 확정·제시한 횟수와 남은 턴을 확인해 기술 최소 5턴·도메인과 HR 합산 최소 3턴을 충족할 수 있는 Persona만 허용하는지 검사한다. 최소 조건을 충족할 수 있는 HR 재선택을 고정 할당으로 막지 않는다.
 - [ ] 허용되지 않은 Persona, 없는 Evidence, 잘못된 ref와 Contract 불일치 후보를 거절한다.
 - [ ] 깨진 JSON, 계약 누락, 구조는 맞지만 허용 Persona·ref를 어긴 후보를 parse/schema/semantic 실패로 구분하고 default로 보충하지 않는다.
 - [ ] 충분한 답변 반복, 후속 보완, 기여 정정, Persona 전환 뒤에도 기록 연결을 유지한다.
@@ -109,7 +109,7 @@ Mock과 policy fixture 통과는 실제 provider 품질, DB 저장, WS 전달이
 | --- | --- | --- |
 | AI-L02 내부 계약 | 기존 여섯 판단 필드와 ask/retrieve/finish, reason_summary의 실제 조회 요약 검토 | 미채택 상세 객체·행동별 null·ToolResult·공개 변환 확정; 영구 실패 기록 위치는 AI-L18, 복구는 AI-L12와 함께 검토 |
 | AI-L04 실행 상한 | ADR 0008 실패 분류·복구 선택 fixture | 공통 LLM 호출 총 2회·semantic 재호출 금지 유지, Tool·재작성·재계획 budget과 소진 처리의 구현·측정 |
-| AI-L09 서비스 연결 | rewrite/replan/failure 선택, 정상 9턴·Persona 6·2·1 고정 횟수 검사 | 기존 반환·오류 안내·기록 보존·명시적 종료 연결 검증; Director는 잔여 횟수 안에서 선택하며 새 수동 이어가기 없음 |
+| AI-L09 서비스 연결 | rewrite/replan/failure 선택, 정상 9턴·기술 목표 6턴·최소 5턴과 도메인·HR 합산 최소 3턴 검사 | 기존 반환·오류 안내·기록 보존·명시적 종료 연결 검증; Director는 최소 조건을 충족할 수 있는 후보 중 답변 맥락에 따라 선택하며 새 수동 이어가기 없음 |
 | AI-L10 domain 운영 | `etc`, 맥락 관련성·목적 비반복 fixture | 운영 문구·검수·version·저장 방식 승인 |
 | AI-L11~L14 BE/WS | 순수 후보와 단일 연결 fixture | worker, 멱등성, WS 식별·복구 계약을 각 담당과 확정 |
 

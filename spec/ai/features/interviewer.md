@@ -31,16 +31,16 @@ Question Contract는 [0014](../decisions/0014-minimal-change-revision.md)에 따
 - 질문 하나와 그 답변이 한 Turn이다. Tool 호출·질문 재작성은 사용자 Turn 수에 넣지 않는다.
 - 정상 Sprint 1은 9번째 질문에 대한 답변 처리를 완료한 뒤 종료한다. 9번째 질문을 보냈다는 이유만으로 답변을 받기 전에 완료하지 않는다.
 - 첫 질문은 `hr_manager`, 이후 Persona는 Director가 선택한다.
-- [공통 0002 결정](../../shared/decisions/0002-local-policy-baseline.md)에 따라 정상 9턴의 Persona 횟수는 `tech_lead` 6회·`domain_lead` 2회·`hr_manager` 1회로 고정한다.
-- [BE Turn 정책](../../backend/features/interview.md#turn-정책)에 따라 2번째 질문부터 Director가 잔여 횟수가 있는 Persona 중에서 선택한다. 첫 HR 질문 외에 고정 질문 순서·교대를 추가하지 않으며 미관찰 Persona의 피드백을 지어내지 않는다.
+- [공통 0004 결정](../../shared/decisions/0004-flexible-persona-allocation-restoration.md)에 따라 정상 9턴에서 `tech_lead`는 목표 6턴·최소 5턴, `domain_lead + hr_manager`는 합산 최소 3턴으로 한다. 도메인과 HR의 개별 횟수는 고정하지 않는다.
+- [BE Turn 정책](../../backend/features/interview.md#turn-정책)에 따라 2번째 질문부터 Director가 허용 Persona 중에서 답변 맥락에 맞춰 선택한다. 첫 HR 질문 이후에도 HR을 선택할 수 있다. 고정 질문 순서·교대를 추가하지 않으며 미관찰 Persona의 피드백을 지어내지 않는다.
 - 기술 질문은 primary repo 1~2개 중심으로 한다. 선택된 모든 repo를 균등하게 질문할 의무는 없다.
 - Director의 정상 조기 종료는 허용하지 않는다. 사용자 종료·장애 처리는 별도 service 정책이고, 분포를 채우기 위해 사용자 종료 이후 계속 질문하지 않는다.
 
 Controller의 Persona 후보 제한:
 
-Controller는 6·2·1에서 이미 확정·제시한 Persona별 횟수를 빼고, 잔여 횟수가 없는 Persona를 후보에서 제외한다. 첫 HR 질문 뒤에는 HR 잔여 횟수가 0이므로 다시 선택하지 않는다. Director는 남은 후보 안에서 현재 답변에 적합한 관점을 선택하며, 정상 종료 시 6·2·1을 충족해야 한다.
+Controller는 이미 확정·제시한 Persona별 횟수와 남은 턴을 확인하고, 남은 턴으로 기술 최소 5턴·도메인과 HR 합산 최소 3턴을 충족할 수 있는 Persona만 허용한다. Director는 기술 목표 6턴을 고려하면서 허용 후보 중 현재 답변에 적합한 관점을 선택한다. 도메인과 HR의 개별 할당이나 첫 질문 이후 HR 재선택 금지는 두지 않는다.
 
-질문 수·답변 완료 수는 구분한다. 요청 중복·Tool 재시도 때문에 횟수를 늘리지 않는다. 이미 사용자에게 제시한 질문의 Persona를 나중에 바꿔 quota를 맞추지 않는다.
+질문 수·답변 완료 수는 구분한다. 요청 중복·Tool 재시도 때문에 횟수를 늘리지 않는다. 이미 사용자에게 제시한 질문의 Persona를 나중에 바꿔 최소 횟수를 맞추지 않는다.
 
 ## 질문 생성과 검증
 
@@ -94,7 +94,7 @@ WS 경로는 `/api/ws/interviews/{sessionId}`이며 REST route는 `interviewId`�
 
 ## 수용 검사
 
-- 첫 질문 HR, 정상 9턴의 6·2·1 횟수, 잔여 횟수가 없는 Persona 선택 거절, 9번째 답변 후 종료와 10번째 질문 없음을 확인한다.
+- 첫 질문 HR, 정상 9턴의 기술 목표 6턴·최소 5턴과 도메인·HR 합산 최소 3턴, HR 재선택 허용, 남은 턴으로 최소 조건을 충족할 수 없는 Persona 선택 거절, 9번째 답변 후 종료와 10번째 질문 없음을 확인한다.
 - 후속 답변 보완·기여 정정·Persona 전환 후에도 같은 기록 참조.
 - 없는 Evidence·범위 밖 repo·잘못된 ref·중복 질문 후보 차단.
 - JSON/Tool/재계획 실패로 질문 또는 답변이 두 번 확정되지 않음.

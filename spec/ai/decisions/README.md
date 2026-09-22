@@ -17,7 +17,8 @@
 각 결정의 승인 범위는 후속 결정까지 함께 적용한다. 0010·0014~0019에서 채택한 정책을 이전 기록의 보류 문구만으로 다시 미정 처리하지 않는다. 남은 상세 구현·저장 연결·실측·검수는 아래 구현 인계에서 관리한다.
 
 - [공통 0003 Sprint 1 세션 인증 유지](../../shared/decisions/0003-sprint1-session-auth.md): Accepted, 2026-09-22. 0010의 `accessToken` 인증 부분을 Redis·`devon_session`으로 대체한다. 면접 `sessionId`와 로그인 세션 ID는 별개이며 JWT·갱신은 Sprint 2로 이관한다.
-- [공통 0002 로컬 정책 기준 채택](../../shared/decisions/0002-local-policy-baseline.md): Accepted, 2026-09-22. 포트폴리오 20MB, 공고 재사용 7일, 정상 9턴의 기술/도메인/HR 6/2/1을 채택한다. 0014의 TTL·개별 배분 부분만 대체하며 실제 연결·구현 검증은 남는다.
+- [공통 0002 로컬 정책 기준 채택](../../shared/decisions/0002-local-policy-baseline.md): Partially Superseded, 2026-09-22. 포트폴리오 20MB와 공고 재사용 7일은 유지한다. 당시 채택한 정상 9턴의 기술/도메인/HR 6/2/1은 공통 0004로 대체하며 실제 연결·구현 검증은 남는다.
+- [공통 0004 면접 역할 배분 기존안 복원](../../shared/decisions/0004-flexible-persona-allocation-restoration.md): Accepted, 2026-09-22. 정상 9턴·첫 HR 질문·조기 종료 없음을 유지하고 기술 목표 6턴·최소 5턴, 도메인·HR 합산 최소 3턴을 복원한다. 개별 배분은 고정하지 않으며 2턴부터 Director가 답변 맥락과 최소 조건에 맞춰 선택한다.
 
 - [0001 AI 구현 기준선](0001-ai-baseline.md) — Accepted, 2026-09-12. 모델 선택 부분은 0011로 대체.
 - [0002 Sprint 1 vector 검색 미도입](0002-sprint1-vector-search.md): Accepted, 2026-09-12. 0001의 Sprint 1 pgvector 보류 부분만 대체하며, BE 반영 확인·Sprint 2 세부는 대기.
@@ -35,7 +36,7 @@
 
 - [0013 답변 분석과 다음 행동 판단의 저장](0013-turn-analysis-decision.md): Partially Superseded, 2026-09-21. 당시 결정 이력. 두 JSONB 위치·기존 보존 목적은 유지하며 추가 객체·상태·조회별 저장 등은 0014로 대체한다.
 
-- [0014 기존 설계를 유지하는 최소 변경 재결정](0014-minimal-change-revision.md): Partially Superseded, 2026-09-21. 기존 질문·분석·판단 필드와 저장 순서를 유지하고 0012·0013의 불필요한 구조 확장을 철회한다. 필수 보존 원칙과 기존 미정 범위는 유지하며 공고 TTL·역할별 배분은 후속 공통 0002를 따른다.
+- [0014 기존 설계를 유지하는 최소 변경 재결정](0014-minimal-change-revision.md): Partially Superseded, 2026-09-21. 기존 질문·분석·판단 필드와 저장 순서를 유지하고 0012·0013의 불필요한 구조 확장을 철회한다. 필수 보존 원칙과 기존 미정 범위는 유지하며 공고 TTL은 공통 0002, 역할별 배분은 기존안을 복원한 공통 0004를 따른다.
 
 - [0015 기존 내부 계약·작업 인수 유지와 부분 조회 오류 처리](0015-existing-contracts-and-tool-results.md): Accepted, 2026-09-22. 기존 Context·Question·Evidence 기본 필드, ToolResult 다섯 필드·네 상태와 오류 시 유효 근거 보존, 다섯 job의 전달 인수, 프로필의 기존 저장·공개 구조를 채택한다. 프로필 언어 집계는 0016, 개인 역할 요약은 0019를 따르며 운영 상한·미채택 상세 구현 경계는 해당 잔여 범위다.
 
