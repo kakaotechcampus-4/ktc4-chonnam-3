@@ -29,5 +29,7 @@
 | Private repo | 지원하지 않음. 필드만 유지 | FIX |
 | Report score | 0~100 score 6개와 단순 평균 `totalScore`; 세부 기준 seed는 보강 가능 | FIX |
 | pgvector | 실제 vector 검색 필요 여부 | `PENDING_AI` |
+| `answer`의 `turn` | `spec/frontend/features/interview.md:149`·`:154`와 `spec/backend/features/interview.md:54`는 `{ type, turn, text }`, `frontend/docs/api-spec.md:1146`·`:1152`는 `{ type, text }`다. FE는 BE 문서 기준으로 `turn`을 싣도록 구현했다 — 서버가 `turn`을 필수로 받으면 `text`만 보내는 쪽이 깨지기 때문이다. features:158이 "현재 답변 가능한 turn과 일치해야 한다"는 서버 검증을 요구해 판단 근거가 없다. 지금 FE는 끊긴 상태의 전송을 아예 차단해 회피한다 — 큐에 담으면 재연결이 늦어졌을 때 지난 턴 답변이 다음 질문에 붙는다. `turn`이 들어오면 서버가 거절할 수 있으므로 이 제약을 풀 수 있다. 함께 정할 것: 불일치 시 reason을 `answer_rejected`로 묶을지 신규로 만들지 — 현재 `answer_rejected`의 화면 처리는 "같은 턴 재제출"이라 (`frontend/docs/api-spec.md:1209`) 지나간 턴에는 맞지 않는다 | `PENDING_BE` |
+| 명시적 이탈 통지 | `abandoned`는 명시적 이탈과 레포 재선택으로만 설정한다 (`spec/frontend/features/interview.md:90`, `backend/docs/pipeline.md:241-242`). 그런데 FE가 "나가기를 눌렀다"를 서버에 알릴 수단이 계약에 없다 — REST 엔드포인트 없음, WS 클라이언트 메시지는 `answer`뿐 (`frontend/docs/api-spec.md:1152`), close code 규약도 없음. 서버가 끊김과 구분할 수 없어 Sprint 1에서 이탈 모달은 화면만 닫는다. FE 제안은 REST — 이탈 모달은 재연결 중에도 누를 수 있어 소켓이 죽은 상태에서는 close code·WS 메시지가 나가지 못한다. 덧붙여 `frontend/docs/api-spec.md:1140`·`:1604`는 아직 "재연결 실패 시 `abandoned` 확정"으로 적혀 있어 위 결정과 충돌한다 | `PENDING_BE` |
 
 기존 자료는 참고 기록으로 남긴다. 구현자는 이 문서의 FIX/PENDING 상태를 보고 범위를 판단한다.

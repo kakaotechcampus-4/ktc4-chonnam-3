@@ -129,9 +129,10 @@ export function useInterviewSocket({ interviewId, sessionId, enabled, onMessage 
   /**
    * 보냈으면 true. 연결이 없을 때 큐에 담을지는 호출자가 정한다.
    *
-   * queue: true는 멱등한 메시지(prepareRetry)에만 쓴다. answer는 turn을 싣지 않아
-   * 서버가 "현재 턴"에 저장하므로, 재연결이 늦으면 지난 턴 답변이 다음 질문에 붙는다.
-   * 그래서 answer는 큐에 담지 않고 실패로 돌려준다. 잠금이 턴 기준이라 다시 누르면 된다.
+   * queue: true는 멱등한 메시지(prepareRetry)에만 쓴다. answer는 turn을 싣지만 서버가
+   * 불일치를 거절한다는 보장이 아직 없어(migration.md의 `answer`의 `turn` 행, 불일치
+   * reason 미정) 큐에 담지 않고 실패로 돌려준다. 재연결이 늦으면 지난 턴 답변이 다음
+   * 질문에 붙을 수 있기 때문이다. 잠금이 턴 기준이라 다시 누르면 된다.
    */
   const send = useCallback((message: WsClientMessage, options?: { queue?: boolean }) => {
     if (sessionClosedRef.current) return false;

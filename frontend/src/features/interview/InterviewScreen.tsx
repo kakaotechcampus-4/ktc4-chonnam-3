@@ -260,9 +260,10 @@ export default function InterviewScreen() {
     if (!question || answerDraft.trim() === '' || overLength) return;
 
     setError(null);
-    // 연결이 없으면 보내지 않는다. 큐에 담아 두면 재연결이 늦어졌을 때
-    // 지난 턴 답변이 다음 질문에 붙는다.
-    if (!send({ type: 'answer', text: answerDraft })) {
+    // 연결이 없으면 큐에 담지 않고 실패로 돌린다 — 사유는 useInterviewSocket의 send.
+    // turn은 spec/backend/features/interview.md:54 기준이고 확정은 아직이다
+    // (migration.md의 `answer`의 `turn` 행, PENDING_BE).
+    if (!send({ type: 'answer', turn: question.turn, text: answerDraft })) {
       // 보내지 못했으니 제출한 적 없는 상태로 되돌린다. 입력창과 초안이 유지된다.
       setSendFailed(true);
       submittedTurnRef.current = null;
@@ -278,6 +279,11 @@ export default function InterviewScreen() {
   }
 
   function handleLeave() {
+    // 서버에 이탈을 알리지 않는다. 명세는 명시적 이탈만 abandoned로 인정하는데
+    // (spec/frontend/features/interview.md:90, backend/docs/pipeline.md:241-242)
+    // 알릴 수단이 계약에 없다 — REST 엔드포인트도, WS 클라이언트 메시지도, close code
+    // 규약도 없다. 서버는 이 종료를 단순 끊김과 구분하지 못한다.
+    // spec/shared/contracts/migration.md의 `명시적 이탈 통지` 행 참고 (PENDING_BE).
     setLeaveModalOpen(false);
     closeSocket();
     navigate('/home', { replace: true });
