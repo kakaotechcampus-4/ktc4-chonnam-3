@@ -18,6 +18,7 @@ def test_plan_pins_question_identity_requirements_and_controller_permissions(pla
         {"question_id": " "},
         {"turn": 0},
         {"turn": 10},
+        {"turn": 1},
         {"turn": True},
         {"allowed_personas": ("MANAGER",)},
         {"allowed_personas": ("tech_lead", "tech_lead")},

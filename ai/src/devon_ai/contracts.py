@@ -555,6 +555,8 @@ class QuestionPlan(_Contract):
         _unique(self.allowed_personas, "allowed personas")
         if not 1 <= self.turn <= 9:
             raise ContractError("schema", "question turn")
+        if self.turn == 1 and any(persona != "hr_manager" for persona in self.allowed_personas):
+            raise ContractError("semantic", "first question persona")
         if self.remaining_candidates < 0:
             raise ContractError("schema", "remaining candidates")
 
