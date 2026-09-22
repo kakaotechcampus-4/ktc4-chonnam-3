@@ -405,7 +405,7 @@ def validate_analysis(
     _references(covered, keys, "covered_points")
     _references(candidate.missing_points, keys, "missing_points")
     if candidate.sufficiency is None:
-        if not candidate.limitations or covered or candidate.missing_points:
+        if not candidate.limitations:
             raise ContractError("semantic", "unevaluable sufficiency")
     elif set(covered) | set(candidate.missing_points) != keys:
         raise ContractError("semantic", "point coverage")
@@ -426,6 +426,8 @@ def validate_analysis(
             raise ContractError("semantic", "covered point quotes")
         _quotes(point.answer_quotes, answer_text)
     technical = candidate.technical_assessment
+    if not (technical.answer_quotes or technical.evidence_refs or technical.limitations):
+        raise ContractError("semantic", "technical assessment basis")
     _quotes(technical.answer_quotes, answer_text)
     _references(technical.evidence_refs, evidence_refs, "technical evidence")
     _quotes(candidate.contribution_quotes, answer_text)
