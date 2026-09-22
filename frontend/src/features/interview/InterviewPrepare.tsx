@@ -198,7 +198,10 @@ export default function InterviewPrepare() {
     };
 
     socket.onclose = () => {
-      socketRef.current = null;
+      // close 이벤트는 비동기라 새 소켓이 이미 socketRef에 들어온 뒤 도착할 수 있다.
+      // 자기 소켓일 때만 비운다. 아니면 살아 있는 연결의 참조를 지워, 다시 시도가
+      // OPEN 분기 대신 재연결 경로를 타면서 멀쩡한 소켓을 한 번 더 끊는다.
+      if (socketRef.current === socket) socketRef.current = null;
       if (disposed || sessionClosedRef.current) return;
 
       setWsStatus('reconnecting');
