@@ -10,6 +10,32 @@ from devon_ai.llm_tasks import ModelCall, call_model
 type QuestionReviewer = Callable[[c.QuestionPlan, c.Question], c.QuestionCandidateReview]
 
 
+def _recovery(
+    plan: c.QuestionPlan,
+    candidate: c.Question,
+    assessment: c.QuestionCandidateReview,
+) -> c.CandidateRecovery | None:
+    result: c.CandidateRecovery | None
+    if not assessment.premises_valid:
+        result = c.CandidateRecovery("replan", "거짓 또는 유효하지 않은 전제 재계획")
+    elif not assessment.context_valid:
+        result = c.CandidateRecovery("replan", "현재 맥락 또는 이미 확인한 목적 재계획")
+    else:
+        # 표현 오류만 있으면 재작성하되, 마지막 Contract 검사에서 의미 변경을 우선 차단한다.
+        result = (
+            c.CandidateRecovery("rewrite", "목적과 필수 확인내용을 유지한 표현 재작성")
+            if not assessment.wording_valid
+            else None
+        )
+        if not assessment.contract_matches or candidate.question_contract != plan.contract:
+            result = c.CandidateRecovery("replan", "실제 질문과 사전 목적·확인내용 불일치")
+    if result is not None and (not assessment.safe_alternative or plan.remaining_candidates <= 1):
+        return c.CandidateRecovery(
+            "no_valid_candidate", "허용 범위 또는 남은 상한 내 유효 후보 없음"
+        )
+    return result
+
+
 async def generate_question(
     request: c.ModelRequest,
     *,
@@ -48,6 +74,7 @@ async def generate_question(
     }
 
     def validate(candidate: c.Question) -> c.ContractChecked[c.Question]:
+        nonlocal recovery
         if candidate.persona not in plan.allowed_personas:
             raise c.ContractError("semantic", "persona permission")
         c._references(candidate.evidence_refs, evidence_refs, "question evidence")
@@ -60,13 +87,9 @@ async def generate_question(
             or assessment.question != candidate
         ):
             raise c.ContractError("semantic", "review binding")
-        if not (
-            assessment.premises_valid
-            and assessment.context_valid
-            and assessment.wording_valid
-            and assessment.contract_matches
-            and candidate.question_contract == plan.contract
-        ):
+        rejected = _recovery(plan, candidate, assessment)
+        if rejected is not None:
+            recovery = rejected
             raise c.ContractError("semantic", "question assessment")
         return c.validate_question(
             candidate,
