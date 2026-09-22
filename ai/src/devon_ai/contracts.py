@@ -4,7 +4,8 @@ See spec/ai/designs/2026-09-21-question-eval-contracts.md for the adopted subset
 Structural decoding alone does not establish semantic validity or BE acceptance.
 """
 
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, field, fields, is_dataclass
+from math import isfinite
 from types import UnionType
 from typing import Literal, Union, cast, get_args, get_origin, get_type_hints
 
@@ -190,6 +191,65 @@ def validate_question(
     if candidate.text != review.text or candidate.question_contract != review.question_contract:
         raise ContractError("semantic", "question requirements")
     return _checked(candidate)
+
+
+@dataclass(frozen=True)
+class ModelRequest:
+    """BE-prepared input, schema and prompt; credentials stay in the transport.
+
+    Limits are required injection values, not production defaults. The callable
+    consumes this request exactly once, with SDK/provider retries disabled.
+    Schema JSON guides the provider; local contract checks remain authoritative.
+    """
+
+    task_name: str
+    model: str
+    prompt: str = field(repr=False)
+    prompt_version: str
+    schema_json: str = field(repr=False)
+    schema_version: str
+    input_json: str = field(repr=False)
+    timeout_seconds: float
+    max_output_tokens: int
+
+    def __post_init__(self) -> None:
+        for name in (
+            "task_name",
+            "model",
+            "prompt",
+            "prompt_version",
+            "schema_json",
+            "schema_version",
+            "input_json",
+        ):
+            _convert(str, getattr(self, name), name, wire=False)
+        if (
+            type(self.timeout_seconds) not in (int, float)
+            or not isfinite(self.timeout_seconds)
+            or self.timeout_seconds <= 0
+        ):
+            raise ValueError("timeout_seconds must be finite and positive")
+        if type(self.max_output_tokens) is not int or self.max_output_tokens <= 0:
+            raise ValueError("max_output_tokens must be a positive integer")
+
+
+@dataclass(frozen=True)
+class ModelResponse:
+    """Untrusted provider output and observed metadata; no success implication."""
+
+    raw_output: str = field(repr=False)
+    model: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+    def __post_init__(self) -> None:
+        if type(self.raw_output) is not str:
+            raise ValueError("raw_output must be text")
+        _convert(str, self.model, "model", wire=False)
+        for name in ("input_tokens", "output_tokens"):
+            value = getattr(self, name)
+            if value is not None and (type(value) is not int or value < 0):
+                raise ValueError(f"{name} must be a nonnegative integer or None")
 
 
 @dataclass(frozen=True)
