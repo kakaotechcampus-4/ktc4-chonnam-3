@@ -253,6 +253,47 @@ class ModelResponse:
 
 
 @dataclass(frozen=True)
+class ModelFailure:
+    """Safe classification only; never provider exception text or rejected values."""
+
+    stage: Literal["timeout", "provider", "parse", "schema", "semantic"]
+
+    @property
+    def error_code(self) -> Literal["llm_timeout", "llm_parse_failed", "llm_failed"]:
+        if self.stage == "timeout":
+            return "llm_timeout"
+        if self.stage == "parse":
+            return "llm_parse_failed"
+        return "llm_failed"
+
+
+@dataclass(frozen=True)
+class ModelAttempt:
+    """In-memory record for BE-owned protected persistence, not a log payload."""
+
+    task_name: str
+    requested_model: str
+    prompt_version: str
+    schema_version: str
+    attempt: int
+    latency_ms: float
+    response: ModelResponse | None = field(repr=False)
+    failure: ModelFailure | None
+
+
+@dataclass(frozen=True)
+class ModelSuccess[T]:
+    data: ContractChecked[T] = field(repr=False)
+    attempts: tuple[ModelAttempt, ...]
+
+
+@dataclass(frozen=True)
+class ModelFailed:
+    failure: ModelFailure
+    attempts: tuple[ModelAttempt, ...]
+
+
+@dataclass(frozen=True)
 class CoveredPoint(_Contract):
     key: str
     answer_quotes: tuple[str, ...]

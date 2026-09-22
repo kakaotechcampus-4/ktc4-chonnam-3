@@ -1,8 +1,11 @@
+import asyncio
+import json
 from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
 from devon_ai import contracts as c
+from devon_ai import llm_tasks
 
 
 @pytest.fixture
@@ -61,3 +64,103 @@ def test_response_distinguishes_unknown_tokens_from_zero_and_hides_raw_output():
 def test_response_rejects_invalid_token_metadata(value, name):
     with pytest.raises(ValueError, match=name):
         c.ModelResponse(raw_output="{}", model="actual-model", **{name: value})
+
+
+@pytest.fixture
+def decision_data():
+    return dict(
+        next_step="finish",
+        intent="종료",
+        persona=None,
+        target=None,
+        tool_requests=[],
+        reason_summary="완료된 면접",
+    )
+
+
+def check_decision(candidate):
+    return c.validate_decision(
+        candidate,
+        question=None,
+        allowed_personas=(),
+        finish_allowed=True,
+        allowed_locations=frozenset(),
+    )
+
+
+class FakeClient:
+    def __init__(self, *outcomes):
+        self.outcomes = iter(outcomes)
+        self.requests = []
+
+    async def __call__(self, model_request):
+        self.requests.append(model_request)
+        outcome = next(self.outcomes)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
+
+def invoke(model_request, client, validator=check_decision):
+    return asyncio.run(
+        llm_tasks.call_model(
+            model_request,
+            client=client,
+            contract_type=c.DirectorDecision,
+            validate=validator,
+        )
+    )
+
+
+def test_success_requires_contract_checks_and_records_actual_metadata(model_request, decision_data):
+    response = c.ModelResponse(json.dumps(decision_data), "actual-version", 12, 8)
+    client = FakeClient(response)
+    result = invoke(model_request, client)
+    assert isinstance(result, c.ModelSuccess)
+    assert isinstance(result.data, c.ContractChecked)
+    assert result.data.data.next_step == "finish"
+    assert client.requests == [model_request]
+    (attempt,) = result.attempts
+    assert attempt.attempt == 1 and attempt.latency_ms >= 0
+    assert attempt.requested_model == "fixture-model"
+    assert attempt.prompt_version == "fixture-p1" and attempt.schema_version == "fixture-s1"
+    assert attempt.response is response and attempt.failure is None
+    assert "완료된 면접" not in repr(result)
+
+
+@pytest.mark.parametrize(
+    ("raw", "stage", "code"),
+    [
+        ("not json", "parse", "llm_parse_failed"),
+        ("{}", "schema", "llm_failed"),
+        ('{"next_step":"unknown"}', "schema", "llm_failed"),
+    ],
+)
+def test_invalid_output_never_becomes_success(model_request, raw, stage, code):
+    result = invoke(model_request, FakeClient(c.ModelResponse(raw, "actual")))
+    assert isinstance(result, c.ModelFailed)
+    assert result.failure.stage == stage and result.failure.error_code == code
+    assert not hasattr(result, "data")
+    assert result.attempts[0].response.raw_output == raw
+
+
+def test_semantic_failure_is_closed_without_exposing_error_values(model_request, decision_data):
+    def reject(candidate):
+        raise c.ContractError("semantic", "private rejected value")
+
+    result = invoke(
+        model_request, FakeClient(c.ModelResponse(json.dumps(decision_data), "actual")), reject
+    )
+    assert isinstance(result, c.ModelFailed)
+    assert result.failure.stage == "semantic"
+    assert "private rejected value" not in repr(result)
+
+
+def test_validator_cannot_return_an_unchecked_candidate(model_request, decision_data):
+    result = invoke(
+        model_request,
+        FakeClient(c.ModelResponse(json.dumps(decision_data), "actual")),
+        lambda candidate: candidate,
+    )
+    assert isinstance(result, c.ModelFailed)
+    assert result.failure.stage == "semantic"
