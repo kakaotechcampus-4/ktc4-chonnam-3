@@ -44,7 +44,13 @@
 
   /** 응답 본문의 키 집합이 계약의 required 집합과 정확히 같은지 본다. */
   const checkKeys = (검사, 기대키, 본문) =>
-    check(검사, 기대키.slice().sort().join(','), Object.keys(본문 ?? {}).sort().join(','));
+    check(
+      검사,
+      기대키.slice().sort().join(','),
+      Object.keys(본문 ?? {})
+        .sort()
+        .join(','),
+    );
 
   const SEED_FAILED_RUN = '5c7b9e10-0000-4000-8000-00000000bbbb';
   const SEED_INTERVIEW = 'a3d51c20-1001-4c00-9a00-000000000001';
@@ -55,7 +61,9 @@
 
   // 워커가 붙어 있는지 먼저 확인한다. 여기서 실패하면 아래는 전부 무의미하다.
   if (!navigator.serviceWorker.controller) {
-    console.error('[check] 서비스 워커가 페이지를 제어하고 있지 않습니다. 새로고침 후 다시 실행하세요.');
+    console.error(
+      '[check] 서비스 워커가 페이지를 제어하고 있지 않습니다. 새로고침 후 다시 실행하세요.',
+    );
     return;
   }
 
@@ -153,11 +161,7 @@
   const failedRun = await call('GET', `/analysis-runs/${SEED_FAILED_RUN}`);
   check('GET /analysis-runs (실패 seed)', 'failed', failedRun.data.status);
   check('  └ failureReason', 'jd_fetch_failed', failedRun.data.failureReason);
-  check(
-    '  └ 실패 step',
-    'failed',
-    failedRun.data.steps.find((s) => s.key === 'jd_fetch').status,
-  );
+  check('  └ 실패 step', 'failed', failedRun.data.steps.find((s) => s.key === 'jd_fetch').status);
 
   // SSE ---------------------------------------------------------------------
   const sse = await new Promise((resolve) => {
@@ -249,7 +253,11 @@
     'session_limit_exceeded',
     (await call('POST', '/interviews', { runId, repositoryIds })).data.error.reason,
   );
-  check('GET /interviews/{id} 준비중', 'preparing', (await call('GET', `/interviews/${ivId}`)).data.status);
+  check(
+    'GET /interviews/{id} 준비중',
+    'preparing',
+    (await call('GET', `/interviews/${ivId}`)).data.status,
+  );
   await sleep(3600);
   const ready = await call('GET', `/interviews/${ivId}`);
   checkKeys(
@@ -287,7 +295,11 @@
   );
 
   // 리포트 lazy generation (seed 면접) -------------------------------------------
-  check('GET /report (1차)', 202, (await call('GET', `/interviews/${SEED_INTERVIEW}/report`)).status);
+  check(
+    'GET /report (1차)',
+    202,
+    (await call('GET', `/interviews/${SEED_INTERVIEW}/report`)).status,
+  );
   await sleep(3100);
   const report = await call('GET', `/interviews/${SEED_INTERVIEW}/report`);
   checkKeys(
@@ -317,10 +329,12 @@
   check(
     'POST /feedback-disagreements',
     204,
-    (await call('POST', `/interviews/${SEED_INTERVIEW}/feedback-disagreements`, {
-      persona: 'tech_lead',
-      reasonType: 'overly_harsh',
-    })).status,
+    (
+      await call('POST', `/interviews/${SEED_INTERVIEW}/feedback-disagreements`, {
+        persona: 'tech_lead',
+        reasonType: 'overly_harsh',
+      })
+    ).status,
   );
   check('POST /retry', 201, (await call('POST', `/interviews/${SEED_INTERVIEW}/retry`)).status);
   check('GET /interviews/없는id', 404, (await call('GET', '/interviews/nope')).status);
@@ -335,7 +349,11 @@
   } else {
     msw.scenario('auth-expired');
     const expired = await call('GET', '/me');
-    check('auth-expired', '401/unauthenticated', `${expired.status}/${expired.data?.error?.reason}`);
+    check(
+      'auth-expired',
+      '401/unauthenticated',
+      `${expired.status}/${expired.data?.error?.reason}`,
+    );
 
     msw.scenario('refresh-failed');
     check('refresh-failed — /auth/refresh', 401, (await call('POST', '/auth/refresh')).status);
@@ -343,7 +361,11 @@
 
     msw.scenario('github-token-invalid');
     const gh = await call('GET', '/me/home');
-    check('github-token-invalid', '403/token_invalid', `${gh.status}/${gh.data?.error?.reason}`);
+    check(
+      'github-token-invalid',
+      '403/github_token_invalid',
+      `${gh.status}/${gh.data?.error?.reason}`,
+    );
 
     msw.scenario('run-expired');
     check('run-expired', 410, (await call('GET', `/analysis-runs/${runId}/result`)).status);
@@ -429,12 +451,19 @@
       setTimeout(() => socket.send(JSON.stringify({ type: 'prepareRetry' })), 200);
     setTimeout(finish, 6000);
   });
-  check('WS prepareRetry — 복구', true, seen(retried, 'prepareCompleted') && seen(retried, 'question'));
+  check(
+    'WS prepareRetry — 복구',
+    true,
+    seen(retried, 'prepareCompleted') && seen(retried, 'question'),
+  );
   // 성공한 3단계는 재실행하지 않는다. compose_question 만 running 으로 온다.
   check(
     '  └ 실패 단계만 재실행',
     'compose_question',
-    retried.filter((m) => m.status === 'running').map((m) => m.key).join(','),
+    retried
+      .filter((m) => m.status === 'running')
+      .map((m) => m.key)
+      .join(','),
   );
 
   check('WS 없는 세션', '1008/not_found', (await collect('sess_없음', () => false, 2000)).closed);
@@ -475,9 +504,8 @@
       setTimeout(finish, timeoutMs);
     });
 
-  const tooLong = await sendAndCollect(
-    { type: 'answer', text: 'x'.repeat(2001) },
-    (got) => seen(got, 'error'),
+  const tooLong = await sendAndCollect({ type: 'answer', text: 'x'.repeat(2001) }, (got) =>
+    seen(got, 'error'),
   );
   const tooLongError = tooLong.find((m) => m.type === 'error');
   check('WS 2000자 초과', 'answer_too_long', tooLongError?.reason);
@@ -490,7 +518,11 @@
   check('WS 답변 수신', true, seen(answered, 'answerReceived'));
 
   const detailAfterWs = await call('GET', `/interviews/${ivId}`);
-  check('  └ REST 와 정합', true, detailAfterWs.data.turns.some((t) => t.answer !== null));
+  check(
+    '  └ REST 와 정합',
+    true,
+    detailAfterWs.data.turns.some((t) => t.answer !== null),
+  );
 
   if (msw) msw.clear();
 

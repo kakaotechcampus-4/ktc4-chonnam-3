@@ -53,19 +53,23 @@ export const scenarios: Record<ScenarioName, Scenario> = {
     ],
   },
 
+  /**
+   * `github_token_invalid` 는 DEVON 세션이 아니라 GitHub 연동 토큰이 만료·폐기된 상태다.
+   * 둘을 구분하려고 `token_invalid` 에서 개명됐다(api-spec.md 변경 이력 2026-09-10).
+   */
   'github-token-invalid': {
     describe: 'GitHub 연동이 끊긴 상태. 재연동 유도 화면을 본다.',
     rules: [
       {
         path: '/me/home',
         status: 403,
-        reason: 'token_invalid',
+        reason: 'github_token_invalid',
         message: 'GitHub 연동 권한이 만료되었어요.',
       },
       {
         path: '/analysis-runs*',
         status: 403,
-        reason: 'token_invalid',
+        reason: 'github_token_invalid',
         message: 'GitHub 연동 권한이 만료되었어요.',
       },
     ],
