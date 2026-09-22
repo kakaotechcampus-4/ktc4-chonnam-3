@@ -12,5 +12,14 @@
 
 공통 계약·스키마·용어에 영향이 있는 결정만 기록한다.
 
-## 검토 중
-- [0001 공통 계약 이관](0001-contract-migration.md) — Proposed
+## 현재 결정
+
+API 원본 구분은 [공통 계약 안내](../contracts/README.md)와 병합된 [PR #35](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/35)를 따른다. 과거 0001의 부분 이관 초안으로 현재 API 계약 전체를 미정 처리하지 않는다.
+
+- [0003 Sprint 1 세션 인증 유지와 JWT의 Sprint 2 이관](0003-sprint1-session-auth.md) — Accepted, 2026-09-22. 기존 Redis·`devon_session`·14일 sliding 세션을 채택한다. JWT·갱신은 Sprint 2로 이관하며 실제 인증 구현·검증은 남는다.
+- [0004 면접 질문 배분의 기존 기준 복원](0004-flexible-persona-allocation-restoration.md) — Accepted, 2026-09-22. 정상 9턴·첫 HR을 유지하고 기술 목표 6턴·최소 5턴, 도메인·HR 합산 최소 3턴과 개별 배분 비고정을 복원한다. 실제 제어 구현·검증은 대기다.
+- [0002 로컬 기준의 업로드 용량·공고 재사용·면접 배분 채택](0002-local-policy-baseline.md) — Partially Superseded, 2026-09-22. 포트폴리오 20MB와 공고 재사용 7일은 유지하며 면접 배분은 0004를 따른다. 실제 구현 상태와 정책 확정은 구분한다.
+
+## 과거 결정·제안 이력
+
+- [0001 공통 계약 이관](0001-contract-migration.md) — Superseded. 당시 제안은 보존하며 현행 원본 범위는 공통 계약 안내를 따른다. 전체 구현·검증 완료를 뜻하지 않는다.

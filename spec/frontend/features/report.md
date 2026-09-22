@@ -8,6 +8,12 @@
 
 피드백 이의 제기는 `spec/shared/contracts/migration.md`("Report disagreement | Sprint 1 테이블 생성, API/row 생성은 Sprint 2 | FIX")에 따라 **Sprint 2 기능**이다. Sprint 1은 버튼만 배치하고 항상 비활성(disabled) 상태로 둔다 — `POST /reports/{id}/feedback-disagreements` 호출 자체를 만들지 않는다.
 
+### 계약 차이와 구현 범위
+
+- 이의 제기는 기존 결정대로 Sprint 1 API 제공·호출 대상이 아니다. 다만 OpenAPI와 FE 타입·mock에는 `/interviews/{id}/feedback-disagreements` 계약이 남아 있고, 아래 과거안의 `/reports/{id}`와 식별자도 다르다. 이번 문서 정리에서 API를 삭제하거나 Sprint 1 기능으로 되살리지 않으며 계약 파일의 잔존 내용은 후속 정합화 대상으로 남긴다. 아래 Sprint 2 예시를 현행 호출 지시로 사용하지 않는다.
+- 재도전 허용 상태는 이 문서의 `original_not_completed` 설명과 BE 명세의 `completed` 또는 `abandoned` 허용이 다르다. OpenAPI는 409 응답만 정의하므로 세부 조건을 이번 문서 정리에서 임의 확정하지 않는다. 기존 동작·필드 유지 상태로 차이를 표시한다.
+- 리포트 일반 통신 오류의 화면 예외는 [task-11](../../../frontend/docs/task-11-report.md)에 기록한 수정 보류를 유지한다. 문서 수정으로 해당 코드가 고쳐진 것은 아니다.
+
 | 화면 | 코드 | 구성 |
 | --- | --- | --- |
 | 리포트 | 5c-v2 | 탭 3개 + `재도전` 버튼 |

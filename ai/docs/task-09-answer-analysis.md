@@ -16,15 +16,15 @@
 - [0003 추가 근거 조회와 결과 해석 결정](../../spec/ai/decisions/0003-evidence-lookup-policy.md)
 - [0008 AI 후보 검증·선택 정책](../../spec/ai/decisions/0008-ai-candidate-policy.md)의 구조화 실패·질문 복구 선택
 - [Director와 텍스트 면접의 답변부터 다음 질문까지](../../spec/ai/features/interviewer.md)
-- [AI 내부 계약의 AnswerAnalysis 제안](../../spec/ai/contracts.md)
-- [잔여 결정 목록의 AI-L02·AI-L04·AI-L09·AI-L18](../../later.md)
+- [AI 내부 계약의 AnswerAnalysis](../../spec/ai/contracts.md#answeranalysis)
+- [구현·검수 인계](pipeline.md#기존-id별-구현검수-인계)의 AI-L02·AI-L04·AI-L09·AI-L18
 
 ## 선행 조건
 
-- [전체 AI pipeline](pipeline.md)과 [task-02 내부 계약](task-02-contracts.md)의 Proposed 상태를 확인한다.
+- [전체 AI pipeline](pipeline.md)과 [task-02 내부 계약](task-02-contracts.md)의 채택 범위와 미채택 상세를 확인한다.
 - [task-06 Context 준비](task-06-context-preparation.md)의 확정 질문·Contract·답변 원문 fixture를 입력으로 사용한다.
 - [task-08 Evidence Tool](task-08-evidence-tools.md)의 조회 필요성·결과 해석 정책을 따른다.
-- 실제 enum·JSONB·복구 상태가 미정이어도 승인된 세 축과 보존 정책의 fixture 검증은 진행할 수 있다.
+- 0014의 기존 분석 필드·값·JSONB 위치를 유지한다. 상세 참조·저장·복구 연결이 미완성이어도 승인된 세 축과 보존 정책의 fixture 검증은 진행할 수 있다.
 
 ## 대상 파일과 책임
 
@@ -33,7 +33,7 @@
 - [BE turn service](../../backend/app/features/interview/turn_service.py): 확정 답변과 분석·결정의 저장 순서를 소유한다.
 - [BE Director adapter](../../backend/app/agents/director/agent.py): 검증된 분석을 다음 행동 후보에 전달한다.
 - BE는 DB 상태, Tool 실행, 서비스 상태·공개 흐름 복구, WS/API 변환과 원문 보존을 소유한다.
-- LLM 호출 attempt와 retry는 AI-L04가 SDK/client/task/worker 중 선택한 한 계층만 소유한다.
+- LLM 호출 attempt와 retry는 0010의 공통 LLM gateway/task 호출 계층만 소유한다. 총 2회 상한과 semantic 실패 재호출 금지를 유지한다.
 - AI task는 DB session을 받거나 다음 질문·점수·최종 상태를 직접 확정하지 않는다.
 
 ## 작업
@@ -78,12 +78,12 @@
 - [ ] 모든 판단이 실제 질문 범위·답변 구절·검증된 근거 또는 명시한 한계를 가진다.
 - [ ] 개인 기여·점수·미확인 사실을 생성하지 않는다.
 - [ ] 후속 보완과 기여 정정이 반영되며 최초 기록은 보존된다.
-- [ ] 저장·복구·공개 변환 미합의 상태를 runtime 완료로 표시하지 않는다.
+- [ ] 상세 저장·복구·공개 변환의 구현·검증 미완료를 runtime 완료로 표시하지 않는다.
 
 ## 결정 대기와 재개 조건
 
-- AI-L02: 평가 상태·세 축 필드·null·enum·Question Contract·JSONB 위치가 채택되면 실제 타입과 저장 변환을 고정한다.
-- 질문 후보의 rewrite/replan/failure 선택은 ADR 0008에 따라 즉시 검사한다. AI-L09에서 사용자 입력과 runtime 상태 복구가 합의되면 Director·서비스 공개 복구 흐름을 연결한다.
-- AI-L18: 실패 raw output, 답변 원문, 최초 분석·정정 이력의 위치·권한·마스킹·보존/삭제가 정해지면 운영 보존 검증을 완료한다.
-- AI-L04: 실제 호출 timeout·재시도 주체·attempt 계산이 정해지기 전에는 provider 실행 완료를 주장하지 않는다.
-- 공개 점수와 품질 수용 기준은 각각 AI-L15·AI-L19의 별도 결정이며 이 작업에서 정하지 않는다.
+- AI-L02: [0014](../../spec/ai/decisions/0014-minimal-change-revision.md)에 따라 질문의 다섯 필드·분석/판단의 기존 평면 필드와 명시한 값·JSONB 위치를 유지한다. 축별 한계는 기존 판단 필드·limitations에 기록한다. 상세 객체·근거 참조·미채택 null·실패 기록의 영구 저장 경계를 기존 구조 안에서 정한 뒤 타입과 저장 변환을 고정한다.
+- 질문 후보의 rewrite/replan/failure 선택은 ADR 0008에 따라 검사한다. AI-L09는 0018의 기존 미저장 답변 재제출·저장 답변 보완·오류 안내·명시적 나가기를 실제 반환·전송에 연결하고 검증한다.
+- AI-L18: 0018의 내부 비교용 재사용·보관 유지 정책을 따른다. 실패 raw output, 답변 원문, 최초 분석·정정 이력의 저장 위치·권한·마스킹·보관 연결은 실제 구현 후 검증한다.
+- AI-L04: 기존 재시도 책임·총 2회 상한을 유지하며 실제 timeout·실행 상한과 attempt 기록을 검증하기 전에는 provider 실행 완료를 주장하지 않는다.
+- 공개 점수는 기존 6개 0~100 값·단순 평균을 유지한다. 세부 채점 기준·seed 검수와 품질 수용 기준은 AI-L15·AI-L19의 구현·검수 작업이며 이 task에서 임의로 채우지 않는다.

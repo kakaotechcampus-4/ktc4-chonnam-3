@@ -243,14 +243,13 @@ export default function JobInput() {
     mutationFn: api.createAnalysisRun,
     onSuccess: ({ runId }) => navigate(`/interview/analyzing/${runId}`),
     onError: (error) => {
-      // 409 run_in_progress는 진행 중인 run의 runId를 body 최상위로 돌려준다(공통 에러 스키마 밖).
-      const inFlightRunId = (error as { runId?: unknown }).runId;
+      // 중복 요청은 공통 오류의 error.details.runId로 기존 분석을 안내한다.
       if (
         isApiError(error) &&
         error.error.reason === 'run_in_progress' &&
-        typeof inFlightRunId === 'string'
+        typeof error.error.details?.runId === 'string'
       ) {
-        navigate(`/interview/analyzing/${inFlightRunId}`);
+        navigate(`/interview/analyzing/${error.error.details.runId}`);
         return;
       }
       setSubmitError(
