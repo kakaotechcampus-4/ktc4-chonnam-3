@@ -50,7 +50,10 @@ export function resendPendingQuestion(client: Client, record: InterviewRecord) {
  * 답변 1건을 처리한다.
  *
  * 계약 순서를 지킨다: `answerReceived`(저장 완료) → `thinking` → `evidenceCheck` → 다음 `question`.
- * 화면은 `answerReceived`를 받을 때까지 입력창을 잠그므로 이 메시지를 빠뜨리면 영영 잠긴다.
+ *
+ * `answerReceived`는 "수신·저장 완료" 신호다. 저장이 안 됐는데 보내면 화면은 제출 중
+ * 상태만 풀고 다음 `question`을 영영 기다린다. 그렇다고 아무것도 안 보내면 입력창이
+ * 잠긴 채로 남는다. 둘 다 막히므로 저장 실패는 `answer_rejected`로 알린다(api-spec.md #18).
  */
 export async function handleAnswer(
   client: Client,
@@ -65,8 +68,13 @@ export async function handleAnswer(
   }
 
   const answered = recordAnswer(record, turn, text);
+  if (!answered) {
+    // 없는 턴이거나 이미 답변된 턴. 같은 턴 재제출로 유도한다.
+    send(client, wsError('answer_rejected', 'ERR_ANSWER_REJECTED', { recoverable: true }));
+    return;
+  }
+
   send(client, { type: 'answerReceived' });
-  if (!answered) return;
 
   const nextTurn = questionForTurn(answered.turn + 1);
   if (!nextTurn || answered.turn >= TOTAL_TURNS) {
