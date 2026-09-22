@@ -16,6 +16,7 @@ const ANSWER_MAX_LENGTH = 2000;
 const ERROR_MESSAGE: Record<string, string> = {
   answer_too_long: '답변이 너무 길어요. 2000자 이내로 줄여서 다시 보내주세요.',
   answer_rejected: '답변을 저장하지 못했어요. 다시 보내주세요.',
+  answer_stale_turn: '지난 질문에 대한 답변이에요. 현재 질문에 다시 답해주세요.',
   question_failed: '다음 질문을 만들지 못했어요. 잠시만 기다려주세요.',
   repo_unreachable: '레포에 접근할 수 없어 면접을 이어갈 수 없어요.',
   github_token_invalid: 'GitHub 연동이 만료돼 면접을 이어갈 수 없어요.',
@@ -151,6 +152,12 @@ export default function InterviewScreen() {
           submittedTurnRef.current = null;
           setSubmittedTurn(null);
         }
+        // 지나간 턴에 보낸 답변이다. 그 초안은 되살릴 곳이 없으므로 버리고,
+        // 서버가 보고 있는 현재 질문을 스냅샷으로 다시 받는다. api-spec.md #18.
+        if (message.reason === 'answer_stale_turn') {
+          setDraft({ turn: -1, text: '' });
+          void refetchInterview();
+        }
       }
     },
   });
@@ -240,10 +247,16 @@ export default function InterviewScreen() {
   const showSendFailed = sendFailed && wsStatus !== 'open';
 
   /**
+   * 다른 안내를 덮어야 하는 오류. answer_stale_turn은 이미 지나간 턴에 대한 안내라
+   * 현재 상황을 가리면 안 된다 — 그 뒤에 생긴 전송 실패가 묻힌다.
+   */
+  const blockingError = error && error.reason !== 'answer_stale_turn' ? error : null;
+
+  /**
    * 조건부로 나타나는 요소에 aria-live를 달면 삽입 시점을 놓치는 조합이 있다.
    * 항상 떠 있는 영역 하나에 현재 상태를 넣어 변화만 읽히게 한다.
    */
-  const liveStatus = error
+  const liveStatus = blockingError
     ? '' // 오류 배너가 role="alert"로 읽는다. 여기서 또 읽으면 두 번 들린다.
     : ackLost
       ? '답변이 전달되지 못했어요. 고쳐서 다시 보낼 수 있어요'
@@ -261,8 +274,6 @@ export default function InterviewScreen() {
 
     setError(null);
     // 연결이 없으면 큐에 담지 않고 실패로 돌린다 — 사유는 useInterviewSocket의 send.
-    // turn은 spec/backend/features/interview.md:54 기준이고 확정은 아직이다
-    // (migration.md의 `answer`의 `turn` 행, PENDING_BE).
     if (!send({ type: 'answer', turn: question.turn, text: answerDraft })) {
       // 보내지 못했으니 제출한 적 없는 상태로 되돌린다. 입력창과 초안이 유지된다.
       setSendFailed(true);
@@ -412,13 +423,13 @@ export default function InterviewScreen() {
         )}
       </div>
 
-      {ackLost && !error && (
+      {ackLost && !blockingError && (
         <p className="text-[11px] font-bold text-error">
           답변이 전달되지 못했어요 · 고쳐서 다시 보낼 수 있어요
         </p>
       )}
 
-      {showSendFailed && !ackLost && !error && (
+      {showSendFailed && !ackLost && !blockingError && (
         <p className="text-[11px] font-bold text-error">
           연결이 끊겨 답변을 보내지 못했어요 · 다시 연결되면 한 번 더 눌러주세요
         </p>

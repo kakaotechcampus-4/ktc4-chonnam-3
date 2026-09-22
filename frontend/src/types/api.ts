@@ -307,8 +307,8 @@ export type InterviewDetailResponse = {
 export type WsClientMessage =
   | { type: 'prepareRetry' }
   // Sprint 1 은 텍스트 답변 1회 전송이다. 음성(answerStart/answerEnd)은 Sprint 2.
-  // turn 은 spec/backend/features/interview.md:54 기준이다. api-spec.md:1152 만
-  // text-only 라 확정은 아직이다 — migration.md 의 `answer`의 `turn` 행 참고.
+  // turn 은 spec/ai/decisions/0010:30 에 따라 싣는다. 서버는 현재 답변 가능한 turn 과
+  // 다르면 answer_stale_turn 으로 거절한다. api-spec.md #18.
   | { type: 'answer'; turn: number; text: string };
 
 export type WsServerMessage =
