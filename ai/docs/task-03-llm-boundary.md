@@ -1,11 +1,21 @@
 # task-03 - provider 중립 LLM 경계
 
-> 상태: 구현 가이드. 실제 provider 연결과 AI runtime 호출은 아직 구현되지 않았다.
+> 상태: provider 중립 호출 계약과 BE OpenAI HTTP transport·설정·prompt loader·초기 seed 구현. 로컬 PostgreSQL 15.19의 prompt 조회·seed·트랜잭션·동시성 검증 통과. 실제 모델 계정·운영 prompt 품질 검증은 미실행.
 > 선행: [전체 순서](pipeline.md), [task-01 패키지 셋업](task-01-setup.md), [task-02 내부 계약](task-02-contracts.md)
 
 ## 목표
 
 AI 로직은 주입된 모델 호출 경계만 소비하고, 구체 transport·인증·설정·prompt 조회는 기존 BE 파일이 소유하게 한다. 실제 provider를 가정하지 않는 fake로 호출·실패 정책을 검토하며 새 AI gateway 클래스나 모듈을 만들지 않는다.
+
+## 현재 구현
+
+[구현 인계](../../spec/ai/designs/2026-09-23-ai-foundation.md)의 사용법을 따른다. `ModelRequest`와 validator를 주입된 `ModelCall`에 전달하며 `ModelResult`가 검증 결과 또는 typed failure를 반환한다. BE `call_model`이 OpenAI Responses 요청·실패 분류·재시도를 맡고, 부분 배치 재요청도 동일한 `CallBudget`의 총 2회 상한을 공유한다. raw output은 metadata에 보존하되 repr/log에서 제외한다. 별도 SDK 의존성은 추가하지 않았다.
+
+운영 제한값 4개는 `.env.example`에서 명시적으로 설정해야 한다. 초기 seed는 외부에서 검수된 7개 PromptSpec과 transaction을 받아 실행한다. DB migration·운영 prompt 본문·ARQ job·실제 모델 평가는 이 구현의 완료 주장에 포함하지 않는다.
+
+Director 첫 구현에서 `ModelRequest.max_attempts`(기본 2, 허용 1~2)를 추가했다.
+공통 호출 계층이 요청별 상한과 공유 CallBudget의 총 2회 상한을 함께 지키며,
+남은 호출이 1인 요청에 자동 재시도를 덧붙이지 않는다.
 
 ## 근거
 
@@ -29,10 +39,10 @@ AI 로직은 주입된 모델 호출 경계만 소비하고, 구체 transport·�
 
 ## 대상 파일과 책임
 
-- [backend/app/integrations/llm/client.py](../../backend/app/integrations/llm/client.py): 구체 SDK transport, 응답 metadata 수집과 provider/transport 실패 매핑을 맡는다.
+- [backend/app/integrations/llm/client.py](../../backend/app/integrations/llm/client.py): httpx 기반 transport, 응답 metadata 수집과 provider/transport 실패 매핑을 맡는다.
 - [backend/app/core/config.py](../../backend/app/core/config.py): 승인된 provider credential, model ID, timeout/budget 설정의 단일 환경 진입점이다.
 - [backend/app/llm_tasks/prompt_loader.py](../../backend/app/llm_tasks/prompt_loader.py): DB session을 받는 유일한 LLM task 경계로 prompt 문자열·version과 승인된 설정을 로드한다.
-- `ai/tests/test_llm_boundary.py` (추가 예정, 현재 없음): provider 독립 fake, timeout/provider/parse 실패와 metadata fixture를 둔다.
+- `ai/tests/test_llm_boundary.py`: provider 독립 callable과 값·metadata 계약을 검사한다. `backend/tests/integrations/test_llm_client.py`는 실제 HTTP adapter를 MockTransport로 검사하며 설정·loader·seed 검사도 BE에서 실행한다.
 - `devon_ai` task는 BE/SDK/DB를 import하지 않고 주입값만 소비한다. 별도 `gateway.py`, provider package, facade 또는 client class를 추가하지 않는다.
 
 ## 작업

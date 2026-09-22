@@ -2,7 +2,7 @@
 
 작성일: 2026-09-12. 갱신일: 2026-09-22. 상태: [0014](decisions/0014-minimal-change-revision.md)의 질문 기준·분석·판단 구성과 저장 흐름, [0015](decisions/0015-existing-contracts-and-tool-results.md)의 기존 Context·Question·Evidence 기본 필드와 ToolResult 다섯 필드·네 상태·부분 오류 해석은 Accepted다. 명시한 기본 표현 외 상세 객체·참조·공개 변환 등 미채택 부분은 **Proposed**다.
 
-이 문서는 공개 API나 승인된 DB schema를 대체하지 않는다. [패키지 설계](designs/2026-09-12-ai-package-structure.md)에 따른 AI 원본 위치는 `ai/src/devon_ai/contracts.py`이며 현재 실제 클래스가 없다. 기존 `backend/app/agents/contracts.py`도 연결 계층 안내만 있다. 패키지 구조 승인은 AI-L02의 타입 채택 승인이 아니다. 0014·0015에서 채택한 필드·값·저장 위치는 유지하고, 나머지 상세 객체·참조·변환은 AI·BE가 검토하여 테스트 fixture에 고정한다. 공개 camelCase와 내부 snake_case 변환은 service/schema 계층의 책임이다.
+이 문서는 공개 API나 승인된 DB schema를 대체하지 않는다. [패키지 설계](designs/2026-09-12-ai-package-structure.md)에 따른 AI 원본 위치는 `ai/src/devon_ai/contracts.py`다. task-02~03의 Python 계약·순수 검증과 BE 호출 경계는 [구현 인계](designs/2026-09-23-ai-foundation.md)에 기록했다. 0014·0015에서 채택한 필드·값·저장 위치는 유지하고, 상세 객체·참조·변환은 기존 표현을 따라 테스트 fixture에 고정한다. 공개 camelCase와 내부 snake_case 변환은 service/schema 계층의 책임이다.
 
 아래 필드 표와 enum은 명시적으로 Accepted인 범위 외에는 fixture로 검토할 후보이며, 이 문서만으로 migration·공개 API·WS enum 추가를 승인하지 않는다. 기존 FIX와 [0008 후보 정책](decisions/0008-ai-candidate-policy.md) 등 명시된 Accepted 정책만 승인 범위에서 확정된 요구사항이다.
 
@@ -101,7 +101,7 @@
 
 ## AnswerAnalysis
 
-과거 스켈레톤의 `specificity`, `verified_claims`, `unverified_claims` 표기는 아래 0014의 채택 필드를 대체하지 않는다. `specificity`를 충분성·정확성·기여의 통합 점수로 사용하지 않는다. 실제 계약 클래스와 BE 연결은 아직 구현되지 않았다.
+과거 스켈레톤의 `specificity`, `verified_claims`, `unverified_claims` 표기는 아래 0014의 채택 필드를 대체하지 않는다. `specificity`를 충분성·정확성·기여의 통합 점수로 사용하지 않는다. 순수 계약·검증은 구현되어 있으며 실제 답변 분석 생성·저장 service 연결은 후속 task다.
 
 [0014 결정](decisions/0014-minimal-change-revision.md)에 따라 기존 최상위 필드와 아래 명시한 값은 유지·채택한다. 목록 항목·근거 참조·판단 객체의 상세 형식은 AI-L02에서 기존 자료 표현에 맞춰 정한다.
 
