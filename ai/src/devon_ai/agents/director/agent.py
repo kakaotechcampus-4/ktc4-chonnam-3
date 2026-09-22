@@ -75,6 +75,13 @@ async def generate_question(
     c._convert(tuple[c.ReferenceText, ...], reference_texts, "reference text", wire=False)
     source_ids = tuple(source.reference_id for source in reference_texts)
     c._unique(source_ids, "reference text identity")
+    evidence_content = {item.evidence_id: item.content for item in selected}
+    if any(
+        source.reference_id in evidence_content
+        and source.content != evidence_content[source.reference_id]
+        for source in reference_texts
+    ):
+        raise c.ContractError("semantic", "conflicting source identity")
     c._references(tuple(jd_requirement_ids), frozenset(source_ids), "JD source required")
     c._references(tuple(basis_refs), frozenset(source_ids) | evidence_refs, "basis source required")
     _history_payload(history, plan.turn)
@@ -116,7 +123,11 @@ async def generate_question(
         c._references(candidate.evidence_refs, evidence_refs, "question evidence")
         c._references(candidate.question_contract.basis_refs, basis_refs, "question basis")
         c._references(candidate.jd_requirement_ids, jd_requirement_ids, "question JD")
-        assessment = review(plan, candidate)
+        try:
+            assessment = review(plan, candidate)
+        except c.ContractError:
+            # 검토 연결 오류는 모델 JSON 오류가 아니므로 생성 재시도로 복구하지 않는다.
+            raise c.ContractError("semantic", "independent review failed") from None
         if (
             type(assessment) is not c.QuestionCandidateReview
             or assessment.plan != plan
