@@ -78,8 +78,8 @@ export const completedTurns: InterviewTurn[] = [
 
 /**
  * score key/label은 `score_criteria` 시드에서 내려오는 값이다.
- * 점수 산정 방식은 `spec/backend/features/report.md`에서 PENDING_TEAM이므로
- * 아래 값은 화면 확인용 예시다.
+ * 점수 6개·0~100 범위·단순 평균은 `spec/backend/features/report.md`의 확정 정책이다.
+ * 아래 값은 화면 확인용 예시이며 실제 세부 채점 기준의 검수·적용 결과가 아니다.
  */
 export const reportScores: ScoreItem[] = [
   { key: 'project_understanding', label: '프로젝트 이해도', score: 88 },
