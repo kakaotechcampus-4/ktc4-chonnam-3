@@ -12,7 +12,7 @@
 | 배열 | `TEXT[]`, `UUID[]` |
 | migration | CHECK, UNIQUE, INDEX, extension을 수동 확인 |
 | GitHub token | 일반 OAuth App long-lived token 전제. `BYTEA` 암호화 저장. FE 노출 금지 |
-| pgvector | `PENDING_AI` |
+| pgvector | [0002 결정](../../spec/ai/decisions/0002-sprint1-vector-search.md): Sprint 1 미도입·선설치 없음. 실제 migration 반영은 검증 대기, Sprint 2 도입 여부는 후속 검토 |
 
 ## Sprint 1 테이블
 
@@ -55,7 +55,9 @@ Sprint 1에 만들지 않는 것:
 - `score_criteria`는 Sprint 1에 사용한다. 공개 점수는 0~100 number 6개와 단순 평균 `totalScore`로 계산한다. 항목별 세부 기준과 seed 문구는 평가 담당 자료 보강에 따라 수정 가능성을 열어둔다.
 - `feedback_signals`, `eval_cases`, `eval_runs`는 Sprint 2로 미루고 Sprint 1 DB에서는 제외한다.
 - `auth_sessions`는 Sprint 1과 Sprint 2 모두 만들지 않는다.
-- `github_accounts`는 GitHub API 호출용 OAuth token만 저장한다. DEVON 자체 JWT는 이 테이블에 저장하지 않는다.
+- Sprint 1 DEVON 로그인 세션은 [공통 0003 결정](../../spec/shared/decisions/0003-sprint1-session-auth.md)에 따라 Redis `auth:sess:{sid}`에 둔다. 세션 유실·만료는 재로그인하며 Postgres에서 복구하지 않는다. 기존 계정 테이블·컬럼은 유지한다.
+- `github_accounts`는 GitHub API 호출용 OAuth token만 암호화 저장한다. DEVON 로그인 세션이나 JWT를 이 테이블에 저장하지 않는다.
+- DEVON JWT·refresh token은 Sprint 2다. 관련 저장 설계는 해당 구현 시 검토하며 Sprint 1 migration에 추가하지 않는다.
 - GitHub OAuth App은 long-lived access token 전제로 구현한다. expiring token, refresh token, GitHub App user token으로 바꾸면 별도 migration으로 추가한다.
 - `analysis_jobs.status`는 `queued`, `running`, `succeeded`, `partial`, `failed`, `canceled`.
 - FE `RunStatus`는 `running`, `completed`, `failed`; DB `partial`은 FE에 `failed`로 매핑한다.
@@ -65,6 +67,8 @@ Sprint 1에 만들지 않는 것:
 - `interview_sessions.status`는 `preparing`, `preparing_failed`, `in_progress`, `completed`, `abandoned`.
 - `interview_sessions.answer_mode`는 Sprint 1에서 `text` 고정.
 - `interview_turns.topic_code`는 Sprint 1에 FK를 걸지 않는다.
+- [0014 결정](../../spec/ai/decisions/0014-minimal-change-revision.md)에 따라 `interview_turns.analysis`와 `interview_turns.decision`은 별도 JSONB 컬럼이며, 기존 평면 구조를 사용하는 [분석과 판단의 저장](../../spec/ai/contracts.md#분석과-판단의-저장)을 따른다.
+- 질문별 평가 기준의 기존 다섯 항목은 `interview_turns.question_contract` JSONB에 [Question Contract 저장 형식](../../spec/ai/contracts.md#question-contract-저장-형식)으로 보관한다. 별도 기준 테이블은 만들지 않는다.
 - `user_profile_summaries`는 Sprint 1에 만들고 완료 면접에 사용된 repo 기준으로 갱신한다.
 
 ## GitHub Accounts Token Fields
@@ -81,7 +85,7 @@ Sprint 1에 만들지 않는 것:
 | `refresh_token_encrypted` | DROP | refresh token을 받지 않는 전제라 저장하지 않음 |
 | `refresh_token_expires_at` | DROP | refresh token을 저장하지 않으므로 불필요 |
 
-DEVON 자체 JWT 생성은 `users.id`와 필요 시 `github_accounts.id` 같은 식별자만 사용한다. GitHub access token은 JWT payload에 넣지 않고, JWT 발급/검증을 위해 `github_accounts`의 token 필드를 읽지 않는다.
+Sprint 1 DEVON 로그인 세션은 기존 사용자 식별자를 연결한다. 로그인 쿠키에는 세션 식별자만 전달하고 GitHub access token은 넣지 않는다. GitHub token의 DB 암호화 저장과 세션 인증은 별개이며, 이 설계 반영이 실제 저장·인증 구현 완료를 뜻하지 않는다.
 
 ## Candidate Tables
 
@@ -125,8 +129,8 @@ DEVON 자체 JWT 생성은 `users.id`와 필요 시 `github_accounts.id` 같은 
 ## Wanted 공고
 
 - Sprint 1은 Wanted만 지원.
-- `job_postings`는 normalized Wanted URL 기준 재사용.
-- `fetched_at` 기준 TTL은 24시간.
+- `job_postings`는 normalized Wanted URL 기준 재사용을 유지하며, 재조회 내용이 바뀌면 새 공고·요구사항 ID로 저장해 이전 참조를 보존한다. [공고 재조회와 이전 자료 보존](../../spec/backend/features/analysis-run.md#공고-재조회와-이전-자료-보존)을 따른다.
+- `fetched_at` 기준 TTL은 7일(`JD_REUSE_TTL_DAYS=7`).
 - `jd_requirements.requirement_type`: `required`, `preferred`, `unknown`.
 - API 표시용 `category`와 저장 분류를 구분한다. 주요 업무는 `unknown`으로 분류하고 원문 출처를 함께 보존한다. 변환·재조회 규칙은 [분석 Run의 Wanted 공고 수집·분류](../../spec/backend/features/analysis-run.md#wanted-공고-수집분류)를 따른다.
 - `skill_tags`를 `tech_tags` 원천으로 사용한다.
