@@ -1,6 +1,11 @@
+import asyncio
+import json
+from dataclasses import asdict
+
 import pytest
 
 from devon_ai import contracts as c
+from devon_ai.agents.director import agent
 
 
 @pytest.fixture
@@ -48,3 +53,32 @@ def model_request():
         1.0,
         100,
     )
+
+
+@pytest.fixture
+def run_director(plan, personas, model_request):
+    def run(*outputs, review=None, **kwargs):
+        calls, reviews = [], []
+        outcomes = iter(outputs)
+
+        async def client(request):
+            calls.append(request)
+            value = next(outcomes)
+            if isinstance(value, BaseException):
+                raise value
+            raw = value if isinstance(value, str) else json.dumps(asdict(value))
+            return c.ModelResponse(raw, "actual-model")
+
+        def reviewer(current_plan, candidate):
+            reviews.append(candidate)
+            if review is not None:
+                return review(current_plan, candidate)
+            return c.QuestionCandidateReview(current_plan, candidate, True, True, True, True, True)
+
+        args = dict(
+            request=model_request, plan=plan, personas=personas, client=client, review=reviewer
+        )
+        args.update(kwargs)
+        return asyncio.run(agent.generate_question(**args)), calls, reviews
+
+    return run

@@ -559,6 +559,37 @@ class QuestionPlan(_Contract):
             raise ContractError("schema", "remaining candidates")
 
 
+@dataclass(frozen=True)
+class QuestionCandidateReview:
+    """Trusted independent assessment; never decoded from the generator's output."""
+
+    plan: QuestionPlan
+    question: Question = field(repr=False)
+    premises_valid: bool
+    context_valid: bool
+    wording_valid: bool
+    contract_matches: bool
+    safe_alternative: bool
+
+    def __post_init__(self) -> None:
+        for name, annotation in get_type_hints(type(self)).items():
+            _convert(annotation, getattr(self, name), name, wire=False)
+
+
+@dataclass(frozen=True)
+class QuestionReady:
+    question_id: str
+    turn: int
+    result: ModelSuccess[Question] = field(repr=False)
+
+
+@dataclass(frozen=True)
+class QuestionRejected:
+    question_id: str
+    failure: ModelFailed
+    recovery: CandidateRecovery
+
+
 def validate_decision(
     candidate: DirectorDecision,
     *,
