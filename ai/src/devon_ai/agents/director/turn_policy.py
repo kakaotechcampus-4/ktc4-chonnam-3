@@ -1,6 +1,6 @@
 """Pure turn rules over BE-confirmed records; no persistence or session authority."""
 
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 
 from devon_ai import contracts as c
 
@@ -171,3 +171,26 @@ def validate_turn_decision(
         finish_allowed=done,
         allowed_locations=allowed_locations,
     )
+
+
+def feedback_context(progress: TurnProgress) -> dict[str, object]:
+    """Supply complete, ordered originals to final feedback without rewriting them.
+
+    A later contribution statement is scoped to its own question, never a global
+    replacement for unrelated work. The feedback consumer must consider later
+    corrections alongside earlier statements. This builds input only: report
+    generation, scoring, storage and semantic quality remain separate work.
+    """
+    if not finish_allowed(progress):
+        raise c.ContractError("semantic", "feedback requires completed interview")
+    return {
+        "turns": [
+            {
+                "question_id": presented.question_id,
+                "question": asdict(record.question.data),
+                "answer": asdict(record.answer),
+                "analysis": asdict(record.analysis.data),
+            }
+            for presented, record in zip(progress.questions, progress.history, strict=True)
+        ],
+    }
