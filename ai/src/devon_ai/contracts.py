@@ -536,6 +536,29 @@ class CandidateRecovery(_Contract):
     reason_summary: str
 
 
+@dataclass(frozen=True)
+class QuestionPlan(_Contract):
+    """Prepared purpose/requirements and Controller permissions, before wording.
+
+    question_id is issued by BE. Remaining candidates is a finite injected
+    allowance, not permission to automatically retry semantic failures.
+    """
+
+    question_id: str
+    turn: int
+    contract: QuestionContract
+    allowed_personas: tuple[PersonaId, ...]
+    remaining_candidates: int
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _unique(self.allowed_personas, "allowed personas")
+        if not 1 <= self.turn <= 9:
+            raise ContractError("schema", "question turn")
+        if self.remaining_candidates < 0:
+            raise ContractError("schema", "remaining candidates")
+
+
 def validate_decision(
     candidate: DirectorDecision,
     *,
