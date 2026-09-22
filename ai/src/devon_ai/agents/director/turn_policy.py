@@ -121,3 +121,53 @@ def complete_answer(progress: TurnProgress, record: c.AnalysisHistory) -> TurnPr
     if progress.question_count != progress.completed_count + 1:
         raise c.ContractError("semantic", "no pending answer")
     return replace(progress, history=(*progress.history, record))
+
+
+def plan_question(
+    progress: TurnProgress,
+    question_id: str,
+    contract: c.QuestionContract,
+    *,
+    remaining_candidates: int,
+) -> c.QuestionPlan:
+    """Attach computed turn permissions to a caller-prepared purpose, without advancing."""
+    if type(progress) is not TurnProgress:
+        raise c.ContractError("schema", "turn progress")
+    if progress.question_count != progress.completed_count or finish_allowed(progress):
+        raise c.ContractError("semantic", "next question unavailable")
+    if question_id in {item.question_id for item in progress.questions}:
+        raise c.ContractError("semantic", "reused question identity")
+    return c.QuestionPlan(
+        question_id,
+        progress.question_count + 1,
+        contract,
+        allowed_personas(tuple(item.question.data.persona for item in progress.questions)),
+        remaining_candidates,
+    )
+
+
+def validate_turn_decision(
+    progress: TurnProgress,
+    candidate: c.DirectorDecision,
+    *,
+    question: c.ContractChecked[c.Question] | None = None,
+    allowed_locations: frozenset[tuple[str, str, str]] = frozenset(),
+) -> c.ContractChecked[c.DirectorDecision]:
+    """Use computed finish/ask permissions, never a model-provided completion flag."""
+    if type(progress) is not TurnProgress:
+        raise c.ContractError("schema", "turn progress")
+    c._convert(c.DirectorDecision, candidate, "decision", wire=False)
+    if progress.question_count != progress.completed_count:
+        raise c.ContractError("semantic", "answer processing incomplete")
+    done = finish_allowed(progress)
+    if done and candidate.next_step != "finish":
+        raise c.ContractError("semantic", "normal interview already complete")
+    return c.validate_decision(
+        candidate,
+        question=question,
+        allowed_personas=allowed_personas(
+            tuple(item.question.data.persona for item in progress.questions)
+        ),
+        finish_allowed=done,
+        allowed_locations=allowed_locations,
+    )

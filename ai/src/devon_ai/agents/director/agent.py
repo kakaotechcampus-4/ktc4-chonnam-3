@@ -5,6 +5,7 @@ from collections.abc import Callable
 from dataclasses import asdict, replace
 
 from devon_ai import contracts as c
+from devon_ai.agents.director import turn_policy
 from devon_ai.llm_tasks import ModelCall, call_model
 from devon_ai.llm_tasks.answer_analysis import _current_evidence, _history_payload
 
@@ -52,6 +53,7 @@ async def generate_question(
     allowed_locations: frozenset[tuple[str, str, str]] = frozenset(),
     reference_texts: tuple[c.ReferenceText, ...] = (),
     history: tuple[c.AnalysisHistory, ...] = (),
+    progress: turn_policy.TurnProgress | None = None,
 ) -> c.QuestionReady | c.QuestionRejected:
     """Generate once from a prepared plan; no automatic semantic repair or finish.
 
@@ -60,6 +62,20 @@ async def generate_question(
     it must not trust self-validation fields in the generator's response.
     """
     c._convert(c.QuestionPlan, plan, "question plan", wire=False)
+    if progress is not None:
+        expected = turn_policy.plan_question(
+            progress,
+            plan.question_id,
+            plan.contract,
+            remaining_candidates=plan.remaining_candidates,
+        )
+        if plan.turn != expected.turn or not set(plan.allowed_personas).issubset(
+            expected.allowed_personas
+        ):
+            raise c.ContractError("semantic", "plan turn policy")
+        if history and history != progress.history:
+            raise c.ContractError("semantic", "progress history mismatch")
+        history = progress.history
     c.validate_personas(personas)
     c._references((), evidence_refs, "evidence registry")
     c._references(plan.contract.basis_refs, basis_refs, "planned basis")
@@ -115,6 +131,16 @@ async def generate_question(
             for item in history
         ],
     }
+    if progress is not None:
+        payload["turn_policy"] = {
+            "question_count": progress.question_count,
+            "completed_count": progress.completed_count,
+            "persona_counts": {
+                persona: sum(item.question.data.persona == persona for item in progress.questions)
+                for persona in turn_policy.PERSONAS
+            },
+            "tech_target": 6,
+        }
 
     def validate(candidate: c.Question) -> c.ContractChecked[c.Question]:
         nonlocal recovery
