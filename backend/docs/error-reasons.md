@@ -39,6 +39,8 @@
 | 면접 생성 | `session_limit_exceeded` | 409 |
 | 면접 준비 | `prep_failed` | 409 |
 | 면접 준비 | `repo_unreachable` | 409 |
+| 면접 준비 재시도 | `prep_in_progress` | 409 |
+| 면접 준비 재시도 | `session_expired` | 410 |
 | 면접 조회 | `not_found` | 404 |
 | 재시도 | `original_not_completed` | 409 |
 | 재시도 | `repository_unavailable` | 409 |

@@ -1,6 +1,6 @@
 # 준비 재시도 전송 방식 — REST 확정
 
-상태: Proposed
+상태: Accepted (2026-09-23, BE 합의)
 작성일: 2026-09-22
 제안: FE
 결정 필요: BE (수락 시 `spec/shared/decisions/`에 기록하고 `migration.md` 행을 FIX로 확정)

@@ -29,7 +29,7 @@
 | Private repo | 지원하지 않음. 필드만 유지 | FIX |
 | Report score | 0~100 score 6개와 단순 평균 `totalScore`; 세부 기준 seed는 보강 가능 | FIX |
 | pgvector | 실제 vector 검색 필요 여부 | `PENDING_AI` |
-| 준비 재시도 경로 | WS `prepareRetry`(`frontend/docs/api-spec.md:1142`, WS 계약 원본) vs REST `POST /interviews/{id}/prepare/retry`(`spec/ai/decisions/0010:32` Accepted, FE/BE features) | `PENDING_BE` — FE 제안: `spec/frontend/designs/2026-09-22-prepare-retry-transport.md` |
+| 준비 재시도 경로 | REST `POST /interviews/{id}/prepare/retry`. `spec/ai/decisions/0010:32` 반영, BE 합의 2026-09-23. 거절 reason `prep_in_progress`(409)·`session_expired`(410) 신설 | FIX |
 | 수동 재시도 상한 | 사용자가 `다시 시도`를 누를 수 있는 횟수의 상한이 없다. `analysis_jobs.retry_count`는 지표이고 차단 규칙이 아니다 (`spec/ai/decisions/0010:72`, `backend/docs/pipeline.md:13`). LLM 호출 상한(최초 1 + 자동 1)만 있어 수동 N회는 최대 2×(N+1)회 호출이 된다 (`spec/ai/contracts.md:141`) | `PENDING_BE` |
 | 준비 실패 대기 시간 | `github_api_rate_limited`의 화면 처리는 "대기 후 재시도"인데 (`spec/frontend/features/interview.md:200`) 대기 시간을 담을 필드가 없다. WS `error`(`frontend/docs/api-spec.md:1183`)와 `InterviewLastError`(`openapi.yaml:866`)는 `openapi.yaml:870-871`에 따라 같은 모양을 유지해야 해 한쪽만 고칠 수 없다 | `PENDING_TEAM` |
 
