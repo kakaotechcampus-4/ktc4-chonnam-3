@@ -82,3 +82,61 @@ def run_director(plan, personas, model_request):
         return asyncio.run(agent.generate_question(**args)), calls, reviews
 
     return run
+
+
+@pytest.fixture
+def turn_record():
+    def make(turn, persona="hr_manager"):
+        contract = c.QuestionContract(
+            f"역할 확인 {turn}", (c.RequiredPoint("role", "역할"),), (), (), "본인 역할"
+        )
+        question = c.Question(persona, f"역할은 무엇인가요 {turn}?", "role", contract, (), ())
+        checked = c.validate_question(
+            question,
+            review=c.QuestionReview(question.text, contract),
+            allowed_personas=(persona,),
+            evidence_refs=frozenset(),
+            basis_refs=frozenset(),
+            jd_requirement_ids=frozenset(),
+        )
+        answer = c.SubmittedAnswer("answer", turn, "팀원이 구현했습니다")
+        analysis = c.AnswerAnalysis(
+            "evaluated",
+            "sufficient",
+            (c.CoveredPoint("role", (answer.text,)),),
+            (),
+            c.TechnicalAssessment("역할 확인", (), (), ("기술 주장 없음",)),
+            "teammate",
+            (answer.text,),
+            (),
+            False,
+            (),
+            (),
+        )
+        result = c.validate_analysis(
+            analysis,
+            question=checked,
+            answer_text=answer.text,
+            evidence_refs=frozenset(),
+            allowed_locations=frozenset(),
+        )
+        return (
+            c.QuestionReady(f"q-{turn}", turn, c.ModelSuccess(checked, ())),
+            c.AnalysisHistory(checked, answer, result),
+        )
+
+    return make
+
+
+@pytest.fixture
+def progress_for(turn_record):
+    from devon_ai.agents.director import turn_policy as policy
+
+    def make(personas):
+        progress = policy.TurnProgress()
+        for turn, persona in enumerate(personas, 1):
+            ready, record = turn_record(turn, persona)
+            progress = policy.complete_answer(policy.record_question(progress, ready), record)
+        return progress
+
+    return make
