@@ -1,6 +1,14 @@
 # task-10 - Director 질문 결정
 
-상태: 구현 가이드. 현재 runtime은 docstring 스켈레톤이며 Director 동작은 미구현이다.
+상태: 준비된 질문 목적을 받는 기본 생성·독립 검토·검증 경로 구현. 목적 자동 선정·도구 실행·턴 전환·BE 서비스 연결은 후속 범위다.
+
+## 현재 구현
+
+`generate_question`은 기존 Context/QuestionContract와 주입 모델 호출·검토기를 사용해
+`ModelResult[ContractChecked[Question]]` 또는 실패를 반환한다.
+[첫 구현 인계](../../spec/ai/designs/2026-09-23-director-question-path.md)에 입력과 책임,
+참조 검사, 요청별 시도 상한, 검토 실패와 [프롬프트 초안](../prompts/director-question-v1.md)을 기록했다.
+실제 의미 검토기와 provider 품질은 아직 검증하지 않았다. 아래 체크리스트는 전체 task 범위다.
 
 ## 목표
 
@@ -81,7 +89,9 @@ Persona마다 별도 Agent나 class를 만들지 않는다. `hr_manager`, `tech_
 
 ## 검증
 
-추가 예정, 현재 없음: `ai/tests/agents/director/test_director.py`.
+현재 존재: `ai/tests/agents/director/test_director.py`,
+`backend/tests/integrations/test_director_boundary.py`.
+기본 생성 경로의 fixture·HTTP adapter 검사이며 아래 전체 턴 정책·서비스 검사의 완료를 뜻하지 않는다.
 
 - [ ] 첫 질문 HR, 9번째 답변 후 종료, 10번째 질문 없음의 대조 사례를 둔다.
 - [ ] Controller가 이미 확정·제시한 횟수와 남은 턴을 확인해 기술 최소 5턴·도메인과 HR 합산 최소 3턴을 충족할 수 있는 Persona만 허용하는지 검사한다. 최소 조건을 충족할 수 있는 HR 재선택을 고정 할당으로 막지 않는다.

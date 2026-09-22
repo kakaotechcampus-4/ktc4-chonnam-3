@@ -1,1 +1,1 @@
-"""The Director boundary follows spec/ai/features/interviewer.md and is unimplemented."""
+"""Director의 기본 질문 생성·검증 경계. 목적 자동 선정과 도구 실행은 후속 범위다."""
