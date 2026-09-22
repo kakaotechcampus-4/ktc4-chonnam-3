@@ -1,4 +1,10 @@
-import type { PrepareStepKey, WsClientMessage, WsServerMessage } from '@/types/api';
+import type {
+  InterviewLastError,
+  PrepareStepKey,
+  WsClientMessage,
+  WsErrorMessage,
+  WsServerMessage,
+} from '@/types/api';
 
 /**
  * 면접 WS 목의 공통 조각. `frontend/docs/api-spec.md` #18.
@@ -20,19 +26,30 @@ export function send(client: Client, message: WsServerMessage) {
   client.send(JSON.stringify(message));
 }
 
-export function wsError(
+/**
+ * 오류 본문. `GET /interviews/{id}`의 `lastError`와 같은 모양이라
+ * 레코드에 그대로 저장할 수 있다.
+ */
+export function wsLastError(
   reason: string,
   code: string,
   options: { recoverable: boolean; step?: PrepareStepKey | null },
-): WsServerMessage {
+): InterviewLastError {
   return {
-    type: 'error',
     reason,
     code,
     step: options.step ?? null,
     recoverable: options.recoverable,
     occurredAt: new Date().toISOString(),
   };
+}
+
+export function wsError(
+  reason: string,
+  code: string,
+  options: { recoverable: boolean; step?: PrepareStepKey | null },
+): WsErrorMessage {
+  return { type: 'error', ...wsLastError(reason, code, options) };
 }
 
 /** 클라이언트 메시지를 계약 타입으로 좁힌다. 모르는 모양이면 무시한다. */

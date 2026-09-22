@@ -158,6 +158,22 @@ export function recordAnswer(record: InterviewRecord, turn: number, text: string
 }
 
 /**
+ * WS 준비 단계 오류를 레코드에 남긴다.
+ *
+ * 메시지만 보내고 레코드를 안 건드리면 새로고침 후 `GET /interviews/{id}`가
+ * `preparing`을 돌려주고, `PREPARE_DURATION_MS`가 지나면 화면이 `in_progress`로 보고
+ * 질문 없는 진행 화면으로 넘어간다. 재연결 시 오류를 되보내지 않기로 했으므로(D14)
+ * 새로고침 후 배너의 유일한 근거가 이 스냅샷이다.
+ *
+ * 진행 중 오류에는 쓰지 않는다. 계약상 `lastError`는 `preparing_failed`일 때만 값이 있다.
+ */
+export function setPrepareFailure(record: InterviewRecord, lastError: InterviewLastError) {
+  record.fixedStatus = 'preparing_failed';
+  record.fixedLastError = lastError;
+  return record;
+}
+
+/**
  * 준비 실패를 풀고 다시 준비 상태로 되돌린다. WS `prepareRetry` 에서 부른다.
  * `createdAt` 을 옮겨 이미 성공한 단계는 다시 실행되지 않게 한다. api-spec.md #18
  */
