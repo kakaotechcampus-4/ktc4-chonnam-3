@@ -15,13 +15,13 @@
 - [0006 작업별 LLM 정책](../../spec/ai/decisions/0006-task-llm-usage-policy.md)의 `L1 요약과 저장 매핑`
 - [0008 AI 후보 검증·선택 정책](../../spec/ai/decisions/0008-ai-candidate-policy.md)의 구조화 후보 실패
 - [0001 기준선](../../spec/ai/decisions/0001-ai-baseline.md), [0002 vector 미도입](../../spec/ai/decisions/0002-sprint1-vector-search.md)
-- [잔여 결정 목록](../../later.md)의 `AI-L03 변환·요약 version과 저장 매핑`, `AI-L04 실행 상한과 재시도 책임`
+- [구현·검수 인계](pipeline.md#기존-id별-구현검수-인계)의 `AI-L03 변환·요약 version과 저장 매핑`, `AI-L04 실행 상한과 재시도 책임`
 
 ## 선행 조건
 
 - 비식별 batch fixture, 안정 ID 대응, 부분 실패 분리와 캐시 판정은 실제 모델·저장 없이 구현할 수 있다.
 - `repo_shallow_v1`의 정확한 schema는 AI-L02 채택 범위만 사용한다. 문서 후보 필드를 새 DTO로 먼저 고정하지 않는다.
-- L1의 LLM 사용 방향과 프로젝트 기능·역할 요약 의미는 Accepted다. 실제 provider 연결은 AI-L01 뒤 수행한다.
+- L1의 LLM 사용 방향과 프로젝트 기능·역할 요약 의미는 Accepted다. 모델은 0011의 OpenAI `gpt-5.6-luna`를 유지하며, 실제 연결·계정 접근·task 적합성은 AI-L01의 구현·검증 작업이다.
 - `role_summary` 이름과 DB/API 저장 매핑, deterministic metadata는 AI-L03의 AI·BE 합의 전 연결하지 않는다.
 - 실패 item의 attempt는 공통 LLM gateway/task 호출 계층 정책을 따른다. semantic 실패 item은 재호출하지 않는다. batch budget과 timeout/token 상한은 AI-L04 남은 결정 전 production 정책으로 만들지 않는다.
 
@@ -49,7 +49,7 @@
 - [ ] `model`은 결과 metadata로 다루되 cache identity에 추가하지 않는다.
 - [ ] head SHA 또는 의미 있는 prompt 계약이 바뀌면 cache miss가 되며, model/출력 의미 변경 시 prompt version 갱신을 요구한다.
 - [ ] Sprint 1에서 embedding, vector store, 전체 tree scan 또는 global search 의존성을 추가하지 않는다.
-- [ ] raw output 보존이 필요하면 AI-L18 승인 경계로 넘기고 일반 로그에 사용자 자료를 출력하지 않는다.
+- [ ] raw output 보존은 [0018의 자료 정책](../../spec/ai/decisions/0018-existing-baseline-bulk-resolution.md)과 [구현 인계](pipeline.md#기존-id별-구현검수-인계)를 따르고 일반 로그에 사용자 자료를 출력하지 않는다.
 
 ## 검증
 

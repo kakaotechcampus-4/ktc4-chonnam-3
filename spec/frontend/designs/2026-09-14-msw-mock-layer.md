@@ -2,8 +2,12 @@
 
 - 상태: Accepted
 - 작성일: 2026-09-14
+<<<<<<< HEAD
 - 개정: 2026-09-19 — PR #28 멘토 리뷰 반영, `openapi.yaml` 단일 원본 기준으로 재정렬
 - 개정: 2026-09-21 — 실패 케이스(장애 주입) 추가. WS는 별도 문서로 분리
+=======
+- 개정: 2026-09-19 — PR #28 멘토 리뷰 반영, 일반 HTTP API를 `openapi.yaml` 기준으로 재정렬
+>>>>>>> ebbe13da1fc81abae0e0d129378a1ca5f87b8ed4
 - 관련 브랜치: `feature/MSW_handler` → `refactor/mocks`
 - 참조 명세: `spec/shared/contracts/openapi.yaml`, `spec/shared/contracts/migration.md`,
   `spec/backend/features/{analysis-run,documents,interview,report}.md`,
@@ -15,11 +19,13 @@
 BE 구현 전에 FE 화면을 실제 네트워크 흐름 위에서 개발할 수 있게 한다.
 동시에 mock을 계약에 맞추는 과정에서 드러난 FE 코드·계약 간 차이를 기록한다.
 
+일반 HTTP API는 [OpenAPI](../../shared/contracts/openapi.yaml)가 원본이며 WS·SSE·브라우저 이동은 [공통 계약 안내](../../shared/contracts/README.md)에 따라 `frontend/docs/api-spec.md`를 따른다. 아래 2026-09-19 검수·통과 기록은 당시 결과다. 이후 확정한 0002·0003·0017과 현재 구현의 일치 여부는 별도로 검증하며, 이번 문서 정리에서 runtime·mock·smoke 스크립트를 수정하지 않는다.
+
 ## 범위
 
 포함: REST 정상 흐름 핸들러, 상태 전이가 필요한 흐름(분석 run·면접 준비·리포트 생성·후보 page), SSE 스트림, fixture.
 
-`openapi.yaml`의 operation 16개 전부에 핸들러가 있다. SSE 스트림은 계약 밖(`api-spec.md` #13)이라 별도로 둔다.
+2026-09-19 검수 당시 `openapi.yaml`의 operation 16개 전부에 핸들러가 있었다. 이후 0003 결정으로 refresh는 Sprint 1 계약에서 제외됐으며, 현재 mock의 해당 핸들러는 정리할 대상이다. SSE 스트림은 `api-spec.md` #13을 따르며 별도로 둔다.
 
 2026-09-21 개정에서 실패 케이스를 포함했다(아래 설계 결정 5).
 WS(`/ws/interviews/{sessionId}`)는 `spec/frontend/designs/2026-09-21-ws-mock.md`로 분리했다.
@@ -32,7 +38,7 @@ WS(`/ws/interviews/{sessionId}`)는 `spec/frontend/designs/2026-09-21-ws-mock.md
 
 초판은 `types/api.ts`가 이관 전 FE 문서 기준이라 임의로 고칠 수 없다고 보고 Sprint 1 계약을
 `types/contract.ts`에 따로 두었다. 그 전제가 사라졌다. 커밋 `3143c75`·`81894a0`에서
-`openapi.yaml`을 유일 원본으로 확정하고 `types/api.ts`와 전수 대조를 마쳤다.
+일반 HTTP API의 `openapi.yaml` 기준으로 `types/api.ts`를 대조했다. WS·SSE·브라우저 이동에 대한 원본 예외는 위 안내를 따른다.
 
 남은 문제는 mock만 `contract.ts`를 본다는 것이었다. 실제로 PR #28에서 런타임 오류로 드러났다.
 `/result` 목이 `jdRequirements`를 빠뜨려 `RepoSelect`가 dev에서만 깨졌다(멘토 리뷰 `4040570820`).
@@ -118,7 +124,7 @@ BE가 아직 없는 시점이라 `import.meta.env.DEV`에서 기본 on으로 두
 
 ### A. 해소됨 — `types/api.ts`와 `openapi.yaml`의 차이
 
-초판 시점에는 둘이 달랐다. 지금은 일치한다(커밋 `3143c75`·`81894a0`).
+초판 시점에는 둘이 달랐고, 아래는 당시 대조 기록이다(커밋 `3143c75`·`81894a0`). 현재 전체 일치나 실제 서버 동작의 검증 결과를 뜻하지 않는다.
 초판 표에서 "openapi.yaml 쪽"으로 적었던 값 중 실제로는 반대로 확정된 것이 있으니 주의한다.
 
 | 항목 | 초판 표의 기술 | 2026-09-19 확정값 |
@@ -131,6 +137,8 @@ BE가 아직 없는 시점이라 `import.meta.env.DEV`에서 기본 on으로 두
 `POST /analysis-runs`가 JSON이라는 점, `StepKey` 7개, `Persona` 3종은 초판대로 유지됐다.
 `shared/api.ts`의 multipart 호출은 이미 JSON으로 고쳐졌다. mock의 multipart 501 가드는 회귀 감지용으로 남긴다.
 
+위 이의 제기 행은 계약 파일에 경로가 있다는 기록이다. `migration.md`의 기존 Sprint 2 이관 결정은 유지하므로 Sprint 1 API 제공·호출 대상으로 읽지 않는다. 계약·mock의 잔존 내용은 [report의 계약 차이](../features/report.md#계약-차이와-구현-범위)에 따라 후속 정합화한다.
+
 ### B. 일부 해소 — `openapi.yaml`에 정의가 없어 mock이 가정한 항목
 
 | 항목 | 현재 처리 | 상태 |
@@ -138,9 +146,9 @@ BE가 아직 없는 시점이라 `import.meta.env.DEV`에서 기본 on으로 두
 | SSE 이벤트 payload | `{type:'step'\|'completed'\|'failed'}` — `api-spec.md` #13 기준 | **미해결(D7)** — BE 구현과 대조 필요 |
 | SSE `progress` 이벤트 | **전송하지 않는다** | 읽는 화면이 하나도 없어 계약 쪽을 정리하기로 함(리뷰 `4050021937`, 커밋 `e25d68e`) |
 | 없는 리소스 조회 | `/analysis-runs/*`는 `410 run_expired`, `/interviews/{id}`는 `404 not_found` | **부분 해결(D3)** — 계약의 응답 목록에 맞춰 410으로 옮겼다. `retry`·`report`의 404는 계약에 없어 남아 있다 |
-| `POST /analysis-runs` 중복 | `409 run_in_progress` + `details.runId` | 초판의 `reused: true` 본문 필드를 버렸다. 계약 응답에 그런 필드가 없다(D2) |
+| `POST /analysis-runs` 중복 | `409 run_in_progress` + `error.details.runId` | 정상 202는 `{runId}`이며 중복 응답은 공통 오류를 유지한다. 기존 응답·문서 정리와 JobInput의 ID 읽기 수정 완료(D2) |
 | 면접 제한 시간 | 900초 | **미해결(D5)** — 계약에 근거 없음 |
-| 리포트 score key/label | 6개 유지 | **미해결(D6)** — 산정 방식 `PENDING_TEAM` |
+| 리포트 score key/label | 6개 유지 | **정책 확정(D6)** — [0010](../../ai/decisions/0010-sprint1-interface-runtime-decisions.md)의 각 0~100·단순 평균. 세부 기준 작성·검수와 실제 채점 연결은 남음 |
 
 ### C. 해소됨 — 화면에 필요하지만 계약에 없던 필드
 
@@ -154,18 +162,18 @@ id가 아니라 요구사항 `text`를 담는다.
 ### D. 해소됨 — 이관되지 않았던 엔드포인트
 
 `GET /me/home`, `GET /me/interviews`, `POST /auth/logout`은 모두 `openapi.yaml`에 있다.
-`GET /me/profile`과 `POST /auth/refresh` 핸들러를 새로 만들었다.
+당시 `GET /me/profile`과 `POST /auth/refresh` 핸들러를 새로 만들었다. 이후 [0003 결정](../../shared/decisions/0003-sprint1-session-auth.md)으로 JWT·refresh는 Sprint 2로 보류됐다. 현재 코드의 refresh 핸들러는 기존 구현 잔재이며 Sprint 1 동작에서 정리할 대상이다.
 **`/me/profile`은 핸들러가 없어 마이페이지가 catch-all 501에 걸려 깨져 있었다.**
 
 `GET /me/interviews`의 `status` 쿼리 파라미터는 팀에 제안만 된 상태다(리뷰 `4050406821`).
 계약에 없으므로 mock에 넣지 않고 `handlers/user.ts`에 `TODO(contract)`로 남겼다.
 
-### E. `PENDING_FE` 항목에 대한 mock의 처리
+### E. 기존 `PENDING_FE` 항목의 결정과 mock 반영
 
 - WS 식별자: `CreateInterviewResponse`가 `sessionId`·`interviewId` 둘 다 required로 확정됐다.
   라우트 `:id`는 `interviewId`, WS 경로는 `sessionId`다.
 - `preparing_failed`: `lastError`가 계약에 들어와 seed로 이 상태를 만들 수 있게 됐다.
-- `questionEnd`, 이탈/복구, JWT 전달: WS 작업에서 다룬다.
+- `questionEnd` 제외, 명시적 이탈만 abandoned 처리, 끊김만으로 abandoned 처리하지 않기는 [0010](../../ai/decisions/0010-sprint1-interface-runtime-decisions.md)을 따른다. 인증은 후속 [0003 결정](../../shared/decisions/0003-sprint1-session-auth.md)의 Redis·`devon_session` 쿠키로 대체한다. 실제 WS 연결·복구는 구현·검증할 작업이다.
 
 ### F. 픽스처 내부 정합 (신규)
 
@@ -174,9 +182,13 @@ id가 아니라 요구사항 `text`를 담는다.
 `fixtures/jd.ts`에 요구사항을 신설하고 카드가 그 상수를 참조하게 했다.
 스모크 스크립트가 고아 참조 0건을 검사한다.
 
+후속 [0017 결정](../../ai/decisions/0017-recommendation-score-deferral.md)에 따라 Sprint 1의 `matchScore`는 필드를 유지하고 null을 반환한다. 기존 fixture의 숫자 예시는 구현 연결 시 정리할 대상이며 이 문서 수정으로 mock 값이 바뀐 것은 아니다.
+
 ## 기존 FE 인프라 검토
 
 mock을 붙이면서 확인한 항목이다. 이번 변경에는 포함하지 않았다.
+
+2026-09-22 인증 명세 변경은 런타임·MSW 수정이 아니다. 현재 refresh/logout mock의 `204`는 세션 생성·만료·삭제를 검증하지 않는다. `api.refresh`·mock refresh·smoke 검사의 정리와 Query/Mutation의 `401 unauthenticated` 처리는 [auth 구현 작업](../../../frontend/docs/task-07-auth.md)에 남긴다. 아래 과거 검증 결과를 서버 세션 인증의 통과 근거로 사용하지 않는다.
 
 | # | 항목 | 내용 |
 | --- | --- | --- |
@@ -191,7 +203,7 @@ mock을 붙이면서 확인한 항목이다. 이번 변경에는 포함하지 �
 ## 검증 (2026-09-19 실행)
 
 테스트 러너가 없으므로(`package.json`에 `test` 스크립트 부재) `spec/frontend/verification.md`에 따라
-수동 시나리오로 확인한다. 재현 절차는 `frontend/docs/msw-smoke-check.js`에 있다.
+수동 시나리오로 확인한 당시 기록이다. `frontend/docs/msw-smoke-check.js`는 브라우저 콘솔용 API·SSE 검사 스크립트이며 아래 화면 시나리오 전체를 자동 실행하지 않는다.
 
 ### 실행한 명령
 
@@ -206,7 +218,7 @@ mock을 붙이면서 확인한 항목이다. 이번 변경에는 포함하지 �
 ### 스모크 스크립트
 
 `npm run dev` 후 브라우저 콘솔에서 `frontend/docs/msw-smoke-check.js` 실행.
-**59건 전부 통과.** 응답 필드는 계약의 required 집합과 키 단위로 대조한다.
+**당시 실행 기록은 59건 통과다.** 스크립트는 일부 응답의 키·값·상태 전이를 직접 적은 기대값과 비교한다. OpenAPI를 읽어 전체 required·enum·nullable·중첩 스키마를 자동 검증하는 도구는 아니며, 현재 스크립트를 이번 문서 정리에서 재실행한 결과도 아니다.
 
 초판의 "SSE 이벤트 15건" 검사는 뺐다. 구독 시점에 따라 이미 지나간 step의 `running`을 못 받아
 개수가 흔들린다. 대신 "step 7개가 모두 종료 상태로 도착"·"`succeeded` 미사용"·"`progress` 0건"을 본다.
@@ -237,26 +249,32 @@ mock을 붙이면서 확인한 항목이다. 이번 변경에는 포함하지 �
 202 `generating` 상태에서 탭을 두면 200이 된 뒤에도 "리포트를 만들고 있어요"에 머문다.
 `refetchIntervalInBackground: true`가 필요한지는 화면 담당자가 판단할 일이라 손대지 않았다.
 
-## 팀 결정이 필요한 항목
+## 당시 검토 항목과 현재 처리 상태
 
 mock이 임의로 확정하지 않았다. 루트 `CLAUDE.md`의 "migration.md의 충돌을 임의로 합의 처리하지 않는다"를 따른다.
 
 | # | 항목 | 현재 mock | 필요한 결정 |
 | --- | --- | --- | --- |
 | D1 | `POST /documents/preview`의 `file` 필드 누락 | `400 internal_error` | 400을 계약에 추가할지, 415로 흡수할지 |
-| D2 | `POST /analysis-runs` 중복 요청 | `409 run_in_progress` + `details.runId` | 이 형태로 계약에 명시할지 (`api-spec.md` #11은 이미 이 형태) |
+| D2 | `POST /analysis-runs` 중복 요청 | `409 run_in_progress` + `error.details.runId` | 해소 — 기존 응답 유지, 문서 정정과 JobInput ID 읽기 수정. 같은 정책을 다시 질문하지 않음 |
 | D3 | `retry`·`report`의 없는 리소스 | `404 not_found` | 계약 응답 목록에 404가 없다. 410으로 옮길지 계약에 404를 추가할지 |
 | D4 | 핸들러 없는 `/api` 경로 | `501` | 실서버가 안 쓰는 코드를 mock 신호로 쓰는 것이 괜찮은지 (멘토 질문 미회신) |
 | D5 | 면접 제한 시간 900초 | 상수 | `spec/backend/features/interview.md`에 근거 명시 필요 |
-| D6 | 점수 산정 | fixture 예시값 | `PENDING_TEAM` |
+| D6 | 점수 산정 | fixture 예시값 | 6개·각 0~100·단순 평균 확정; 세부 기준 작성·검수와 실제 연결 대기 |
 | D7 | SSE payload 형식 | `api-spec.md` #13 기준 | BE 구현과 대조 |
 | D8 | SSE `progress` 이벤트 | 미전송 | 계약에서 제거할지 결정 후 `api-spec.md`·`types/api.ts`의 `SseProgressEvent` 정리 |
 
 ## 후속
 
+<<<<<<< HEAD
 1. D1~D8 결정. WS 쪽 D9~D13은 `2026-09-21-ws-mock.md`.
 2. ~~실패 케이스 핸들러~~ — 2026-09-21 완료 (설계 결정 5).
 3. ~~WS mock~~ — 2026-09-21 완료. 화면 구현 시 이 목으로 상태머신을 맞춘다.
+=======
+1. D1~D8 중 해소되지 않은 차이를 확인한다. D2·D6처럼 이미 정한 정책은 재질문하지 않고 필요한 구현·검증만 남긴다.
+2. 실패 케이스 핸들러 (인증 실패·만료·네트워크 실패).
+3. WS mock — `InterviewPrepare`·`InterviewScreen` 화면 작업과 함께.
+>>>>>>> ebbe13da1fc81abae0e0d129378a1ca5f87b8ed4
 4. `/me/interviews?status=` 가 합의되면 목에 반영.
 5. 테스트 러너 선정 — 지금의 수동 스모크 스크립트를 자동 테스트로 옮긴다.
 6. `shared/api.ts`의 401 인터셉터 — `api.refresh`에 "인터셉터가 호출한다"는 주석만 있고 구현이 없다.

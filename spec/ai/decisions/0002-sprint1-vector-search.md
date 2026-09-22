@@ -4,11 +4,11 @@
 - 날짜: 2026-09-12
 - 관련 PR: 없음
 - 검토자: 현재 사용자 승인
-- 연결 항목: [later.md의 AI-L20](../../../later.md)
+- 연결 항목: [AI-L20 — Sprint 2 검색 검토](../features/extensions.md#sprint-2-착수-시-검토할-사항)
 
 ## 맥락
 
-[ForAI 1](../../../ForAI.md)과 [공통 계약 이관표](../../shared/contracts/migration.md)는 실제 vector 검색 필요 여부를 AI 파트 검토로 남겼다. 기존 Sprint 1 범위는 README, repository metadata, languages, commit metadata, L2 notable area 주변 파일을 이용하며 vector 없이 동작해야 한다.
+과거 원본 `ForAI.md` 1항(현재 저장소에 없음)과 [공통 계약 이관표](../../shared/contracts/migration.md)는 실제 vector 검색 필요 여부를 AI 파트 검토로 남겼다. 기존 Sprint 1 범위는 README, repository metadata, languages, commit metadata, L2 notable area 주변 파일을 이용하며 vector 없이 동작해야 한다. 현행 검색 범위는 [Evidence Retriever](../features/evidence-retrieval.md)에서 확인한다.
 
 현재 도입 필요성을 입증한 실제 검색 품질·비용·지연 측정 결과는 없다. 사용자는 Sprint 1 미도입, extension 선설치 없음, 실제 실패 사례를 통한 Sprint 2 재평가 방향을 승인했다.
 
@@ -53,4 +53,4 @@
 
 ## 대체 관계
 
-[0001 AI 구현 기준선](0001-ai-baseline.md)의 pgvector 관련 보류 중 Sprint 1 도입 여부만 후속 결정으로 대체한다(부분 Superseded). 0001의 다른 기준과 과거 기록은 유지하며, Sprint 2 검색 세부는 계속 [later.md](../../../later.md)에서 추적한다.
+[0001 AI 구현 기준선](0001-ai-baseline.md)의 pgvector 관련 보류 중 Sprint 1 도입 여부만 후속 결정으로 대체한다(부분 Superseded). 0001의 다른 기준과 과거 기록은 유지한다. Sprint 2 검색 세부는 작성 당시 `later.md`에서 추적했으며, 현재 [Sprint 2 착수 시 검토할 사항](../features/extensions.md#sprint-2-착수-시-검토할-사항)에 보존한다.
