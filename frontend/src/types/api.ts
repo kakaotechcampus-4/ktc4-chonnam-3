@@ -309,10 +309,13 @@ export type PrepareStepStatus = Exclude<StepStatus, 'skipped'>;
  * 1차 스프린트는 텍스트 전용이다(`answerMode: 'text'`).
  * 음성 전환(`answerStart` → 오디오 바이너리 → `answerEnd`, `transcript`)은 2차 범위다.
  *
- * `answer`는 제출 버튼 클릭 시 1회 전송한다. 초안 저장은 없다.
- * `prepareRetry`는 준비 실패 후 "다시 시도"에서 보낸다. 성공한 단계는 재실행되지 않는다.
+ * `answer`는 현재 답변 가능한 `turn`과 함께 제출 버튼 클릭 시 1회 전송한다. 초안 저장은 없다.
+ * `turn` 없이 보내면 서버가 "마지막 턴"으로 추정해야 하고, 재연결이 늦으면
+ * 지난 턴 답변이 다음 질문에 붙는다. api-spec.md #18
+ *
+ * 준비 실패 재시도는 WS 메시지가 아니라 `POST /interviews/{id}/prepare/retry` 다(0010 결정).
  */
-export type WsClientMessage = { type: 'prepareRetry' } | { type: 'answer'; text: string };
+export type WsClientMessage = { type: 'answer'; turn: number; text: string };
 
 /**
  * WS 오류는 `GET /interviews/{id}`의 `lastError`와 같은 형태다.

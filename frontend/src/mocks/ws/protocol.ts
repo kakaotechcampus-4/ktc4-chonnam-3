@@ -41,13 +41,10 @@ export function parseClientMessage(data: unknown): WsClientMessage | null {
   try {
     const parsed: unknown = JSON.parse(data);
     if (typeof parsed !== 'object' || parsed === null) return null;
-    const { type } = parsed as { type?: unknown };
-    if (type === 'prepareRetry') return { type: 'prepareRetry' };
-    if (type === 'answer') {
-      const { text } = parsed as { text?: unknown };
-      if (typeof text === 'string') return { type: 'answer', text };
-    }
-    return null;
+    const { type, turn, text } = parsed as { type?: unknown; turn?: unknown; text?: unknown };
+    if (type !== 'answer') return null;
+    if (typeof turn !== 'number' || typeof text !== 'string') return null;
+    return { type: 'answer', turn, text };
   } catch {
     return null;
   }
