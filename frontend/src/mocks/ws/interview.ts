@@ -64,7 +64,7 @@ export const interviewWsHandlers = [
         console.warn('[msw] 해석할 수 없는 WS 메시지', event.data);
         return;
       }
-      void handleAnswer(client, record, message.text);
+      void handleAnswer(client, record, message.turn, message.text);
     });
 
     /**

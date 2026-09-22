@@ -52,14 +52,19 @@ export function resendPendingQuestion(client: Client, record: InterviewRecord) {
  * 계약 순서를 지킨다: `answerReceived`(저장 완료) → `thinking` → `evidenceCheck` → 다음 `question`.
  * 화면은 `answerReceived`를 받을 때까지 입력창을 잠그므로 이 메시지를 빠뜨리면 영영 잠긴다.
  */
-export async function handleAnswer(client: Client, record: InterviewRecord, text: string) {
+export async function handleAnswer(
+  client: Client,
+  record: InterviewRecord,
+  turn: number,
+  text: string,
+) {
   if (text.length > ANSWER_MAX_LENGTH) {
     // 같은 턴 재제출. 답변은 저장하지 않는다.
     send(client, wsError('answer_too_long', 'ERR_ANSWER_TOO_LONG', { recoverable: true }));
     return;
   }
 
-  const answered = recordAnswer(record, text);
+  const answered = recordAnswer(record, turn, text);
   send(client, { type: 'answerReceived' });
   if (!answered) return;
 

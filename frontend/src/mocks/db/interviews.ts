@@ -136,16 +136,24 @@ export function appendQuestion(record: InterviewRecord, turn: InterviewTurn) {
   return record.liveTurns;
 }
 
-/** 답변 수신. 마지막 턴의 `answer`를 채운다. 이미 채워져 있으면 덮어쓰지 않는다. */
-export function recordAnswer(record: InterviewRecord, text: string) {
+/**
+ * 답변 수신. 클라이언트가 지정한 턴의 `answer`를 채운다.
+ *
+ * 계약이 `answer`에 `turn`을 싣게 바뀌어(api-spec.md #18) "마지막 턴" 추정을 버렸다.
+ * 추정에 기대면 재연결이 늦을 때 지난 턴 답변이 다음 질문에 붙는다.
+ *
+ * 없는 턴이거나 이미 답변된 턴이면 `null`이다. 호출자가 저장 실패로 처리해야 한다.
+ */
+export function recordAnswer(record: InterviewRecord, turn: number, text: string) {
   const turns = record.liveTurns;
-  if (!turns || turns.length === 0) return null;
+  if (!turns) return null;
 
-  const last = turns[turns.length - 1];
-  if (last.answer !== null) return last;
+  const index = turns.findIndex((item) => item.turn === turn);
+  if (index === -1) return null;
+  if (turns[index].answer !== null) return null;
 
-  const answered = { ...last, answer: text };
-  record.liveTurns = [...turns.slice(0, -1), answered];
+  const answered = { ...turns[index], answer: text };
+  record.liveTurns = [...turns.slice(0, index), answered, ...turns.slice(index + 1)];
   return answered;
 }
 
