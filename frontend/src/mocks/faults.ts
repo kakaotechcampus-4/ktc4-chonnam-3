@@ -109,6 +109,38 @@ export function takeFault(request: Request): FaultRule | null {
   return takeFaultFor(new URL(request.url).pathname, request.method);
 }
 
+/** WS 경로를 명시한 규칙인지. `*` 같은 전역 규칙은 WS 로 새지 않게 막는다. */
+export function targetsWebSocket(rule: FaultRule) {
+  return rule.path.startsWith('/ws/');
+}
+
+/**
+ * WS 연결에 적용할 규칙을 찾아 소비한다.
+ *
+ * HTTP 전역 규칙(`path: '*'`)까지 WS 에 걸리면 두 가지가 깨진다.
+ * 규칙이 여기서 소비돼 정작 HTTP 요청에는 안 걸리고, `code` 가 없는 HTTP 규칙이
+ * 계약에 없는 `ERR_UNKNOWN` 오류를 WS 로 내보낸다.
+ * 그래서 경로를 `/ws/` 로 명시한 규칙만 받는다.
+ */
+export function takeWsFault(pathname: string): FaultRule | null {
+  const rules = read();
+  const suffix = pathname.startsWith(BASE) ? pathname.slice(BASE.length) : pathname;
+
+  const index = rules.findIndex(
+    (rule) => targetsWebSocket(rule) && matchesPath(rule.path, suffix),
+  );
+  if (index === -1) return null;
+
+  const rule = rules[index];
+  if (typeof rule.times === 'number') {
+    const left = rule.times - 1;
+    if (left <= 0) rules.splice(index, 1);
+    else rules[index] = { ...rule, times: left };
+    write(rules);
+  }
+  return rule;
+}
+
 export function listFaults(): FaultRule[] {
   return read();
 }

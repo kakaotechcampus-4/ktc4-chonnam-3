@@ -166,14 +166,25 @@ export const scenarios: Record<ScenarioName, Scenario> = {
     ],
   },
 
+  /**
+   * WS 규칙을 따로 둔다. HTTP 전역 규칙(`*`)은 WS 로 새지 않는다.
+   * 규칙이 WS 에서 소비되면 정작 HTTP 요청에는 걸리지 않고,
+   * `code` 없는 HTTP 규칙이 계약에 없는 오류를 WS 로 내보내기 때문이다.
+   */
   offline: {
-    describe: '모든 요청이 네트워크 단계에서 실패. HTTP 실패와 구분되는지 본다.',
-    rules: [{ path: '*', kind: 'network' }],
+    describe: '모든 요청과 WS 연결이 네트워크 단계에서 실패. 재연결 경로를 본다.',
+    rules: [
+      { path: '*', kind: 'network' },
+      { path: '/ws/interviews/*', kind: 'network' },
+    ],
   },
 
   slow: {
-    describe: '모든 요청이 10초 뒤 실패. 로딩 상태와 타임아웃 처리를 본다.',
-    rules: [{ path: '*', kind: 'timeout', delayMs: 10_000 }],
+    describe: '모든 요청이 10초 뒤 실패하고 WS 는 아무 말도 하지 않는다.',
+    rules: [
+      { path: '*', kind: 'timeout', delayMs: 10_000 },
+      { path: '/ws/interviews/*', kind: 'timeout' },
+    ],
   },
 };
 

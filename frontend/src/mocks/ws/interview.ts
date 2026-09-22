@@ -1,7 +1,7 @@
 import { ws } from 'msw';
 
 import { getInterviewBySessionId, interviewStatus, setPrepareFailure } from '../db';
-import { takeFaultFor } from '../faults';
+import { takeWsFault } from '../faults';
 import { path } from '../http';
 import { sendPrepareFailure, streamPrepare } from './prepare';
 import { CLOSE_GRACE_MS, parseClientMessage, send, wait, wsLastError } from './protocol';
@@ -79,11 +79,23 @@ export const interviewWsHandlers = [
     if (status === 'preparing_failed') return;
 
     /**
-     * 장애 주입 규칙이 이 연결을 겨냥하면 오류만 보내고 끝낸다.
-     * REST와 같은 저장소를 쓰므로 `msw.fault({ path: '/ws/interviews/*', ... })` 로 건다.
-     * `recoverable: false` 면 계약대로 서버가 세션을 닫는다.
+     * 장애 주입. REST와 같은 저장소를 쓰지만 경로를 `/ws/` 로 명시한 규칙만 받는다.
+     * `msw.fault({ path: '/ws/interviews/*', ... })` 로 건다.
+     *
+     * `kind` 가 `network`·`timeout` 이면 연결 자체가 실패한 상황이라 메시지를 보내지 않는다.
+     * 화면의 재연결 경로(onclose → GET → 재연결)를 검증할 수 있게 하기 위함이다.
      */
-    const fault = takeFaultFor(new URL(client.url).pathname);
+    const fault = takeWsFault(new URL(client.url).pathname);
+
+    if (fault?.kind === 'network') {
+      client.close();
+      return;
+    }
+    if (fault?.kind === 'timeout') {
+      // 연결은 열려 있는데 아무 말도 하지 않는 서버. 화면의 대기 상태를 본다.
+      return;
+    }
+
     if (fault?.reason) {
       const recoverable = fault.recoverable !== false;
       const lastError = wsLastError(fault.reason, fault.code ?? 'ERR_UNKNOWN', {
