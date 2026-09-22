@@ -378,6 +378,17 @@ class AnalysisToolResult(_Contract):
     limitations: tuple[str, ...]
     error_code: str | None
 
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.status == "found" and not self.items:
+            raise ContractError("semantic", "found evidence required")
+        if self.status == "not_found" and (self.items or not self.searched_scope):
+            raise ContractError("semantic", "not found scope")
+        if self.status in ("tool_error", "insufficient_analysis") and not self.limitations:
+            raise ContractError("semantic", "lookup limitations")
+        if (self.status == "tool_error") != (self.error_code is not None):
+            raise ContractError("semantic", "lookup error code")
+
 
 @dataclass(frozen=True)
 class AnalysisHistory:

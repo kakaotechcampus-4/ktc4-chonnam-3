@@ -87,13 +87,21 @@ async def analyze_answer(
     }
 
     def validate(candidate: c.AnswerAnalysis) -> c.ContractChecked[c.AnswerAnalysis]:
-        return c.validate_analysis(
+        checked = c.validate_analysis(
             candidate,
             question=question,
             answer_text=answer.text,
             evidence_refs=evidence_refs,
             allowed_locations=allowed_locations,
         )
+        claims = {claim.claim_text: claim for claim in candidate.claim_checks}
+        if len(claims) != len(candidate.claim_checks):
+            raise c.ContractError("semantic", "duplicate claim checks")
+        for verification in candidate.verification_requests:
+            claim = claims.get(verification.claim_text)
+            if claim is None or claim.status == "supported" or not claim.limitations:
+                raise c.ContractError("semantic", "unresolved verification claim")
+        return checked
 
     return await call_model(
         replace(request, input_json=json.dumps(payload, ensure_ascii=False)),

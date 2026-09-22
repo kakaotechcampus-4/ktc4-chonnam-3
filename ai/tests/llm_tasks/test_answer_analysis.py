@@ -269,3 +269,118 @@ def test_partial_tool_error_preserves_valid_items(analysis, run_analysis, eviden
     payload = json.loads(calls[0].input_json)
     assert payload["evidence"][0]["evidence_id"] == "ev-cache"
     assert payload["tool_results"][0]["limitations"] == ["두 번째 파일 조회 중단"]
+
+
+@pytest.mark.parametrize(
+    ("status", "scope", "limits", "error"),
+    [
+        ("found", ("path",), (), None),
+        ("not_found", (), (), None),
+        ("tool_error", (), (), "lookup_failed"),
+        ("tool_error", (), ("실패",), None),
+        ("insufficient_analysis", (), (), None),
+        ("not_found", ("path",), (), "lookup_failed"),
+    ],
+)
+def test_contradictory_tool_state_is_not_accepted(status, scope, limits, error):
+    with pytest.raises(c.ContractError):
+        c.AnalysisToolResult(status, (), scope, limits, error)
+
+
+def test_retrieval_requires_an_unresolved_claim_and_stays_in_scope(
+    analysis, run_analysis, locations
+):
+    analysis.update(
+        needs_verification=True,
+        verification_requests=[
+            {
+                "claim_text": "캐시했습니다",
+                "purpose": "현재 선정 근거를 실제 구현과 비교",
+                "repository_id": "repo-1",
+                "git_ref": "sha-fixed",
+                "allowed_paths": ["src/cache.py"],
+            }
+        ],
+        claim_checks=[
+            {
+                "claim_text": "캐시했습니다",
+                "status": "unverified",
+                "evidence_refs": [],
+                "limitations": ["구현 근거가 없어 추가 확인 필요"],
+            }
+        ],
+    )
+    result, _ = run_analysis(analysis, allowed_locations=locations)
+    assert isinstance(result, c.ModelSuccess)
+    assert result.data.data.verification_requests[0].git_ref == "sha-fixed"
+    analysis["claim_checks"] = []
+    rejected, calls = run_analysis(analysis, allowed_locations=locations)
+    assert isinstance(rejected, c.ModelFailed) and rejected.failure.stage == "semantic"
+    assert len(calls) == 1
+
+
+def test_already_supported_claim_does_not_trigger_another_lookup(
+    analysis,
+    run_analysis,
+    evidence,
+    locations,
+):
+    analysis.update(
+        needs_verification=True,
+        verification_requests=[
+            {
+                "claim_text": "캐시했습니다",
+                "purpose": "구현 확인",
+                "repository_id": "repo-1",
+                "git_ref": "sha-fixed",
+                "allowed_paths": ["src/cache.py"],
+            }
+        ],
+        claim_checks=[
+            {
+                "claim_text": "캐시했습니다",
+                "status": "supported",
+                "evidence_refs": ["ev-cache"],
+                "limitations": [],
+            }
+        ],
+    )
+    result, _ = run_analysis(
+        analysis,
+        evidence=(evidence,),
+        evidence_refs=frozenset({"ev-cache"}),
+        allowed_locations=locations,
+    )
+    assert isinstance(result, c.ModelFailed) and result.failure.stage == "semantic"
+
+
+def test_real_code_conflict_remains_a_candidate_with_condition_limits(
+    analysis,
+    run_analysis,
+    evidence,
+    locations,
+):
+    analysis["claim_checks"] = [
+        {
+            "claim_text": "캐시했습니다",
+            "status": "conflicting",
+            "evidence_refs": ["ev-cache"],
+            "limitations": ["선택 버전에서 캐시 경로가 없어 조건 확인 필요"],
+        }
+    ]
+    result, _ = run_analysis(
+        analysis,
+        evidence=(replace(evidence, content="return db.get(key)"),),
+        evidence_refs=frozenset({"ev-cache"}),
+        allowed_locations=locations,
+    )
+    assert isinstance(result, c.ModelSuccess)
+    assert result.data.data.claim_checks[0].status == "conflicting"
+    assert result.data.data.claim_checks[0].limitations
+
+
+@pytest.mark.parametrize("raw", ["broken JSON", "{}"])
+def test_analysis_uses_only_the_common_retry_boundary(analysis, run_analysis, raw):
+    result, calls = run_analysis(raw, analysis)
+    assert isinstance(result, c.ModelSuccess)
+    assert len(calls) == 2 and [item.attempt for item in result.attempts] == [1, 2]
