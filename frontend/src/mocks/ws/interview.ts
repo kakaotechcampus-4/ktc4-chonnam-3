@@ -19,6 +19,17 @@ import { handleAnswer, resendPendingQuestion, sendFirstQuestion } from './turns'
 export const interviewSocket = ws.link(path('/ws/interviews/:sessionId'));
 
 /**
+ * 이 세션에 열려 있는 연결. 준비 재시도가 REST 로 들어오므로(0010 결정)
+ * REST 핸들러가 진행 상황을 흘려보낼 상대를 찾아야 한다.
+ * 열린 연결이 없으면 빈 배열이고, 다음 연결이 경과 시간 기준으로 이어받는다.
+ */
+export function clientsForSession(sessionId: string) {
+  return [...interviewSocket.clients].filter(
+    (client) => new URL(client.url).pathname.endsWith(`/${sessionId}`),
+  );
+}
+
+/**
  * 연결 수립.
  *
  * 핸드셰이크 실패(401·409)는 HTTP 상태코드로 표현되는데 WebSocket 목은 그 단계에 끼어들 수 없다.

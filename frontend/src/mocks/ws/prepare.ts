@@ -46,19 +46,27 @@ export async function streamPrepare(client: Client, createdAt: number) {
 }
 
 /**
- * `prepareRetry`. 실패한 단계부터 다시 실행한다. 성공한 단계는 재실행하지 않는다.
- * 세션과 선택 레포는 그대로 유지된다.
+ * 준비 재시도. 실패한 단계부터 다시 실행하도록 시계를 되돌린다.
+ * 성공한 단계는 재실행하지 않고 세션·선택 레포는 유지한다.
+ *
+ * 0010 결정으로 트리거가 WS 메시지에서 `POST /interviews/{id}/prepare/retry` 로 바뀌었다.
+ * 그래서 이 함수는 연결을 모르고 레코드만 되돌린다. 진행 상황 전송은 호출자가 한다.
+ * 재시도할 수 없는 상태면 `null`.
  */
-export async function handlePrepareRetry(client: Client, record: InterviewRecord) {
+export function retryPrepare(record: InterviewRecord) {
   const lastError = interviewLastError(record);
-  if (!lastError) return;
+  if (!lastError) return null;
 
   const failedIndex = lastError.step ? PREPARE_STEPS.indexOf(lastError.step) : 0;
   const doneCount = Math.max(0, failedIndex);
 
   // 이미 끝난 단계만큼 시계를 과거로 옮기면 streamPrepare 가 그 단계를 건너뛴다.
   clearPrepareFailure(record, Date.now() - doneCount * STEP_MS);
+  return lastError;
+}
 
+/** 재시도 진행 상황을 열려 있는 연결로 흘려보낸다. */
+export async function streamPrepareFrom(client: Client, record: InterviewRecord) {
   await streamPrepare(client, record.createdAt);
   sendFirstQuestion(client, record);
 }
