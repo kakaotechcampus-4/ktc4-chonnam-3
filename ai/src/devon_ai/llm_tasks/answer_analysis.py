@@ -7,6 +7,27 @@ from devon_ai import contracts as c
 from devon_ai.llm_tasks import ModelCall, call_model
 
 
+def _current_evidence(
+    evidence: tuple[c.AnalysisEvidence, ...],
+    tool_results: tuple[c.AnalysisToolResult, ...],
+    evidence_refs: frozenset[str],
+    allowed_locations: frozenset[tuple[str, str, str]],
+) -> tuple[c.AnalysisEvidence, ...]:
+    c._convert(tuple[c.AnalysisEvidence, ...], evidence, "evidence", wire=False)
+    c._convert(tuple[c.AnalysisToolResult, ...], tool_results, "tool results", wire=False)
+    c._requests((), allowed_locations)
+    registry: dict[str, c.AnalysisEvidence] = {}
+    for item in (*evidence, *(item for result in tool_results for item in result.items)):
+        if (item.repository_id, item.git_ref, item.path) not in allowed_locations:
+            raise c.ContractError("semantic", "evidence location")
+        if item.evidence_id in registry and registry[item.evidence_id] != item:
+            raise c.ContractError("semantic", "conflicting evidence identity")
+        registry[item.evidence_id] = item
+    c._references((), evidence_refs, "evidence registry")
+    c._references(tuple(evidence_refs), frozenset(registry), "missing evidence content")
+    return tuple(item for key, item in registry.items() if key in evidence_refs)
+
+
 async def analyze_answer(
     request: c.ModelRequest,
     *,
@@ -14,6 +35,10 @@ async def analyze_answer(
     question_turn: int,
     answer: c.SubmittedAnswer,
     client: ModelCall,
+    evidence: tuple[c.AnalysisEvidence, ...] = (),
+    tool_results: tuple[c.AnalysisToolResult, ...] = (),
+    evidence_refs: frozenset[str] = frozenset(),
+    allowed_locations: frozenset[tuple[str, str, str]] = frozenset(),
 ) -> c.ModelSuccess[c.AnswerAnalysis] | c.ModelFailed:
     """Use BE's common rubric/config and build input from confirmed task arguments.
 
@@ -29,6 +54,7 @@ async def analyze_answer(
         raise c.ContractError("semantic", "answer turn mismatch")
     if request.task_name != "answer_analysis_v1":
         raise c.ContractError("schema", "analysis task")
+    selected = _current_evidence(evidence, tool_results, evidence_refs, allowed_locations)
     payload = {
         "question_turn": question_turn,
         "question": {
@@ -36,6 +62,9 @@ async def analyze_answer(
             "question_contract": asdict(value.question_contract),
         },
         "answer": asdict(answer),
+        "evidence": [asdict(item) for item in selected],
+        "tool_results": [asdict(result) for result in tool_results],
+        "allowed_locations": sorted(allowed_locations),
     }
 
     def validate(candidate: c.AnswerAnalysis) -> c.ContractChecked[c.AnswerAnalysis]:
@@ -43,8 +72,8 @@ async def analyze_answer(
             candidate,
             question=question,
             answer_text=answer.text,
-            evidence_refs=frozenset(),
-            allowed_locations=frozenset(),
+            evidence_refs=evidence_refs,
+            allowed_locations=allowed_locations,
         )
 
     return await call_model(

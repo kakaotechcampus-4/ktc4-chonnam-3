@@ -169,3 +169,103 @@ def test_persona_does_not_change_evaluation_input_or_rubric(analysis, question, 
     assert calls1[0].input_json == calls2[0].input_json
     assert calls1[0].prompt == calls2[0].prompt
     assert first.data == second.data
+
+
+@pytest.fixture
+def evidence():
+    return c.AnalysisEvidence(
+        "ev-cache", "repo-1", "sha-fixed", "code", "src/cache.py", "cache.get(key)", None
+    )
+
+
+@pytest.fixture
+def locations():
+    return frozenset({("repo-1", "sha-fixed", "src/cache.py")})
+
+
+def test_current_relevant_evidence_reaches_model_and_validates_claim(
+    analysis,
+    run_analysis,
+    evidence,
+    locations,
+):
+    analysis["claim_checks"] = [
+        {
+            "claim_text": "캐시했습니다",
+            "status": "supported",
+            "evidence_refs": ["ev-cache"],
+            "limitations": [],
+        }
+    ]
+    result, calls = run_analysis(
+        analysis,
+        evidence=(evidence,),
+        evidence_refs=frozenset({"ev-cache"}),
+        allowed_locations=locations,
+    )
+    assert isinstance(result, c.ModelSuccess)
+    assert result.data.data.claim_checks[0].status == "supported"
+    assert json.loads(calls[0].input_json)["evidence"][0]["content"] == "cache.get(key)"
+
+
+def test_wrong_ref_is_rejected_before_model_call(run_analysis, evidence, locations):
+    with pytest.raises(c.ContractError):
+        run_analysis(
+            evidence=(replace(evidence, git_ref="sha-old"),),
+            evidence_refs=frozenset({"ev-cache"}),
+            allowed_locations=locations,
+        )
+
+
+def test_similar_but_unrelated_code_cannot_support_claim(
+    analysis, run_analysis, evidence, locations
+):
+    analysis["technical_assessment"]["evidence_refs"] = ["ev-cache"]
+    result, calls = run_analysis(
+        analysis, evidence=(evidence,), evidence_refs=frozenset(), allowed_locations=locations
+    )
+    assert isinstance(result, c.ModelFailed) and result.failure.stage == "semantic"
+    assert json.loads(calls[0].input_json)["evidence"] == []
+
+
+@pytest.mark.parametrize("status", ["not_found", "insufficient_analysis", "tool_error"])
+def test_lookup_limits_do_not_become_false_claims(analysis, run_analysis, status):
+    tool = c.AnalysisToolResult(
+        status,
+        (),
+        ("repo-1@sha-fixed:src/cache.py",),
+        ("이번 조회로는 검증 불가",),
+        "lookup_failed" if status == "tool_error" else None,
+    )
+    analysis["claim_checks"] = [
+        {
+            "claim_text": "캐시했습니다",
+            "status": "unverified",
+            "evidence_refs": [],
+            "limitations": ["이번 조회로는 검증 불가"],
+        }
+    ]
+    result, calls = run_analysis(analysis, tool_results=(tool,))
+    assert isinstance(result, c.ModelSuccess) and result.data.data.sufficiency == "partial"
+    assert result.data.data.claim_checks[0].status == "unverified"
+    assert json.loads(calls[0].input_json)["tool_results"][0]["status"] == status
+    analysis["claim_checks"][0]["status"] = "conflicting"
+    rejected, _ = run_analysis(analysis, tool_results=(tool,))
+    assert isinstance(rejected, c.ModelFailed) and rejected.failure.stage == "semantic"
+
+
+def test_partial_tool_error_preserves_valid_items(analysis, run_analysis, evidence, locations):
+    tool = c.AnalysisToolResult(
+        "tool_error", (evidence,), ("src/cache.py",), ("두 번째 파일 조회 중단",), "lookup_failed"
+    )
+    analysis["technical_assessment"]["evidence_refs"] = ["ev-cache"]
+    result, calls = run_analysis(
+        analysis,
+        tool_results=(tool,),
+        evidence_refs=frozenset({"ev-cache"}),
+        allowed_locations=locations,
+    )
+    assert isinstance(result, c.ModelSuccess)
+    payload = json.loads(calls[0].input_json)
+    assert payload["evidence"][0]["evidence_id"] == "ev-cache"
+    assert payload["tool_results"][0]["limitations"] == ["두 번째 파일 조회 중단"]

@@ -355,6 +355,30 @@ class SubmittedAnswer(_Contract):
             raise ContractError("schema", "answer turn")
 
 
+@dataclass(frozen=True)
+class AnalysisEvidence(_Contract):
+    """BE-verified source excerpt for this task, not a new stored Evidence schema."""
+
+    evidence_id: str
+    repository_id: str
+    git_ref: str
+    source_kind: str
+    path: str
+    content: str = field(repr=False)
+    tool_name: str | None
+
+
+@dataclass(frozen=True)
+class AnalysisToolResult(_Contract):
+    """Existing tool outcome; searched_scope describes what was actually inspected."""
+
+    status: Literal["found", "not_found", "insufficient_analysis", "tool_error"]
+    items: tuple[AnalysisEvidence, ...]
+    searched_scope: tuple[str, ...]
+    limitations: tuple[str, ...]
+    error_code: str | None
+
+
 def _checked_data[T](value: ContractChecked[T], expected: type[T]) -> T:
     if type(value) is not ContractChecked or type(value.data) is not expected:
         raise ContractError("schema", "contract checked input")
