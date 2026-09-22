@@ -112,13 +112,15 @@ msw.clear(); // 전부 해제
 | `report-unavailable`   | 리포트 409                      |
 | `session-limit`        | 면접 생성 409                   |
 | `server-error`         | 모든 요청 500                   |
-| `ws-question-failed`   | WS 오류 (복구 가능)             |
+| `ws-prepare-failed`    | WS 준비 단계 실패 (체크리스트 ✕) |
+| `ws-question-failed`   | WS 진행 중 오류 (복구 가능)     |
 | `ws-repo-unreachable`  | WS 오류 후 연결 종료            |
 | `offline`              | 네트워크 단계 실패              |
 | `slow`                 | 10초 뒤 실패                    |
 
 규칙 필드는 `path`(와일드카드 `*`) · `method` · `kind`(`http`/`network`/`timeout`) · `status` ·
-`reason` · `message` · `times` · `delayMs`, WS 전용으로 `code` · `recoverable`.
+`reason` · `message` · `times` · `delayMs`, WS 전용으로 `code` · `recoverable` · `step`.
+WS 에는 경로를 `/ws/` 로 명시한 규칙만 적용된다. 전역 `*` 규칙은 HTTP 에만 걸린다.
 `reason` 은 `backend/docs/error-reasons.md` 에 있는 값만 쓴다.
 
 워커가 켜질 때 남아 있는 규칙이 있으면 콘솔에 경고한다.
@@ -135,7 +137,7 @@ msw.clear(); // 전부 해제
 | 9턴 종료         | `interviewEnd`, `GET /interviews/{id}` 가 `completed`             |
 | 재연결           | 준비 재생 없이 `prepareCompleted` + 미답변 질문 재전송            |
 | 2000자 초과      | `answer_too_long`                                                 |
-| 준비 실패 seed   | 체크리스트 재생 + `error`, `prepareRetry` 로 실패 단계부터 재실행 |
+| 준비 실패        | 체크리스트 ✕ + `error`(`step` 포함), REST `POST /interviews/{id}/prepare/retry` 로 실패 단계부터 재실행 |
 | 없는/종료된 세션 | `1008` 로 닫힘                                                    |
 
 ## 7. 시나리오 전환

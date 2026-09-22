@@ -432,6 +432,10 @@
   const onConnect = await collect(SEED_PREPARING_FAILED_SESSION, () => false, 1200);
   check('WS 준비 실패 — 연결 시 무전송', 0, onConnect.got.length);
 
+  /**
+   * 재시도는 WS 메시지가 아니라 REST 다(0010 결정).
+   * 진행 상황은 계약대로 WS 로 나오므로 소켓을 열어 둔 채 REST 를 호출한다.
+   */
   const retried = await new Promise((resolve) => {
     const socket = new WebSocket(wsUrl(SEED_PREPARING_FAILED_SESSION));
     const got = [];
@@ -448,11 +452,14 @@
       if (seen(got, 'question')) finish();
     };
     socket.onopen = () =>
-      setTimeout(() => socket.send(JSON.stringify({ type: 'prepareRetry' })), 200);
+      setTimeout(
+        () => void call('POST', `/interviews/${SEED_PREPARING_FAILED}/prepare/retry`),
+        200,
+      );
     setTimeout(finish, 6000);
   });
   check(
-    'WS prepareRetry — 복구',
+    'POST /prepare/retry — 복구',
     true,
     seen(retried, 'prepareCompleted') && seen(retried, 'question'),
   );
@@ -465,6 +472,53 @@
       .map((m) => m.key)
       .join(','),
   );
+  check(
+    '  └ 준비 실패가 아니면 409',
+    'prep_failed',
+    (await call('POST', `/interviews/${SEED_INTERVIEW}/prepare/retry`)).data?.error?.reason,
+  );
+
+  /**
+   * 주입한 준비 실패가 REST 스냅샷에도 남아야 한다.
+   * 메시지만 보내면 새로고침 후 preparing 으로 보이고, 시간이 지나면 화면이
+   * in_progress 로 보고 질문 없는 진행 화면으로 넘어간다.
+   */
+  const run2 = await call('POST', '/analysis-runs', {
+    postingUrl: 'https://www.wanted.co.kr/wd/3',
+  });
+  const iv2 = await call('POST', '/interviews', {
+    runId: run2.data.runId,
+    repositoryIds,
+  });
+  if (iv2.status !== 201) {
+    check('주입 준비 실패 — 면접 생성', 201, `${iv2.status}(${iv2.data?.error?.reason})`);
+  } else {
+    msw?.scenario('ws-prepare-failed');
+    const injected = await collect(iv2.data.sessionId, (got) => seen(got, 'error'), 3000);
+    const injectedError = injected.got.find((m) => m.type === 'error');
+    check(
+      '주입 준비 실패 — 체크리스트',
+      4,
+      injected.got.filter((m) => m.type === 'prepareStep').length,
+    );
+    check('  └ 실패 칸', 'compose_question', injected.got.find((m) => m.status === 'failed')?.key);
+    check('  └ error.step', 'compose_question', injectedError?.step);
+    check('  └ error.code', 'ERR_QUESTION_GEN_TIMEOUT', injectedError?.code);
+
+    const snapshot = await call('GET', `/interviews/${iv2.data.interviewId}`);
+    check('  └ REST 스냅샷 status', 'preparing_failed', snapshot.data.status);
+    check('  └ REST 스냅샷 lastError.step', 'compose_question', snapshot.data.lastError?.step);
+
+    // HTTP 전역 규칙은 WS 로 새지 않는다. 규칙이 WS 에서 소비되면 HTTP 검증이 망가진다.
+    msw?.scenario('auth-expired');
+    const notLeaked = await collect(iv2.data.sessionId, (got) => seen(got, 'question'), 6000);
+    check(
+      '전역 HTTP 규칙이 WS 로 누수되지 않음',
+      0,
+      notLeaked.got.filter((m) => m.type === 'error').length,
+    );
+    msw?.clear();
+  }
 
   check('WS 없는 세션', '1008/not_found', (await collect('sess_없음', () => false, 2000)).closed);
   check(
@@ -504,7 +558,7 @@
       setTimeout(finish, timeoutMs);
     });
 
-  const tooLong = await sendAndCollect({ type: 'answer', text: 'x'.repeat(2001) }, (got) =>
+  const tooLong = await sendAndCollect({ type: 'answer', turn: 1, text: 'x'.repeat(2001) }, (got) =>
     seen(got, 'error'),
   );
   const tooLongError = tooLong.find((m) => m.type === 'error');
@@ -512,10 +566,22 @@
   check('  └ code', 'ERR_ANSWER_TOO_LONG', tooLongError?.code);
   check('  └ recoverable', true, tooLongError?.recoverable);
 
-  const answered = await sendAndCollect({ type: 'answer', text: '정상 답변' }, (got) =>
+  const answered = await sendAndCollect({ type: 'answer', turn: 1, text: '정상 답변' }, (got) =>
     seen(got, 'answerReceived'),
   );
   check('WS 답변 수신', true, seen(answered, 'answerReceived'));
+
+  // 같은 턴을 두 번 보내면 저장이 거부된다. answerReceived 를 보내면 화면이 다음 질문을 영영 기다린다.
+  const duplicated = await sendAndCollect(
+    { type: 'answer', turn: 1, text: '같은 턴 재전송' },
+    (got) => seen(got, 'error'),
+  );
+  check('WS 같은 턴 재전송', 'answer_rejected', duplicated.find((m) => m.type === 'error')?.reason);
+  check(
+    '  └ answerReceived 미전송',
+    0,
+    duplicated.filter((m) => m.type === 'answerReceived').length,
+  );
 
   const detailAfterWs = await call('GET', `/interviews/${ivId}`);
   check(
