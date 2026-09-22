@@ -1,8 +1,8 @@
 # Director와 텍스트 면접
 
-상태: Sprint 1 FIX 정리. 질문 후보의 재작성·재계획·유효 후보 없음 선택은 0008에서 Accepted이며 정확한 내부 형식·runtime 복구는 Proposed.
+상태: Sprint 1 FIX 정리. 질문 후보의 재작성·재계획·유효 후보 없음 선택은 0008에서 Accepted이며 [0014](../decisions/0014-minimal-change-revision.md)의 기존 필드·저장 순서 채택 외 상세 형식·runtime 복구는 Proposed.
 
-원본: [BE 면접](../../backend/features/interview.md), [공통 용어](../../shared/glossary.md), [통신 이관](../../shared/contracts/migration.md), [FE 면접](../../frontend/features/interview.md), [report 25~30](../../../report.md).
+원본: [BE 면접](../../backend/features/interview.md), [공통 용어](../../shared/glossary.md), [통신 이관](../../shared/contracts/migration.md), [FE 면접](../../frontend/features/interview.md). 과거 원본 `report.md` 25~30은 현재 저장소에 없으며, 당시 검토 내역은 [원본 감사 기록](../source-audit.md)을 참고한다.
 
 ## 역할과 입력
 
@@ -22,23 +22,23 @@ Director는 현재 문답·평가·근거·남은 턴으로 다음 질문의 관
 
 첫 질문은 `hr_manager`다. 자기소개를 시작점으로 사용하되 개인 경력·기여를 추정하지 않는다. 코드 Evidence 없이도 허용한다. 질문·Persona·Question Contract를 전달 전에 함께 검증·저장한다.
 
-여기서 Question Contract의 상세 필드·저장은 Proposed 내부 설계다. AI·BE가 해당 계약을 채택한 뒤 아래 저장·평가 흐름에 적용한다. 합의 전에는 fixture로 설계를 검증하고, 임의의 DB 컬럼·테이블을 추가하거나 Contract 기반 평가 완료를 선언하지 않는다.
+Question Contract는 [0014](../decisions/0014-minimal-change-revision.md)에 따라 같은 Turn의 `question_contract` JSONB에 [기존 다섯 필드](../contracts.md#question-contract-저장-형식)로 저장한다. 문서 채택과 실제 저장·평가 구현 완료를 구분한다.
 
-준비 실패는 `preparing_failed`이며 `abandoned`와 다르다. 실패를 숨기고 일반 질문으로 면접을 시작하지 않는다. 준비 단계 순서는 `analyze_repo`, `build_persona`, `set_criteria`, `compose_question`이다. 점수 산식 미합의를 임의 rubric으로 메우지 않는다.
+준비 실패는 `preparing_failed`이며 `abandoned`와 다르다. 실패를 숨기고 일반 질문으로 면접을 시작하지 않는다. 준비 단계 순서는 `analyze_repo`, `build_persona`, `set_criteria`, `compose_question`이다. 공개 점수 6개·단순 평균은 확정됐으며, 세부 평가 기준의 작성·검수가 끝나지 않은 상태를 임의 기준으로 메우지 않는다.
 
 ## 고정 9턴 정책
 
 - 질문 하나와 그 답변이 한 Turn이다. Tool 호출·질문 재작성은 사용자 Turn 수에 넣지 않는다.
 - 정상 Sprint 1은 9번째 질문에 대한 답변 처리를 완료한 뒤 종료한다. 9번째 질문을 보냈다는 이유만으로 답변을 받기 전에 완료하지 않는다.
 - 첫 질문은 `hr_manager`, 이후 Persona는 Director가 선택한다.
-- `tech_lead` 목표 6턴·최소 5턴, `domain_lead + hr_manager` 합산 최소 3턴이다.
-- domain과 HR 각각의 최소 횟수나 고정 교대 순서는 합의돼 있지 않다. 미관찰 Persona의 피드백을 지어내지 않는다.
+- [공통 0002 결정](../../shared/decisions/0002-local-policy-baseline.md)에 따라 정상 9턴의 Persona 횟수는 `tech_lead` 6회·`domain_lead` 2회·`hr_manager` 1회로 고정한다.
+- [BE Turn 정책](../../backend/features/interview.md#turn-정책)에 따라 2번째 질문부터 Director가 잔여 횟수가 있는 Persona 중에서 선택한다. 첫 HR 질문 외에 고정 질문 순서·교대를 추가하지 않으며 미관찰 Persona의 피드백을 지어내지 않는다.
 - 기술 질문은 primary repo 1~2개 중심으로 한다. 선택된 모든 repo를 균등하게 질문할 의무는 없다.
 - Director의 정상 조기 종료는 허용하지 않는다. 사용자 종료·장애 처리는 별도 service 정책이고, 분포를 채우기 위해 사용자 종료 이후 계속 질문하지 않는다.
 
-Controller의 Persona 후보 제한 제안:
+Controller의 Persona 후보 제한:
 
-현재까지 제시한 Persona 횟수에 후보를 1회 추가하고 남은 질문 수를 계산한다. 기술 최소 5회까지 필요한 수와 비기술 합산 최소 3회까지 필요한 수의 합이 남은 질문 수보다 크면 그 후보를 제외한다. 가능한 후보 중 기술 목표 6회와 현재 답변의 적합성을 고려한다. 이는 FIX 분포의 실행 방식 제안이며 새로운 최소치를 추가하지 않는다.
+Controller는 6·2·1에서 이미 확정·제시한 Persona별 횟수를 빼고, 잔여 횟수가 없는 Persona를 후보에서 제외한다. 첫 HR 질문 뒤에는 HR 잔여 횟수가 0이므로 다시 선택하지 않는다. Director는 남은 후보 안에서 현재 답변에 적합한 관점을 선택하며, 정상 종료 시 6·2·1을 충족해야 한다.
 
 질문 수·답변 완료 수는 구분한다. 요청 중복·Tool 재시도 때문에 횟수를 늘리지 않는다. 이미 사용자에게 제시한 질문의 Persona를 나중에 바꿔 quota를 맞추지 않는다.
 
@@ -58,7 +58,7 @@ Controller의 Persona 후보 제한 제안:
 
 이 선택은 새 enum, 정상 종료, 사용자 입력 복구, service 상태, 추가 모델 호출, attempt/budget 또는 Persona·Turn quota를 승인하지 않는다. Controller가 최종 상태와 공개 동작을 결정한다.
 
-이 세 의미 기준은 [context AI의 질문 검증](../../../context/AI.md)에서 수용한 내부 검토안이다. 별도 모델을 추가해야 한다는 뜻이 아니다. 결정적 검사로 확인 가능한 ID·enum·quota는 코드로 먼저 검사한다.
+이 세 의미 기준은 과거 원본 `context/AI.md`의 질문 검증에서 수용한 내부 검토안이다. 해당 원본은 현재 저장소에 없으며, 현행 후보 정책은 [0008 결정](../decisions/0008-ai-candidate-policy.md)을 따른다. 별도 모델을 추가해야 한다는 뜻이 아니다. 결정적 검사로 확인 가능한 ID·enum·quota는 코드로 먼저 검사한다.
 
 보완 질문은 이전 답변의 부족한 부분을, 심화 질문은 새로운 판단 조건을 확인한다. 이미 충분히 설명한 내용을 표현만 바꿔 반복하지 않는다. `answer_vs_code` 차이는 확인형 질문으로 제시한다. 검색 미발견을 거짓의 증거로 표현하지 않는다.
 
@@ -74,6 +74,8 @@ Controller의 Persona 후보 제한 제안:
 6. 다음 질문이 필요하면 검증된 Question/Contract/Persona·근거 관계를 확정하고 DB commit 후 전달한다. 정상 종료는 9번째 답변 처리 완료일 때만 확정한다. 사용자 종료나 시스템 실패는 service의 별도 상태 처리이며 모델이 정상 종료로 바꾸지 않는다.
 7. Postgres Context 확정 후 Redis snapshot을 갱신한다. Redis 누락은 DB에서 복구한다.
 
+[0014](../decisions/0014-minimal-change-revision.md)에 따라 기존 T3 분석 저장·T4 판단과 Context 갱신 순서를 유지하고, `analysis`·`decision` JSONB에 기존 객체를 직접 보관한다. 별도 실행 상태·공통 바깥 객체·조회별 DB 쓰기는 추가하지 않는다. 실제 조회 요약은 성공 판단의 `reason_summary`에 포함하며 최초 분석·근거를 보존한다. 실패·중단 기록은 [저장 경계](../contracts.md#분석과-판단의-저장)를 따르고 영구 실패 기록 위치·형식은 AI-L02·AI-L18에서 정한다.
+
 DB 변경의 정확한 transaction 분리와 row lock/CAS 방식은 BE와 맞춘다. 외부 LLM이 응답할 때까지 긴 DB transaction을 유지하지 않는다. 질문 저장 후 알림만 실패하면 같은 질문을 재전달하며, 모델을 다시 호출해 다른 질문을 만들지 않는다.
 
 ## 공개 메시지와 보류 항목
@@ -84,13 +86,15 @@ DB 변경의 정확한 transaction 분리와 row lock/CAS 방식은 BE와 맞춘
 
 별도 `clientSubmissionId`는 Sprint 1에 추가하지 않는다. 같은 연결의 진행 중 중복은 service 상태/lock으로 막고, turn mismatch나 이미 답변된 turn의 메시지는 저장하지 않는다. 동일 본문이라는 이유로 모든 반복 답변을 중복 처리하지 않는다.
 
-WS 경로는 `/api/ws/interviews/{sessionId}`이며 REST route는 `interviewId`를 사용한다. `POST /interviews`와 `GET /interviews/{id}`는 `sessionId`를 반환한다. WS 인증은 HttpOnly `accessToken` cookie handshake다. 준비 실패 snapshot은 `GET /interviews/{id}`의 `lastError`와 `prepareSteps`로 복구하고, 준비 재시도는 `POST /interviews/{id}/prepare/retry` REST endpoint로 처리한다. Sprint 1에서는 연결 끊김·재연결 실패만으로 `abandoned`를 설정하지 않는다.
+WS 경로는 `/api/ws/interviews/{sessionId}`이며 REST route는 `interviewId`를 사용한다. `POST /interviews`와 `GET /interviews/{id}`는 `sessionId`를 반환한다. WS 인증은 [공통 0003](../../shared/decisions/0003-sprint1-session-auth.md)에 따라 HttpOnly `devon_session` 쿠키와 Redis 로그인 세션으로 handshake 시 확인한다. 로그인 세션 ID는 면접 `sessionId`와 별개다. 준비 실패 snapshot은 `GET /interviews/{id}`의 `lastError`와 `prepareSteps`로 복구하고, 준비 재시도는 `POST /interviews/{id}/prepare/retry` REST endpoint로 처리한다. Sprint 1에서는 연결 끊김·재연결 실패만으로 `abandoned`를 설정하지 않는다.
 
-사용자 종료 요청의 정확한 wire도 별도 확인한다. 내부 Controller에서 종료 이후 결과 차단을 검사할 수 있지만, 승인되지 않은 종료 메시지·endpoint를 새로 만들어 공개 완료를 주장하지 않는다.
+명시적 나가기 확인·레포 재선택만 abandoned로 처리하는 기존 정책을 유지한다. 사용자 종료 요청의 정확한 wire는 이 동작과 기존 소유권에 맞춰 BE·FE 연결 시 구체화하며 메시지 필드·WS/REST를 사용자에게 개별 선택으로 묻지 않는다. 내부 Controller에서 종료 이후 결과 차단을 검사할 수 있지만, 실제 송수신 계약을 기록·검증하기 전 종료 연동 완료를 주장하지 않는다.
+
+질문 생성이 허용된 시도 후에도 실패하면 기존 기록 보존·오류 안내·명시적 나가기와 새 면접 흐름을 유지한다. 진행 중 면접의 새 수동 이어가기 기능을 추가하지 않는다. 오류 안내나 WS 연결 종료는 DB의 completed/abandoned 확정과 다르며, 재연결을 실패한 LLM 작업의 자동 재호출로 사용하지 않는다. 재시도는 0010의 공통 계층 1회·semantic 실패 재호출 금지가 우선한다. 오류 전달·종료·실패 보존의 실제 연결은 AI-L09·AI-L12·AI-L18에서 구현 검증한다.
 
 ## 수용 검사
 
-- 첫 질문 HR, 9번째 답변 후 종료, 10번째 질문 없음, quota를 불가능하게 하는 선택 거절.
+- 첫 질문 HR, 정상 9턴의 6·2·1 횟수, 잔여 횟수가 없는 Persona 선택 거절, 9번째 답변 후 종료와 10번째 질문 없음을 확인한다.
 - 후속 답변 보완·기여 정정·Persona 전환 후에도 같은 기록 참조.
 - 없는 Evidence·범위 밖 repo·잘못된 ref·중복 질문 후보 차단.
 - JSON/Tool/재계획 실패로 질문 또는 답변이 두 번 확정되지 않음.

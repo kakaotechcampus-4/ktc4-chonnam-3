@@ -21,6 +21,8 @@
 
 `syncing`·`no_repository`·`no_interview`면 `analysis`는 `null`, `recentInterviews`는 `[]`다.
 
+[0019 프로필 역할 요약 복원](../../ai/decisions/0019-sprint1-profile-role-summary-restoration.md)에 따라 Sprint 1에서 기존 `analysis.roleSummary` 문자열의 역할 요약을 같은 문단에 표시한다. 일괄 기능 보류 안내로 대체하지 않으며 언어 그래프·프로젝트 유형·패널 상태는 유지한다. 기존 mock 문장은 실제 생성·검증 결과가 아니며 README·커밋만으로 개인 역할을 단정하는 예시는 구현 검증에서 근거 기준에 맞춰 확인한다. 이번 결정은 실제 생성·저장·화면 연결 완료를 뜻하지 않는다.
+
 ## 화면 이동 순서
 
 ```
@@ -68,7 +70,7 @@
 | `/auth/github/link/callback` 복귀 | `me`, `home` |
 | `POST /auth/logout` | 전체 `clear()` |
 
-`analysisStatus === 'syncing'`이면 폴링으로 재조회한다. **폴링 간격은 미정 — 팀 결정 필요 (`PENDING_TEAM`).**
+`analysisStatus === 'syncing'`이면 [현재 Home 구현](../../../frontend/src/features/home/Home.tsx)의 3초 간격 폴링을 유지하고, 다른 상태에서는 폴링을 중단한다. 간격 조정이 필요하면 실제 응답 시간·호출량을 확인해 구현 설정으로 조정한다.
 
 ## 상태 요구사항
 
@@ -81,6 +83,7 @@
 ## 검증 시나리오
 
 - `analysisStatus` 4가지(`syncing`/`no_repository`/`no_interview`/`completed`) 각각 정상 렌더
+- `completed`의 역할 문단은 기존 roleSummary 요약을 표시하며 서버의 요약 검증과 실제 응답 연결을 확인함
 - 최근 면접 행 클릭 → 리포트 이동
 - `새 면접 시작` → 공고 입력 이동
 - 403 `github_token_invalid` → 재연동 배너 노출, 패널은 마지막 캐시 유지

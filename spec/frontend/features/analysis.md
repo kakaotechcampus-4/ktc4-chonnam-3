@@ -2,6 +2,8 @@
 
 상태: 초안 — frontend/md/features/analysis.md에서 이관.
 
+아래는 구현·검수 기준이다. 업로드 형식·자소서 처리, 개별 `partial` 저장소 선택, 부분 실패 후 성공 결과 이동은 [task-09](../../../frontend/docs/task-09-analysis.md)에 기록한 수정 보류를 유지한다. 문서와 실제 화면이 모두 일치한다는 뜻은 아니다.
+
 ## 목표 + 화면 구성
 
 채용 공고와 첨부 문서를 받아 GitHub 레포를 분석하고, 면접에 쓸 레포를 사용자가 확정한다. 면접 생성까지가 이 기능의 범위다.
@@ -18,7 +20,7 @@
 | 항목 | 필수 | 형식 | 상한 |
 | --- | --- | --- | --- |
 | 공고 URL | ✅ | URL | — |
-| 포트폴리오 | ❌ | PDF, DOCX, TXT, MD | 10MB |
+| 포트폴리오 | ❌ | PDF, DOCX, TXT, MD | 20MB |
 
 - 라벨에 `* 필수` 배지, 나머지는 `(선택)`
 - URL이 비었거나 URL 형식이 아니면 `분석 시작` 버튼 비활성 (회색). 눌러도 진행되지 않고 입력창 아래 안내 문구
@@ -30,26 +32,23 @@
 
 Sprint 1에서 preview는 포트폴리오 전용이다. 자소서는 `/documents/preview`로 보내지 않는다. 파일 업로더는 `POST /analysis-runs`에 파일을 직접 실어 보내지 않는다. BE는 2단계 구조다.
 
-1. 파일 선택 즉시 `POST /documents/preview`로 업로드 → 텍스트·GitHub URL 추출 → `documentId` + `status`(`succeeded`/`partial`/`failed`) 반환
+1. 파일 선택 즉시 `POST /documents/preview`로 업로드 → 텍스트·GitHub URL 추출 → `documentId` + `extractStatus`(`succeeded`/`partial`/`failed`) 반환
 2. `분석 시작` 클릭 시 `POST /analysis-runs`에 portfolio preview `documentId`(선택)만 실어 보낸다
 
-지원 형식: `.pdf`(텍스트 레이어 있는 PDF만, 스캔 이미지 PDF는 추출 실패), `.docx`, `.txt`, `.md`. 최대 10MB. `.hwp`·이미지·`.ppt/.pptx`는 미지원.
+지원 형식: `.pdf`(텍스트 레이어 있는 PDF만, 스캔 이미지 PDF는 추출 실패), `.docx`, `.txt`, `.md`. 최대 20MB. `.hwp`·이미지·`.ppt/.pptx`는 미지원.
 
-응답 필드(`spec/shared/contracts/openapi.yaml` `DocumentPreviewResponse` 기준):
+응답은 기존 [공통 API 계약](../../shared/contracts/openapi.yaml)의 `DocumentPreviewResponse` 두 필드를 유지한다. 아래 정리는 응답 설명을 현재 계약·FE 타입·모의 서버에 맞추는 것이며, 실제 BE 추출·저장 구현 완료를 뜻하지 않는다.
 
 | 필드 | 타입 | 비고 |
 | --- | --- | --- |
-| `documentId` | string | — |
-| `status` | `succeeded`\|`partial`\|`failed` | — |
-| `fileName` | string | — |
-| `sizeBytes` | number | — |
-| `extractedGithubUrls` | string[] | — |
-| `truncated` | boolean (선택) | 길이 초과로 축약됐는지 |
-| `failureReason` | string \| null (선택) | `status: 'failed'`일 때만 |
+| `documentId` | string | 후속 분석 요청에 연결할 문서 ID |
+| `extractStatus` | `succeeded`\|`partial`\|`failed` | 문서 추출 결과 |
+
+파일명·크기·추출 내용 등의 기존 DB 저장 설계는 [BE 문서 Preview 명세](../../backend/features/documents.md)를 유지하며, 이를 추가 응답 필드로 노출하지 않는다.
 
 요청에는 선택 필드 `postingUrl`(공고 URL)도 있다 — JD 키워드 기반 축약에 쓰인다. 공고 URL을 먼저 입력받은 뒤 파일을 업로드하면 이 값을 함께 보내는 편이 축약 품질에 유리하다. 파일이 공고 URL보다 먼저 선택되면 이 필드 없이 호출해도 된다(선택 필드).
 
-`status === 'failed'`는 hard blocker가 아니다 — "문서 없이 계속 진행" 선택 시 `documentId`를 `analysis-runs` 요청에서 뺀다.
+`extractStatus === 'failed'`는 hard blocker가 아니다 — "문서 없이 계속 진행" 선택 시 `documentId`를 `analysis-runs` 요청에서 뺀다.
 
 `documentId`는 단수이며 Sprint 1에서는 portfolio preview document ID를 의미한다. 자소서 claim 추출과 자소서 기반 분석은 Sprint 2에서 별도 설계한다.
 
@@ -57,7 +56,7 @@ Sprint 1에서 preview는 포트폴리오 전용이다. 자소서는 `/documents
 
 `doc_extract` → `repo_select` → `repo_detail` → `jd_fetch` → `jd_extract` → `repo_analyze` → `match_score`
 
-각 단계 `status`: `pending` | `running` | `completed` | `failed`
+각 단계 `status`: `pending` | `running` | `completed` | `failed` | `skipped`. 포트폴리오 미첨부의 `doc_extract: skipped`는 정상 경로다.
 
 ### 5a-v2 레포 카드
 
@@ -73,16 +72,20 @@ Sprint 1에서 preview는 포트폴리오 전용이다. 자소서는 `/documents
 | 링크 | `fullName` 조립 |
 | 배지 | `candidateSource`(📎 포트폴리오) · `recommended`(AI 추천) |
 
-- `recommended: true`인 레포는 기본 체크 상태. 최대 5개
+- 선택 가능한 `succeeded` 레포 중 `recommended: true`인 레포는 기본 체크 상태. 최대 5개
 - `status === 'failed'`면 카드 회색 + `errorCode` 문구, `matchScore`·`recommendReason`은 `null`
-- `status === 'partial'`은 카드 표시, 별도 문구 없음
+- `status === 'partial'`은 카드를 표시하지만 기존 서버 선택 기준상 선택 대상은 아니다. 로컬 화면의 수동·기본 선택 보완은 task-09의 보류 항목이다.
 - 선택 상한 5개
+
+[0017 결정](../../ai/decisions/0017-recommendation-score-deferral.md)에 따라 Sprint 1에는 추천 숫자 점수를 표시하지 않는다. API의 필수 `matchScore` 필드는 null을 반환하며 null만으로 실패나 추천 제외를 판단하지 않는다. 기존 카드 순서·추천 배지·이유·기본 선택을 유지하고 점수 정렬을 추가하지 않는다. 기존 mock의 숫자 예시는 실제 연결 시 이 정책에 맞춘다. 이 문서 수정은 화면·fixture 구현 완료를 뜻하지 않는다.
+
+[0018 결정](../../ai/decisions/0018-existing-baseline-bulk-resolution.md)의 추천은 공고 기술과 유효 분석 기술의 직접 일치를 바탕으로 기존 후보 순서에서 최대 5개를 표시한다. 모든 page를 합쳐 0~5개이며 JD 적합도 점수 순위로 표현하지 않는다. 기술 정보나 일치가 없으면 정상 미추천이고, 사용자는 선택 가능한 저장소를 직접 고를 수 있다. 추천 이유·요구사항 연결은 기술 관련성을 설명하며 경력·자격요건 충족을 뜻하지 않는다. 추천 응답 갱신으로 사용자가 직접 선택·해제한 상태를 덮어쓰지 않는다.
 
 ### 5a-v2 우측 공고 리스트
 
-`jdRequirements[]`를 `type`으로 그룹핑(`required` / `preferred`). 응답 배열 순서 그대로 표시(`displayOrder` 없음). 읽기 전용, 편집 불가.
+`jdRequirements[]`를 공개 API의 `category`로 그룹핑(`required` / `preferred` / `responsibility`)하고 `displayOrder` 순으로 표시한다. 읽기 전용이며 편집하지 않는다.
 
-BE 협의(2026-09-11)로 필드명 `category`→`type`, `responsibility` 카테고리·`displayOrder` 필드는 제거했다 — 화면 요구사항 표시에 필요 없다고 판단.
+[공통 OpenAPI](../../shared/contracts/openapi.yaml)의 `JdRequirement`·`JdCategory`가 기준이다. 과거 `type` 2종·`displayOrder` 제거 설명은 현행 계약이 아니다. API의 표시 분류와 DB·AI의 `requirement_type`은 [이관 현황](../../shared/contracts/migration.md#pr-15-jd-분류-정합화)에 따라 구분한다.
 
 ### 포트폴리오 매칭 안내
 
@@ -136,7 +139,7 @@ BE 협의(2026-09-11)로 필드명 `category`→`type`, `responsibility` 카테�
 | 413 | `file_too_large` | 업로더 에러 |
 | 415 | `unsupported_media_type` | 업로더 에러 |
 
-401 재시도 시 `FormData`를 재전송해야 한다. 인터셉터가 요청 바디를 복제해 보관하도록 구현한다(`fetch`의 body는 1회 소비된다).
+[공통 0003](../../shared/decisions/0003-sprint1-session-auth.md)에 따라 `401 unauthenticated`는 캐시를 비우고 로그인으로 이동한다. 인증 갱신 후 자동 재전송하지 않으므로 401 재시도용 `FormData` 복제는 추가하지 않는다.
 
 ### POST /analysis-runs
 
@@ -150,17 +153,17 @@ BE 협의(2026-09-11)로 필드명 `category`→`type`, `responsibility` 카테�
 
 응답 `202`:
 ```json
-{ "runId": "run_abc123", "status": "running", "reused": false }
+{ "runId": "run_abc123" }
 ```
 
-`status`는 `RunStatus`(`running`/`completed`/`failed`), `reused: true`면 동일 fingerprint의 진행 중인 run을 재사용한 것이다(새 job을 만들지 않음).
+정상 `202` 응답 본문은 `runId`만 포함한다. 동일 fingerprint의 진행 중인 run이 있으면 새 job을 만들지 않고 `409 run_in_progress`와 `error.details.runId`로 기존 run ID를 반환한다. FE는 이 ID로 기존 분석 진행 화면으로 이동한다.
 
 | 코드 | reason | 처리 |
 | --- | --- | --- |
 | 400 | `job_url_required` | 입력창 에러 |
 | 400 | `unsupported_site` | "지원하지 않는 사이트예요" |
 | 400 | `url_unreachable` | "공고를 불러올 수 없어요" |
-| 409 | `run_in_progress` | 응답의 `runId`로 4-2-v2 이동 |
+| 409 | `run_in_progress` | `error.details.runId`로 기존 분석 진행 화면(4-2-v2) 이동 |
 
 ### SSE 구독
 
@@ -179,7 +182,7 @@ new EventSource(`/api/analysis-runs/${runId}/events`, { withCredentials: true })
 
 **`/api` 프리픽스 직접 붙여야 함**: `EventSource`는 `shared/api.ts` 래퍼를 거치지 않아 `/api`를 자동으로 붙여주지 않는다. 위 예시처럼 URL에 직접 포함해야 Caddy의 `/api/*` reverse proxy를 탄다.
 
-인증은 연결 수립 시 1회 검증. 연결 유지 중 토큰 만료로 스트림이 끊기지 않는다.
+`devon_session` 인증은 연결 수립 시 1회 검증한다. 연결 유지 중 로그인 세션 만료를 이유로 기존 스트림을 끊는 정책은 추가하지 않는다. 재연결 시에는 다시 인증하며 폴백 조회가 `401 unauthenticated`이면 캐시를 비우고 로그인으로 이동한다.
 
 ### failureReason 분기 (4-3-v2)
 
@@ -195,7 +198,7 @@ new EventSource(`/api/analysis-runs/${runId}/events`, { withCredentials: true })
 | `doc_extract_failed` | 첨부 파일 안내 | ✅ |
 | `llm_timeout` | "분석이 지연되고 있어요" | ✅ |
 
-**분석 실패도 HTTP 200이다.** `status: "failed"` + `failureReason`으로 판단한다. 레포 일부만 실패한 경우는 잡 실패가 아니며 `status: "completed"`로 온다.
+**분석 실패도 HTTP 200이다.** `status: "failed"` + `failureReason`으로 판단한다. [부분 실패 기준](../../backend/features/analysis-run.md#부분-실패)에 따라 DB run이 `partial`이면 FE에는 `failed`로 매핑하지만 성공한 저장소의 결과는 기존 result API로 조회할 수 있다. 개별 저장소의 `status: 'partial'`과는 다른 범위다. 실패 화면에서 성공 결과로 이동하는 경로는 task-09에 보완안만 기록했으며 버튼 방식이나 코드 수정이 승인·완료된 것은 아니다.
 
 ### 레포별 errorCode (5a-v2 카드)
 
@@ -229,7 +232,7 @@ new EventSource(`/api/analysis-runs/${runId}/events`, { withCredentials: true })
 | --- | --- |
 | `postingUrlInput` | 입력 중인 공고 URL 텍스트 |
 | `selectedPortfolioFile` | 선택된 포트폴리오 파일 객체 |
-| `documentPreview` | 포트폴리오 `POST /documents/preview` 결과(`documentId`, `status`, 추출 요약) |
+| `documentPreview` | 포트폴리오 `POST /documents/preview` 결과(`documentId`, `extractStatus`) |
 | `isDragging` | 드래그 오버 하이라이트 (업로더별) |
 | `isUrlValid` | `분석 시작` 버튼 활성 여부 (파생값) |
 | `isSubmitting` | 중복 제출 방지 |
@@ -247,7 +250,7 @@ SSE 스트림 상태는 TanStack Query로 관리하지 않는다. 컴포넌트 �
 
 | 상태 | 용도 |
 | --- | --- |
-| `selectedRepoIds` | 체크된 레포 (초기값 = `recommended: true`). 상한 5개 |
+| `selectedRepoIds` | 체크된 레포 (초기값 = 선택 가능한 `succeeded` 중 `recommended: true`). 상한 5개. 로컬 반영은 보류 |
 | `isMoreExpanded` | `내 레포 더 보기` 확장 여부 |
 | `morePage` | 더 보기 목록 페이지 |
 | `morePageStatus` | 페이지별 `idle` / `analyzing`(202 대기 중) |
@@ -263,6 +266,8 @@ SSE 스트림 상태는 TanStack Query로 관리하지 않는다. 컴포넌트 �
 - `failureReason` 9종 분기 문구 확인
 - 레포 카드 실패 상태(회색 + `errorCode`) 노출
 - 레포 선택 5개 상한 처리
-- 문서 추출 실패(`status: 'failed'`) 시 계속 진행 여부 확인 동작
+- 추천이 0개여도 정상 카드의 직접 선택이 가능하고, 더 보기·추천 갱신이 사용자 선택을 덮어쓰지 않음
+- 서버 제공 카드 순서를 유지하며 전체 page 합산 추천 5개 상한·숫자 점수 미표시를 확인
+- 문서 추출 실패(`extractStatus: 'failed'`) 시 계속 진행 여부 확인 동작
 - 더보기 202 `analyzing` 폴링 후 카드 추가 확인
 - 확정 → 면접 생성 후 이동
