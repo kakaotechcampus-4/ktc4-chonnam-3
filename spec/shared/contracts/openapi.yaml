@@ -278,6 +278,36 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
+  /interviews/{id}/prepare/retry:
+    post:
+      operationId: retryInterviewPrepare
+      summary: Re-run interview preparation from the step that failed
+      description: >-
+        Only for interviews in preparing_failed. The server resumes from the failed
+        prepareStepKey and does not re-run completed steps. The session and its
+        session_repositories are kept. Progress is delivered over the WebSocket as
+        prepareStep events, not in this response.
+      parameters:
+        - $ref: '#/components/parameters/InterviewId'
+      responses:
+        '204':
+          description: Re-run accepted
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: >-
+            prep_in_progress when a re-run is already running, prep_failed when the
+            interview is not in preparing_failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '410':
+          description: session_expired when the session no longer exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /interviews/{id}/report:
     get:
       operationId: getInterviewReport

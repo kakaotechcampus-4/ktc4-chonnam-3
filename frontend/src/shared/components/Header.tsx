@@ -7,16 +7,23 @@ type HeaderProps = {
   githubLinked?: boolean;
   name?: string;
   avatarUrl?: string;
+  /**
+   * GitHub 연동 배지를 대체하는 내용. 둘은 같은 자리를 쓰며 이 값이 있으면
+   * githubLinked는 무시된다. 면접 진행 화면의 잔여 시간이 쓴다.
+   */
+  statusSlot?: React.ReactNode;
 };
 
-export default function Header({ active, githubLinked, name, avatarUrl }: HeaderProps) {
+export default function Header({ active, githubLinked, name, avatarUrl, statusSlot }: HeaderProps) {
   return (
     <header className="flex items-center justify-between border-b border-line-soft bg-surface px-6 py-3">
       <div className="flex items-center gap-8">
         <span className="text-lg font-bold">DEVON</span>
         <nav className="flex items-center gap-1 text-sm">
           {active === 'home' ? (
-            <span className="rounded-full bg-accent-soft px-3 py-1.5 font-medium text-accent">홈</span>
+            <span className="rounded-full bg-accent-soft px-3 py-1.5 font-medium text-accent">
+              홈
+            </span>
           ) : (
             <Link to="/home" className="rounded-full px-3 py-1.5 text-muted hover:bg-paper">
               홈
@@ -43,7 +50,8 @@ export default function Header({ active, githubLinked, name, avatarUrl }: Header
         </nav>
       </div>
       <div className="flex items-center gap-3">
-        {githubLinked && (
+        {statusSlot}
+        {!statusSlot && githubLinked && (
           <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-accent">
             GitHub 연동됨
           </span>
