@@ -10,6 +10,7 @@
 | AnalysisRun | 공고와 repo 후보를 분석하는 실행 단위 | 내부 job status와 FE RunStatus는 매핑될 수 있다 |
 | Candidate | 특정 AnalysisRun에서 선택/추천 후보가 된 repo | `analysis_repo_candidates`에 run 종속 ranking 저장 |
 | Interview | 질문/답변/평가가 연결된 면접 기록 | 영구 식별자는 `interviewId` |
+| Login Session | Redis에 저장하는 로그인 상태 | `devon_session` 쿠키의 ID로 확인하며, 면접 `sessionId`와는 별개. 만료·유실 시 재로그인 |
 | Realtime Session | WS 연결과 단일 접속 lock을 위한 실시간 연결 단위 | Sprint 1 WS는 `sessionId`를 사용한다 |
 | Persona | Director가 취하는 질문 관점 | 독립 Agent가 아니다 |
 | Director | 다음 persona, 질문, follow-up을 결정하는 단일 면접 제어자 | Evidence Retriever는 Director tool |

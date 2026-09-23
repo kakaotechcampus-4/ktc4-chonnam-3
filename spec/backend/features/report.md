@@ -28,11 +28,15 @@
 
 - 리포트 API 응답은 profile summary 갱신을 기다리지 않는다.
 - 같은 사용자에 대해 진행 중인 profile summary job이 있으면 중복 enqueue를 막는다.
-- Sprint 1은 단순 집계 중심.
+- Sprint 1 언어·프로젝트 유형은 기존 자료로 집계하고, 개인 역할 요약만 LLM으로 생성한다.
 - profile summary 실패는 이미 생성된 report를 실패로 되돌리지 않는다. 실패 재시도·복구·상세 실패 처리는 Sprint 2다.
 - Sprint 2는 LLM 기반 자연어 요약을 강화한다.
 
 `user_profile_summaries`는 Sprint 1 DB에 포함한다. 집계 기준은 전체 수집 repo가 아니라 완료된 면접에 사용된 repo다.
+
+[0016 결정](../../ai/decisions/0016-profile-language-aggregation.md)에 따라 기존 저장소 식별자로 중복을 제거하며 같은 저장소의 면접 횟수·ref 수로 비중을 늘리지 않는다. `basedOnRepoCount`는 서로 다른 대상 저장소 수이고, `languages`는 기존 저장소별 언어 비율의 동일 비중 평균이다. 코드량 가중치·추가 수집·ref별 새 스냅샷 저장을 요구하지 않는다. 언어 자료 자체가 누락된 저장소를 0%로 넣거나 제외해 성공 결과를 만들지 않고 기존 갱신 실패 경계에서 이전 성공 요약을 유지한다.
+
+[0019 결정](../../ai/decisions/0019-sprint1-profile-role-summary-restoration.md)에 따라 Sprint 1 개인 역할 요약 보류를 철회하고 기존 LLM 요약 계획을 복원한다. 기존 `user_profile_summaries.role_summary` 저장 필드와 `roleSummary` 응답, Home 표시, `profile_summary(user_id)` 후속 갱신과 실패 분리를 유지한다. 언어·유형 집계에 LLM을 사용하지 않으며, 역할 요약은 기존 근거가 뒷받침하는 범위에서 작성하고 프로젝트 기능·README·commit만으로 개인 기여를 단정하지 않는다. 새 DB/API 필드는 추가하지 않는다. 실제 요약 생성·저장·호출 연결은 아직 구현·검증 대상이다.
 
 ## 점수
 

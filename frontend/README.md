@@ -46,7 +46,9 @@ src/
 
 개발 서버에서는 MSW mock API가 기본으로 켜진다. 끄려면 `.env.local`에 `VITE_USE_MSW=false`를 넣는다. 자세한 내용은 [`docs/task-07-msw.md`](docs/task-07-msw.md) 참고.
 
-API 요청은 `src/shared/api.ts`에서 `/api` prefix로 호출. 응답/요청 타입은 `src/types/api.ts`, API 스펙은 [`docs/api-spec.md`](../docs/api-spec.md) 참고.
+API 요청은 `src/shared/api.ts`에서 `/api` prefix로 호출한다. 일반 HTTP API의 원본은 [OpenAPI](../spec/shared/contracts/openapi.yaml)이며, WebSocket·SSE·브라우저 이동 경로는 [`docs/api-spec.md`](docs/api-spec.md)를 따른다. 원본의 적용 범위와 미합의 항목은 [공통 계약 안내](../spec/shared/contracts/README.md)와 [이관 현황](../spec/shared/contracts/migration.md), FE용 타입은 `src/types/api.ts`에서 확인한다.
+
+문서의 요구사항과 로컬 구현 상태는 구분한다. 면접 준비·진행 화면은 현재 골격이며, 인증 연결과 보류된 화면 보완은 `docs/task-*.md`의 후속 작업이다. `npm run test` 스크립트는 없고 lint/build 통과만으로 화면·실서버 동작이 검증되지는 않는다.
 
 ## 브랜치 / PR
 

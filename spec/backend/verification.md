@@ -8,6 +8,7 @@
 | --- | --- |
 | 계약 | `spec/shared/contracts/openapi.yaml`과 Pydantic schema가 camelCase API를 일치시킨다 |
 | 에러 | 모든 4xx/5xx는 공통 error envelope를 반환한다 |
+| 인증 | [공통 0003](../shared/decisions/0003-sprint1-session-auth.md)의 세션 발급, REST/SSE/WS 인증, 쿠키·Redis 만료 연장, 만료·유실 후 재로그인, 로그아웃·반복 204, Redis 장애와 만료 구분을 검증한다 |
 | DB | PostgreSQL 기준 migration이 CHECK, UNIQUE, INDEX, JSONB, TEXT[], pgcrypto를 포함한다 |
 | 분석 | 7 step 상태 전이, partial->FE failed 매핑, result 조회 가능 조건을 검증한다 |
 | 후보 | `analysis_repo_candidates` ranking, excluded reason, page 분석 상태를 검증한다 |
@@ -16,8 +17,8 @@
 | Wanted | Sprint 1은 Wanted-only이며 unsupported site를 차단한다 |
 | 면접 | 9턴, 첫 hr_manager 질문, persona target distribution, 텍스트 WS를 검증한다 |
 | Evidence | `question_basis`와 `evaluation_basis`, `answer_vs_code` conflict 생성을 검증한다 |
-| Redis | Redis snapshot 유실 시 Postgres에서 재구성 가능해야 한다 |
-| 리포트 | lazy generation 200/202/409, feedback disagreement unique를 검증한다 |
+| Redis | 면접 Context `iv:ctx` snapshot 유실 시 Postgres에서 재구성한다. 로그인 `auth:sess`는 재구성하지 않고 만료·유실 시 재로그인한다 |
+| 리포트 | lazy generation 200/202/409를 검증한다. 이의 제기는 Sprint 1에 테이블만 두며 API·row 생성·기능 검증은 Sprint 2다 |
 | 이벤트 | 고정 10개 이벤트 외 값은 거부한다 |
 
 ## 테스트 원칙

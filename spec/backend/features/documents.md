@@ -31,10 +31,12 @@
 
 제한:
 
-- 파일 최대 크기: 10MB.
+- 포트폴리오 파일 최대 크기: 20MB(20,971,520 bytes). [현재 로컬 기준 채택 결정](../../shared/decisions/0002-local-policy-baseline.md)을 따른다.
 - 파일 바이너리는 Sprint 1에서 저장하지 않는다.
 - DB에는 filename, MIME type, size, extracted_text, extracted_github_urls, extract_status, truncation 여부만 저장한다.
 - `document_claims` row 생성은 Sprint 2에서 자소서/포트폴리오 claim 추출을 함께 구현할 때 시작한다.
+
+20MB 정책의 채택은 BE preview API의 크기 검사 구현 완료를 뜻하지 않는다. API 구현 시 같은 상한과 초과 거부를 검증한다.
 
 ## 상태
 
@@ -67,4 +69,4 @@
 - Bitbucket
 - URL 없이 `owner/repo` 텍스트만 있는 패턴
 
-unmatched URL을 사용자에게 어떻게 보여줄지는 `PENDING_FE`.
+unmatched URL의 상세 목록은 노출하지 않고 [기존 포트폴리오 매칭 안내](../../frontend/features/analysis.md#포트폴리오-매칭-안내)에 따라 언급된 저장소 수와 매칭된 수만 안내한다. 실제 응답·화면 연결은 구현·검증할 작업이다.

@@ -6,7 +6,7 @@ import { errorResponse, path, type Res } from '../http';
 
 /** spec/backend/features/documents.md — 지원 형식과 크기 제한. */
 const SUPPORTED = ['.pdf', '.docx', '.txt', '.md'];
-const MAX_BYTES = 10 * 1024 * 1024;
+const MAX_BYTES = 20 * 1024 * 1024;
 
 export const documentHandlers = [
   http.post<PathParams, never, Res<DocumentPreviewResponse>>(
@@ -28,10 +28,10 @@ export const documentHandlers = [
         );
       }
       if (file.size > MAX_BYTES) {
-        return errorResponse(413, 'document_too_large', '파일은 10MB까지 올릴 수 있어요.');
+        return errorResponse(413, 'document_too_large', '파일은 20MB까지 올릴 수 있어요.');
       }
 
-      // 텍스트 추출을 흉내 내기 위해 크기에 비례한 지연을 준다.
+      // 실제 텍스트 추출 없이 화면의 처리 대기 상태를 확인하도록 잠시 지연한다.
       await delay(800);
 
       /**
