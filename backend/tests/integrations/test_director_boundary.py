@@ -53,6 +53,12 @@ def wire(value):
     return json.loads(json.dumps(asdict(value), ensure_ascii=False))
 
 
+def model_output(question):
+    data = wire(question)
+    del data["question_contract"]
+    return data
+
+
 def response(text):
     return {
         "id": "resp_director_fixture",
@@ -101,7 +107,7 @@ async def generate(http, context, contract, review, *, budget=None, limits=None,
 async def test_http_request_and_checked_question_reach_existing_jsonb_boundary(context, contract):
     sent = []
     reviewed = []
-    raw = json.dumps(wire(candidate(contract)), ensure_ascii=False)
+    raw = json.dumps(model_output(candidate(contract)), ensure_ascii=False)
 
     async def review(request, question):
         reviewed.append((request, question))
@@ -132,7 +138,6 @@ async def test_http_request_and_checked_question_reach_existing_jsonb_boundary(c
         "persona",
         "text",
         "topic_code",
-        "question_contract",
         "evidence_refs",
         "jd_requirement_ids",
     }
@@ -142,6 +147,7 @@ async def test_http_request_and_checked_question_reach_existing_jsonb_boundary(c
     assert result.attempts[0].model == "actual-model-snapshot"
     assert result.attempts[0].raw_output == raw
     assert result.attempts[0].input_tokens == 100
+    assert result.attempts[0].schema_version == "2"
     assert "fixture-key" not in repr(result) and raw not in repr(result)
 
 
@@ -151,7 +157,7 @@ async def test_common_boundary_retries_invalid_generation_once_then_reviews(
 ):
     sent = []
     reviewed = []
-    raw = wire(candidate(contract))
+    raw = model_output(candidate(contract))
     invalid = "not-json" if stage == "parse" else json.dumps({**raw, "text": 123})
 
     async def review(request, question):
@@ -167,14 +173,14 @@ async def test_common_boundary_retries_invalid_generation_once_then_reviews(
     assert [item.error_stage for item in result.attempts] == [stage, None]
 
 
-@pytest.mark.parametrize("change", ["persona", "plan"])
+@pytest.mark.parametrize("change", ["persona", "reference"])
 async def test_semantic_generation_failure_stops_before_review(context, contract, change):
     sent = []
-    raw = wire(candidate(contract))
+    raw = model_output(candidate(contract))
     if change == "persona":
         raw["persona"] = "tech_lead"
     else:
-        raw["question_contract"]["purpose"] = "다른 목적"
+        raw["evidence_refs"] = ["unknown"]
 
     async def forbidden(*args):
         pytest.fail("a rejected model candidate must not reach independent review")
@@ -185,6 +191,22 @@ async def test_semantic_generation_failure_stops_before_review(context, contract
     assert result.failure.stage == "semantic" and result.data is None
     assert len(sent) == len(result.attempts) == 1
     assert result.attempts[0].error_stage == "semantic"
+
+
+async def test_model_contract_echo_is_retried_as_schema_failure(context, contract):
+    sent = []
+    raw = model_output(candidate(contract))
+    raw["question_contract"] = wire(contract)
+
+    async def forbidden(*args):
+        pytest.fail("output with an unowned contract reached reviewer")
+
+    encoded = json.dumps(raw)
+    async with httpx.AsyncClient(transport=provider([encoded, encoded], sent)) as http:
+        result = await generate(http, context, contract, forbidden)
+
+    assert result.failure.stage == "schema" and result.data is None
+    assert len(sent) == 2
 
 
 async def test_one_remaining_call_does_not_retry_parse_failure(context, contract):
@@ -215,7 +237,7 @@ async def test_independent_review_failure_never_retries_generation(context, cont
         return c.QuestionReview("다른 문장", contract)
 
     async with httpx.AsyncClient(
-        transport=provider([json.dumps(wire(candidate(contract)))], sent)
+        transport=provider([json.dumps(model_output(candidate(contract)))], sent)
     ) as http:
         result = await generate(http, context, contract, review)
 
@@ -237,7 +259,7 @@ async def test_unexpected_reviewer_error_propagates_without_another_request(cont
         raise RuntimeError("reviewer bug")
 
     async with httpx.AsyncClient(
-        transport=provider([json.dumps(wire(candidate(contract)))], sent)
+        transport=provider([json.dumps(model_output(candidate(contract)))], sent)
     ) as http:
         with pytest.raises(RuntimeError, match="reviewer bug"):
             await generate(http, context, contract, review)
@@ -255,7 +277,7 @@ async def test_review_deadline_cancels_a_stalled_reviewer_without_regeneration(c
             finished.set()
 
     async with httpx.AsyncClient(
-        transport=provider([json.dumps(wire(candidate(contract)))], sent)
+        transport=provider([json.dumps(model_output(candidate(contract)))], sent)
     ) as http:
         result = await asyncio.wait_for(
             generate(http, context, contract, review, limits=c.CallLimits(0.05, 512, 65536, 65536)),
@@ -270,7 +292,7 @@ async def test_review_deadline_cancels_a_stalled_reviewer_without_regeneration(c
 async def test_one_request_attempt_can_use_the_second_shared_budget_slot(context, contract):
     sent = []
     budget = CallBudget()
-    raw = json.dumps(wire(candidate(contract)))
+    raw = json.dumps(model_output(candidate(contract)))
     reviewed = []
 
     async def review(request, question):
@@ -284,7 +306,7 @@ async def test_one_request_attempt_can_use_the_second_shared_budget_slot(context
         third = await generate(http, context, contract, review, budget=budget)
 
     assert first.succeeded and second.succeeded
-    assert [item.attempt for item in second.attempts] == [1, 2]
+    assert [item.attempt for item in second.attempts] == [2]
     assert third.failure.stage == "budget" and third.data is None
     assert len(sent) == 2 and reviewed == [1, 1]
 
@@ -303,7 +325,7 @@ async def test_posting_source_reaches_generation_and_independent_review_unchange
         return c.QuestionReview(question.text, contract)
 
     async with httpx.AsyncClient(
-        transport=provider([json.dumps(wire(candidate(contract)))], sent)
+        transport=provider([json.dumps(model_output(candidate(contract)))], sent)
     ) as http:
         result = await generate(http, context, contract, review, reference_texts={ref: source})
 

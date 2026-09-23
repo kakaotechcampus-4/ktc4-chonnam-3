@@ -6,6 +6,9 @@
 
 `generate_question`은 기존 Context/QuestionContract와 주입 모델 호출·검토기를 사용해
 `ModelResult[ContractChecked[Question]]` 또는 실패를 반환한다.
+모델의 `DirectorQuestion` schema version 2 출력은 persona·text·topic_code·evidence_refs·
+jd_requirement_ids 다섯 필드만 받는다. 입력 QuestionContract 원본은 코드가 결합해 기존
+여섯 필드 Question을 만들며, 모델이 계약을 다시 출력하거나 바꾸게 하지 않는다.
 [첫 구현 인계](../../spec/ai/designs/2026-09-23-director-question-path.md)에 입력과 책임,
 참조 검사, 요청별 시도 상한, 검토 실패와 [프롬프트 초안](../prompts/director-question-v1.md)을 기록했다.
 실제 의미 검토기와 provider 품질은 아직 검증하지 않았다. 아래 체크리스트는 전체 task 범위다.
@@ -95,8 +98,8 @@ Persona마다 별도 Agent나 class를 만들지 않는다. `hr_manager`, `tech_
 
 - [ ] 첫 질문 HR, 9번째 답변 후 종료, 10번째 질문 없음의 대조 사례를 둔다.
 - [ ] Controller가 이미 확정·제시한 횟수와 남은 턴을 확인해 기술 최소 5턴·도메인과 HR 합산 최소 3턴을 충족할 수 있는 Persona만 허용하는지 검사한다. 최소 조건을 충족할 수 있는 HR 재선택을 고정 할당으로 막지 않는다.
-- [ ] 허용되지 않은 Persona, 없는 Evidence, 잘못된 ref와 Contract 불일치 후보를 거절한다.
-- [ ] 깨진 JSON, 계약 누락, 구조는 맞지만 허용 Persona·ref를 어긴 후보를 parse/schema/semantic 실패로 구분하고 default로 보충하지 않는다.
+- [ ] 허용되지 않은 Persona, 없는 Evidence, 잘못된 ref와 준비된 Contract 범위 밖 참조 후보를 거절한다.
+- [ ] 깨진 JSON, 모델이 추가한 `question_contract`·필드 누락, 구조는 맞지만 허용 Persona·ref를 어긴 후보를 parse/schema/semantic 실패로 구분하고 default로 보충하지 않는다.
 - [ ] 충분한 답변 반복, 후속 보완, 기여 정정, Persona 전환 뒤에도 기록 연결을 유지한다.
 - [ ] domain `etc` fallback, 중심 목적, 가정형 표현과 기술 질문 중복 방지를 검사한다.
 - [ ] Tool·재계획 실패가 질문 중복 확정이나 무제한 호출로 이어지지 않는지 검사한다.

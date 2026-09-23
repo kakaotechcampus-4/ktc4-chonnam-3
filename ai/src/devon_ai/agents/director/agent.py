@@ -2,6 +2,7 @@
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import asdict
+from typing import cast
 
 from devon_ai import contracts as c
 
@@ -18,43 +19,14 @@ def _object_schema(properties: dict[str, object]) -> dict[str, object]:
 
 
 def _question_schema() -> dict[str, object]:
-    # 모델에는 구조를 제한하고, 원문·참조·계획의 일치는 아래 validator에서 별도로 확인한다.
+    # 질문 계획은 입력 원본을 코드가 결합하며 모델에는 다시 출력시키지 않는다.
     text = {"type": "string"}
     texts = {"type": "array", "items": text}
-    contract = _object_schema(
-        {
-            "purpose": text,
-            "required_points": {
-                "type": "array",
-                "items": _object_schema(
-                    {
-                        "key": text,
-                        "description": text,
-                    }
-                ),
-            },
-            "assumptions": texts,
-            "basis_refs": {
-                "type": "array",
-                "items": _object_schema(
-                    {
-                        "kind": {
-                            "type": "string",
-                            "enum": ["evidence", "jd_requirement", "job_posting", "answer_turn"],
-                        },
-                        "id": text,
-                    }
-                ),
-            },
-            "evaluation_scope": text,
-        }
-    )
     return _object_schema(
         {
             "persona": {"type": "string", "enum": ["hr_manager", "tech_lead", "domain_lead"]},
             "text": text,
             "topic_code": text,
-            "question_contract": contract,
             "evidence_refs": texts,
             "jd_requirement_ids": texts,
         }
@@ -161,8 +133,12 @@ async def generate_question(
             None, c.CallFailure("budget", "llm_failed", "No provider attempts remain."), ()
         )
 
-    evidence_refs = frozenset(ref.id for ref in sources if ref.kind == "evidence")
-    jd_ids = frozenset(ref.id for ref in sources if ref.kind == "jd_requirement")
+    evidence_refs = frozenset(
+        ref.id for ref in question_contract.basis_refs if ref.kind == "evidence"
+    )
+    jd_ids = frozenset(
+        ref.id for ref in question_contract.basis_refs if ref.kind == "jd_requirement"
+    )
     basis_refs = frozenset(sources)
 
     def validate_candidate(candidate: c.Question) -> c.Question:
@@ -178,7 +154,24 @@ async def generate_question(
         )
 
     def validate(raw: object) -> c.Question:
-        return validate_candidate(c.decode(c.Question, raw))
+        fields = {"persona", "text", "topic_code", "evidence_refs", "jd_requirement_ids"}
+        if type(raw) is not dict or set(raw) != fields:
+            raise c.ContractError("schema", "DirectorQuestion")
+        evidence_refs = raw["evidence_refs"]
+        jd_requirement_ids = raw["jd_requirement_ids"]
+        if type(evidence_refs) is not list:
+            raise c.ContractError("schema", "evidence_refs")
+        if type(jd_requirement_ids) is not list:
+            raise c.ContractError("schema", "jd_requirement_ids")
+        candidate = c.Question(
+            persona=cast(c.PersonaId, raw["persona"]),
+            text=cast(str, raw["text"]),
+            topic_code=cast(str, raw["topic_code"]),
+            question_contract=question_contract,
+            evidence_refs=cast(tuple[str, ...], tuple(evidence_refs)),
+            jd_requirement_ids=cast(tuple[str, ...], tuple(jd_requirement_ids)),
+        )
+        return validate_candidate(candidate)
 
     request = c.ModelRequest(
         prompt=prompt,
@@ -191,7 +184,7 @@ async def generate_question(
             "answer_analysis": analysis_data,
         },
         schema_name="DirectorQuestion",
-        schema_version="1",
+        schema_version="2",
         output_schema=_question_schema(),
         limits=limits,
         max_attempts=min(2, context.limits.remaining_calls),

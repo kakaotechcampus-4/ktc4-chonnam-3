@@ -45,8 +45,14 @@ def candidate(contract, **changes):
     )
 
 
+def model_output(question):
+    data = asdict(question)
+    del data["question_contract"]
+    return data
+
+
 def metadata():
-    return c.AttemptMetadata(1, "fixture", "fixture-model", "director_v1", "1", 2, None, 12)
+    return c.AttemptMetadata(1, "fixture", "fixture-model", "director_v1", "2", 2, None, 12)
 
 
 class Provider:
@@ -92,11 +98,12 @@ def generate(context, contract, provider, **options):
 
 
 def test_first_hr_question_returns_checked_data_and_preserves_attempts(context, contract):
-    provider = Provider(asdict(candidate(contract)))
+    provider = Provider(model_output(candidate(contract)))
     before = asdict(context)
     result = generate(context, contract, provider)
     assert result.succeeded
     assert result.data.data.text == "맡은 역할을 소개해 주세요."
+    assert result.data.data.question_contract is contract
     assert c.to_data(result.data)["question_contract"]["purpose"] == "본인의 역할 소개"
     assert result.attempts == (metadata(),)
     assert asdict(context) == before
@@ -105,6 +112,26 @@ def test_first_hr_question_returns_checked_data_and_preserves_attempts(context, 
     assert request.payload["question_contract"]["purpose"] == "본인의 역할 소개"
     assert request.payload["answer_analysis"] is None
     assert request.payload["reference_texts"] == []
+    assert request.schema_version == "2"
+
+
+def test_model_contract_echo_is_schema_failure_before_review(context, contract):
+    raw = model_output(candidate(contract))
+    raw["question_contract"] = asdict(contract)
+
+    async def forbidden(*args):
+        pytest.fail("output with an unowned contract reached reviewer")
+
+    result = generate(context, contract, Provider(raw), review=forbidden)
+    assert result.failure.stage == "schema" and result.data is None
+
+
+@pytest.mark.parametrize("field", ["evidence_refs", "jd_requirement_ids"])
+def test_model_reference_fields_must_be_json_lists(context, contract, field):
+    raw = model_output(candidate(contract))
+    raw[field] = "not-a-list"
+    result = generate(context, contract, Provider(raw))
+    assert result.failure.stage == "schema" and result.data is None
 
 
 def technical_context(context):
@@ -134,12 +161,16 @@ def test_followup_uses_real_source_text_and_injected_reviewer(context, contract)
     context = technical_context(context)
     contract = replace(
         contract,
-        basis_refs=(c.BasisRef("evidence", "ev-1"), c.BasisRef("answer_turn", "answered-turn-1")),
+        basis_refs=(
+            c.BasisRef("evidence", "ev-1"),
+            c.BasisRef("jd_requirement", "jd-1"),
+            c.BasisRef("answer_turn", "answered-turn-1"),
+        ),
     )
     question = candidate(
         contract, persona="tech_lead", evidence_refs=("ev-1",), jd_requirement_ids=("jd-1",)
     )
-    provider = Provider(asdict(question))
+    provider = Provider(model_output(question))
     reviewed = []
 
     async def review(request, actual_question):
@@ -157,22 +188,43 @@ def test_followup_uses_real_source_text_and_injected_reviewer(context, contract)
 @pytest.mark.parametrize(
     "change",
     [
-        {"purpose": "다른 목적"},
-        {"required_points": (c.RequiredPoint("other", "다른 내용"),)},
-        {"assumptions": ("개인 구현 확정",)},
-        {"basis_refs": (c.BasisRef("evidence", "unknown"),)},
-        {"evaluation_scope": "다른 평가 범위"},
+        {"evidence_refs": ("ev-2",)},
+        {"jd_requirement_ids": ("jd-2",)},
     ],
 )
-def test_changed_plan_is_semantic_failure_before_review(context, contract, change):
-    provider = Provider(asdict(candidate(replace(contract, **change))))
+def test_candidate_references_stay_within_prepared_plan(context, contract, change):
+    context = technical_context(context)
+    context = replace(
+        context,
+        evidence=(
+            *context.evidence,
+            c.Evidence(
+                "ev-2", "repo-1", "a" * 40, "source_file", "queue.py", None, "queue code", None
+            ),
+        ),
+        jd_requirements=(
+            *context.jd_requirements,
+            c.JDRequirement("jd-2", "메시지 큐", "preferred", "preferred", ("Kafka",)),
+        ),
+    )
+    contract = replace(
+        contract,
+        basis_refs=(
+            c.BasisRef("evidence", "ev-1"),
+            c.BasisRef("jd_requirement", "jd-1"),
+        ),
+    )
 
     async def forbidden(*args):
-        pytest.fail("invalid plan reached reviewer")
+        pytest.fail("reference outside the prepared plan reached reviewer")
 
-    result = generate(context, contract, provider, review=forbidden)
-    assert not result.succeeded and result.failure.stage == "semantic"
-    assert len(provider.requests) == 1
+    result = generate(
+        context,
+        contract,
+        Provider(model_output(candidate(contract, persona="tech_lead", **change))),
+        review=forbidden,
+    )
+    assert result.failure.stage == "semantic" and result.data is None
 
 
 @pytest.mark.parametrize(
@@ -188,7 +240,7 @@ def test_invalid_candidate_is_rejected_before_review(context, contract, change):
         pytest.fail("invalid policy reached reviewer")
 
     result = generate(
-        context, contract, Provider(asdict(candidate(contract, **change))), review=forbidden
+        context, contract, Provider(model_output(candidate(contract, **change))), review=forbidden
     )
     assert result.failure.stage == "semantic"
 
@@ -197,7 +249,7 @@ def test_invalid_candidate_is_rejected_before_review(context, contract, change):
     "mode", ["reject", "wrong_text", "wrong_contract", "invalid_review", "timeout"]
 )
 def test_review_failure_never_retries_generation_or_exposes_candidate(context, contract, mode):
-    provider = Provider(asdict(candidate(contract)))
+    provider = Provider(model_output(candidate(contract)))
 
     async def review(*args):
         if mode == "reject":
@@ -230,21 +282,21 @@ def test_review_failure_never_retries_generation_or_exposes_candidate(context, c
     ],
 )
 def test_invalid_first_question_input_is_rejected_without_model_call(context, contract, change):
-    provider = Provider(asdict(candidate(contract)))
+    provider = Provider(model_output(candidate(contract)))
     result = generate(replace(context, **change), contract, provider)
     assert not result.succeeded and result.failure.stage == "semantic"
     assert provider.requests == []
 
 
 def test_zero_budget_is_failure_without_a_model_call(context, contract):
-    provider = Provider(asdict(candidate(contract)))
+    provider = Provider(model_output(candidate(contract)))
     result = generate(replace(context, limits=c.ContextLimits(0, 0, "fixture")), contract, provider)
     assert result.failure.stage == "budget" and result.attempts == ()
     assert provider.requests == []
 
 
 def test_one_remaining_call_limits_the_provider_request(context, contract):
-    provider = Provider(asdict(candidate(contract)))
+    provider = Provider(model_output(candidate(contract)))
     result = generate(replace(context, limits=c.ContextLimits(1, 0, "fixture")), contract, provider)
     assert result.succeeded
     assert provider.requests[0].max_attempts == 1
@@ -275,7 +327,7 @@ def test_untrusted_context_reference_scope_never_reaches_model(context, contract
         context = replace(context, jd_requirements=context.jd_requirements * 2)
     else:
         context = replace(context, history=context.history * 2)
-    provider = Provider(asdict(candidate(contract)))
+    provider = Provider(model_output(candidate(contract)))
     result = generate(context, contract, provider)
     assert result.failure.stage == "semantic" and provider.requests == []
 
@@ -283,7 +335,7 @@ def test_untrusted_context_reference_scope_never_reaches_model(context, contract
 def test_posting_reference_requires_explicit_source_text(context, contract):
     ref = c.BasisRef("job_posting", "posting-1")
     contract = replace(contract, basis_refs=(ref,))
-    provider = Provider(asdict(candidate(contract)))
+    provider = Provider(model_output(candidate(contract)))
     failed = generate(context, contract, provider)
     assert failed.failure.stage == "semantic" and provider.requests == []
     result = generate(context, contract, provider, reference_texts={ref: "팀 소개"})
@@ -299,15 +351,13 @@ def test_extra_reference_cannot_replace_or_invent_context_evidence(context, cont
         {c.BasisRef("evidence", "ev-1"): "tampered"},
         {c.BasisRef("evidence", "new"): "new"},
     ):
-        provider = Provider(asdict(candidate(contract)))
+        provider = Provider(model_output(candidate(contract)))
         result = generate(context, contract, provider, reference_texts=sources)
         assert result.failure.stage == "semantic" and provider.requests == []
 
 
-def test_model_cannot_self_approve_and_cancellation_propagates(context, contract):
-    raw = asdict(candidate(contract))
-    raw.update(passed=True, turn_id="model-id", next_step="finish")
-    provider = Provider(raw)
+def test_reviewer_cancellation_propagates(context, contract):
+    provider = Provider(model_output(candidate(contract)))
 
     async def cancelled(*args):
         raise asyncio.CancelledError
@@ -341,7 +391,7 @@ def test_reviewer_is_actually_timed_out(context, contract):
         finally:
             stopped.append(True)
 
-    provider = Provider(asdict(candidate(contract)))
+    provider = Provider(model_output(candidate(contract)))
     result = generate(
         context, contract, provider, review=blocked, limits=c.CallLimits(0.01, 512, 65536, 65536)
     )
@@ -361,17 +411,10 @@ def test_injected_model_cannot_bypass_prepared_contract_check(context, contract)
 
 
 def test_self_review_and_model_ids_do_not_appear_in_checked_output(context, contract):
-    raw = asdict(candidate(contract))
+    raw = model_output(candidate(contract))
     raw.update(passed=True, turn_id="model-id", next_step="finish")
     result = generate(context, contract, Provider(raw))
-    assert set(c.to_data(result.data)) == {
-        "persona",
-        "text",
-        "topic_code",
-        "question_contract",
-        "evidence_refs",
-        "jd_requirement_ids",
-    }
+    assert result.failure.stage == "schema" and result.data is None
 
 
 @pytest.mark.parametrize("max_attempts", [0, 3, True, 1.5])
@@ -392,14 +435,14 @@ def test_attempt_limit_cannot_expand_retry_policy(max_attempts):
     "sources", [[], ["not a mapping"], {c.BasisRef("job_posting", "job"): " "}]
 )
 def test_invalid_source_container_returns_input_failure(context, contract, sources):
-    provider = Provider(asdict(candidate(contract)))
+    provider = Provider(model_output(candidate(contract)))
     result = generate(context, contract, provider, reference_texts=sources)
     assert result.failure.error_code == "director_input_invalid"
     assert provider.requests == []
 
 
 def test_only_checked_analysis_is_forwarded_as_interpretation(context, contract):
-    first = generate(context, contract, Provider(asdict(candidate(contract)))).data
+    first = generate(context, contract, Provider(model_output(candidate(contract)))).data
     text = "캐시를 담당했습니다."
     analysis = c.AnswerAnalysis(
         "evaluated",
@@ -422,11 +465,11 @@ def test_only_checked_analysis_is_forwarded_as_interpretation(context, contract)
     )
     context = technical_context(context)
     question = candidate(contract, persona="tech_lead")
-    provider = Provider(asdict(question))
+    provider = Provider(model_output(question))
     result = generate(context, contract, provider, answer_analysis=checked)
     assert result.succeeded
     assert provider.requests[0].payload["answer_analysis"] == c.to_data(checked)
     assert provider.requests[0].payload["context"]["history"][0]["answer"] == text
-    provider = Provider(asdict(question))
+    provider = Provider(model_output(question))
     rejected = generate(context, contract, provider, answer_analysis=analysis)
     assert rejected.failure.stage == "schema" and provider.requests == []

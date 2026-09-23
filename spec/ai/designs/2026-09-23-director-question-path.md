@@ -45,8 +45,16 @@ result = await generate_question(
 ## 생성과 검토
 
 모델 입력은 `context`, `question_contract`, `reference_texts`, `answer_analysis` 네 항목이다.
-공통 transport가 JSON을 읽고 Director validator가 Question 구조를 decode한다. 준비된 계약의
-다섯 필드 중 하나라도 바뀌거나 Persona/근거/JD 참조가 허용 범위를 벗어나면 semantic 실패다.
+모델의 `DirectorQuestion` schema version 2 출력은 persona·text·topic_code·evidence_refs·
+jd_requirement_ids 다섯 필드다. `question_contract`를 모델에 다시 출력시키지 않고 Director
+validator가 검증된 입력 원본을 결합해 기존 여섯 필드 Question을 만든다. 모델 출력에
+`question_contract`나 다른 미소유 필드가 있으면 schema 실패다. topic_code는 비어 있지 않은
+기존 문자열 필드를 유지하며 새 허용 enum·taxonomy를 만들지 않는다.
+
+출력의 Evidence/JD ID는 Context에 등록된 자료이면서 준비된 `question_contract.basis_refs`의
+같은 kind ID에 포함되어야 한다. 이는 준비된 계획 밖 자료를 모델이 새로 연결하지 못하게 하는
+현재 질문 생성 경로의 정책이다. 모델이 실제 문장에 연결한 부분집합을 반환하되 필수 근거를
+누락한 빈 목록을 정상으로 보충하지 않으며 독립 검토기가 문장과 참조의 실제 연결을 확인한다.
 `validate_question_candidate`는 구조·정책 검사만 하며 검증 완료 객체를 만들지 않는다.
 
 이후 `await review(request, candidate)`에 동일한 생성 입력·출처와 실제 후보를 전달한다.
@@ -57,8 +65,9 @@ result = await generate_question(
 
 검토 결과와 후보의 문장·계약이 일치하고 기존 `validate_question`이 통과해야만
 ContractChecked 결과를 반환한다. 실패 시 후보는 result.data에 남기지 않는다.
-공통 decoder의 기존 정책대로 미소유 추가 필드는 저장·반환하지 않는다. 생성 요청의
-JSON Schema는 Question 여섯 필드 및 중첩 객체의 추가 필드를 금지한다.
+생성 모델이 계약을 출력하지 않아도 독립 검토에는 코드가 원본 계약을 붙인 완성 Question을
+전달한다. 따라서 생성 출력의 중복 계약 비교는 제거하되 reviewer가 반환한 문장·계약과 실제
+후보의 동등 비교는 유지한다. 생성 요청 JSON Schema와 validator는 다섯 필드 외 값을 거절한다.
 
 ## 출처와 호출 상한
 
@@ -100,7 +109,7 @@ PromptSpec/seed 경로로 주입한다. 실제 DB에 활성 prompt를 등록한 
 
 AI 테스트: `ai/tests/agents/director/test_director.py`.
 BE HTTP adapter 연결 테스트: `backend/tests/integrations/test_director_boundary.py`.
-정상 첫 HR/후속 질문, 계획 변조·출처·Persona 차단, 독립 검토 실패·취소·시간제한,
+정상 첫 HR/후속 질문, 모델 계약 재출력·계획 밖 출처·Persona 차단, 독립 검토 실패·취소·시간제한,
 재시도 상한, 원문 전달, metadata와 평면 Turn JSONB 변환을 검사한다.
 테스트는 provider/의미 검토기를 대체하며 실제 면접 서비스·모델 품질을 검증하지 않는다.
 최종 실행 결과는 [AI 테스트 안내](../../../ai/docs/testing.md)에 기록한다.
