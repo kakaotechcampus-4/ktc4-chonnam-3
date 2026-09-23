@@ -1,6 +1,18 @@
 # 배포 · 쿠키 · CI
 
-## 1. 배포 구조 — AWS 통합
+## 현재 저장소의 배포 구성 — Caddy + Compose
+
+저장소 루트의 [`compose.deploy.yaml`](../../compose.deploy.yaml)은 `db`·`redis`·`migrate`·`api`·`worker`·`caddy`를 실행한다. `migrate`가 `alembic upgrade head`를 완료해야 API와 worker가 시작한다. Caddy는 FE 파일을 제공하고 `/api/*`를 API로 전달한다. 공개 `/auth/github/*`에는 `/api`를 붙여 전달하므로 브라우저 callback과 내부 API 경로가 다르다. 설정은 [`frontend/Caddyfile.deploy`](../../frontend/Caddyfile.deploy)에 있다.
+
+새 DB 또는 migration 호환성을 검토한 DB를 대상으로 `.env.deploy`를 준비한 뒤, 저장소 루트에서 `docker compose -f compose.deploy.yaml up -d --build`를 실행한다. 기존 volume에 이전 `0002`·`0003` OAuth migration이 적용되어 있다면 먼저 이력·스키마를 검토한다. 자동 migration을 성공시키기 위해 기존 데이터를 삭제하거나 Alembic 이력을 임의로 stamp하지 않는다.
+
+API는 `--no-access-log`로 시작하고 worker는 `arq app.workers.arq_app.WorkerSettings`를 실행한다. worker는 로그인 후 public 저장소 목록 메타데이터를 수집하며 AI 분석 worker까지 등록한 것은 아니다. 큐 소비를 위해 worker가 계속 실행되어야 한다. 현재 저장소의 배포 구성 검증과 실제 운영 배포 완료는 별개다.
+
+운영 환경은 `APP_ENV=prod`, `COOKIE_SECURE=true`, HTTPS `FRONTEND_ORIGIN`, 동일 origin의 `/auth/github/callback`을 `GITHUB_REDIRECT_URI`로 설정한다. GitHub OAuth App에는 이 공개 callback 하나를 등록하며 로그인·재연동이 함께 사용한다. `read:user`만 요청하고 **Expire user access tokens는 OFF**, `offline_access`는 사용하지 않는다.
+
+## 1. 배포 구조 — AWS 통합 검토안
+
+아래 CloudFront·ALB 내용은 AWS로 옮길 때의 검토안이다. 현재 Compose/Caddy 배포에 CloudFront·ALB가 이미 구성되었다는 뜻은 아니다.
 
 FE·BE 를 **하나의 CloudFront 배포** 뒤에 둔다. 브라우저가 보는 호스트는 하나뿐이다.
 
@@ -8,6 +20,7 @@ FE·BE 를 **하나의 CloudFront 배포** 뒤에 둔다. 브라우저가 보는
                     ┌─ CloudFront (단일 도메인) ─┐
 브라우저  ─────────▶ │  /          → S3 (FE 정적)  │
                     │  /api/*     → ALB → api     │
+                    │  /auth/github/* → ALB → api │
                     │  /ws/*      → ALB → worker* │
                     └────────────────────────────┘
                        * api 컨테이너가 WS 도 받는다. ALB 뒤의 실행 방식
@@ -55,8 +68,9 @@ Set-Cookie: devon_session=...; HttpOnly; Secure; SameSite=Lax; Path=/
 
 `Secure` 는 prod 에서 유지한다 — same-origin 이어도 HTTPS 전용 쿠키여야 한다.
 
-`FRONTEND_ORIGIN` 은 prod 에서 CORS 용도로는 쓰이지 않는다. 로컬에서 vite 프록시를 쓰지 않는
-경우의 allowlist 로만 남긴다.
+`FRONTEND_ORIGIN`은 OAuth callback의 origin 검증과 상태 변경 요청·WS handshake의 Origin 검사에 사용한다. 현재 API는 별도 CORS allowlist를 제공하지 않으므로 로컬도 Vite 프록시를 사용한다.
+
+세션은 Redis `auth:sess:{sid}`의 사용자 ID와 14일 TTL로 관리한다. 인증된 REST·SSE·WS handshake 응답에 같은 쿠키의 Max-Age를 1,209,600초로 연장한다. Redis가 비면 다시 로그인하며 PostgreSQL에서 로그인 세션을 복원하지 않는다. 로그아웃은 현재 Redis 세션과 쿠키만 삭제하고 GitHub 암호화 토큰은 유지한다. Redis 장애는 인증 만료와 구분해 `500 internal_error`로 응답한다.
 
 ## 3. CloudFront 설정 — 반드시 지킬 것 4가지
 
@@ -78,7 +92,7 @@ GET /api/interviews/{없는id}
 [error-reasons.md](error-reasons.md) 의 reason 체계가 통째로 무력화된다. **기본 behavior 에만
 적용되는 CloudFront Function(viewer request)으로 rewrite 한다.**
 
-### ② `/api/*` · `/ws/*` 는 캐시를 끄고 전체를 전달한다
+### ② `/api/*` · `/auth/github/*` · `/ws/*` 는 캐시를 끄고 전체를 전달한다
 
 CloudFront 는 캐시 적중률을 위해 **기본적으로 쿠키·헤더를 원본에 넘기지 않는다.** 그대로 두면
 쿠키 없이 도착해 전부 401 이다.
@@ -86,6 +100,7 @@ CloudFront 는 캐시 적중률을 위해 **기본적으로 쿠키·헤더를 �
 | behavior   | 캐시 정책         | 오리진 요청 정책                                                         |
 | ---------- | ----------------- | ------------------------------------------------------------------------ |
 | `/api/*`   | `CachingDisabled` | `AllViewer` (ALB 가 host 기반 라우팅을 쓰면 `AllViewerExceptHostHeader`) |
+| `/auth/github/*` | `CachingDisabled` | query·Cookie·Set-Cookie 보존, 원본으로 전달할 때 `/api` prefix 추가 |
 | `/ws/*`    | `CachingDisabled` | 위와 동일 — `Upgrade` · `Connection` 헤더 전달에 필요                    |
 | `/` (기본) | 정적 캐시         | 최소                                                                     |
 
@@ -119,29 +134,38 @@ ALB 기본 유휴 타임아웃은 **60초**다. WS 연결에 60초간 프레임�
 `GITHUB_REDIRECT_URI` 는 prod 에서 **CloudFront 도메인**을 가리켜야 한다.
 
 ```
-https://{cloudfront-domain}/api/auth/github/callback
+https://{public-domain}/auth/github/callback
 ```
 
 ⚠ ALB · EC2 주소를 직접 넣으면 **쿠키가 그 호스트에 심겨 1절의 문제가 그대로 재발한다.**
-GitHub OAuth App 설정의 Callback URL 도 같이 맞춘다.
+GitHub OAuth App 설정의 Callback URL도 같은 공개 주소로 맞춘다. 로그인과 재연동은 하나의 callback을 공유하며 서버에 저장된 일회용 state의 purpose로 구분한다. `/auth/github/link/callback`은 호환 경로로만 남아 있으며 추가 등록할 필요가 없다.
 
 콜백 URL 은 요청의 `Host` 헤더가 아니라 **`core/config.py` 의 설정값으로 만든다**
 ([layer-rules.md](layer-rules.md) — `os.environ` 단일 진입점).
 
+프록시는 callback을 `/api/auth/github/callback`으로 전달하고 code·state query와 쿠키를 보존한다. 코드 교환 시 GitHub에 보내는 `redirect_uri`는 내부 `/api` 경로가 아니라 위 공개 주소다. `oauthState`의 Path는 `/auth/github`, 로그인 쿠키의 Path는 `/`다.
+
 ## 5. 로컬 개발 — vite 프록시
 
-`frontend/vite.config.ts` 에 프록시를 추가해야 한다 (현재 없음 — **FE 작업 항목**).
+`frontend/vite.config.ts`에 아래 프록시가 구현되어 있다. Vite 포트는 5173으로 고정된다.
 
 ```ts
 server: {
   proxy: {
-    '/api': { target: 'http://localhost:8000', changeOrigin: true },
+    '/api': { target: 'http://localhost:8000', changeOrigin: true, ws: true },
+    '/auth/github': {
+      target: 'http://localhost:8000',
+      changeOrigin: true,
+      rewrite: (url) => `/api${url}`,
+    },
   },
 }
 ```
 
 → 로컬도 같은 오리진이 되어 prod 와 구조가 같아진다. CORS 설정이 필요 없고 `SameSite=lax` 로
 충분하다.
+
+실제 API를 연결할 때는 `frontend/.env.local`의 `VITE_USE_MSW=false`가 필요하다. API는 `uv run uvicorn app.main:app --reload --port 8000 --no-access-log`, worker는 별도 터미널에서 `uv run arq app.workers.arq_app.WorkerSettings`로 시작한다. 전체 절차와 기존 DB 주의사항은 [로컬 OAuth 안내](local-oauth.md)를 따른다.
 
 ## 6. CI
 
@@ -155,6 +179,8 @@ jobs: ruff → mypy → pytest (services: postgres:15, redis:7)
 ```
 
 GitHub · Wanted · LLM 은 CI 에서 실제 호출하지 않고 mock 한다.
+
+현재 PostgreSQL/Redis 통합 fixture는 `TEST_DATABASE_URL`·`TEST_REDIS_URL`만 사용한다. DB 이름에는 `_test`가 포함되어야 하고 Redis DB는 13·14·15 중 테스트 전용 번호를 지정해야 한다. 두 변수가 없으면 관련 테스트는 skip된다. fixture의 SQL TRUNCATE와 Redis FLUSHDB 대상에 개발·운영 데이터를 지정하지 않는다.
 
 CODEOWNERS 의 [팀 자유 영역] 이 팀 자체 CI 추가를 명시적으로 허용한다. 운영 3파일
 (`assign-mentor` / `notify-discord` / `convention-check`)과 `CODEOWNERS` 만 건드리지 않으면 된다.
@@ -177,6 +203,7 @@ GitHub 토큰은 `BYTEA` + AES-GCM 으로 암호화해 저장한다 (`app/core/c
 
 - GitHub access token 을 FE 에 노출하지 않는다.
 - 로그에 token · Authorization 헤더 · 쿠키 값을 남기지 않는다.
+- OAuth callback의 code·state query도 로그에 남기지 않는다. API access log는 끄고 프록시·CDN의 수집 정책도 확인한다.
 - private repo scope 를 요청하지 않는다.
 
 ## 9. 미결

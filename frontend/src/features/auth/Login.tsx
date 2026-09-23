@@ -2,6 +2,12 @@ import { useSearchParams } from 'react-router-dom';
 
 import { BASE } from '@/shared/api';
 
+const ERROR_MESSAGES: Record<string, string> = {
+  denied: 'GitHub 로그인이 취소됐어요. 다시 시도해주세요.',
+  account_suspended: '이용이 정지된 계정이에요.',
+  account_withdrawn: '탈퇴한 계정으로는 다시 가입할 수 없어요.',
+};
+
 function GithubMark() {
   return (
     <svg width="17" height="17" viewBox="0 0 17 17" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -15,7 +21,7 @@ function GithubMark() {
 
 export default function Login() {
   const [searchParams] = useSearchParams();
-  const denied = searchParams.get('error') === 'denied';
+  const errorMessage = ERROR_MESSAGES[searchParams.get('error') ?? ''];
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
@@ -28,9 +34,12 @@ export default function Login() {
           <p className="text-2xl font-bold">DEVON</p>
           <p className="text-base text-muted">회원가입 없이 GitHub 계정으로 바로 시작하세요</p>
 
-          {denied && (
-            <p className="w-full rounded-md border border-error-soft bg-error-soft px-4 py-3 text-sm text-error">
-              GitHub 로그인이 취소됐어요. 다시 시도해주세요.
+          {errorMessage && (
+            <p
+              role="alert"
+              className="w-full rounded-md border border-error-soft bg-error-soft px-4 py-3 text-sm text-error"
+            >
+              {errorMessage}
             </p>
           )}
 

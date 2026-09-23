@@ -23,6 +23,7 @@ dependencies = [
     "python-multipart",
     "anthropic",
     "devon-ai",
+    "cryptography>=50.0.1",
 ]
 
 [tool.uv.sources]

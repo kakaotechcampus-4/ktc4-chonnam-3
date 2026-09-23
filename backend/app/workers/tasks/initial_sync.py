@@ -1,5 +1,11 @@
-"""M1 큐 태스크. auth service 가 연동 직후 enqueue 한다.
-pipeline/initial_sync.py 를 호출하는 얇은 껍데기.
+"""ARQ adapter. Job arguments contain only the persisted job identifier."""
 
-확정본 §2 M1 / task-08
-"""
+from typing import Any
+from uuid import UUID
+
+from app.features.analysis.pipeline.initial_sync import run_initial_sync
+
+
+async def initial_sync(ctx: dict[str, Any], analysis_job_id: str) -> None:
+    async with ctx["session_factory"]() as db:
+        await run_initial_sync(db, UUID(analysis_job_id), ctx["http_client"], ctx["cipher"])

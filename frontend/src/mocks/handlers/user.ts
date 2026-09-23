@@ -8,6 +8,7 @@ import type {
 } from '@/types/api';
 import { homeScenarios, interviewPage, me, meProfile, meUnlinked } from '../fixtures/user';
 import { errorResponse, path, pickScenario, type Res } from '../http';
+import { setMockSession } from '../session';
 
 /**
  * 이 파일의 4개 조회 경로는 모두 spec/shared/contracts/openapi.yaml 에 정의돼 있다.
@@ -26,17 +27,9 @@ export const userHandlers = [
     return HttpResponse.json<MeProfileResponse>(meProfile);
   }),
 
-  /**
-   * 401 인터셉터가 single-flight 로 호출한다. 자신은 인터셉터 대상에서 제외된다.
-   * mock 은 항상 성공한다. 갱신 실패(401) 시나리오는 인증 실패 케이스 작업 범위다.
-   */
-  http.post<PathParams, never, undefined>(path('/auth/refresh'), async () => {
-    await delay(100);
-    return new HttpResponse(null, { status: 204 });
-  }),
-
   http.post<PathParams, never, undefined>(path('/auth/logout'), async () => {
     await delay(100);
+    setMockSession('expired');
     return new HttpResponse(null, { status: 204 });
   }),
 

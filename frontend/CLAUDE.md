@@ -16,8 +16,9 @@ npm run dev
 ```text
 npm run lint
 npm run build
+npm test
 ```
-현재 package.json에 test 스크립트는 없다. lint/build를 동작 테스트 통과로 표현하지 않는다.
+`npm test`는 Playwright의 MSW 기반 인증 화면 테스트다. 최초 환경에서는 `npx playwright install chromium`이 필요하다. lint/build나 MSW 테스트를 실제 GitHub·Redis·운영 인증 검증으로 표현하지 않는다.
 미구현·도구 미설치·테스트 없음은 미실행으로 보고한다.
 
 ## 산출물 위치

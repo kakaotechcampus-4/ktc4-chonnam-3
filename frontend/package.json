@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint src",
+    "test": "playwright test",
+    "test:integration": "playwright test --config playwright.integration.config.ts",
     "format": "prettier --write src",
     "preview": "vite preview"
   },
@@ -18,6 +20,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",

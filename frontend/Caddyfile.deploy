@@ -1,4 +1,10 @@
 devon-chonnam-3.duckdns.org {
+    # GitHub에 등록한 공개 콜백 경로를 유지하고 내부 API prefix만 추가한다.
+    handle /auth/github/* {
+        rewrite * /api{uri}
+        reverse_proxy api:8000
+    }
+
     @backend path /api /api/* /ws /ws/*
     handle @backend {
         reverse_proxy api:8000
