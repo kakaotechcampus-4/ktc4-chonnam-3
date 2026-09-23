@@ -155,7 +155,7 @@ ARQ 작업은 reaper 재등록이나 비정상 종료 경계에서 중복 실행
 - Redis snapshot hit, miss, expiry, 손상 시 PostgreSQL 재구성을 검증한다.
 - 동일 job 재실행, 외부 호출 중 session 종료, head SHA/prompt version/current turn 변경을 검증한다.
 - 질문, Contract, persona, evidence reference가 같은 turn에 고정되고 소급 변형되지 않는지 검증한다.
-- LLM timeout, provider 오류, parse/schema 실패의 한 번 재시도와 raw output 보호를 검증한다.
+- LLM timeout, 재시도 가능한 provider 오류, parse/schema 실패의 한 번 재시도와 raw output 보호를 검증한다. 영구 HTTP 오류·quota 소진 및 서버 최소 대기 초과는 재호출 없이 종료하는지도 확인한다.
 - 로그와 error details에 access token, 비밀키, 불필요한 답변 원문이 없는지 검증한다.
 
 현재 runtime과 tests는 docstring 중심 skeleton이다. 이 문서의 Proposed 형식을 이미 존재하는 callable, migration 또는 검증 결과로 보고하지 않는다.

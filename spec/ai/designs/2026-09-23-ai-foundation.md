@@ -64,7 +64,7 @@ from app.core.config import get_settings
 from app.integrations.llm.client import CallBudget, call_model
 from app.llm_tasks.prompt_loader import load_active_prompt
 
-settings = get_settings()
+settings = get_settings().require_llm()
 prompt = await load_active_prompt(db_session, "repo_shallow")
 # DB 조회 transaction은 서비스에서 종료한 뒤 모델을 호출한다.
 model_call = partial(
@@ -83,7 +83,9 @@ model_call = partial(
 포함한 HTTP 요청 본문 전체이며 응답 byte는 HTTP 본문 전체다. 각 상한은 양수, timeout은 유한값이다.
 예산 소진은 실패이며 출력 자르기·추측한 기본값·provider fallback으로 성공을 만들지 않는다.
 
-timeout/provider/parse/schema는 최초 요청 포함 최대 2회, semantic/budget은 즉시 종료한다.
+`Settings/get_settings()`가 환경의 단일 진입점이다. 미설정·빈 LLM 키와 상한은 일반 앱 기동을 막지 않으며 `require_llm()`이 이미 읽은 값으로 엄격한 `LLMSettings` 검증 뷰를 만든다. 이 뷰는 환경을 다시 읽지 않는다. `LLM_MAX_RETRIES=1`은 총 2회 정책을 표시하며 임의로 상향할 수 없다.
+
+timeout·재시도 가능한 provider·parse·schema는 최초 요청 포함 최대 2회, semantic/budget과 영구 HTTP 오류·quota 소진은 즉시 종료한다. 일시적 제한의 Retry-After 대기는 요청 timeout 이내에서만 허용한다. 구체 분류는 [호출 계약](../contracts.md#model-gateway와-실패)을 따른다.
 첫 배치에서 유효 항목이 있으면 부분 결과를 받은 task가 실패한 ID만 다시 요청하고 같은 CallBudget을
 사용한다. 내부 transport 재시도는 없다. 호출자가 넣는 http_client에도 별도 재시도를 설정하지 않는다.
 `parse_shallow_batch`의 결과에는 `succeeded`와 `failed`가 함께 있을 수 있다. 바깥 ModelResult의
@@ -97,6 +99,8 @@ provider 거부·불완전 응답·깨진 JSON·중복 JSON key·NaN/Infinity를
 실제 응답 model과 response ID, prompt/schema version, 시도별 latency·token·오류를 기록한다.
 token 미수집은 None이며 0으로 바꾸지 않는다. raw output은 AttemptMetadata에 보존하되 repr/log에는
 노출하지 않는다. DB 영구 보관·권한·보존 기간 적용은 해당 서비스 연결 시 검증한다.
+
+2026-09-23 리뷰 반영: 결과 `attempts`는 이번 함수 호출분만 반환하며 공유 작업 번호는 이어진다. 첫 호출 `[1]`, 부분 재요청 `[2]`, 실제 호출 없는 실패 `[]`로 저장 중복을 피한다. JSON container 깊이는 64로 명시하고 반복문으로 검사한다. 큰 HTTP 오류가 응답 budget 오류로 바뀌지 않게 상태를 먼저 분류하며, 429 이외 HTTP 오류의 본문은 읽거나 보관하지 않는다.
 
 ## 프롬프트와 DB
 

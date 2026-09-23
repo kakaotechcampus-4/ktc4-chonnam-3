@@ -19,6 +19,17 @@ Director JSON Schema는 별도 검사 환경에서 정상 1개·오류 4개 입�
 schema 2개·부분 OpenAPI·양성/음성 fixture 7개를 통과했다. schema 검사 도구는 AI runtime 의존성에
 추가하지 않았다. 모델 응답과 의미 검토는 테스트 대역이며 실제 provider·검토 품질·DB/WS 면접 연결은 미검증이다.
 
+2026-09-23 PR #56 리뷰 수정 후 `develop`의 BE setup(`b444c64`)을 함께 검증했다.
+양쪽 `uv sync --locked --python 3.12`와 Ruff·format·mypy가 통과했고, AI **138 passed**
+(Director 47개), 실제 PostgreSQL URL을 주입한 BE **231 passed**, skip 0개
+(Director HTTP 연결 15개·PostgreSQL 13개)다. Director schema v2는 정상 1개·오류 5개,
+공유 계약 검사는 schema 2개·부분 OpenAPI·fixture 7개를 통과했다. JSON 깊이 64/65,
+영구 HTTP 오류·quota·Retry-After·오류 본문 중단·공유 호출 대기와 attempts를 회귀 검증했다.
+로컬 PostgreSQL 15.19의 임시 테스트 schema가 모두 삭제됐음을 확인하고 서버를 종료했다.
+Linux 실행은 WSL 미설치 및 Docker 엔진 미기동으로 미실행이다. Windows에서 명시적 깊이
+상한과 파서 RecursionError 처리를 각각 확인했지만 Linux 검증 통과로 간주하지 않는다.
+실제 모델·독립 검토 품질·전체 migration 및 서비스 E2E는 여전히 미실행이다.
+
 ## 기능별 검증 위치
 
 작업의 선행 관계는 [구현 작업 지도](pipeline.md)를 따른다. 현재 존재하는 구조 검사는 [test_package.py](../tests/test_package.py), [test_import_boundaries.py](../tests/test_import_boundaries.py), BE의 [설치 연결 검사](../../backend/tests/agents/test_ai_package_imports.py)다.

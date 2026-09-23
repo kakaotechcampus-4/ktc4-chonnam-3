@@ -64,9 +64,19 @@ commit 전 타 세션 가시성, 호출자 rollback, task/version UNIQUE 및 활
 2026-09-23 로컬 PostgreSQL **15.19**에서 해당 **13개 통과**, 같은 설정의 전체 BE **133개 통과**.
 이후 임시 인스턴스는 종료했으며, 프로젝트 `.env`와 기존 서비스 DB 설정은 변경하지 않았다.
 
+2026-09-23 PR #56 리뷰 수정과 `develop`의 BE setup(`b444c64`) 반영 후 다시 실행했다.
+로컬 PostgreSQL **15.19**의 13개를 포함해 전체 BE **231 passed**, skip 0개다.
+Ruff·format·mypy도 통과했다. 테스트 schema 잔여 0개를 확인하고 임시 서버를 종료했다.
+LLM HTTP는 mock 검증이며 실제 모델 호출·전체 migration·서비스 E2E는 미실행이다.
+
 ## LLM 실패 처리
 
-- timeout/provider 오류/parsing 실패는 자동 1회 재시도.
+- timeout·재시도 가능한 provider 오류·parsing 실패는 최대 1회 재시도.
+- 영구 HTTP 요청 오류·quota/결제 한도 소진은 provider 실패로 즉시 종료한다. 일시적 제한의 Retry-After는 요청 timeout 이내에서만 대기하며 서버 최소 대기를 줄이지 않는다.
+- 같은 budget의 재호출과 대기 중 취소 뒤에도 다음 시도는 남은 Retry-After 대기를 지킨다.
+- 큰 HTTP 오류도 provider로 분류하며 정상 HTTP 응답의 byte 초과는 budget으로 처리한다.
+- JSON container 깊이 64/65 경계와 파서 RecursionError 경로를 별도로 검사한다.
+- 공유 budget은 총 2회지만 결과 attempts는 이번 호출분만 반환한다. 두 번째 부분 요청에는 시도 번호 2만 포함한다.
 - schema 실패도 공통 호출 계층에서 자동 1회 재시도할 수 있다.
 - semantic 실패는 재호출하지 않는다.
 - 2회 실패 시 `llm_timeout`, `llm_parse_failed`, `llm_failed`.

@@ -70,6 +70,6 @@ backend AI 연결 -> devon_ai
 
 - 작업별 prompt version을 사용한다.
 - Sprint 1 공급자·모델은 [0011 결정](../../spec/ai/decisions/0011-sprint1-model-selection.md)의 OpenAI `gpt-5.6-luna`다. SDK/client 연결·계정 접근·작업별 품질은 구현·검증할 작업이다.
-- timeout/provider 오류/JSON parsing 실패는 자동 1회 재시도.
+- timeout·재시도 가능한 provider 오류·JSON parsing 실패는 최대 1회 재시도. 영구 HTTP 요청 오류와 quota 소진은 provider 실패로 즉시 종료하며 상태별 처리·유한 대기는 `spec/ai/contracts.md`를 따른다.
 - 2회 실패 시 error_code를 남기고 중단한다.
 - raw output, model, prompt version, token, latency를 가능한 범위에서 저장한다.

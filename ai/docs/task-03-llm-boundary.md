@@ -34,7 +34,7 @@ Director 첫 구현에서 `ModelRequest.max_attempts`(기본 2, 허용 1~2)를 �
 - provider 독립 fake와 순수 성공·실패 fixture는 실제 transport 연결 전에 작성할 수 있다.
 - 주입 callable의 정확한 signature, 요청/응답 타입 또는 Protocol은 AI-L02에서 채택된 계약만 사용한다.
 - 공급자 OpenAI와 API 모델 ID `gpt-5.6-luna`는 0011로 확정됐으며 기존 BE 설정·seed에서 읽어 주입한다. 인증·SDK/client 연결, 실제 계정 접근과 task별 schema·도구 호출·품질은 AI-L01의 구현·검증 작업이며 모델 선택만으로 완료 처리하지 않는다.
-- parse/schema/semantic 실패 구분과 invalid 후보의 fail-closed 처리는 Accepted다. attempt는 공통 LLM gateway/task 호출 계층에서만 관리하며 timeout/provider/parse/schema 실패는 총 2회까지 호출하고 semantic 실패는 재호출하지 않는다. timeout과 task별 token/context/tool budget은 AI-L04에 남아 있다.
+- parse/schema/semantic 실패 구분과 invalid 후보의 fail-closed 처리는 Accepted다. attempt는 공통 LLM gateway/task 호출 계층에서만 관리하며 timeout·재시도 가능한 provider·parse·schema 실패는 총 2회까지 호출하고 semantic 실패는 재호출하지 않는다. 영구 HTTP 오류·quota 소진은 즉시 종료하고 일시적 제한은 요청 timeout 이내에서 대기한다. 상태별 분류·JSON 깊이 상한·호출분 attempts 반환은 [내부 호출 계약](../../spec/ai/contracts.md#model-gateway와-실패)을 따른다. task별 실행값의 운영 검증은 별도다.
 - 사용자 원문·raw output·호출 metadata의 실제 보존은 0018의 확정한 내부 보관·재사용 정책에 맞춰 저장 위치·권한·마스킹·보관 연결을 확인한 뒤 적용한다.
 
 ## 대상 파일과 책임
@@ -53,7 +53,7 @@ Director 첫 구현에서 `ModelRequest.max_attempts`(기본 2, 허용 1~2)를 �
 - [ ] `prompt_loader`가 task 이름에 맞는 prompt 문자열과 version을 로드하고 task에 DB session을 넘기지 않게 한다.
 - [ ] prompt, model ID, credential을 AI 소스나 task 상수로 하드코딩하지 않는다.
 - [ ] AI-L02에서 채택한 task 계약과 ADR 0008의 semantic 검증을 통과하기 전에는 어느 계층도 provider 응답을 downstream 성공으로 확정하지 않게 한다.
-- [ ] timeout/provider 오류/JSON parse/schema 실패의 공통 호출 계층 재시도 1회를 정책 fixture로 표현한다.
+- [ ] timeout·재시도 가능한 provider 오류·JSON parse/schema 실패의 공통 호출 계층 재시도 1회와 영구 HTTP 오류·quota 소진의 즉시 종료를 정책 fixture로 표현한다.
 - [ ] semantic 실패는 재호출하지 않고 typed failure로 반환한다.
 - [ ] SDK·client·task·worker의 중복 재시도로 총 호출 수가 곱해지는 시나리오를 실패 사례로 둔다.
 - [ ] 어떤 invalid 후보도 빈 성공·추측한 기본값·누락값 보충·ad hoc repair로 바꾸지 않고 task 범위 typed failure로 반환한다.
