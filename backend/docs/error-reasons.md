@@ -21,7 +21,7 @@
 | 그룹 | reason | HTTP |
 | --- | --- | --- |
 | 인증 | `unauthenticated` | 401 |
-| 인증 | `token_invalid` | 403 |
+| 인증 | `github_token_invalid` | 403 |
 | 인증 | `account_suspended` | 403 |
 | 인증 | `account_withdrawn` | 403 |
 | 문서 | `unsupported_document_type` | 415 |
@@ -39,12 +39,19 @@
 | 면접 생성 | `session_limit_exceeded` | 409 |
 | 면접 준비 | `prep_failed` | 409 |
 | 면접 준비 | `repo_unreachable` | 409 |
+| 면접 준비 재시도 | `prep_in_progress` | 409 |
+| 면접 준비 재시도 | `session_expired` | 410 |
 | 면접 조회 | `not_found` | 404 |
 | 재시도 | `original_not_completed` | 409 |
 | 재시도 | `repository_unavailable` | 409 |
 | 리포트 | `report_unavailable` | 409 |
 | 이의 제출 | `already_submitted` | 409 |
 | 공통 | `internal_error` | 500 |
+
+> `github_token_invalid`는 DEVON 세션이 아니라 GitHub 연동 토큰이 만료·폐기된 상태다
+> (`github_accounts.token_status`가 `expired`·`revoked`). 화면은 로그인이 아니라 재연동으로 유도한다.
+> 2026-09-10 `token_invalid`에서 개명됐다. `frontend/docs/api-spec.md` #7·#8 및 변경 이력 참고.
+> 아래 `analysis_jobs.error_code`의 `token_invalid`는 API 표면이 아닌 내부 코드라 그대로 둔다.
 
 ## Job Error Code
 

@@ -1,5 +1,6 @@
-"""M2 큐 태스크. pipeline/interview_prep.py 를 호출하는 얇은 껍데기.
-재시도 시 API 에서도 같은 pipeline 을 호출하므로 로직을 여기 쓰지 않는다.
+"""현행 interview_prep은 M4-a 면접 준비 태스크이며 연결은 구현 대기다.
+옛 M2의 7단계 분석은 analysis_run으로 분리해야 한다 (docs/pipeline.md).
+준비 재시도 REST API는 실패 단계부터 같은 준비 흐름을 사용한다.
 
 docs/layer-rules.md 1절 / task-11
 """

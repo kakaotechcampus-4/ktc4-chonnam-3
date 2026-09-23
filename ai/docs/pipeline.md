@@ -8,7 +8,7 @@
 
 1. [루트 지침](../../CLAUDE.md), [AI 지침](../CLAUDE.md), [README의 보호 지침 안내](../README.md)를 읽는다. BE 파일을 수정할 작업은 [BE 지침](../../backend/CLAUDE.md)도 읽는다.
 2. 아래 표에서 맡은 작업과 관련 명세를 찾고 현재 파일·사용자 변경·기존 테스트를 확인한다.
-3. FIX와 [AI 결정 기록](../../spec/ai/decisions/README.md)의 Accepted 정책, Proposed 계약, [later.md](../../later.md)의 잔여 미결정 항목을 구분한다. 한 정책의 부분 승인을 관련 저장·API 계약 전체의 승인으로 취급하지 않는다.
+3. FIX와 [AI 결정 기록](../../spec/ai/decisions/README.md)의 Accepted 정책, Proposed 계약, 아래 구현·검수 인계와 [Sprint 2 후속 목록](../../spec/ai/features/extensions.md#sprint-2-착수-시-검토할-사항)을 구분한다. 한 정책의 부분 승인을 관련 저장·API 계약 전체의 승인으로 취급하지 않는다.
 4. 각 task의 검증 fixture와 독립 정책 검사부터 시작한다. 미결정 사항을 임의로 채우거나 아직 없는 함수를 이미 제공되는 API처럼 호출하지 않는다.
 5. 계약 채택·실제 provider·BE 연결 조건이 충족된 경로만 구현·연결하고 실행 근거를 남긴다. 다른 경로의 보류가 독립적인 검토와 mock 검사를 모두 중단시키지는 않는다.
 
@@ -20,7 +20,7 @@
 | --- | --- | --- |
 | [01 셋업](task-01-setup.md) | 없음 | 설치·구조 검증 기반; 기능 구현과 구분 |
 | [02 내부 계약](task-02-contracts.md) | 01, 내부 계약 원본 | 검토 fixture와 채택 범위; AI-L02 |
-| [03 LLM 경계](task-03-llm-boundary.md) | 01·02, [ADR 0008](../../spec/ai/decisions/0008-ai-candidate-policy.md) | parse/schema/semantic 실패와 fail-closed fake; 실제 provider AI-L01, 재호출 책임 AI-L04 |
+| [03 LLM 경계](task-03-llm-boundary.md) | 01·02, [ADR 0008](../../spec/ai/decisions/0008-ai-candidate-policy.md) | parse/schema/semantic 실패와 fail-closed fake; 선택 모델 연결 AI-L01, 기존 재호출 정책의 구현·상한 AI-L04 |
 | [04 L1](task-04-repo-shallow.md) | 02·03, ADR 0008 | repo별 유효 결과 보존·invalid 분리; version·저장 매핑 AI-L03 |
 | [05 L2](task-05-repo-deep.md) | 02·03·04, ADR 0008 | 고정 ref의 사용 가능·제한·무효 관찰; readiness·상태 AI-L06 |
 | [06 Context 준비](task-06-context-preparation.md) | 02·04·05 | BE 주입 입력·준비 불변 조건; 상태 연결 AI-L11·12·14 |
@@ -59,22 +59,42 @@ AI 기능과 관련되더라도 다음 작업을 `devon_ai`로 옮기거나 중�
 | --- | --- | --- |
 | L0·GitHub 수집 | [GitHub client](../../backend/app/integrations/github/client.py), [BE task-08](../../backend/docs/task-08-github.md) | 선택 repo·고정 ref·원문 범위가 실제 입력과 일치 |
 | Wanted 분류 | [jd_extract.py](../../backend/app/llm_tasks/jd_extract.py), [ADR 0006](../../spec/ai/decisions/0006-task-llm-usage-policy.md) | 규칙 변환·LLM 비호출; AI-L03의 version·저장과 AI-L05 단계 관계 |
-| 추천·match score | [match_score.py](../../backend/app/features/analysis/pipeline/steps/match_score.py), [BE task-10](../../backend/docs/task-10-match.md) | AI-L07 산식·미계산·FE 표시 합의; 실패를 낮은 점수로 바꾸지 않음 |
-| Prompt·설정·모델 I/O | [prompt_loader.py](../../backend/app/llm_tasks/prompt_loader.py), [LLM client](../../backend/app/integrations/llm/client.py) | 문자열·검증 데이터·도구 주입, 실제 provider·재시도·기록 책임 합의 |
-| 프로필 집계 | [profile_summary.py](../../backend/app/llm_tasks/profile_summary.py), [ADR 0006](../../spec/ai/decisions/0006-task-llm-usage-policy.md) | LLM 비호출·확정 데이터 집계; AI-L17과 후속 job 연결 |
+| 추천·match score | [match_score.py](../../backend/app/features/analysis/pipeline/steps/match_score.py), [BE task-10](../../backend/docs/task-10-match.md) | 0017~0018의 null 점수·직접 기술 비교·기존 후보 순서·run 전체 최대 5개를 실제 근거·카드에 연결하며 실패를 낮은 점수로 바꾸지 않음 |
+| Prompt·설정·모델 I/O | [prompt_loader.py](../../backend/app/llm_tasks/prompt_loader.py), [LLM client](../../backend/app/integrations/llm/client.py) | 문자열·검증 데이터·도구 주입, 선택 모델·기존 재시도 책임·실제 사용 기록의 구현·검증 |
+| 프로필 집계·역할 요약 | [profile_summary.py](../../backend/app/llm_tasks/profile_summary.py), [ADR 0016](../../spec/ai/decisions/0016-profile-language-aggregation.md), [ADR 0019](../../spec/ai/decisions/0019-sprint1-profile-role-summary-restoration.md) | 언어 비율은 기존 평균·비LLM 집계, 개인 역할만 근거에 맞춰 LLM 요약; 기존 저장·응답·후속 job 연결 |
 | 큐·저장·전송 | [BE pipeline](../../backend/docs/pipeline.md), [BE task-15](../../backend/docs/task-15-interview-ws.md), [BE task-16](../../backend/docs/task-16-report.md) | 기존 여섯 job·텍스트 WS·분석 SSE 유지; 멱등성·복구·공개 응답의 미합의 구분 |
 
 ## 결정 대기 지점을 다루는 방법
 
-대기 목록의 원본은 [later.md](../../later.md)이며 이 문서에 별도 상태 원장을 만들지 않는다. 각 task는 관련 ID와 재개에 필요한 합의·검수·설정 근거를 명시한다.
+[0018 일괄 정리](../../spec/ai/decisions/0018-existing-baseline-bulk-resolution.md)에 따라 현재 Sprint 1 범위에서 추가 사용자 선택이 필요한 항목은 없다. 채택한 방향은 [AI 결정 기록](../../spec/ai/decisions/README.md), 구현·검수는 아래 인계표, Sprint 2의 미정 세부는 [후속 목록](../../spec/ai/features/extensions.md#sprint-2-착수-시-검토할-사항)에서 확인한다. 기존 task의 “AI-Lxx 결정 후” 표기는 이 분류와 최신 Accepted 결정을 함께 읽으며 사용자에게 같은 설계 선택을 다시 요청하는 조건으로 사용하지 않는다.
 
-- AI-L01·02·04: 실제 모델 식별, 내부 계약, 실행 상한·재시도 책임은 각각 별도 확인한다. 하나의 승인으로 다른 항목을 채택하지 않는다.
-- [ADR 0008](../../spec/ai/decisions/0008-ai-candidate-policy.md)의 후보 정책과 [ADR 0009](../../spec/ai/decisions/0009-ai-evaluation-method.md)의 평가 방법을 포함한 Accepted AI 정책은 즉시 적용하고, `later.md`에는 version·저장·runtime·운영·실측 같은 잔여 합의만 확인한다.
+- AI-L01·02·04: 모델 선택·기존 내부 계약·재시도 책임은 채택 범위를 유지한다. 실제 연결·상세 타입과 저장 매핑·실행 상한은 각각 구현·검증하며 한 경로의 완료를 다른 경로의 완료로 보지 않는다.
+- [ADR 0008](../../spec/ai/decisions/0008-ai-candidate-policy.md)의 후보 정책과 [ADR 0009](../../spec/ai/decisions/0009-ai-evaluation-method.md)의 평가 방법을 포함한 Accepted AI 정책은 후속 결정의 변경 범위와 함께 적용한다. version·저장·실행 설정·운영·실측의 구체화는 아래 인계표에서 확인한다. 기존 범위를 바꾸는 사용자 선택이 새로 필요하면 관련 결정 문서에 근거·영향을 정리해 확인한다.
 - AI-L05~07·11~17: 영향받는 BE·FE 연결을 구분한다. 리포트 점수, 추천 점수, 준비 성공, WS 복구는 서로 다른 조건이다.
 - AI-L18·19: 합성 fixture 준비와 실제 사용자 자료·독립 검수·실제 모델 평가의 권한·품질 조건을 구분한다.
 - AI-L21~26: 후속 기능 채택 여부를 현재 패키지 구조나 task 번호로 승인하지 않는다.
 
-담당자가 결정을 확정하면 해당 원본 결정 문서와 검토 fixture를 먼저 맞춘 뒤 관련 task를 재개한다. 팀 검수자를 임의로 기록하거나, 미정 값에 임의 숫자·모델 ID·enum을 넣어 테스트를 통과시키지 않는다.
+해당 원본 결정 문서와 검토 fixture를 먼저 맞춘 뒤 관련 task를 연결한다. 팀 검수자를 임의로 기록하거나, 미정 값에 임의 숫자·모델 ID·enum을 넣어 테스트를 통과시키지 않는다. 아래 항목은 사용자에게 다시 물을 목록이 아니라 실제 구현·검수에서 완료 증거를 남길 작업이다.
+
+## 기존 ID별 구현·검수 인계
+
+| 기존 ID | 유지하는 방향과 남은 실제 확인 | 연결 작업 |
+| --- | --- | --- |
+| AI-L01 | 선택한 모델을 설정/seed에서 주입하고 실제 사용값·version 기록. 서비스 인증·SDK/client·호출 경로 연결, 계정 접근·구조화 출력·도구 호출 적합성 검증. 다른 모델·공급자가 필요하면 그때 실제 차이 확인 | task-03·13 |
+| AI-L02 | 기존 Context·Question·Evidence·ToolResult·분석/판단 계약 안에서 타입·null·참조·직렬화 연결. 공고 내용 비교·동시 수집 제약 확인. 실패 원문·조회 중단의 영구 저장 위치는 기존 책임 안에서 확인하고 AI-L18의 자료 정책 적용 | task-02·13 |
+| AI-L03 | JD source_field·requirement_type과 규칙 변환 version 기록, L1 프로젝트 요약의 기존 분석 저장 매핑 확인. prompt version을 변환 version으로 바꾸거나 프로젝트 요약을 개인 역할·description으로 쓰지 않음 | task-04·13, BE JD |
+| AI-L06 | 기존 L2 준비 조건·한계 비공개 유지. 실제 지원 언어·parser·읽기 기능과 실패 repo/path/area의 Context 연결을 fixture로 확인. 아직 읽지 못하는 범위를 지원한다고 선언하지 않음 | task-05·06·08 |
+| AI-L07 | 0017~0018의 직접 기술 비교·기존 run 후보 순서·최대 5개·실제 근거·null 점수를 저장/카드에 연결. 태그 겹침을 전체 요구사항 충족으로 바꾸지 않음 | BE task-10, task-13 |
+| AI-L09 | 기존 재작성/재계획/유효 후보 없음, 미저장 답변 재제출·저장 답변 보완·오류 안내·명시적 나가기를 반환/전송에 연결. 새 수동 이어가기·자동 LLM 반복 없음 | task-09·10·13 |
+| AI-L10 | 기존 7개 category·21개 개발 후보·etc fallback 유지. 운영 문구는 독립·도메인·한국어 검수 후 활성화. category 근거 입력·version·검수 metadata·idempotent seed 연결을 기존 구조에서 확인 | task-07, BE task-03 |
+| AI-L11 | 단일 queue/worker·기존 6개 job·식별자 전달·DB 재조회 유지. initial_sync 인수·직렬화·등록 연결을 확인. job timeout은 AI-L04·08 운영 상한과 함께 설정 | task-06·13 |
+| AI-L12 | T3/T4·실패 정리의 짧은 transaction, 기존 식별자·입력 version·행 잠금/조건부 갱신·중복 제약·lock token 확인. DB commit 후 알림, 저장 질문 재전달, 기존 queued 작업 재등록 범위 유지. running 자동 재실행·outbox는 선제 추가하지 않음. 충돌 중복·DB 장애·서버 중단을 실제 검사 | task-13, BE pipeline |
+| AI-L13 | 기존 인증·소유권·명시적 이탈 의미를 유지하고 종료 wire/endpoint를 BE·FE가 기록·검증. 연결 끊김으로 abandoned 처리하지 않음 | task-13, BE task-15 |
+| AI-L15 | 기존 6개 0~100 점수·단순 평균·score_criteria 유지. 주석뿐인 seed의 세부 평가 기준·version과 근거 자료를 작성·검수하고 미관찰 사례까지 점검. 숫자 정책을 다시 선택하지 않음 | task-11·12, BE task-03 |
+| AI-L18 | 0018의 후속 내부 비교용 보관·재사용 범위 유지. 최종 내부 비교 검증 뒤에도 보관하며 별도의 자동 삭제 기한 없음. 실제 사용 권한·참여자 안내·팀 접근·영구 저장·마스킹·복사본과 파생 자료 관리 연결 확인 | task-12·13, BE 저장 |
+| AI-L19 | 기존 네 사례 종류·source group 분리·합성 JSON 쌍·독립 검수·불일치 pending·grader control·전체 결과 기록 유지. 실제 자료·기대 결과·검수자·판정 오류를 확인하고 대표 사례를 측정. 최종 표본·비율·수용 수치는 운영 조건 및 AI-L18 자료 범위에 맞춰 설정 | task-12·13 |
+
+AI-L04·08의 실제 상한 설정·실측과 AI-L18의 저장 위치·마스킹·접근·보관·재사용 연결도 구현 작업이다. 사용 범위·운영 조건·자료 정책의 채택 내용은 0018을 따르며 숫자·필드·도구 선택을 하나씩 묻지 않는다. 이 표로 구현·검수·출시를 완료 처리하지 않는다.
 
 ## 완료와 인계
 

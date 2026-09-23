@@ -42,3 +42,4 @@ OpenAPI로 표현할 수 없는 세 가지는 `frontend/docs/api-spec.md`가 원
 - `PENDING_FE`: FE 라우팅, 상태머신, UX와 함께 결정해야 한다.
 - `PENDING_AI`: AI 리드가 모델/검색/프롬프트 구조를 확정해야 한다.
 - `PENDING_TEAM`: 팀 자료 보충 또는 평가 기준 합의가 필요하다.
+- `PENDING_BE`: BE 구현 방식 확인 또는 서버 측 규칙 확정이 필요하다.
