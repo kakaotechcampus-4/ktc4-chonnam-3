@@ -70,7 +70,7 @@ interviewStatus:  preparing | in_progress | completed | preparing_failed | aband
 runStatus:        running | completed | failed
 stepKey:          doc_extract | repo_select | repo_detail | jd_fetch
                   | jd_extract | repo_analyze | match_score
-prepareStepKey:   analyze_repo | build_persona | compose_question | set_criteria
+prepareStepKey:   analyze_repo | build_persona | set_criteria | compose_question
 stepStatus:       pending | running | completed | failed | skipped
 answerMode:       text            (2차에 voice 추가)
 repoStatus:       succeeded | partial | failed
@@ -161,12 +161,13 @@ Redis 조회 장애는 세션 만료·유실과 구분한다. 정상 인증이�
 | 22 | GET | `/analysis-runs/{runId}/candidates` | fetch |
 | 16 | POST | `/interviews` | fetch |
 | 17 | GET | `/interviews/{id}` | fetch |
+| 23 | POST | `/interviews/{id}/prepare/retry` | fetch |
 | 18 | GET *(Upgrade)* | `/ws/interviews/{sessionId}` | WebSocket |
 | 19 | GET | `/interviews/{id}/report` | fetch |
 | 20 | POST | `/interviews/{id}/retry` | fetch |
 | 21 | POST | `/interviews/{id}/feedback-disagreements` | 계약 잔존, Sprint 1 제공·호출 제외 |
 
-기존 번호 22개를 유지한다(기존 색인 21개 + Sprint 2 예약 #3). #21의 잔존 계약은 Sprint 1 제공·호출 대상이 아니므로 이 숫자를 실제 제공 API 수로 해석하지 않는다. 번호는 아래 "최종 엔드포인트 목록"·`shared/queryKeys.ts` 참조 번호와 같다. 22번은 `analysis-runs` 계열끼리 묶어 읽도록 15번 뒤에 배치했다.
+총 23개. 번호는 아래 "최종 엔드포인트 목록"·`shared/queryKeys.ts` 참조 번호와 같다. 22번은 `analysis-runs` 계열끼리 묶어 읽도록 15번 뒤에 배치했고, 23번은 준비 화면 흐름을 따라 17번 뒤에 두었다.
 
 > 브라우저 이동 경로는 `shared/api.ts`에 넣지 않는다. `<a href>` 또는 `window.location`으로 처리한다.
 > 
@@ -1148,6 +1149,36 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 
 ---
 
+## 23. POST /interviews/{id}/prepare/retry
+
+준비 단계가 실패한 뒤 "다시 시도"를 눌렀을 때 호출한다. 서버는 실패한 `prepareStepKey`부터 다시 실행하고, 성공한 단계는 재실행하지 않는다. 세션과 `session_repositories`는 그대로 유지된다.
+
+2026-09-10에는 WS `prepareRetry` 메시지로 설계했으나 `spec/ai/decisions/0010:32`에서 REST로 확정했다. 재시도 거절을 상태코드로 구분할 수 있고, 만료 토큰 복구가 401 인터셉터를 타며, 새로고침 후 소켓이 없는 상태에서도 보낼 수 있다.
+
+**Request**
+
+없음.
+
+**Response**
+
+`204 No Content`
+
+재실행 진행 상황은 이 응답이 아니라 WS `prepareStep` 이벤트로 받는다. 소켓이 열려 있으면 그대로 두고 호출하며, 닫혀 있으면 응답을 확인한 뒤 연다.
+
+**UI states**
+
+1b(준비 실패) `다시 시도` 버튼 클릭 시 호출. 성공하면 실패 배너를 내리고 실패 단계만 `pending`으로 되돌린 뒤 `prepareStep`을 기다린다. 재연결로 이전 시도의 `error`가 늦게 도착할 수 있으므로, 새 시도의 첫 `prepareStep`을 받으면 배너를 한 번 더 비운다.
+
+**Failure**
+
+| 코드 | reason | 화면 처리 |
+| --- | --- | --- |
+| 409 | `prep_in_progress` | 이미 재실행 중. 배너 없이 진행 화면 유지 |
+| 409 | `prep_failed` | `preparing_failed` 상태가 아님. `GET /interviews/{id}`로 상태 재확인 |
+| 410 | `session_expired` | 재시도 버튼을 내리고 `레포 다시 선택하기`만 남긴다 |
+
+---
+
 ## 18. GET (Upgrade) /ws/interviews/{sessionId}
 
 5a2-v2에서 연결하고 5b-v2까지 유지한다.
@@ -1177,9 +1208,9 @@ Redis 로그인 세션 인증은 핸드셰이크 시 1회 검증한다. 연결 �
 | --- | --- |
 | `answer` | `turn` (number), `text` (string, 최대 2000자) |
 
-[0010 결정](../../spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md)에 따라 준비 실패 후 "다시 시도"는 WS `prepareRetry`가 아니라 REST `POST /interviews/{id}/prepare/retry`를 호출한다. 실패한 `prepareStepKey`부터 다시 실행하고 성공한 단계·면접 식별자·레포 조합을 유지한다. 기존 번호는 추가하지 않으며 상세 흐름은 [면접 명세](../../spec/frontend/features/interview.md)를 따른다. 이 REST 경로의 공통 계약 파일 반영과 실제 구현·연결은 별도 검증 대상이다.
+Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시도는 WS가 아니라 `POST /interviews/{id}/prepare/retry`(#23)로 처리한다 — `spec/ai/decisions/0010:32`.
 
-`answer`는 현재 답변 가능한 `turn`과 함께 제출 버튼 클릭 시 1회 전송한다. 초안 저장은 없다. 2000자 초과 시 `answer_too_long`.
+`answer`는 제출 버튼 클릭 시 1회 전송한다. 초안 저장은 없다. 2000자 초과 시 `answer_too_long`. `turn`은 그 답변이 어느 질문에 대한 것인지 서버가 판별하는 값이다 (`spec/ai/decisions/0010:30`). 서버는 현재 답변 가능한 turn과 다르면 `answer_stale_turn`으로 거절한다.
 
 **Response**
 
@@ -1239,12 +1270,13 @@ Redis 로그인 세션 인증은 핸드셰이크 시 1회 검증한다. 연결 �
 | --- | --- | --- | --- |
 | `answer_too_long` | `ERR_ANSWER_TOO_LONG` | `true` | 같은 턴 재제출 |
 | `answer_rejected` | `ERR_ANSWER_REJECTED` | `true` | 같은 턴 재제출 (저장 실패) |
-| `question_failed` | `ERR_QUESTION_FAILED` | `true` | 허용된 시도 후 실패 안내·기록 보존·명시적 나가기 (아래 재시도 책임 참고) |
-| `question_gen_timeout` | `ERR_QUESTION_GEN_TIMEOUT` | `true` | 준비 실패 화면 — REST `POST /interviews/{id}/prepare/retry` |
-| `persona_build_failed` | `ERR_PERSONA_BUILD_FAILED` | `true` | 준비 실패 화면 — REST `POST /interviews/{id}/prepare/retry` |
-| `criteria_set_failed` | `ERR_CRITERIA_SET_FAILED` | `true` | 준비 실패 화면 — REST `POST /interviews/{id}/prepare/retry` |
-| `repo_analyze_failed` | `ERR_REPO_ANALYZE_FAILED` | `true` | 준비 실패 화면 — REST `POST /interviews/{id}/prepare/retry` |
-| `github_api_rate_limited` | `ERR_GITHUB_RATE_LIMITED` | `true` | 준비 실패 화면 — 대기 후 REST `POST /interviews/{id}/prepare/retry` |
+| `answer_stale_turn` | `ERR_ANSWER_STALE_TURN` | `true` | 지나간 턴에 보낸 답변 — 초안을 버리고 현재 질문으로 |
+| `question_failed` | `ERR_QUESTION_FAILED` | `true` | 자동 1회 재시도 |
+| `question_gen_timeout` | `ERR_QUESTION_GEN_TIMEOUT` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
+| `persona_build_failed` | `ERR_PERSONA_BUILD_FAILED` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
+| `criteria_set_failed` | `ERR_CRITERIA_SET_FAILED` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
+| `repo_analyze_failed` | `ERR_REPO_ANALYZE_FAILED` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
+| `github_api_rate_limited` | `ERR_GITHUB_RATE_LIMITED` | `true` | 준비 실패 화면 — 대기 후 `POST /interviews/{id}/prepare/retry` |
 | `repo_unreachable` | `ERR_REPO_UNREACHABLE` | `false` | "레포에 접근할 수 없어요" — 레포 재선택 |
 | `github_token_invalid` | `ERR_GITHUB_TOKEN_INVALID` | `false` | GitHub 재연동 유도 |
 
@@ -1540,30 +1572,30 @@ Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagr
 | --- | --- | --- | --- | --- |
 | 1 | GET | `/auth/github/login` | 브라우저 이동 | 불필요 |
 | 2 | GET | `/auth/github/callback` | 프론트 무관 | 불필요 |
-| 3 | POST | `/auth/refresh` | Sprint 2 예약 | Sprint 1 해당 없음 |
-| 4 | POST | `/auth/logout` | fetch | `devon_session` (만료·없음도 204) |
-| 5 | GET | `/me` | fetch | `devon_session` |
-| 6 | GET | `/me/profile` | fetch | `devon_session` |
-| 7 | GET | `/auth/github/link` | 브라우저 이동 | `devon_session` |
-| 8 | GET | `/auth/github/link/callback` | 프론트 무관 | `devon_session` |
-| 9 | GET | `/me/home` | fetch | `devon_session` |
-| 10 | GET | `/me/interviews` | fetch | `devon_session` |
-| 11 | POST | `/documents/preview` | fetch (multipart) | `devon_session` |
-| 12 | POST | `/analysis-runs` | fetch | `devon_session` |
-| 13 | GET | `/analysis-runs/{runId}/events` | EventSource | `devon_session` |
-| 14 | GET | `/analysis-runs/{runId}` | fetch | `devon_session` |
-| 15 | GET | `/analysis-runs/{runId}/result` | fetch | `devon_session` |
-| 16 | POST | `/interviews` | fetch | `devon_session` |
-| 17 | GET | `/interviews/{id}` | fetch | `devon_session` |
-| 18 | GET *(Upgrade)* | `/ws/interviews/{sessionId}` | WebSocket | `devon_session` |
-| 19 | GET | `/interviews/{id}/report` | fetch | `devon_session` |
-| 20 | POST | `/interviews/{id}/retry` | fetch | `devon_session` |
-| 21 | POST | `/interviews/{id}/feedback-disagreements` | 계약 잔존, Sprint 1 제공·호출 제외 | `devon_session` |
-| 22 | GET | `/analysis-runs/{runId}/candidates` | fetch | `devon_session` |
+| 3 | POST | `/auth/refresh` | fetch | `refreshToken` |
+| 4 | POST | `/auth/logout` | fetch | `accessToken` |
+| 5 | GET | `/me` | fetch | `accessToken` |
+| 6 | GET | `/me/profile` | fetch | `accessToken` |
+| 7 | GET | `/auth/github/link` | 브라우저 이동 | `accessToken` |
+| 8 | GET | `/auth/github/link/callback` | 프론트 무관 | `accessToken` |
+| 9 | GET | `/me/home` | fetch | `accessToken` |
+| 10 | GET | `/me/interviews` | fetch | `accessToken` |
+| 11 | POST | `/documents/preview` | fetch (multipart) | `accessToken` |
+| 12 | POST | `/analysis-runs` | fetch | `accessToken` |
+| 13 | GET | `/analysis-runs/{runId}/events` | EventSource | `accessToken` |
+| 14 | GET | `/analysis-runs/{runId}` | fetch | `accessToken` |
+| 15 | GET | `/analysis-runs/{runId}/result` | fetch | `accessToken` |
+| 16 | POST | `/interviews` | fetch | `accessToken` |
+| 17 | GET | `/interviews/{id}` | fetch | `accessToken` |
+| 18 | GET *(Upgrade)* | `/ws/interviews/{sessionId}` | WebSocket | `accessToken` |
+| 19 | GET | `/interviews/{id}/report` | fetch | `accessToken` |
+| 20 | POST | `/interviews/{id}/retry` | fetch | `accessToken` |
+| 21 | POST | `/interviews/{id}/feedback-disagreements` | fetch | `accessToken` |
+| 22 | GET | `/analysis-runs/{runId}/candidates` | fetch | `accessToken` |
 
-기존 번호 22개를 유지한다(기존 색인 21개 + Sprint 2 예약 #3). #21은 계약이 잔존하지만 Sprint 1 제공·호출 대상에서 제외한다. 이 숫자는 실제 제공 API 수나 구현 완료 수가 아니며, 준비 재시도 등 별도 명세의 추가 경로도 전체 개수에 섞어 세지 않는다.
+총 23개.
 
-`shared/api.ts`에 넣지 않는 것: 1, 2, 7, 8(브라우저 이동 또는 프론트 무관). 3은 Sprint 2 예약이므로 Sprint 1에서는 호출하지 않는다.
+`shared/api.ts`에 넣지 않는 것: 1, 2, 7, 8 (브라우저 이동 또는 프론트 무관). 3은 인터셉터 내부에서만 호출한다.
 
 ### 구현 방식별 분류
 
@@ -1700,5 +1732,6 @@ Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagr
 | 2026-09-17 | `GET /interviews/{id}` 응답에 **`runId`** 필드 추가 — 1b(준비 실패)·`repo_unreachable`에서 "레포 다시 선택"으로 5a-v2에 진입하려면 `/analysis-runs/{runId}/result`가 필요한데, 새로고침 시 FE가 `runId`를 보유하지 않아 경로가 끊겼다 |
 | 2026-09-17 | **`POST /reports/{id}/feedback-disagreements` → `POST /interviews/{id}/feedback-disagreements`** — `{id}`는 `interviewId`다. 리포트는 면접당 1개이고 #19 응답에 `reportId`가 없어 FE가 보유한 식별자는 `interviewId`뿐이다. 제출 단위 표기도 `(reportId, persona)` → `(interviewId, persona)`로 정정, `404 not_found` 추가 |
 | 2026-09-17 | #13 SSE에 **구독 전 `GET /analysis-runs/{runId}` 스냅샷 호출 명시** — 스트림은 구독 시점 이후 델타만 전달하므로 새로고침 시 이전 `step` 이벤트를 복구할 수 없다 |
+| 2026-09-23 | **준비 재시도를 WS `prepareRetry` → `POST /interviews/{id}/prepare/retry`(#23)로 이동** — `spec/ai/decisions/0010:32`(Accepted, 2026-09-15) 반영. 거절 reason `prep_in_progress`(409)·`session_expired`(410) 신설, 성공은 `204` |
+| 2026-09-23 | WS `answer`에 **`turn` 추가** — `spec/ai/decisions/0010:30` 반영. 불일치 시 `answer_stale_turn` 신설 |
 | 2026-09-17 | #19의 **`202 Accepted`를 Failure → Response로 이동** (생성 중은 실패가 아님), `error.retryAfter`와 본문 최상위 `retryAfter`의 위치 차이 명시 |
-| 2026-09-22 | [공통 0003](../../spec/shared/decisions/0003-sprint1-session-auth.md): Sprint 1은 기존 Redis·HttpOnly `devon_session`·14일 sliding 세션으로 확정. JWT·refresh 및 #3은 Sprint 2로 이관. 기존 번호와 과거안은 보존하며 실제 인증 구현·검증은 후속 작업으로 구분 |
