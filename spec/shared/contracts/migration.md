@@ -30,6 +30,8 @@
 | Private repo | 지원하지 않음. 필드만 유지 | FIX |
 | Report score | 0~100 score 6개와 단순 평균 `totalScore`; 세부 기준 seed는 보강 가능 | FIX |
 | pgvector | 실제 vector 검색 필요 여부 | `PENDING_AI` |
+| `answer`의 `turn` | `{ type, turn, text }`. `spec/ai/decisions/0010:30` 반영, BE 합의 2026-09-23. 불일치 시 `answer_stale_turn`(recoverable `true`)으로 거절하며 화면은 초안을 버리고 현재 질문으로 돌아간다 | FIX |
+| 명시적 이탈 통지 | `abandoned`는 명시적 이탈과 레포 재선택으로만 설정한다 (`spec/frontend/features/interview.md:90`, `backend/docs/pipeline.md:241-242`). 그런데 FE가 "나가기를 눌렀다"를 서버에 알릴 수단이 계약에 없다 — REST 엔드포인트 없음, WS 클라이언트 메시지는 `answer`뿐 (`frontend/docs/api-spec.md:1152`), close code 규약도 없음. 서버가 끊김과 구분할 수 없어 Sprint 1에서 이탈 모달은 화면만 닫는다. FE 제안은 REST — 이탈 모달은 재연결 중에도 누를 수 있어 소켓이 죽은 상태에서는 close code·WS 메시지가 나가지 못한다. 덧붙여 `frontend/docs/api-spec.md:1140`·`:1604`는 아직 "재연결 실패 시 `abandoned` 확정"으로 적혀 있어 위 결정과 충돌한다 | `PENDING_BE` |
 | 준비 재시도 경로 | REST `POST /interviews/{id}/prepare/retry`. `spec/ai/decisions/0010:32` 반영, BE 합의 2026-09-23. 거절 reason `prep_in_progress`(409)·`session_expired`(410) 신설 | FIX |
 | 수동 재시도 상한 | 사용자가 `다시 시도`를 누를 수 있는 횟수의 상한이 없다. `analysis_jobs.retry_count`는 지표이고 차단 규칙이 아니다 (`spec/ai/decisions/0010:72`, `backend/docs/pipeline.md:13`). LLM 호출 상한(최초 1 + 자동 1)만 있어 수동 N회는 최대 2×(N+1)회 호출이 된다 (`spec/ai/contracts.md:141`) | `PENDING_BE` |
 | 준비 실패 대기 시간 | `github_api_rate_limited`의 화면 처리는 "대기 후 재시도"인데 (`spec/frontend/features/interview.md:200`) 대기 시간을 담을 필드가 없다. WS `error`(`frontend/docs/api-spec.md:1183`)와 `InterviewLastError`(`openapi.yaml:866`)는 `openapi.yaml:870-871`에 따라 같은 모양을 유지해야 해 한쪽만 고칠 수 없다 | `PENDING_TEAM` |

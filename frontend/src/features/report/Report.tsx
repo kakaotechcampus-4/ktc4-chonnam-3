@@ -4,19 +4,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
-import type { AgentFeedback, ApiError, Persona, ReportResponse } from '@/types/api';
-
-const ROLE_LABELS: Record<Persona, string> = {
-  tech_lead: '개발팀',
-  hr_manager: '인사팀',
-  domain_lead: '기획팀',
-};
-
-const ROLE_INITIALS: Record<Persona, string> = {
-  tech_lead: '개발',
-  hr_manager: '인사',
-  domain_lead: '기획',
-};
+import { PERSONA_INITIALS, PERSONA_LABELS } from '@/shared/persona';
+import type { AgentFeedback, ApiError, ReportResponse } from '@/types/api';
 
 export default function Report() {
   const { id = '' } = useParams<{ id: string }>();
@@ -132,11 +121,11 @@ export default function Report() {
                 >
                   <div className="flex gap-2.5">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[11px] font-bold text-accent">
-                      {ROLE_INITIALS[turn.persona]}
+                      {PERSONA_INITIALS[turn.persona]}
                     </span>
                     <div className="flex-1">
                       <p className="text-[11.5px] font-bold text-accent">
-                        {ROLE_LABELS[turn.persona]}
+                        {PERSONA_LABELS[turn.persona]}
                       </p>
                       <p className="text-xs">{turn.question}</p>
                     </div>
@@ -196,11 +185,11 @@ function FeedbackCard({ feedback }: { feedback: AgentFeedback }) {
   return (
     <div className="flex gap-3 rounded-lg border border-line-soft p-3.5">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[11.5px] font-bold text-accent">
-        {ROLE_INITIALS[feedback.persona]}
+        {PERSONA_INITIALS[feedback.persona]}
       </span>
       <div className="flex flex-1 flex-col gap-1.5">
         <div className="flex items-center justify-between">
-          <p className="text-[13.5px] font-bold">{ROLE_LABELS[feedback.persona]}</p>
+          <p className="text-[13.5px] font-bold">{PERSONA_LABELS[feedback.persona]}</p>
           <span className="rounded-full bg-paper px-2.5 py-0.5 text-[10.5px] font-bold text-muted">
             {feedback.tags.join(' · ')}
           </span>
