@@ -142,6 +142,8 @@ class AttemptMetadata:
 
 @dataclass(frozen=True)
 class ModelResult[T]:
+    """이번 호출분의 결과와 시도 기록. 공유 작업의 과거 attempts는 다시 반환하지 않는다."""
+
     data: T | None = field(repr=False)
     failure: CallFailure | None
     attempts: tuple[AttemptMetadata, ...]
@@ -595,7 +597,7 @@ class Evidence(_Contract):
         if (self.repository_id is None) != (self.git_ref is None):
             raise ContractError("semantic", "repository ref")
         if self.git_ref is not None:
-            _sha(self.git_ref)
+            _sha(self.git_ref, "git_ref")
         if (self.path is None) == (self.metadata_key is None):
             raise ContractError("semantic", "evidence location")
         if self.path is not None:
@@ -666,7 +668,7 @@ class ContextRepository(_Contract):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        _sha(self.git_ref)
+        _sha(self.git_ref, "git_ref")
         _unique(cast(tuple[object, ...], self.analysis_refs), "analysis_refs")
 
 
@@ -724,9 +726,9 @@ class Context(_Contract):
         _unique(cast(tuple[object, ...], self.allowed_personas), "allowed_personas")
 
 
-def _sha(value: str) -> None:
+def _sha(value: str, name: str = "head_sha") -> None:
     if fullmatch(r"[0-9a-f]{40}", value) is None:
-        raise ContractError("schema", "head_sha")
+        raise ContractError("schema", name)
 
 
 def _repository_path(value: str) -> None:

@@ -250,6 +250,30 @@ def test_evidence_validates_fixed_ref_and_omitted_optional_fields() -> None:
         c.decode(c.Evidence, payload)
 
 
+def test_git_ref_sha_errors_name_the_field_without_echoing_input() -> None:
+    invalid_git_ref = "private-invalid-ref"
+    factories = (
+        lambda: c.Evidence(
+            None,
+            "repo-1",
+            invalid_git_ref,
+            "source_file",
+            "src/cache.py",
+            None,
+            "code",
+            None,
+        ),
+        lambda: c.ContextRepository("repo-1", invalid_git_ref, True, (), ()),
+    )
+
+    for factory in factories:
+        with pytest.raises(c.ContractError) as failure:
+            factory()
+        assert failure.value.stage == "schema"
+        assert failure.value.field == "git_ref"
+        assert invalid_git_ref not in str(failure.value)
+
+
 def test_metadata_evidence_cannot_claim_source_line_numbers() -> None:
     with pytest.raises(c.ContractError):
         c.Evidence(None, None, None, "commit", None, "commit_count", "3", None, None, 1, 1)

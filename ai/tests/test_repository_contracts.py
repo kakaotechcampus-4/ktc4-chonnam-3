@@ -144,8 +144,10 @@ def test_parse_shallow_batch_missing_or_wrong_type_sha_is_schema_failure(head_sh
 
 @pytest.mark.parametrize("head_sha", ["main", "a" * 39, "g" * 40, "A" * 40])
 def test_repository_contract_requires_lowercase_full_sha(head_sha: str) -> None:
-    with pytest.raises(c.ContractError):
+    with pytest.raises(c.ContractError) as failure:
         _shallow(head_sha=head_sha)
+    assert failure.value.field == "head_sha"
+    assert head_sha not in str(failure.value)
 
 
 def test_partial_l0_input_requires_l1_limitations() -> None:
