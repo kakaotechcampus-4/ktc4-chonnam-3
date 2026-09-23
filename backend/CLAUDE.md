@@ -20,12 +20,12 @@
 - GitHub token은 FE에 노출하지 않는다. BE가 암호화 저장하고 GitHub API를 대행한다.
 - GitHub token은 OAuth App long-lived access token 전제다. `github_accounts`에는 `access_token_encrypted`, `token_status`, `token_scope`만 둔다.
 - `token_type`, `token_expires_at`, `refresh_token_encrypted`, `refresh_token_expires_at`는 만들지 않는다.
-- DEVON 자체 JWT는 HttpOnly `accessToken` cookie로 전달한다. WS handshake도 같은 cookie를 사용한다.
-- DEVON JWT payload에는 GitHub access token을 넣지 않는다.
+- Sprint 1 인증은 [공통 0003](../spec/shared/decisions/0003-sprint1-session-auth.md)의 Redis 로그인 세션과 HttpOnly `devon_session` 쿠키를 따른다. REST/SSE/WS에 같은 인증을 적용하고 JWT·갱신 토큰은 Sprint 2로 이관한다.
+- GitHub access token은 로그인 쿠키나 Redis 로그인 세션에 넣지 않는다.
 - API 요청/응답은 camelCase, Python/DB는 snake_case.
 - DB enum은 PostgreSQL ENUM이 아니라 `VARCHAR + CHECK`.
-- Redis는 ARQ broker, lock, SSE mirror, 면접 context snapshot 같은 짧은 상태에 쓴다. 영구 원본은 Postgres.
-- LLM 모델은 Sprint 1에서 `5.5 Luna`로 고정한다. 코드에 모델명을 하드코딩하지 말고 설정/seed에서 읽어 실제 사용값을 DB에 저장한다.
+- Redis는 로그인 세션, ARQ broker, lock, SSE mirror, 면접 context snapshot에 쓴다. 업무 기록의 영구 원본은 Postgres이며 로그인 세션 유실은 재로그인으로 처리한다.
+- LLM 모델·공급자는 [모델 선택 결정](../spec/ai/decisions/0011-sprint1-model-selection.md)과 BE 아키텍처의 현행 기준을 따른다. 코드에 모델명을 하드코딩하지 말고 설정/seed에서 읽어 실제 사용값을 DB에 저장한다.
 - LLM timeout/provider 오류와 구조화 JSON parse/schema 실패는 공통 호출 계층에서 자동 1회 재시도 후 실패 처리한다. semantic 실패는 재호출하지 않는다. 깨진 JSON을 downstream에 넘기지 않는다.
 - `document_claims`는 Sprint 1에 테이블만 만들고 row 생성/claim 추출은 하지 않는다.
 - `evidence_conflicts`는 Sprint 1에 만들며 `answer_vs_code` 용도로만 사용한다. `claim_id` FK는 Sprint 2.
@@ -56,5 +56,6 @@ DB 기능은 PostgreSQL 기준으로 검증한다. SQLite로 대체하지 않는
 - 고정 설계: `spec/backend/`
 - 공통 API 계약: `spec/shared/contracts/openapi.yaml`
 - 구현 체크리스트: `backend/docs/task-*.md`
-- 결정/보류 변경 기록: 루트 `report.md`
+- 결정 기록: `spec/backend/decisions/`; 공통 계약에 영향이 있으면 `spec/shared/decisions/`
+- 구현 대기·보류: 관련 `spec/backend/features/`와 `backend/docs/task-*.md`
 - AI 실행 계획: `.claude/scratch/plans/`

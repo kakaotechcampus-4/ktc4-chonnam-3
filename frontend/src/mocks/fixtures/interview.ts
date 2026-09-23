@@ -1,13 +1,15 @@
-import type { ContractAgentFeedback, ContractScore, ContractTurn } from '@/types/contract';
+import type { AgentFeedback, InterviewTurn, ReportCoverage, ScoreItem } from '@/types/api';
+import { REQ_MONITORING, REQ_PAYMENT_DOMAIN, jdRequirements } from './jd';
 
 /**
  * 면접 턴 구성은 `spec/backend/features/interview.md`의 Turn 정책을 따른다.
- * 기본 9턴, 1턴은 `hr_manager` 고정, `tech_lead` 6턴, `domain_lead`+`hr_manager` 합산 3턴.
+ * 아래 예시는 9턴·첫 HR·기술 6턴·도메인 1턴·HR 2턴이며, 역할별 고정 배분을 뜻하지 않는다.
+ * 실제 정책은 기술 목표 6턴·최소 5턴, 도메인·HR 합산 최소 3턴이고 개별 배분은 유동적이다.
  */
 export const TOTAL_TURNS = 9;
 
 /** 면접 생성 직후 준비가 끝나면 노출되는 첫 질문. */
-export const firstTurn: ContractTurn = {
+export const firstTurn: InterviewTurn = {
   turn: 1,
   persona: 'hr_manager',
   question: '먼저 긴장 푸시고, 선택하신 프로젝트 중 가장 애착이 가는 걸 하나만 소개해주세요.',
@@ -15,7 +17,7 @@ export const firstTurn: ContractTurn = {
 };
 
 /** 이미 종료된 면접(seed)의 전체 턴. 리포트/마이페이지 화면 개발용. */
-export const completedTurns: ContractTurn[] = [
+export const completedTurns: InterviewTurn[] = [
   {
     ...firstTurn,
     answer: 'payment-service가 가장 기억에 남습니다. 결제 실패 재시도를 직접 설계했습니다.',
@@ -77,10 +79,10 @@ export const completedTurns: ContractTurn[] = [
 
 /**
  * score key/label은 `score_criteria` 시드에서 내려오는 값이다.
- * 점수 산정 방식은 `spec/backend/features/report.md`에서 PENDING_TEAM이므로
- * 아래 값은 화면 확인용 예시다.
+ * 점수 6개·0~100 범위·단순 평균은 `spec/backend/features/report.md`의 확정 정책이다.
+ * 아래 값은 화면 확인용 예시이며 실제 세부 채점 기준의 검수·적용 결과가 아니다.
  */
-export const reportScores: ContractScore[] = [
+export const reportScores: ScoreItem[] = [
   { key: 'project_understanding', label: '프로젝트 이해도', score: 88 },
   { key: 'technical_reasoning', label: '기술적 사고력', score: 79 },
   { key: 'problem_solving', label: '문제 해결력', score: 83 },
@@ -89,7 +91,7 @@ export const reportScores: ContractScore[] = [
   { key: 'company_job_fit', label: '기업·직무 적합성', score: 82 },
 ];
 
-export const reportFeedbacks: ContractAgentFeedback[] = [
+export const reportFeedbacks: AgentFeedback[] = [
   {
     persona: 'tech_lead',
     tags: ['Architecture', 'Trade-off'],
@@ -100,19 +102,48 @@ export const reportFeedbacks: ContractAgentFeedback[] = [
       '캐시 TTL 600초는 변경 주기 추정에만 근거했고, 다른 값과 비교한 흔적이 없습니다.',
       '다중 서버 동시 쓰기 상황의 캐시 정합성은 답변하지 못했습니다.',
     ],
+    disagreementSubmitted: false,
   },
   {
     persona: 'domain_lead',
     tags: ['Payment', 'Reconciliation'],
     strengths: ['실패 건 적재 테이블을 둬서 정산 대사 흐름을 고려한 점이 좋았습니다.'],
     improvements: ['대사 주기와 정합성 기준을 누가 정했는지는 설명이 부족했습니다.'],
+    disagreementSubmitted: false,
   },
   {
     persona: 'hr_manager',
     tags: ['Collaboration', 'Decision'],
     strengths: ['이견을 비용이라는 공통 기준으로 정리한 과정을 구체적으로 설명했습니다.'],
     improvements: ['본인의 기여 범위와 팀의 결정을 구분해 말하면 더 명확해집니다.'],
+    disagreementSubmitted: false,
   },
 ];
 
 export const reportTotalScore = 81;
+
+/**
+ * 리포트 상단 구성 요소. 계약의 ReportResponse required 필드다.
+ * positionLabel은 화면 표기용 한글 라벨, position은 공고 원문 값이다.
+ */
+export const reportPositionLabel = '백엔드 개발자';
+export const reportHeadline = '결제 도메인의 장애 대응 근거가 뚜렷한 지원자입니다';
+export const reportSummary =
+  '멱등성과 2중 방어처럼 실제 장애를 겪고 내린 판단은 근거가 분명했습니다. ' +
+  '반면 캐시 정합성처럼 여러 서버가 얽히는 상황은 아직 설명이 비어 있습니다.';
+export const reportCompletedAt = '2026-09-01T15:20:00Z';
+export const reportRepositoryNames = ['payment-service', 'project-a'];
+
+/**
+ * 면접에서 다뤄진 JD 요구사항 커버리지.
+ * uncoveredRequirements 는 화면이 그대로 출력하므로 id가 아니라 text를 담는다.
+ */
+const uncoveredIds = [REQ_PAYMENT_DOMAIN, REQ_MONITORING];
+
+export const reportCoverage: ReportCoverage = {
+  totalRequirements: jdRequirements.length,
+  coveredRequirements: jdRequirements.length - uncoveredIds.length,
+  uncoveredRequirements: jdRequirements
+    .filter((req) => uncoveredIds.includes(req.id))
+    .map((req) => req.text),
+};

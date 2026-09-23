@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+
 type ActivePage = 'home' | 'mypage' | 'interview';
 
 type HeaderProps = {
@@ -16,27 +18,27 @@ export default function Header({ active, githubLinked, name, avatarUrl }: Header
           {active === 'home' ? (
             <span className="rounded-full bg-accent-soft px-3 py-1.5 font-medium text-accent">홈</span>
           ) : (
-            <a href="/home" className="rounded-full px-3 py-1.5 text-muted hover:bg-paper">
+            <Link to="/home" className="rounded-full px-3 py-1.5 text-muted hover:bg-paper">
               홈
-            </a>
+            </Link>
           )}
           {active === 'interview' ? (
             <span className="rounded-full bg-accent-soft px-3 py-1.5 font-medium text-accent">
               모의면접
             </span>
           ) : (
-            <a href="/interview/new" className="rounded-full px-3 py-1.5 text-muted hover:bg-paper">
+            <Link to="/interview/new" className="rounded-full px-3 py-1.5 text-muted hover:bg-paper">
               모의면접
-            </a>
+            </Link>
           )}
           {active === 'mypage' ? (
             <span className="rounded-full bg-accent-soft px-3 py-1.5 font-medium text-accent">
               마이페이지
             </span>
           ) : (
-            <a href="/mypage" className="rounded-full px-3 py-1.5 text-muted hover:bg-paper">
+            <Link to="/mypage" className="rounded-full px-3 py-1.5 text-muted hover:bg-paper">
               마이페이지
-            </a>
+            </Link>
           )}
         </nav>
       </div>
@@ -46,7 +48,7 @@ export default function Header({ active, githubLinked, name, avatarUrl }: Header
             GitHub 연동됨
           </span>
         )}
-        <a href="/mypage" aria-label="마이페이지">
+        <Link to="/mypage" aria-label="마이페이지">
           {avatarUrl ? (
             <img src={avatarUrl} alt={name ?? ''} className="h-8 w-8 rounded-full object-cover" />
           ) : (
@@ -54,7 +56,7 @@ export default function Header({ active, githubLinked, name, avatarUrl }: Header
               {name?.charAt(0) ?? ''}
             </span>
           )}
-        </a>
+        </Link>
       </div>
     </header>
   );

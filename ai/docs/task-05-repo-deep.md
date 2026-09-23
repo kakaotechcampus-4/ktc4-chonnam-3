@@ -11,20 +11,20 @@ BE가 선택한 primary 저장소의 고정 SHA와 허용 원문만 사용해 L2
 
 - [저장소 분석](../../spec/ai/features/repository-analysis.md)의 `분석 단계`, `캐시와 재사용`, `실패와 검증`
 - [AI 작업 Context](../../spec/ai/features/job-context.md)의 `Context Builder 입력`, `Evidence 최소화와 보호`, `멱등성과 stale 결과`
-- [AI 내부 계약](../../spec/ai/contracts.md)의 `task별 structured output 범위`, `Evidence와 ToolResult 제안`
+- [AI 내부 계약](../../spec/ai/contracts.md)의 `task별 structured output 범위`, `Evidence와 ToolResult`
 - [0001 기준선](../../spec/ai/decisions/0001-ai-baseline.md), [0002 vector 미도입](../../spec/ai/decisions/0002-sprint1-vector-search.md), [0006 작업별 LLM 정책](../../spec/ai/decisions/0006-task-llm-usage-policy.md)
 - [0008 AI 후보 검증·선택 정책](../../spec/ai/decisions/0008-ai-candidate-policy.md)의 L2 관찰 근거 범위
-- [잔여 결정 목록](../../later.md)의 `AI-L06 L2 부분 결과의 준비 성공·지원 범위 계약`, `AI-L08 제한 검색의 실행 범위와 운영 계약`
+- [0018 기존안 일괄 정리](../../spec/ai/decisions/0018-existing-baseline-bulk-resolution.md), [구현·검수 인계](pipeline.md#기존-id별-구현검수-인계)의 기존 AI-L06·AI-L08 항목
 - [근거 검색](../../spec/ai/features/evidence-retrieval.md)의 Sprint 1 허용 경로와 ref 제한
 
 ## 선행 조건
 
 - 고정 SHA, 단일 파일 path, 유효·무효 notable area와 부분 결과 fixture는 실제 GitHub·모델 없이 구현할 수 있다.
-- L2 입력·출력의 정확한 필드는 AI-L02에서 채택된 범위만 사용하며 Proposed 구조를 새 schema로 먼저 고정하지 않는다.
-- L2는 기존 LLM 사용 방향을 유지하지만 실제 provider 연결은 AI-L01, 실행 budget은 AI-L04 결정 뒤 수행한다.
+- L2 입력·출력은 채택한 기존 계약을 유지하고 상세 타입·참조·저장 연결은 생산자·소비자에 맞춰 구현·검증한다. 새 구조를 먼저 추가하지 않는다.
+- L2는 기존 LLM 사용 방향을 유지한다. 실제 provider 연결은 계정·지원 기능 확인과 실행 상한 설정·검증 뒤 수행한다.
 - 검증된 notable area가 총 0개면 `preparing_failed`다. 실패 repo/path/area는 질문 근거에서 제외하고 내부 context limitations에 남긴다.
-- 사용 가능·제한·무효 관찰의 의미 정책은 Accepted이며 지원 기능 목록과 context limitations의 정확한 저장 필드만 AI-L06에 남는다.
-- directory path의 열거 깊이·개수·byte/token/time 상한은 AI-L08 결정 전 production 조회로 연결하지 않는다.
+- 사용 가능·제한·무효 관찰의 의미와 Sprint 1 FE의 상세 limitations 비공개는 Accepted다. 실제 지원 언어·도구 기능은 구현과 fixture로 확인하고 정확한 저장 필드는 기존 Context 안에서 구체화한다. 별도 사용자 질문으로 만들거나 검증하지 않은 지원 범위를 선언하지 않는다.
+- directory path의 제한된 열거 방식은 기존 허용 범위 안에서 구현·검증한다. 깊이·개수·byte/token/time 상한은 LLM·Worker 제한과 함께 운영 조건·대표 사례 실측으로 정하며, 설정·검증 전 production 조회로 연결하지 않는다.
 
 ## 대상 파일과 책임
 
@@ -47,7 +47,7 @@ BE가 선택한 primary 저장소의 고정 SHA와 허용 원문만 사용해 L2
 - [ ] notable area는 기존 1~5개 범위를 유지하고 각 항목을 실제 파일 또는 디렉터리 path에 연결한다.
 - [ ] 존재하지 않는 path, 다른 SHA의 path, 허용 범위 밖 path와 근거 없는 함수·줄 위치를 거부한다.
 - [ ] 단일 파일 path는 승인된 source access 결과로 검증하고 읽은 범위와 미확인 부분을 남긴다.
-- [ ] directory path는 AI-L08 상한 승인 전 자동 재귀·전체 tree·global keyword search로 확장하지 않는다.
+- [ ] directory path는 기존 허용 범위와 설정된 상한 안에서만 열거하고 전체 tree·global keyword search로 확장하지 않는다.
 - [ ] 사용 가능·제한·무효 notable area를 분리하고, 검증된 notable area가 하나 이상인 primary repo가 있는지 readiness 입력으로 넘긴다.
 - [ ] notable area가 없거나 검증된 path가 없으면 해당 repo를 L2 준비 성공이나 Evidence 출발점으로 사용하지 않는다.
 - [ ] run의 일반 partial과 필수 L2 미완료로 인한 `preparing_failed` 후보를 구분한다.
@@ -70,11 +70,11 @@ BE가 선택한 primary 저장소의 고정 SHA와 허용 원문만 사용해 L2
 
 - [ ] 모든 채택된 L2 관찰이 고정 SHA, 실제 path와 확인 범위로 추적된다.
 - [ ] 무효 path와 부분 결과가 승인 없이 면접 준비 완료 또는 evidence로 승격되지 않는다.
-- [ ] directory 조회 상한, readiness 기준과 저장 계약의 미결정을 숨기지 않는다.
+- [ ] 채택한 readiness 기준과 실제 조회 상한·저장 연결의 구현·검증 결과를 구분하고 미설정·미검증 부분을 숨기지 않는다.
 - [ ] 실제 provider·GitHub·BE 준비 흐름 검증 전 L2 production 완료로 보고하지 않는다.
 
-## 결정 대기와 재개 조건
+## 구현·검증과 운영 조건
 
-- ADR 0008의 사용 가능·제한·무효 관찰 fixture는 즉시 구현한다. 0010에 따라 검증된 notable area가 있는 primary repo가 최소 1개면 준비 성공으로 연결할 수 있고, 총 0개면 `preparing_failed`다. AI-L06에는 지원 언어·parser·읽기 capability와 context limitations 저장 필드가 남는다.
-- AI-L08 전에는 고정 ref의 단일 파일 검증과 directory 무확장 정책을 진행한다. AI·BE가 파일 열거 방식, 주변 범위·깊이·개수·byte/token/time 상한을 승인하면 directory 조회를 재개한다.
-- AI-L02·L04·L18의 계약, budget, 원문 보존 결정이 필요한 부분만 대기하며 고정 SHA/path 정책 fixture 검증은 계속한다.
+- ADR 0008의 사용 가능·제한·무효 관찰 fixture는 즉시 구현한다. 0010에 따라 검증된 notable area가 있는 primary repo가 최소 1개면 준비 성공으로 연결할 수 있고, 총 0개면 `preparing_failed`다. 지원 언어·parser·읽기 기능과 context limitations의 저장 연결은 기존 구조 안에서 구현·검증한다. 상세 한계 비공개를 다시 미정으로 취급하지 않는다.
+- 고정 ref의 단일 파일 검증과 제한된 디렉터리 열거 fixture는 운영값 확정 전에도 진행한다. 기존 범위를 확대하지 않으며 실제 조회는 운영 조건·실측에 따라 상한을 설정·검증한 뒤 연결한다. 기존 notable area 1~5개를 읽을 파일 수 상한으로 대신하지 않는다.
+- 기존 AI-L02·L06·L08의 상세 연결은 [구현·검증 체크](pipeline.md)로 관리한다. 운영 상한·자료 보관 조건이 필요한 실제 호출·저장만 해당 조건 확인 뒤 연결하고, 고정 SHA/path 정책 fixture 검증은 계속한다. 문서 정리를 runtime·지원 범위 검증 완료로 보고하지 않는다.

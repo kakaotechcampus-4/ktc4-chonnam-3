@@ -15,7 +15,10 @@ Pydantic schema와 공통 계약 테스트를 만든다.
 - `StepKey`: `doc_extract`, `repo_select`, `repo_detail`, `jd_fetch`, `jd_extract`, `repo_analyze`, `match_score`.
 - `Persona`: `tech_lead`, `hr_manager`, `domain_lead`.
 - `DocumentExtractStatus`: `succeeded`, `partial`, `failed`.
+- `DocumentPreviewResponse`는 `documentId`, `extractStatus` 두 필드, `CreateAnalysisRunResponse`는 `runId`만 반환한다.
 - 계약 테스트에서 응답에 snake_case key가 새지 않는지 확인한다.
+
+이는 구현할 계약이다. 로컬 응답 schema 골격과 `tests/contract/`의 존재가 schema·계약 테스트 구현 완료를 뜻하지 않는다.
 
 ## 완료 조건
 

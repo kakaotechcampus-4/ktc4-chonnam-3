@@ -30,16 +30,20 @@ export type ReasonType =
 
 // 2. 공통 에러 타입
 
-export type ApiError = {
-  status: number;
+// 네트워크로 오는 본문 그대로. openapi.yaml #/components/schemas/ApiError 와 1:1 이다.
+export type ApiErrorBody = {
   error: {
     reason: string;
     message: string;
     retryAfter?: number;
+    details?: Record<string, unknown>;
   };
 };
 
-export function isApiError(value: unknown): value is Omit<ApiError, 'status'> {
+// 클라이언트가 HTTP 상태코드를 덧붙인 형태. 본문에는 status 가 없다.
+export type ApiError = ApiErrorBody & { status: number };
+
+export function isApiError(value: unknown): value is ApiErrorBody {
   if (typeof value !== 'object' || value === null) return false;
   if (!('error' in value)) return false;
 
@@ -114,7 +118,8 @@ export type MeProfileResponse = {
 export type InterviewSummary = {
   id: string;
   position: string;
-  companyName: string;
+  // 회사명이 없는 공고가 있다. openapi.yaml·api-spec.md #10 모두 nullable 이다.
+  companyName: string | null;
   techStack: string[];
   careerLevel: string;
   repositoryNames: string[];
@@ -294,29 +299,43 @@ export type InterviewDetailResponse = {
   lastError: InterviewLastError | null;
 };
 
-// 4. WebSocket 메시지 타입
+// 4. WebSocket 메시지 타입 — frontend/docs/api-spec.md #18
 
-// Sprint 1 클라이언트 메시지는 answer 하나다. 준비 재시도는 REST #23으로 처리한다
-// (spec/ai/decisions/0010:32). turn 은 :30 에 따라 싣는다.
+/**
+ * 준비 단계 4개는 모두 필수 실행이라 `skipped`가 오지 않는다.
+ * `skipped`는 분석 StepKey(#13·#14) 전용이다.
+ */
+export type PrepareStepStatus = Exclude<StepStatus, 'skipped'>;
+
+/**
+ * 1차 스프린트는 텍스트 전용이다(`answerMode: 'text'`).
+ * 음성 전환(`answerStart` → 오디오 바이너리 → `answerEnd`, `transcript`)은 2차 범위다.
+ *
+ * `answer`는 현재 답변 가능한 `turn`과 함께 제출 버튼 클릭 시 1회 전송한다. 초안 저장은 없다.
+ * `turn` 없이 보내면 서버가 "마지막 턴"으로 추정해야 하고, 재연결이 늦으면
+ * 지난 턴 답변이 다음 질문에 붙는다. api-spec.md #18
+ *
+ * 준비 실패 재시도는 WS 메시지가 아니라 `POST /interviews/{id}/prepare/retry` 다(0010 결정).
+ */
 export type WsClientMessage = { type: 'answer'; turn: number; text: string };
+
+/**
+ * WS 오류는 `GET /interviews/{id}`의 `lastError`와 같은 형태다.
+ * 새로고침으로 WS 메시지를 놓쳐도 조회로 같은 정보를 복구할 수 있어야 하기 때문이다.
+ * `reason` 값 목록과 화면 처리는 api-spec.md #18의 표를 따른다. 계약대로 union으로 고정하지 않는다.
+ */
+export type WsErrorMessage = { type: 'error' } & InterviewLastError;
 
 export type WsServerMessage =
   | { type: 'prepareStep'; key: PrepareStepKey; status: PrepareStepStatus }
   | { type: 'prepareCompleted' }
+  /** 서버가 답변 수신·저장을 완료했다는 신호. 이때까지 입력창을 잠근다. */
   | { type: 'answerReceived' }
   | { type: 'thinking' }
   | { type: 'evidenceCheck'; repository: string; file: string }
   | { type: 'question'; persona: Persona; text: string; turn: number }
   | { type: 'interviewEnd' }
-  // step 은 준비 단계 오류일 때만 값이 있고, 진행 중 오류에서는 null 이다.
-  | {
-      type: 'error';
-      reason: string;
-      code: string;
-      step: PrepareStepKey | null;
-      recoverable: boolean;
-      occurredAt: string;
-    };
+  | WsErrorMessage;
 
 // 5c-v2 면접 리포트 GET /interviews/{id}/report
 

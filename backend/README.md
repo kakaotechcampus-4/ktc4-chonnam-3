@@ -13,7 +13,7 @@ AI 원본은 [ai/src/devon_ai](../ai/src/devon_ai/)의 로컬 Python 패키지�
 | [error-reasons.md](docs/error-reasons.md) | 에러 봉투 · 3계층 reason 레지스트리                   |
 | [redis-keys.md](docs/redis-keys.md)       | Redis 키 설계표                                       |
 | [pipeline.md](docs/pipeline.md)           | ARQ · run 실행 흐름 · SSE · WebSocket                 |
-| [testing.md](docs/testing.md)             | 테스트 전략 · 필수 테스트 4개 · Eval                  |
+| [testing.md](docs/testing.md)             | 테스트 전략 · 구현 시 검증할 항목 · Eval              |
 | [deploy.md](docs/deploy.md)               | AWS 통합 배포(CloudFront) · 쿠키 · CI                 |
 | [api-spec.md](docs/api-spec.md)           | FE 계약 링크 + 합의된 변경                            |
 
@@ -65,7 +65,7 @@ app/
 ├─ db/              # engine/session + models/ (테이블별 모듈)
 ├─ shared/          # CamelModel, enums, 페이지네이션, clock
 ├─ features/        # 도메인별 API (auth, me, analysis, interview, report) — FE src/features 와 1:1
-│  └─ analysis/pipeline/   # job_type 3종 + steps/ 7개
+│  └─ analysis/pipeline/   # 분석 7단계 골격. 현행 job 연결은 docs/pipeline.md 기준
 ├─ agents/          # AI 패키지 연결 예정 경계. Director 원본은 ../ai/src/devon_ai
 │  └─ director/     # agent.py + 실제 Evidence 도구 adapter 경계
 ├─ llm_tasks/       # AI task 연결, prompt_loader, BE 규칙 변환·집계
@@ -91,25 +91,28 @@ router → service → { queries | agents | llm_tasks | integrations | realtime 
 - `service.py` — 트랜잭션 경계. 여기서만 `commit()`.
 - 읽기 쿼리 모음은 **`queries.py`** 다. `repository.py` 라는 이름은 쓰지 않는다 —
   `repositories` 가 GitHub 레포 테이블이라 이름이 겹친다.
-- **Agent는 Director 하나다.** AI 원본은 `devon_ai.agents.director`이며 Evidence 조회는 별도 Agent가 아니라 주입된 Tool이다. AI의 repo shallow/deep·답변 분석·리포트 모듈은 `devon_ai.llm_tasks`에 둔다. Sprint 1 Wanted 변환·프로필 확정 집계는 BE에서 LLM 없이 처리하며 문서 Claim은 후속이다.
+- **Agent는 Director 하나다.** AI 원본은 `devon_ai.agents.director`이며 Evidence 조회는 별도 Agent가 아니라 주입된 Tool이다. AI의 repo shallow/deep·답변 분석·리포트 모듈은 `devon_ai.llm_tasks`에 둔다. Sprint 1 Wanted 변환·프로필 언어·유형 집계는 BE에서 LLM 없이 처리하며, 개인 역할 요약만 [0019 결정](../spec/ai/decisions/0019-sprint1-profile-role-summary-restoration.md)에 따라 기존 `profile_summary` 경계에서 LLM으로 생성할 구현 대상이다. 문서 Claim은 Sprint 2다.
 - `llm_tasks/prompt_loader.py` 만 `AsyncSession` 을 받는다. service 가 이걸로 프롬프트를 로드해
   문자열로 주입하므로, `agents/` 와 나머지 task 는 DB 를 모른 채 Eval 에서 단독 실행된다.
 - `integrations/speech/` 는 없다 — 스프린트1 은 양방향 텍스트다 (스프린트2 에 STT/TTS 추가).
 
 ## API 스펙
 
-API 표면의 유일한 진실은 [`frontend/docs/api-spec.md`](../frontend/docs/api-spec.md) 이고,
-응답 타입은 [`frontend/src/types/api.ts`](../frontend/src/types/api.ts) 와 1:1 로 맞춘다
-(`tests/contract/` 가 응답 키 집합을 대조한다).
+API 표면의 원본은 [`spec/shared/contracts/openapi.yaml`](../spec/shared/contracts/openapi.yaml) 이다.
+WebSocket · SSE · 브라우저 이동 경로는 OpenAPI 로 표현할 수 없어
+[`frontend/docs/api-spec.md`](../frontend/docs/api-spec.md) 가 원본이다
+(범위는 [`spec/shared/contracts/README.md`](../spec/shared/contracts/README.md) 참고).
+응답 필드·enum은 OpenAPI를 기준으로 구현하고 [`frontend/src/types/api.ts`](../frontend/src/types/api.ts)도 이에 맞춘다.
+`tests/contract/`는 현재 자리만 마련되어 있으며 응답 키 집합·required/nullable/enum을 대조하는 테스트는 구현 대기다.
 
 - 에러 봉투와 reason 목록 → [`docs/error-reasons.md`](docs/error-reasons.md)
 - Redis 키 → [`docs/redis-keys.md`](docs/redis-keys.md)
 - 스키마 결정과 1차/2차 경계 → [`docs/db-schema.md`](docs/db-schema.md)
 - 스펙 ↔ 데이터모델 충돌 결정 → [`docs/db-schema.md`](docs/db-schema.md) "설계 초기안 대비 변경"
 
-**FE 와 합의된 변경 (BE 내부명을 그대로 쓴다 — 경계 매핑 레이어 없음)**
+**합의된 API 표기 (옛 표기와 비교)**
 
-| `types/api.ts` 현재                                           | 확정                                                         |
+| 옛 표기                                                      | 현행 계약                                                    |
 | ------------------------------------------------------------- | ------------------------------------------------------------ |
 | `AgentRole = tech_lead \| senior_developer \| manager`        | `tech_lead` / `hr_manager` / `domain_lead`                   |
 | `StepKey` 4개                                                 | 7개 (`doc_extract` … `match_score`)                          |
