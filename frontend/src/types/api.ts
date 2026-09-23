@@ -14,8 +14,6 @@ export type StepKey =
   | 'match_score';
 export type PrepareStepKey = 'analyze_repo' | 'build_persona' | 'compose_question' | 'set_criteria';
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
-/** prepareStepKey 4단계는 모두 필수 실행이라 skipped 가 오지 않는다. skipped 는 stepKey 전용. */
-export type PrepareStepStatus = Exclude<StepStatus, 'skipped'>;
 export type AnswerMode = 'text';
 export type Persona = 'tech_lead' | 'hr_manager' | 'domain_lead';
 export type ScoreKey =
