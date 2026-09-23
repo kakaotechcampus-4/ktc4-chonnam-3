@@ -163,7 +163,8 @@ async def test_partial_schema_failure_preserves_valid_repos_and_shares_total_bud
         second = await call(request(subset), validator(subset))
         assert second.succeeded and second.data.data.failed == ()
         assert [item.repository_id for item in second.data.data.succeeded] == ["retry"]
-        assert [item.attempt for item in second.attempts] == [1, 2]
+        assert [item.attempt for item in first.attempts] == [1]
+        assert [item.attempt for item in second.attempts] == [2]
         third = await call(request(subset), validator(subset))
         assert third.failure.stage == "budget"
 

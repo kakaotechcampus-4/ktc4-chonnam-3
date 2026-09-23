@@ -302,7 +302,9 @@ async def test_shared_batch_budget_prevents_retry_multiplication_across_calls():
         )
     assert first.data == second.data == 7
     assert third.failure.stage == "budget" and calls == 2
-    assert [entry.attempt for entry in second.attempts] == [1, 2]
+    assert [entry.attempt for entry in first.attempts] == [1]
+    assert [entry.attempt for entry in second.attempts] == [2]
+    assert third.attempts == ()
 
 
 @pytest.mark.asyncio
@@ -384,6 +386,7 @@ async def test_semantic_failure_remains_terminal_for_the_shared_operation():
             budget=budget,
         )
     assert first.failure == second.failure and calls == 1
+    assert second.attempts == ()
 
 
 @pytest.mark.asyncio
@@ -422,3 +425,424 @@ async def test_deep_json_is_a_typed_parse_failure(envelope):
         )
     assert result.failure.stage == ("provider" if envelope else "parse")
     assert len(result.attempts) == 2
+
+
+@pytest.mark.parametrize("container", ["array", "object"])
+def test_json_depth_has_an_explicit_inclusive_boundary(container):
+    opening, closing = ("[", "]") if container == "array" else ('{"x":', "}")
+    client._json(opening * 64 + "0" + closing * 64)
+    with pytest.raises(ValueError, match="depth"):
+        client._json(opening * 65 + "0" + closing * 65)
+
+
+def test_json_depth_ignores_brackets_inside_strings():
+    assert client._json(json.dumps({"text": "[" * 1000})) == {"text": "[" * 1000}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("envelope_failure", [True, False])
+async def test_decoder_recursion_error_is_always_a_typed_failure(monkeypatch, envelope_failure):
+    original = client._json
+
+    def fail_json(value):
+        if isinstance(value, bytes) == envelope_failure:
+            raise RecursionError("fixture parser limit")
+        return original(value)
+
+    monkeypatch.setattr(client, "_json", fail_json)
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda req: httpx.Response(200, json=response()))
+    ) as http:
+        result = await client.call_model(
+            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+        )
+    assert result.failure.stage == ("provider" if envelope_failure else "parse")
+    assert len(result.attempts) == 2
+
+
+@pytest.mark.asyncio
+async def test_large_http_error_keeps_provider_classification_and_closes_stream():
+    closed = []
+
+    class ErrorPage(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"x" * 5000
+            pytest.fail("error response must stop at its byte limit")
+
+        async def aclose(self):
+            closed.append(True)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda req: httpx.Response(502, stream=ErrorPage()))
+    ) as http:
+        result = await client.call_model(
+            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+        )
+    assert result.failure.stage == "provider"
+    assert len(result.attempts) == len(closed) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 422])
+async def test_permanent_http_errors_are_terminal_for_the_shared_budget(status):
+    calls = []
+    budget = client.CallBudget()
+
+    def transport(req):
+        calls.append(req)
+        return httpx.Response(status, text="private provider error")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        first = await client.call_model(
+            request(), validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+        )
+        second = await client.call_model(
+            request(), validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+        )
+    assert first.failure.stage == "provider" and first.failure == second.failure
+    assert len(first.attempts) == len(calls) == 1 and second.attempts == ()
+    assert "private provider error" not in repr(first)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["code", "type"])
+@pytest.mark.parametrize(
+    "code",
+    [
+        "insufficient_quota",
+        "credit_balance_exhausted",
+        "billing_limit_exceeded",
+        "organization_usage_limit_exceeded",
+    ],
+)
+async def test_quota_errors_do_not_retry_or_sleep(monkeypatch, field, code):
+    async def forbidden_sleep(delay):
+        pytest.fail("quota failure must not sleep")
+
+    monkeypatch.setattr(client.asyncio, "sleep", forbidden_sleep)
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda req: httpx.Response(
+                429, json={"error": {field: code}}, headers={"Retry-After": "0.5"}
+            )
+        )
+    ) as http:
+        result = await client.call_model(
+            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+        )
+    assert result.failure.stage == "provider" and len(result.attempts) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [429, 503])
+@pytest.mark.parametrize("retry_after", ["0.5", "Thu, 01 Jan 1970 00:00:01 GMT"])
+async def test_retry_after_is_respected_before_a_single_retry(monkeypatch, status, retry_after):
+    events = []
+    monkeypatch.setattr(client.time, "time", lambda: 0.5)
+    monkeypatch.setattr(client.time, "monotonic", lambda: 100.0)
+
+    async def sleep(delay):
+        events.append(("sleep", delay))
+
+    def transport(req):
+        events.append(("request", len(events)))
+        if len(events) == 1:
+            return httpx.Response(
+                status,
+                json={"error": {"code": "rate_limit_exceeded"}},
+                headers={"Retry-After": retry_after},
+            )
+        return httpx.Response(200, json=response())
+
+    monkeypatch.setattr(client.asyncio, "sleep", sleep)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        result = await client.call_model(
+            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+        )
+    assert result.succeeded and len(result.attempts) == 2
+    assert [event[0] for event in events] == ["request", "sleep", "request"]
+    assert 0.5 <= events[1][1] <= request().limits.timeout_seconds
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("retry_after", ["60", "1.01"])
+async def test_retry_after_above_wait_limit_is_not_shortened(monkeypatch, retry_after):
+    async def forbidden_sleep(delay):
+        pytest.fail("do not shorten a server minimum delay")
+
+    monkeypatch.setattr(client.asyncio, "sleep", forbidden_sleep)
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda req: httpx.Response(429, headers={"Retry-After": retry_after})
+        )
+    ) as http:
+        result = await client.call_model(
+            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+        )
+    assert result.failure.stage == "provider" and len(result.attempts) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("retry_after", [None, "invalid", "nan", "inf", "-1"])
+async def test_temporary_rate_limit_without_valid_hint_uses_bounded_backoff(
+    monkeypatch, retry_after
+):
+    delays = []
+
+    async def sleep(delay):
+        delays.append(delay)
+
+    monkeypatch.setattr(client.asyncio, "sleep", sleep)
+    headers = {} if retry_after is None else {"Retry-After": retry_after}
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda req: httpx.Response(429, headers=headers))
+    ) as http:
+        result = await client.call_model(
+            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+        )
+    assert result.failure.stage == "provider" and len(result.attempts) == 2
+    assert len(delays) == 1 and 0 < delays[0] <= request().limits.timeout_seconds
+
+
+@pytest.mark.asyncio
+async def test_cancellation_during_retry_wait_does_not_start_another_attempt(monkeypatch):
+    async def cancel(delay):
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(client.asyncio, "sleep", cancel)
+    budget = client.CallBudget()
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda req: httpx.Response(429, headers={"Retry-After": "0.5"})
+        )
+    ) as http:
+        with pytest.raises(asyncio.CancelledError):
+            await client.call_model(
+                request(),
+                validate,
+                api_key=SecretStr("fixture-key"),
+                http_client=http,
+                budget=budget,
+            )
+    assert budget._used == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad_code", [[], {"nested": "value"}, 123, None])
+async def test_malformed_error_code_is_a_provider_failure_not_a_programming_error(
+    monkeypatch, bad_code
+):
+    async def sleep(delay):
+        pass
+
+    monkeypatch.setattr(client.asyncio, "sleep", sleep)
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda req: httpx.Response(429, json={"error": {"code": bad_code}})
+        )
+    ) as http:
+        result = await client.call_model(
+            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+        )
+    assert result.failure.stage == "provider" and len(result.attempts) == 2
+
+
+@pytest.mark.asyncio
+async def test_no_retry_wait_when_request_attempt_limit_is_one(monkeypatch):
+    async def forbidden_sleep(delay):
+        pytest.fail("there is no next attempt to wait for")
+
+    monkeypatch.setattr(client.asyncio, "sleep", forbidden_sleep)
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda req: httpx.Response(429, headers={"Retry-After": "0.5"})
+        )
+    ) as http:
+        result = await client.call_model(
+            replace(request(), max_attempts=1),
+            validate,
+            api_key=SecretStr("fixture-key"),
+            http_client=http,
+        )
+    assert result.failure.stage == "provider" and len(result.attempts) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("elapsed", "expected_wait"), [(0.0, 0.5), (0.2, 0.3), (0.6, None)])
+async def test_shared_budget_preserves_only_the_remaining_retry_wait(
+    monkeypatch, elapsed, expected_wait
+):
+    clock = [100.0]
+    calls, waits = [], []
+    monkeypatch.setattr(client.time, "monotonic", lambda: clock[0])
+
+    async def sleep(delay):
+        waits.append(delay)
+        clock[0] += delay
+
+    def transport(req):
+        calls.append(clock[0])
+        if len(calls) == 1:
+            return httpx.Response(429, headers={"Retry-After": "0.5"})
+        return httpx.Response(200, json=response())
+
+    monkeypatch.setattr(client.asyncio, "sleep", sleep)
+    budget = client.CallBudget()
+    limited = replace(request(), max_attempts=1)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        first = await client.call_model(
+            limited, validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+        )
+        assert first.failure.stage == "provider" and waits == []
+        clock[0] += elapsed
+        second = await client.call_model(
+            limited, validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+        )
+        third = await client.call_model(
+            limited, validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+        )
+    assert second.succeeded and calls[1] >= 100.5
+    assert waits == ([] if expected_wait is None else [pytest.approx(expected_wait)])
+    assert [item.attempt for item in first.attempts] == [1]
+    assert [item.attempt for item in second.attempts] == [2]
+    assert third.failure.stage == "budget" and third.attempts == () and len(calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_cancelled_retry_wait_is_preserved_when_the_budget_is_reused(monkeypatch):
+    clock = [100.0]
+    calls, waits = [], []
+    monkeypatch.setattr(client.time, "monotonic", lambda: clock[0])
+
+    async def sleep(delay):
+        waits.append(delay)
+        if len(waits) == 1:
+            clock[0] += 0.2
+            raise asyncio.CancelledError
+        clock[0] += delay
+
+    def transport(req):
+        calls.append(clock[0])
+        if len(calls) == 1:
+            return httpx.Response(429, headers={"Retry-After": "0.5"})
+        return httpx.Response(200, json=response())
+
+    monkeypatch.setattr(client.asyncio, "sleep", sleep)
+    budget = client.CallBudget()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        with pytest.raises(asyncio.CancelledError):
+            await client.call_model(
+                request(),
+                validate,
+                api_key=SecretStr("fixture-key"),
+                http_client=http,
+                budget=budget,
+            )
+        assert calls == [100.0]
+        result = await client.call_model(
+            request(), validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+        )
+    assert result.succeeded and [item.attempt for item in result.attempts] == [2]
+    assert waits == [pytest.approx(0.5), pytest.approx(0.3)]
+    assert calls == [100.0, pytest.approx(100.5)]
+
+
+@pytest.mark.asyncio
+async def test_shared_retry_wait_above_the_new_request_limit_is_terminal(monkeypatch):
+    clock = [100.0]
+    calls = []
+    monkeypatch.setattr(client.time, "monotonic", lambda: clock[0])
+
+    async def forbidden_sleep(delay):
+        pytest.fail("do not shorten a server minimum or exceed the next request's wait limit")
+
+    def transport(req):
+        calls.append(req)
+        return httpx.Response(429, headers={"Retry-After": "0.5"})
+
+    monkeypatch.setattr(client.asyncio, "sleep", forbidden_sleep)
+    budget = client.CallBudget()
+    limited = replace(request(), max_attempts=1)
+    shorter = replace(limited, limits=replace(limited.limits, timeout_seconds=0.1))
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        first = await client.call_model(
+            limited, validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+        )
+        clock[0] += 0.2
+        second = await client.call_model(
+            shorter, validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+        )
+        third = await client.call_model(
+            limited, validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+        )
+    assert first.failure.stage == second.failure.stage == "provider"
+    assert second.failure == third.failure
+    assert second.attempts == third.attempts == () and len(calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_permanent_http_error_is_classified_without_reading_its_body():
+    class Unreadable(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            pytest.fail("a known permanent HTTP rejection needs no body")
+            yield b""
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda req: httpx.Response(401, stream=Unreadable()))
+    ) as http:
+        result = await client.call_model(
+            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+        )
+    assert result.failure.stage == "provider" and len(result.attempts) == 1
+    assert result.attempts[0].raw_output is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("retry_after", ["60", "9" * 400])
+async def test_server_wait_limit_survives_an_unreadable_429_body(monkeypatch, retry_after):
+    calls = []
+
+    async def forbidden_sleep(delay):
+        pytest.fail("an excessive server delay is terminal")
+
+    class BrokenBody(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            raise httpx.ReadError("fixture interrupted error response")
+            yield b""
+
+    def transport(req):
+        calls.append(req)
+        return httpx.Response(429, headers={"Retry-After": retry_after}, stream=BrokenBody())
+
+    monkeypatch.setattr(client.asyncio, "sleep", forbidden_sleep)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        result = await client.call_model(
+            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+        )
+    assert len(calls) == 1 and result.failure.stage == "provider"
+
+
+@pytest.mark.asyncio
+async def test_valid_retry_after_survives_an_unreadable_429_body(monkeypatch):
+    events = []
+    monkeypatch.setattr(client.time, "monotonic", lambda: 100.0)
+
+    async def sleep(delay):
+        events.append(("sleep", delay))
+
+    class BrokenBody(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            raise httpx.ReadError("fixture interrupted error response")
+            yield b""
+
+    def transport(req):
+        events.append(("request", 0))
+        return httpx.Response(429, headers={"Retry-After": "0.5"}, stream=BrokenBody())
+
+    monkeypatch.setattr(client.asyncio, "sleep", sleep)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        result = await client.call_model(
+            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+        )
+    assert result.failure.stage == "provider"
+    assert events == [("request", 0), ("sleep", 0.5), ("request", 0)]
