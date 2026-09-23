@@ -1,9 +1,26 @@
 # 질문·평가 내부 계약 채택안
 
-- 상태: **Proposed** — AI-L02 승인 요청용이며 runtime·저장 계약 채택 기록이 아니다.
-- 작성일: 2026-09-21. 범위: Sprint 1 텍스트 면접의 Persona, Question, QuestionContract, AnswerAnalysis, DirectorDecision과 실패·복구 경계.
+- 상태: **Partially Superseded** — 최초 Proposed 제안의 일부가 후속 결정으로 채택됐다. 현재 적용 범위는 아래 후속 기준을 따른다.
+- 작성일: 2026-09-21. 갱신일: 2026-09-23. 범위: Sprint 1 텍스트 면접의 Persona, Question, QuestionContract, AnswerAnalysis, DirectorDecision과 실패·복구 경계.
 - 기준 브랜치: `develop` (`854e2aa`) → `docs/ai-question-eval-contracts`. 선행 구현 브랜치 없음.
-- 산출물은 이 문서 하나다. [task-02](../../../ai/docs/task-02-contracts.md)에 따라 `ai/src/devon_ai/contracts.py`는 AI-L02 승인 전까지 docstring 상태를 유지한다.
+- 최초 산출물은 이 문서 하나였으며 `ai/src/devon_ai/contracts.py`를 docstring 상태로 유지했다. 현재 채택 범위의 구현은 [현행 task-02][current-task-02]를 따른다.
+
+## 후속 결정과 현재 적용 기준
+
+2026-09-23에 `develop`의 `483fc74`를 대조했다. 아래 1~10절의 Proposed 표기·AI-L 보류·승인 전 구현 금지·실행 결과는 **2026-09-21 당시 검토 기록**이다. 현재 작업의 승인 대기 조건으로 사용하지 않는다. 후속 결정과 [현행 내부 계약][current-contracts]이 우선하며, 이번 정리는 당시 제안을 일괄 승인하거나 구현 완료로 바꾸는 작업이 아니다.
+
+[0014][adr-0014]·[0015][adr-0015]에서 명시한 기본 필드·값·저장 위치는 Accepted다. AI-L02의 상세 작업이 남아 있어도 채택된 범위의 fixture·타입 구현은 진행한다. 미채택 상세 타입·참조·공개 변환은 기존 규칙에 맞춰 구체화하며 필드별 사용자 재승인을 요구하지 않는다. 서비스 동작·지원 범위·운영 조건이 달라지는 선택은 해당 경계에서 검토한다.
+
+| 항목 | 현재 채택 범위와 남은 작업 |
+| --- | --- |
+| 질문·분석·판단 저장 | `interview_turns.question_contract`, `interview_turns.analysis`, `interview_turns.decision`의 JSONB 위치와 기존 평면 구조·T3/T4 순서를 따른다. 별도 공통 저장 객체나 JSON의 필수 `schema_version`은 추가하지 않는다. 실제 직렬화·DB 저장 연결은 구현·검증 작업이다. |
+| 질문 근거 참조 | `basis_refs`는 `{kind, id}` 목록이며 kind는 `evidence`, `jd_requirement`, `job_posting`, `answer_turn`, id는 실제 저장 자료의 UUID다. 본문을 복사하지 않고 질문 당시 자료를 연결한다. BE의 존재·권한·범위 검증과 임시 참조의 저장 ID 변환은 구현·검증한다. |
+| 공급자·모델 | [0011][adr-0011]에서 OpenAI `gpt-5.6-luna`를 선택했다. 인증·SDK/client 연결·계정 접근·task별 품질 검증은 남아 있다. |
+| Persona 배분 | [공통 0004][shared-0004]의 첫 HR·정상 9턴·기술 목표 6/최소 5·HR와 domain 합산 최소 3을 따른다. HR/domain 개별 횟수와 첫 질문 이후 순서를 고정하지 않는 정책도 확정됐으며, 실제 제어·검증은 남아 있다. |
+| 원문 보관·재사용 | [0018][adr-0018]에서 후속 내부 비교용 보관·재사용과 최종 내부 비교 검증 뒤 보관 유지, 별도 자동 삭제 기한 없음을 채택했다. 실제 자료의 사용 권한·영구 저장·마스킹·접근·보관 연결은 구현·검증 작업이다. |
+| 실행 상한·복구 | 공통 호출 총 2회·semantic 재호출 금지를 유지한다. 실행·조회 상한의 설정·측정과 기존 복구 의미의 반환·저장 연결은 구현 작업이며, 재작성·재계획 명목의 추가 자동 반복을 승인하지 않는다. |
+
+결정 상태는 [현행 결정 목록][current-decisions], AI-L 번호별 실제 작업은 [구현·검수 인계][current-handoff]에서 확인한다. 최초 기준 브랜치에도 존재하는 원본 링크는 본문에 보존하고, 후속 기준 링크는 확인한 `develop` 커밋으로 고정해 이 PR 브랜치에서도 읽을 수 있게 했다. 새 후속 결정이 생기면 결정 목록의 대체 관계를 함께 확인한다.
 
 ## 1. 목적과 원본
 
@@ -23,7 +40,7 @@
 | R1/R3/R4 | [ADR 0001](../decisions/0001-ai-baseline.md), [0003](../decisions/0003-evidence-lookup-policy.md), [0004](../decisions/0004-answer-assessment-policy.md): 기준선·조회·평가 |
 | R5/R6 | [ADR 0005](../decisions/0005-domain-question-policy.md), [0006](../decisions/0006-task-llm-usage-policy.md): 도메인·작업별 LLM 사용 |
 | R8/R10 | [ADR 0008](../decisions/0008-ai-candidate-policy.md), [0010](../decisions/0010-sprint1-interface-runtime-decisions.md): 후보 정책·호출 attempt |
-| L | [later.md](../../../later.md): 남은 공동 결정; 각 행의 AI-L 번호 참조 |
+| L | 당시 `later.md`의 AI-L 번호는 유지하며, 현재 상태는 [결정 목록][current-decisions]과 [구현·검수 인계][current-handoff]에서 확인 |
 
 추가 읽기 기준은 [아키텍처](../architecture.md), [검증](../verification.md), [AI README](../../../ai/README.md), [pipeline](../../../ai/docs/pipeline.md), [testing](../../../ai/docs/testing.md), [task-03](../../../ai/docs/task-03-llm-boundary.md), [task-09](../../../ai/docs/task-09-answer-analysis.md), [task-10](../../../ai/docs/task-10-director.md), [후속 기능](../features/extensions.md)이다.
 
@@ -66,7 +83,7 @@ Persona 설정은 세 항목이 모두 있는 BE 주입값이다. 식별자의 �
 | `persona` | FIX enum, 현재 `allowed_personas`의 원소 | S/I: FIX 값; C: Proposed | AI 후보, BE 최종 확정 | 기존 공개 persona로 BE 변환 | AI-L02 타입 채택 |
 | `text` | 비어 있지 않은 문자열, 한 중심 목적, null 불가 | I/R5: Accepted 정책; C: Proposed | AI 생성·검증, BE 확정 | 기존 질문 텍스트만 공개 | AI-L02·04 길이 상한 |
 | `topic_code` | 비어 있지 않은 내부 주제 문자열 | C: Proposed | AI 제안, BE 계약 검토 | 내부 후보; 새 taxonomy/FK 없음 | AI-L02 어휘·저장 필요성 |
-| `question_contract` | 아래 Contract 필수, 전달 후 불변 | C/J: Proposed; R4: Accepted 평가 범위 | AI 구성·검증, BE 동시 확정 | JSONB 위치 미정, 공개 안 함 | AI-L02 저장·version |
+| `question_contract` | 아래 Contract 필수, 전달 후 불변 | C/J: 당시 Proposed; R4: Accepted 평가 범위 | AI 구성·검증, BE 동시 확정 | 당시 미정이던 위치는 후속 0014에서 `interview_turns.question_contract` JSONB로 확정, 비공개 | 현행 저장·version 경계는 상단 후속 기준 참조 |
 | `evidence_refs` | 주입된 유효 Evidence 참조 목록, 중복 금지 | C: Proposed; E: FIX 범위 | AI 참조 검사, BE 권한·저장 | BE가 question_basis 관계 저장 | AI-L02 durable 참조 표현 |
 | `jd_requirement_ids` | 현재 JD의 등록 ID 목록, 중복 금지 | C: Proposed | AI 관련성 검사, BE 소유권 검사 | 내부 연결; 공개 확장 없음 | AI-L02 참조 타입·저장 |
 | `question_contract.purpose` | 실제 질문의 중심 목적, 비어 있지 않은 문자열 | C: Proposed; I/R8: Accepted 의미 | AI 구성·검증 | 질문과 함께 BE 보존, 비공개 | AI-L02 표현·version |
@@ -205,7 +222,7 @@ quota 검사 시 후보를 현재 Persona 횟수에 1회 더한 뒤, 남은 질�
 
 문서 검토 후 승인된 정확한 범위를 기록하고 해당 항목에서 멈춘다. 커밋은 사용자 확인 후에만 하며 1번 내부 계약 구현, push, PR 생성은 현재 승인 범위에 포함하지 않는다.
 
-## 10. 이번 문서 작업의 실행 검증
+## 10. 최초 문서 작업의 실행 검증
 
 2026-09-21 실행. uv의 캐시·Python 설치 경로는 기존 testing 안내처럼 저장소의 `.claude/scratch/uv-cache`, `.claude/scratch/python`으로 지정했다. 패키지 의존성 선언·lock 변경 없이 Python 3.12.13과 기존 lock의 환경을 복구했다.
 
@@ -222,3 +239,13 @@ quota 검사 시 후보를 현재 Persona 횟수에 1회 더한 뒤, 남은 질�
 | `git diff --exit-code develop -- ai frontend backend CLAUDE.md CODEOWNERS .github/workflows` | 통과: 코드·테스트·의존성·보호 파일 변경 없음 |
 | 이번 계약·기능의 새 테스트, 실제 모델·DB·WS 통합 | 미실행. 위 pytest는 기존 패키지 구조·import 경계 검사에 한정 |
 | AI-L02 채택, AI-L01·04·09·10·18·21 잔여 항목 | 보류. FE/BE 구현·음성·점수 구현·배포는 범위 밖 |
+
+[current-contracts]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/483fc74de5d1c9c710303aa4598910392a7dfaa7/spec/ai/contracts.md
+[current-task-02]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/483fc74de5d1c9c710303aa4598910392a7dfaa7/ai/docs/task-02-contracts.md
+[current-decisions]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/483fc74de5d1c9c710303aa4598910392a7dfaa7/spec/ai/decisions/README.md
+[current-handoff]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/483fc74de5d1c9c710303aa4598910392a7dfaa7/ai/docs/pipeline.md#기존-id별-구현검수-인계
+[adr-0011]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/483fc74de5d1c9c710303aa4598910392a7dfaa7/spec/ai/decisions/0011-sprint1-model-selection.md
+[adr-0014]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/483fc74de5d1c9c710303aa4598910392a7dfaa7/spec/ai/decisions/0014-minimal-change-revision.md
+[adr-0015]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/483fc74de5d1c9c710303aa4598910392a7dfaa7/spec/ai/decisions/0015-existing-contracts-and-tool-results.md
+[adr-0018]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/483fc74de5d1c9c710303aa4598910392a7dfaa7/spec/ai/decisions/0018-existing-baseline-bulk-resolution.md
+[shared-0004]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/483fc74de5d1c9c710303aa4598910392a7dfaa7/spec/shared/decisions/0004-flexible-persona-allocation-restoration.md
