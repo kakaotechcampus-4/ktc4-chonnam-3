@@ -19,11 +19,14 @@ import {
   type ReportGeneratingResponse,
   type FeedbackDisagreementRequest,
 } from '@/types/api';
+import { isSessionEnding } from '@/shared/queryClient';
 
 // MSW 핸들러가 같은 prefix를 참조한다. 값이 바뀌면 mock도 함께 따라간다.
 export const BASE = '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  // Mounted observers can refetch as their cache is cleared, before navigation finishes.
+  if (isSessionEnding()) throw new DOMException('Session ended', 'AbortError');
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     credentials: 'include',
@@ -64,8 +67,6 @@ function requestJson<T>(path: string, method: string, body: unknown): Promise<T>
 }
 
 export const api = {
-  // 401 인터셉터가 single-flight 로 호출한다. 자신은 인터셉터 대상에서 제외한다.
-  refresh: () => request<void>('/auth/refresh', { method: 'POST' }),
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
   getMe: () => request<MeResponse>('/me'),
   getProfile: () => request<MeProfileResponse>('/me/profile'),
