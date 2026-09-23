@@ -2,8 +2,10 @@
 
 docs/layer-rules.md / task-04
 
-Sprint 1 의 페이지네이션은 GET /analysis-runs/{runId}/candidates?page=N 하나뿐이다.
-응답은 offset/total 을 담지 않고 {"repositories": [...]} 만 돌려준다 (openapi CandidatesResponse).
+GET /analysis-runs/{runId}/candidates 의 page 쿼리 파라미터용이다 (openapi 에서 required).
+GET /me/interviews 는 page·size 가 optional + default 라 이 클래스를 그대로 쓰지 않는다.
+candidates 응답은 offset/total 을 담지 않고 {"repositories": [...]} 만 돌려준다
+(openapi CandidatesResponse).
 cursor·total count 가 필요해지면 그때 계약과 함께 넓힌다.
 """
 
