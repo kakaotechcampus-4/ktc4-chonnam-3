@@ -55,8 +55,8 @@ Set-Cookie: devon_session=...; HttpOnly; Secure; SameSite=Lax; Path=/
 
 `Secure` 는 prod 에서 유지한다 — same-origin 이어도 HTTPS 전용 쿠키여야 한다.
 
-`FRONTEND_ORIGIN` 은 prod 에서 CORS 용도로는 쓰이지 않는다. 로컬에서 vite 프록시를 쓰지 않는
-경우의 allowlist 로만 남긴다.
+BE 는 CORS 미들웨어를 두지 않는다 — local·prod 모두 same-origin 이다. `FRONTEND_ORIGIN` 은
+CORS allowlist 로 쓰지 않는다.
 
 ## 3. CloudFront 설정 — 반드시 지킬 것 4가지
 
