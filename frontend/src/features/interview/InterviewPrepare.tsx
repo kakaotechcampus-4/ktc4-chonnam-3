@@ -131,6 +131,8 @@ export default function InterviewPrepare() {
   const [steps, setSteps] = useState<StepMap | null>(null);
   const [error, setError] = useState<InterviewLastError | null>(null);
   const [retried, setRetried] = useState(false);
+  /** 재시도 직전에 보던 오류의 occurredAt. 캐시에 남은 그 오류만 낡은 것으로 본다. */
+  const [staleErrorAt, setStaleErrorAt] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   const [retrying, setRetrying] = useState(false);
   /** 서버가 재시도를 거절한 reason. api-spec.md #23 Failure. */
@@ -167,9 +169,12 @@ export default function InterviewPrepare() {
     if (status === 'completed') navigate(`/interview/${id}/report`, { replace: true });
   }, [status, id, navigate]);
 
-  // 재시도를 누른 뒤에는 스냅샷이 낡은 값이므로 WS로 받은 상태만 본다.
+  // 재시도 직후 캐시에는 방금 지운 오류가 남아 있다. 그 오류만 거르고 새 lastError는 보여준다.
+  // 서버는 preparing_failed에서 WS error를 다시 보내지 않으므로, WS error가 유실되면
+  // 재연결 때 조회한 스냅샷이 실패를 알 유일한 경로다.
   const snapshotError = (status === 'preparing_failed' ? interview?.lastError : null) ?? null;
-  const displayError = retried ? error : (error ?? snapshotError);
+  const freshSnapshotError = snapshotError?.occurredAt !== staleErrorAt ? snapshotError : null;
+  const displayError = error ?? freshSnapshotError;
   const displaySteps = steps ?? stepsFromSnapshot(snapshotError?.step);
 
   useEffect(() => {
@@ -289,12 +294,11 @@ export default function InterviewPrepare() {
       return;
     }
     setRetrying(false);
+    setStaleErrorAt(displayError?.occurredAt ?? null);
     setError(null);
     setReady(false);
     // retried는 소켓을 여는 트리거다. 이미 열려 있으면 올리지 않는다 — effect deps가
     // 바뀌면 cleanup이 멀쩡한 소켓을 닫고 새로 열어 그 사이 prepareStep을 놓친다.
-    // 소켓이 열려 있다는 건 status가 preparing이라는 뜻이라 snapshotError가 null이고,
-    // displayError는 retried 값과 무관하게 error가 된다.
     if (socketRef.current?.readyState !== WebSocket.OPEN) setRetried(true);
     // 성공한 단계는 서버가 재실행하지 않는다. 실패 단계만 pending으로 되돌린다.
     setSteps(
