@@ -7,10 +7,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import Settings, get_settings
-from app.core.exception_handlers import register_exception_handlers
+from app.core.exception_handlers import (
+    register_exception_handlers,
+    register_unhandled_exception_middleware,
+)
 from app.core.logging import RequestIdMiddleware, configure_logging, get_logger
 
 logger = get_logger(__name__)
@@ -56,15 +58,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=None if settings.is_prod else "/openapi.json",
     )
 
-    # 추가 순서의 역순으로 감싸진다 — CORS 가 가장 바깥이라 에러 응답에도 헤더가 붙는다.
+    # ServerErrorMiddleware(가장 바깥) 보다 안쪽에서 처리되지 않은 예외를 잡아야
+    # RequestIdMiddleware 가 응답 헤더를 붙일 수 있다 — RequestIdMiddleware 보다 먼저 등록한다.
+    register_unhandled_exception_middleware(app)
+
+    # CORS 미들웨어는 두지 않는다 — local(vite 프록시)·prod 모두 same-origin 이다.
+    # docs/deploy.md 2·5절
     app.add_middleware(RequestIdMiddleware)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,  # HttpOnly accessToken 쿠키를 싣는다
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
 
     # 모든 4xx/5xx 를 공통 envelope 로 감싼다. FastAPI 기본 detail 응답이 새면 계약 위반이다.
     register_exception_handlers(app)

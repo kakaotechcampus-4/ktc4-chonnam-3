@@ -19,8 +19,7 @@ jobs:
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
+          MESSAGE="$(printf '🔀 %s → develop 머지완료\nPR명 : %s\n작성자 : %s\n%s' "$HEAD_REF" "$PR_TITLE" "$PR_AUTHOR" "$PR_URL")"
           curl -sf -X POST "$DISCORD_WEBHOOK" \
             -H "Content-Type: application/json" \
-            -d "$(jq -n \
-              --arg content "🔀 **$HEAD_REF** → develop 머지됨: [$PR_TITLE]($PR_URL) by $PR_AUTHOR" \
-              '{content: $content}')"
+            -d "$(jq -n --arg content "$MESSAGE" '{content: $content}')"

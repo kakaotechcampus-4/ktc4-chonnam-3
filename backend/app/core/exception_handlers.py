@@ -6,6 +6,7 @@ FastAPI 기본 {"detail": ...} 응답이 하나라도 새면 계약 위반이라
 StarletteHTTPException 과 처리되지 않은 Exception 까지 여기서 막는다.
 """
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastapi import FastAPI
@@ -22,9 +23,12 @@ logger = get_logger(__name__)
 
 # 라우팅 단계에서 FastAPI 가 직접 내는 HTTPException 의 상태코드 -> reason.
 # 여기 없는 4xx 는 invalid_request, 5xx 는 internal_error 로 접는다.
+# ⚠ 403 은 매핑하지 않는다 — github_token_invalid/account_suspended/account_withdrawn
+#   모두 403 이라 상태코드만으로는 구분할 수 없고, 우리 인증 코드는 AppError 를 직접
+#   raise 하므로 이 fallback 을 타지 않는다. 다른 라이브러리의 HTTPException(403) 이
+#   섞였을 때 잘못된 도메인 reason 을 내보내는 쪽보다 invalid_request 로 접는 쪽이 안전하다.
 _REASON_BY_STATUS: dict[int, Reason] = {
     401: Reason.UNAUTHENTICATED,
-    403: Reason.TOKEN_INVALID,
     404: Reason.NOT_FOUND,
     413: Reason.DOCUMENT_TOO_LARGE,
     415: Reason.UNSUPPORTED_DOCUMENT_TYPE,
@@ -97,7 +101,12 @@ async def http_exception_handler(request: Request, exc: Exception) -> Response:
 
     logger.info("http_exception", status_code=status_code, path=request.url.path)
     # 상태코드는 원래 값을 유지한다 — 405 를 400 으로 바꾸지 않는다.
-    return _json_error(AppError(reason, status_code=status_code))
+    response = _json_error(AppError(reason, status_code=status_code))
+    # 원래 HTTPException 의 헤더(405 의 Allow 등)를 유지한다. envelope 로 새로 만들면서
+    # 버리면 HTTP 표준이 요구하는 헤더가 응답에서 빠진다.
+    if exc.headers:
+        response.headers.update(exc.headers)
+    return response
 
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> Response:
@@ -120,3 +129,25 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
+
+
+async def unhandled_exception_middleware(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """처리되지 않은 예외를 사용자 미들웨어 스택 안쪽에서 가로챈다.
+
+    Exception 용 add_exception_handler 는 Starlette 의 ServerErrorMiddleware 가 실행하는데,
+    이 레이어는 RequestIdMiddleware 를 포함한 사용자 미들웨어 전부보다 바깥이다. 그래서
+    처리되지 않은 예외가 곧장 ServerErrorMiddleware 까지 올라가면 RequestIdMiddleware 가
+    응답에 X-Request-ID 를 붙일 기회가 없다. 여기서 먼저 잡아 변환하면 그 응답이
+    RequestIdMiddleware 를 정상적으로 통과한다.
+    """
+    try:
+        return await call_next(request)
+    except Exception as exc:
+        return await unhandled_exception_handler(request, exc)
+
+
+def register_unhandled_exception_middleware(app: FastAPI) -> None:
+    """위 미들웨어를 등록한다. RequestIdMiddleware 보다 먼저(= 더 안쪽에) 호출해야 한다."""
+    app.middleware("http")(unhandled_exception_middleware)

@@ -9,37 +9,31 @@ info:
     /auth/github/link/callback), the SSE stream (GET /analysis-runs/{runId}/events)
     and the WebSocket upgrade (/ws/interviews/{sessionId}) are specified in
     frontend/docs/api-spec.md and are not expressible here.
-    PENDING_FE items are explicit and must not be guessed by implementers.
+    Sprint 1 document input, WebSocket identity/messages, abandonment and report
+    score policies were resolved by spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md.
+    Sprint 1 authentication uses the devon_session HttpOnly cookie and a Redis
+    server session per spec/shared/decisions/0003-sprint1-session-auth.md.
+    JWT and POST /auth/refresh are deferred to Sprint 2.
+    Implementation and detailed scoring criteria still require verification.
 servers:
   - url: /api
 x-contract-status: sprint1-fix
-x-pending:
-  - documentId is singular while the job-input screen has two uploaders (PENDING_TEAM)
-  - WS identifier path: interviewId vs sessionId is PENDING_FE
-  - Text WebSocket questionEnd is PENDING_FE
-  - Abandoned/reconnect policy is PENDING_FE
+x-pending: []
+security:
+  - sessionCookie: []
 paths:
-  /auth/refresh:
-    post:
-      operationId: refreshToken
-      summary: Rotate the refresh token and issue a new access token
-      description: >-
-        Called by the 401 interceptor as a single-flight request. This endpoint is
-        itself excluded from the interceptor.
-      responses:
-        '204':
-          description: New cookies set
-        '401':
-          $ref: '#/components/responses/Error'
   /auth/logout:
     post:
       operationId: logout
-      summary: Clear auth cookies and revoke the refresh token
+      summary: Delete the current Redis login session and expire its cookie
+      description: >-
+        Idempotent: an absent or expired session also returns 204. The stored
+        GitHub OAuth token is retained. Redis failures are server errors,
+        not successful logout.
+      security: []
       responses:
         '204':
           description: Logged out
-        '401':
-          $ref: '#/components/responses/Error'
   /me:
     get:
       operationId: getMe
@@ -125,7 +119,7 @@ paths:
                 file:
                   type: string
                   format: binary
-                  description: .pdf (text layer only), .docx, .txt or .md. Max 10MB.
+                  description: .pdf (text layer only), .docx, .txt or .md. Max 20MB (20971520 bytes).
       responses:
         '200':
           description: Preview result
@@ -284,6 +278,36 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
+  /interviews/{id}/prepare/retry:
+    post:
+      operationId: retryInterviewPrepare
+      summary: Re-run interview preparation from the step that failed
+      description: >-
+        Only for interviews in preparing_failed. The server resumes from the failed
+        prepareStepKey and does not re-run completed steps. The session and its
+        session_repositories are kept. Progress is delivered over the WebSocket as
+        prepareStep events, not in this response.
+      parameters:
+        - $ref: '#/components/parameters/InterviewId'
+      responses:
+        '204':
+          description: Re-run accepted
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: >-
+            prep_in_progress when a re-run is already running, prep_failed when the
+            interview is not in preparing_failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '410':
+          description: session_expired when the session no longer exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /interviews/{id}/report:
     get:
       operationId: getInterviewReport
@@ -351,6 +375,15 @@ paths:
         '409':
           $ref: '#/components/responses/Error'
 components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: devon_session
+      description: >-
+        Opaque login session ID backed by Redis, distinct from the interview
+        sessionId. Uses a 14-day sliding lifetime. Missing or invalid sessions
+        return 401 unauthenticated; no JWT refresh is used in Sprint 1.
   parameters:
     RunId:
       name: runId
@@ -427,6 +460,7 @@ components:
       enum: [rule_filter, portfolio, both]
     JdCategory:
       type: string
+      description: API 표시 분류. responsibility는 Wanted main_tasks에서 나온 주요 업무이며 DB requirement_type의 unknown과 원문 출처를 함께 사용해 구분한다.
       enum: [required, preferred, responsibility]
     Persona:
       type: string
@@ -948,7 +982,7 @@ components:
           type: string
         score:
           type: number
-          description: Score formula is PENDING_TEAM.
+          description: Sprint 1 score from 0 to 100. Detailed criteria require authoring and review.
 
     AgentFeedback:
       type: object
@@ -1008,7 +1042,7 @@ components:
           type: string
         totalScore:
           type: number
-          description: Score formula is PENDING_TEAM.
+          description: Arithmetic mean of the six Sprint 1 scores, from 0 to 100.
         headline:
           type: string
         summary:

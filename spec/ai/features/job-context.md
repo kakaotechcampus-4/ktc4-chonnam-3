@@ -1,6 +1,6 @@
 # AI 작업 Context
 
-상태: Sprint 1 FIX 경계 + 내부 형식 Proposed.
+상태: Sprint 1 FIX 경계. [0015 결정](../decisions/0015-existing-contracts-and-tool-results.md)에 따라 기존 Context 필드 구성과 다섯 작업의 식별자 인수·전달 책임은 Accepted. 상세 내부 형식은 기존 구조 안에서 구현·검증하며 실행 상한은 운영 조건과 실측으로 정한다.
 
 이 문서는 ARQ 작업, 분석 pipeline, 단일 Director와 단발 LLM task가 어떤 context를 받을 수 있는지 정의한다. 공통 AI 경계는 [계약](../contracts.md), [아키텍처](../architecture.md), [검증](../verification.md), [기준 결정](../decisions/0001-ai-baseline.md)을 함께 따른다.
 
@@ -16,7 +16,7 @@ Context는 현재 작업에 필요한 자료와 상태를 선별한 입력 묶�
 - 원문, 분석 요약, 사용자 주장, 모델 판단을 서로 다른 출처로 표시한다.
 - 모델이 권한, 세션 상태, turn 번호, 종료 여부를 직접 확정하지 못하게 한다.
 
-근거: [레이어 규칙](../../../backend/docs/layer-rules.md), [Redis 키](../../../backend/docs/redis-keys.md), [회의 기록의 Controller 원칙](../../../context/AI.md).
+근거: [레이어 규칙](../../../backend/docs/layer-rules.md), [Redis 키](../../../backend/docs/redis-keys.md). 과거 Controller 원칙의 원본 `context/AI.md`는 현재 저장소에 없다. 현행 Controller 역할은 [면접의 역할과 입력](interviewer.md#역할과-입력)에서 확인한다.
 
 ## 저장소별 책임
 
@@ -32,18 +32,22 @@ Context는 현재 작업에 필요한 자료와 상태를 선별한 입력 묶�
 
 작업 payload에는 직렬화 가능한 식별자와 재시도 판정에 필요한 작은 값만 넣는다. `AsyncSession`, ORM 객체, access token, 원문 전체, LLM client 객체를 enqueue하지 않는다.
 
-고정된 Sprint 1 job 이름은 다음과 같다.
+고정된 Sprint 1 job 이름은 다음과 같다. [0015 결정](../decisions/0015-existing-contracts-and-tool-results.md)에 따라 `initial_sync`를 제외한 다섯 작업의 기존 식별자 인수와 Worker 재조회 책임을 채택한다.
 
-| job | Proposed 최소 payload | Worker가 다시 조회할 원본 |
+| job | 최소 payload | Worker가 다시 조회할 원본 |
 | --- | --- | --- |
-| `initial_sync` | 사용자 또는 GitHub account 식별자 | 사용자 상태, 암호화 token, 기존 저장소 rows |
+| `initial_sync` | 사용자 또는 GitHub account 식별자; 인증 소유권에 맞춰 구현 시 선택 | 사용자 상태, 암호화 token, 기존 저장소 rows |
 | `analysis_run` | `run_id` | 소유 사용자, posting, optional document, candidate와 step 상태 |
 | `candidate_page_analyze` | `run_id`, `page_no` | page row, 해당 page candidate, L0-b/L1 cache |
 | `interview_prep` | `interview_id` | session, 선택 저장소, posting/JD, L1/L2 결과 |
 | `report_generate` | `interview_id` | 완료 session, 확정 turns, evaluation evidence |
 | `profile_summary` | `user_id` | 완료 면접에서 사용된 저장소와 생성된 report |
 
-정확한 ARQ 함수 signature와 payload serialization은 Proposed다. 구현 전 Python 함수명, 인자 타입, job timeout을 고정한다. Sprint 1은 기본 queue 1개와 단일 ARQ worker 프로세스에 위 6개 job을 등록하며, ARQ `max_tries=1`을 사용한다. `deep_analysis`는 현재 고정 job 목록에 별도 등록하지 않고 `interview_prep`이 호출하는 pipeline 단계로 본다. 이를 독립 queue로 바꾸려면 backend pipeline 결정을 갱신한다.
+인자의 의미와 전달 책임은 확정하되 Python 함수 signature·인자 타입·payload 직렬화는 기존 호출 경계에 맞추는 구현 세부로 정한다. `initial_sync`의 ID 종류도 기존 사용자·GitHub account의 소유권 관계를 확인해 정하며 새 식별자나 인증 구조를 만들지 않는다.
+
+[0018 결정](../decisions/0018-existing-baseline-bulk-resolution.md)에 따라 이 구현 세부를 사용자에게 개별 선택으로 묻지 않고 호출·소유권 fixture로 확인한다. job별 timeout은 LLM·Context·Tool·동시성 제한과 함께 운영 조건·대표 사례 실측으로 정한다. 단일 worker를 동시 작업 한 개로 간주하거나 근거 없는 수치를 채택하지 않으며, 필요한 상한을 설정·검증하기 전 무제한 외부 호출로 연결하지 않는다.
+
+Sprint 1은 기본 queue 1개와 단일 ARQ worker 프로세스에 위 6개 job을 등록하며, ARQ `max_tries=1`을 사용한다. `deep_analysis`는 현재 고정 job 목록에 별도 등록하지 않고 `interview_prep`이 호출하는 pipeline 단계로 본다. 이를 독립 queue로 바꾸려면 backend pipeline 결정을 갱신한다.
 
 면접 답변별 처리는 Sprint 1 WebSocket turn loop 안에서 처리한다. Sprint 1 고정 job 목록에는 전용 turn job 이름이 없으므로 구현자가 임의로 추가하지 않는다.
 
@@ -53,7 +57,7 @@ Sprint 1은 worker/queue를 물리적으로 분리하지 않는다. 대신 `queu
 
 ## Context Builder 입력
 
-상태: Proposed. Context Builder는 순수한 내부 조립 경계이며 별도 Agent가 아니다.
+상태: [0015 결정](../decisions/0015-existing-contracts-and-tool-results.md)에 따라 기존 입력 범위와 [내부 계약의 Context 필드 구성](../contracts.md)을 채택한다. Context Builder는 순수한 내부 조립 경계이며 별도 Agent가 아니다.
 
 Context Builder는 서비스 계층에서 권한과 상태를 확인한 뒤 다음 중 현재 task에 필요한 항목만 받는다.
 
@@ -69,7 +73,7 @@ Context Builder는 서비스 계층에서 권한과 상태를 확인한 뒤 다�
 
 각 reference를 역참조할 때도 사용자 접근권한과 작업 범위를 다시 확인한다. 분석 task는 현재 run의 허용 candidate를, 면접 task는 사용자가 선택한 repository를 사용한다. 면접에서는 고정 `snapshot_head_sha`와 다른 분석, 제외된 문서, 다른 사용자의 evidence를 넣지 않는다. 원격 기본 branch의 새 push를 이유로 진행 중인 면접의 ref를 바꾸지 않는다.
 
-Context Builder 반환값의 구체 JSON/Pydantic schema는 아직 확정하지 않는다. 새 필드가 DB column을 뜻한다고 가정하거나 범용 `dict[str, Any]`를 영구 계약으로 굳히지 않는다.
+Context Builder 반환값은 채택한 기존 필드 구성을 유지한다. 중첩 자료의 상세 타입·참조·null은 기존 생산자와 소비자에 맞춰 구체화하고 fixture로 확인하며, Pydantic 등 구체 클래스는 그 계약을 구현한다. 운영 상한은 위 설정 기준을 따른다. 내부 입력 필드가 새 DB column을 뜻한다고 가정하거나 범용 `dict[str, Any]`를 영구 계약으로 굳히지 않는다.
 
 ## 질문의 불변 사실
 
@@ -83,7 +87,9 @@ Context Builder 반환값의 구체 JSON/Pydantic schema는 아직 확정하지 
 - 질문 전제와 허용된 source/evidence reference
 - 생성에 사용한 prompt version과 실제 model
 
-Question Contract의 물리적 저장 schema는 Proposed이며 Sprint 1 DB에 새 테이블을 자동으로 추가하지 않는다. 다만 질문 전달 뒤 persona, 평가 목적 또는 필수 확인내용을 답변에 맞춰 소급 변경하면 안 된다. 재작성한 질문을 전달할 때는 전달 전 후보가 아니라 최종 승인본만 현재 turn의 질문으로 확정한다.
+[0014 결정](../decisions/0014-minimal-change-revision.md)에 따라 Question Contract의 기존 다섯 항목은 `interview_turns.question_contract` JSONB에 [저장 형식](../contracts.md#question-contract-저장-형식)을 따라 함께 보관하고 별도 테이블은 만들지 않는다. 질문 전달 뒤 persona, 평가 목적 또는 필수 확인내용을 답변에 맞춰 소급 변경하면 안 된다. 재작성한 질문을 전달할 때는 전달 전 후보가 아니라 최종 승인본만 현재 turn의 질문으로 확정한다.
+
+Question Contract의 `basis_refs`에는 `{kind, id}` 연결 정보만 저장하고 원문은 면접 당시 자료에서 읽는다. 코드의 고정 ref와 Evidence 원문 보존은 유지한다. 공고 갱신으로 기존 run·면접의 자료가 바뀌지 않도록 [공고 재조회와 이전 자료 보존](../../backend/features/analysis-run.md#공고-재조회와-이전-자료-보존)을 따른다.
 
 답변은 현재 질문에 대해 사용자가 한 번 제출해 확정한 원문이다. 전송 실패나 작성 중 초안을 평가하지 않는다. 질문과 answer의 대응, session 종료 여부, 중복 제출 여부는 모델 호출 전후에 서비스/Controller가 검사한다.
 

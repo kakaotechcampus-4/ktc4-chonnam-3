@@ -2,8 +2,8 @@
  * MSW 핸들러 점검 스크립트.
  *
  * 사용법: `npm run dev` 후 브라우저에서 앱을 열고, devtools 콘솔에 이 파일 전체를 붙여넣는다.
- * 등록된 핸들러의 정상 흐름과 상태 전이를 순서대로 호출하고 PASS/FAIL 표를 출력한다.
- * 약 15초 걸린다 (분석 run·면접 준비·리포트 생성 대기 포함).
+ * 등록된 핸들러의 정상 흐름·실패 케이스·WebSocket 을 순서대로 호출하고 PASS/FAIL 표를 출력한다.
+ * 약 30초 걸린다 (분석 run·면접 준비·리포트 생성·WS 턴 대기 포함).
  *
  * mock 상태는 메모리에 남으므로 페이지당 한 번만 유효하다. 다시 돌리려면 새로고침한다.
  *
@@ -44,15 +44,26 @@
 
   /** 응답 본문의 키 집합이 계약의 required 집합과 정확히 같은지 본다. */
   const checkKeys = (검사, 기대키, 본문) =>
-    check(검사, 기대키.slice().sort().join(','), Object.keys(본문 ?? {}).sort().join(','));
+    check(
+      검사,
+      기대키.slice().sort().join(','),
+      Object.keys(본문 ?? {})
+        .sort()
+        .join(','),
+    );
 
   const SEED_FAILED_RUN = '5c7b9e10-0000-4000-8000-00000000bbbb';
   const SEED_INTERVIEW = 'a3d51c20-1001-4c00-9a00-000000000001';
   const SEED_PREPARING_FAILED = 'a3d51c20-1009-4c00-9a00-000000000009';
+  /** WS 경로는 sessionId 로 붙는다. 위 seed 면접들의 세션 식별자. */
+  const SEED_SESSION = 'sess_0000000000000001';
+  const SEED_PREPARING_FAILED_SESSION = 'sess_0000000000000009';
 
   // 워커가 붙어 있는지 먼저 확인한다. 여기서 실패하면 아래는 전부 무의미하다.
   if (!navigator.serviceWorker.controller) {
-    console.error('[check] 서비스 워커가 페이지를 제어하고 있지 않습니다. 새로고침 후 다시 실행하세요.');
+    console.error(
+      '[check] 서비스 워커가 페이지를 제어하고 있지 않습니다. 새로고침 후 다시 실행하세요.',
+    );
     return;
   }
 
@@ -150,11 +161,7 @@
   const failedRun = await call('GET', `/analysis-runs/${SEED_FAILED_RUN}`);
   check('GET /analysis-runs (실패 seed)', 'failed', failedRun.data.status);
   check('  └ failureReason', 'jd_fetch_failed', failedRun.data.failureReason);
-  check(
-    '  └ 실패 step',
-    'failed',
-    failedRun.data.steps.find((s) => s.key === 'jd_fetch').status,
-  );
+  check('  └ 실패 step', 'failed', failedRun.data.steps.find((s) => s.key === 'jd_fetch').status);
 
   // SSE ---------------------------------------------------------------------
   const sse = await new Promise((resolve) => {
@@ -246,7 +253,11 @@
     'session_limit_exceeded',
     (await call('POST', '/interviews', { runId, repositoryIds })).data.error.reason,
   );
-  check('GET /interviews/{id} 준비중', 'preparing', (await call('GET', `/interviews/${ivId}`)).data.status);
+  check(
+    'GET /interviews/{id} 준비중',
+    'preparing',
+    (await call('GET', `/interviews/${ivId}`)).data.status,
+  );
   await sleep(3600);
   const ready = await call('GET', `/interviews/${ivId}`);
   checkKeys(
@@ -284,7 +295,11 @@
   );
 
   // 리포트 lazy generation (seed 면접) -------------------------------------------
-  check('GET /report (1차)', 202, (await call('GET', `/interviews/${SEED_INTERVIEW}/report`)).status);
+  check(
+    'GET /report (1차)',
+    202,
+    (await call('GET', `/interviews/${SEED_INTERVIEW}/report`)).status,
+  );
   await sleep(3100);
   const report = await call('GET', `/interviews/${SEED_INTERVIEW}/report`);
   checkKeys(
@@ -314,15 +329,268 @@
   check(
     'POST /feedback-disagreements',
     204,
-    (await call('POST', `/interviews/${SEED_INTERVIEW}/feedback-disagreements`, {
-      persona: 'tech_lead',
-      reasonType: 'overly_harsh',
-    })).status,
+    (
+      await call('POST', `/interviews/${SEED_INTERVIEW}/feedback-disagreements`, {
+        persona: 'tech_lead',
+        reasonType: 'overly_harsh',
+      })
+    ).status,
   );
   check('POST /retry', 201, (await call('POST', `/interviews/${SEED_INTERVIEW}/retry`)).status);
   check('GET /interviews/없는id', 404, (await call('GET', '/interviews/nope')).status);
   check('GET /analysis-runs/없는id', 410, (await call('GET', `/analysis-runs/nope`)).status);
   check('미등록 /api 경로', 501, (await call('GET', '/no-such-endpoint')).status);
+
+  // --- 실패 케이스 (장애 주입) --------------------------------------------
+
+  const msw = window.msw;
+  if (!msw) {
+    check('장애 주입 콘솔 API', '있음', '없음');
+  } else {
+    msw.scenario('auth-expired');
+    const expired = await call('GET', '/me');
+    check(
+      'auth-expired',
+      '401/unauthenticated',
+      `${expired.status}/${expired.data?.error?.reason}`,
+    );
+
+    msw.scenario('refresh-failed');
+    check('refresh-failed — /auth/refresh', 401, (await call('POST', '/auth/refresh')).status);
+    check('  └ 다른 경로는 정상', 200, (await call('GET', '/me')).status);
+
+    msw.scenario('github-token-invalid');
+    const gh = await call('GET', '/me/home');
+    check(
+      'github-token-invalid',
+      '403/github_token_invalid',
+      `${gh.status}/${gh.data?.error?.reason}`,
+    );
+
+    msw.scenario('run-expired');
+    check('run-expired', 410, (await call('GET', `/analysis-runs/${runId}/result`)).status);
+
+    msw.scenario('server-error');
+    check('server-error', 500, (await call('GET', '/me')).status);
+
+    msw.scenario('offline');
+    let networkFailed = false;
+    try {
+      await fetch('/api/me');
+    } catch {
+      networkFailed = true;
+    }
+    check('offline — 네트워크 단계 실패', true, networkFailed);
+
+    msw.clear();
+    check('규칙 해제 후 정상', 200, (await call('GET', '/me')).status);
+
+    msw.fault({ path: '/me', status: 500, reason: 'internal_error', times: 1 });
+    check('times:1 — 1회차', 500, (await call('GET', '/me')).status);
+    check('  └ 2회차', 200, (await call('GET', '/me')).status);
+    check('  └ 규칙 자동 삭제', 0, msw.faults().length);
+  }
+
+  // --- WebSocket (api-spec.md #18) ----------------------------------------
+
+  const wsUrl = (sessionId) =>
+    `${location.origin.replace('http', 'ws')}/api/ws/interviews/${sessionId}`;
+
+  /** 조건이 맞거나 타임아웃까지 메시지를 모은다. */
+  const collect = (sessionId, done, timeoutMs = 9000) =>
+    new Promise((resolve) => {
+      const socket = new WebSocket(wsUrl(sessionId));
+      const got = [];
+      const finish = (closed) => {
+        try {
+          socket.close();
+        } catch {
+          /* 이미 닫힘 */
+        }
+        resolve({ got, closed });
+      };
+      socket.onmessage = (event) => {
+        got.push(JSON.parse(event.data));
+        if (done(got)) finish(null);
+      };
+      socket.onclose = (event) => resolve({ got, closed: `${event.code}/${event.reason}` });
+      setTimeout(() => finish('timeout'), timeoutMs);
+    });
+
+  const seen = (got, type) => got.some((m) => m.type === type);
+
+  /**
+   * 준비 실패 세션에 붙어도 서버는 오류를 되보내지 않는다.
+   * 복구 경로는 GET /interviews/{id} 의 lastError 스냅샷이고, WS 연결은 prepareRetry 를 위한 것이다.
+   * 되보내면 화면이 방금 지운 오류가 되살아나 재시도가 끝나도 실패 배너가 남는다(설계 문서 D14).
+   */
+  const failedSnapshot = await call('GET', `/interviews/${SEED_PREPARING_FAILED}`);
+  check('준비 실패 스냅샷 reason', 'question_gen_timeout', failedSnapshot.data.lastError?.reason);
+  check('  └ code', 'ERR_QUESTION_GEN_TIMEOUT', failedSnapshot.data.lastError?.code);
+  check('  └ recoverable', true, failedSnapshot.data.lastError?.recoverable);
+
+  const onConnect = await collect(SEED_PREPARING_FAILED_SESSION, () => false, 1200);
+  check('WS 준비 실패 — 연결 시 무전송', 0, onConnect.got.length);
+
+  /**
+   * 재시도는 WS 메시지가 아니라 REST 다(0010 결정).
+   * 진행 상황은 계약대로 WS 로 나오므로 소켓을 열어 둔 채 REST 를 호출한다.
+   */
+  const retried = await new Promise((resolve) => {
+    const socket = new WebSocket(wsUrl(SEED_PREPARING_FAILED_SESSION));
+    const got = [];
+    const finish = () => {
+      try {
+        socket.close();
+      } catch {
+        /* 이미 닫힘 */
+      }
+      resolve(got);
+    };
+    socket.onmessage = (event) => {
+      got.push(JSON.parse(event.data));
+      if (seen(got, 'question')) finish();
+    };
+    socket.onopen = () =>
+      setTimeout(
+        () => void call('POST', `/interviews/${SEED_PREPARING_FAILED}/prepare/retry`),
+        200,
+      );
+    setTimeout(finish, 6000);
+  });
+  check(
+    'POST /prepare/retry — 복구',
+    true,
+    seen(retried, 'prepareCompleted') && seen(retried, 'question'),
+  );
+  // 성공한 3단계는 재실행하지 않는다. compose_question 만 running 으로 온다.
+  check(
+    '  └ 실패 단계만 재실행',
+    'compose_question',
+    retried
+      .filter((m) => m.status === 'running')
+      .map((m) => m.key)
+      .join(','),
+  );
+  check(
+    '  └ 준비 실패가 아니면 409',
+    'prep_failed',
+    (await call('POST', `/interviews/${SEED_INTERVIEW}/prepare/retry`)).data?.error?.reason,
+  );
+
+  /**
+   * 주입한 준비 실패가 REST 스냅샷에도 남아야 한다.
+   * 메시지만 보내면 새로고침 후 preparing 으로 보이고, 시간이 지나면 화면이
+   * in_progress 로 보고 질문 없는 진행 화면으로 넘어간다.
+   */
+  const run2 = await call('POST', '/analysis-runs', {
+    postingUrl: 'https://www.wanted.co.kr/wd/3',
+  });
+  const iv2 = await call('POST', '/interviews', {
+    runId: run2.data.runId,
+    repositoryIds,
+  });
+  if (iv2.status !== 201) {
+    check('주입 준비 실패 — 면접 생성', 201, `${iv2.status}(${iv2.data?.error?.reason})`);
+  } else {
+    msw?.scenario('ws-prepare-failed');
+    const injected = await collect(iv2.data.sessionId, (got) => seen(got, 'error'), 3000);
+    const injectedError = injected.got.find((m) => m.type === 'error');
+    check(
+      '주입 준비 실패 — 체크리스트',
+      4,
+      injected.got.filter((m) => m.type === 'prepareStep').length,
+    );
+    check('  └ 실패 칸', 'compose_question', injected.got.find((m) => m.status === 'failed')?.key);
+    check('  └ error.step', 'compose_question', injectedError?.step);
+    check('  └ error.code', 'ERR_QUESTION_GEN_TIMEOUT', injectedError?.code);
+
+    const snapshot = await call('GET', `/interviews/${iv2.data.interviewId}`);
+    check('  └ REST 스냅샷 status', 'preparing_failed', snapshot.data.status);
+    check('  └ REST 스냅샷 lastError.step', 'compose_question', snapshot.data.lastError?.step);
+
+    // HTTP 전역 규칙은 WS 로 새지 않는다. 규칙이 WS 에서 소비되면 HTTP 검증이 망가진다.
+    msw?.scenario('auth-expired');
+    const notLeaked = await collect(iv2.data.sessionId, (got) => seen(got, 'question'), 6000);
+    check(
+      '전역 HTTP 규칙이 WS 로 누수되지 않음',
+      0,
+      notLeaked.got.filter((m) => m.type === 'error').length,
+    );
+    msw?.clear();
+  }
+
+  check('WS 없는 세션', '1008/not_found', (await collect('sess_없음', () => false, 2000)).closed);
+  check(
+    'WS 종료된 면접',
+    '1008/already_ended',
+    (await collect(SEED_SESSION, () => false, 2000)).closed,
+  );
+
+  /**
+   * 정상 진행은 앞서 만든 면접(`iv`)의 세션으로 본다.
+   * 같은 run 에 활성 면접이 하나뿐이라 새로 만들면 409 가 된다.
+   */
+  const sessionId = iv.data.sessionId;
+  const prepared = await collect(sessionId, (got) => seen(got, 'question'));
+  check('WS 준비 완료', true, seen(prepared.got, 'prepareCompleted'));
+  check('  └ 질문 turn', true, (prepared.got.find((m) => m.type === 'question')?.turn ?? 0) >= 1);
+  check('  └ skipped 미사용', 0, prepared.got.filter((m) => m.status === 'skipped').length);
+
+  /** 소켓을 열고 한 번 보낸 뒤 조건이 맞을 때까지 모은다. */
+  const sendAndCollect = (payload, done, timeoutMs = 6000) =>
+    new Promise((resolve) => {
+      const socket = new WebSocket(wsUrl(sessionId));
+      const got = [];
+      const finish = () => {
+        try {
+          socket.close();
+        } catch {
+          /* 이미 닫힘 */
+        }
+        resolve(got);
+      };
+      socket.onmessage = (event) => {
+        got.push(JSON.parse(event.data));
+        if (done(got)) finish();
+      };
+      socket.onopen = () => setTimeout(() => socket.send(JSON.stringify(payload)), 300);
+      setTimeout(finish, timeoutMs);
+    });
+
+  const tooLong = await sendAndCollect({ type: 'answer', turn: 1, text: 'x'.repeat(2001) }, (got) =>
+    seen(got, 'error'),
+  );
+  const tooLongError = tooLong.find((m) => m.type === 'error');
+  check('WS 2000자 초과', 'answer_too_long', tooLongError?.reason);
+  check('  └ code', 'ERR_ANSWER_TOO_LONG', tooLongError?.code);
+  check('  └ recoverable', true, tooLongError?.recoverable);
+
+  const answered = await sendAndCollect({ type: 'answer', turn: 1, text: '정상 답변' }, (got) =>
+    seen(got, 'answerReceived'),
+  );
+  check('WS 답변 수신', true, seen(answered, 'answerReceived'));
+
+  // 같은 턴을 두 번 보내면 저장이 거부된다. answerReceived 를 보내면 화면이 다음 질문을 영영 기다린다.
+  const duplicated = await sendAndCollect(
+    { type: 'answer', turn: 1, text: '같은 턴 재전송' },
+    (got) => seen(got, 'error'),
+  );
+  check('WS 같은 턴 재전송', 'answer_rejected', duplicated.find((m) => m.type === 'error')?.reason);
+  check(
+    '  └ answerReceived 미전송',
+    0,
+    duplicated.filter((m) => m.type === 'answerReceived').length,
+  );
+
+  const detailAfterWs = await call('GET', `/interviews/${ivId}`);
+  check(
+    '  └ REST 와 정합',
+    true,
+    detailAfterWs.data.turns.some((t) => t.answer !== null),
+  );
+
+  if (msw) msw.clear();
 
   console.table(rows);
   const failed = rows.filter((r) => r.결과 === 'FAIL');

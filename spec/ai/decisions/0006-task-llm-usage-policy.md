@@ -1,10 +1,12 @@
 # 0006 작업별 LLM 사용과 요약 의미
 
-- 상태: Accepted, AI의 Sprint 1 처리 원칙에 한함
+- 상태: Partially Superseded — 프로필 역할 요약의 LLM 비호출·보류는 0019로 대체
 - 날짜: 2026-09-12
 - 관련 PR: 없음
 - 검토자: 현재 사용자 승인
-- 연결 항목: [later.md의 AI-L03](../../../later.md)
+- 연결 항목: [AI-L03 — 구현·검수 인계](../../../ai/docs/pipeline.md#기존-id별-구현검수-인계)
+
+후속 결정(2026-09-22): [0019](0019-sprint1-profile-role-summary-restoration.md)에서 Sprint 1 개인 역할의 LLM 요약을 기존 구현 대상으로 복원했다. 아래 본문은 당시 기록이다. Wanted 비호출, 모델에 맡기지 않는 통계 집계, L1 프로젝트 요약과 개인 기여 구분은 유지한다.
 
 ## 맥락
 

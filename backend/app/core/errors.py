@@ -13,7 +13,7 @@ from app.shared.enums import Reason
 
 STATUS_BY_REASON: dict[Reason, int] = {
     Reason.UNAUTHENTICATED: 401,
-    Reason.TOKEN_INVALID: 403,
+    Reason.GITHUB_TOKEN_INVALID: 403,
     Reason.ACCOUNT_SUSPENDED: 403,
     Reason.ACCOUNT_WITHDRAWN: 403,
     Reason.UNSUPPORTED_DOCUMENT_TYPE: 415,
@@ -33,6 +33,8 @@ STATUS_BY_REASON: dict[Reason, int] = {
     Reason.SESSION_LIMIT_EXCEEDED: 409,
     Reason.PREP_FAILED: 409,
     Reason.REPO_UNREACHABLE: 409,
+    Reason.PREP_IN_PROGRESS: 409,
+    Reason.SESSION_EXPIRED: 410,
     Reason.NOT_FOUND: 404,
     Reason.ORIGINAL_NOT_COMPLETED: 409,
     Reason.REPOSITORY_UNAVAILABLE: 409,
@@ -44,7 +46,7 @@ STATUS_BY_REASON: dict[Reason, int] = {
 
 MESSAGE_BY_REASON: dict[Reason, str] = {
     Reason.UNAUTHENTICATED: "로그인이 필요합니다.",
-    Reason.TOKEN_INVALID: "GitHub 연동이 만료되었습니다. 다시 연동해 주세요.",
+    Reason.GITHUB_TOKEN_INVALID: "GitHub 연동이 만료되었습니다. 다시 연동해 주세요.",
     Reason.ACCOUNT_SUSPENDED: "정지된 계정입니다.",
     Reason.ACCOUNT_WITHDRAWN: "탈퇴한 계정입니다.",
     Reason.UNSUPPORTED_DOCUMENT_TYPE: "지원하지 않는 파일 형식입니다.",
@@ -62,6 +64,8 @@ MESSAGE_BY_REASON: dict[Reason, str] = {
     Reason.SESSION_LIMIT_EXCEEDED: "이미 진행 중인 면접이 있습니다.",
     Reason.PREP_FAILED: "면접 준비에 실패했습니다.",
     Reason.REPO_UNREACHABLE: "레포지토리에 접근하지 못했습니다.",
+    Reason.PREP_IN_PROGRESS: "이미 다시 준비하고 있습니다.",
+    Reason.SESSION_EXPIRED: "면접 세션이 만료되었습니다. 레포지토리를 다시 선택해 주세요.",
     Reason.NOT_FOUND: "요청한 리소스를 찾을 수 없습니다.",
     Reason.ORIGINAL_NOT_COMPLETED: "완료되거나 중단된 면접만 다시 시작할 수 있습니다.",
     Reason.REPOSITORY_UNAVAILABLE: "원본 면접의 레포지토리를 사용할 수 없습니다.",
