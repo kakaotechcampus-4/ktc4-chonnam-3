@@ -114,11 +114,6 @@ class Settings(BaseSettings):
         """prod 환경 여부. 쿠키 secure 강제나 문서 노출 차단 판단에 쓴다."""
         return self.app_env == "prod"
 
-    @property
-    def cors_origins(self) -> list[str]:
-        """CORS 허용 origin 목록. 쿠키 인증이라 와일드카드를 쓰지 않는다."""
-        return [self.frontend_origin]
-
 
 @lru_cache
 def get_settings() -> Settings:
