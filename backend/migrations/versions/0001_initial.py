@@ -548,7 +548,7 @@ def _create_interview_tables() -> None:
         _uuid_pk(),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("analysis_job_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("job_posting_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("job_posting_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("retry_of_interview_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("status", sa.String(length=20), server_default="preparing", nullable=False),
         sa.Column("answer_mode", sa.String(length=10), server_default="text", nullable=False),
@@ -582,7 +582,6 @@ def _create_interview_tables() -> None:
             ["job_posting_id"],
             ["job_postings.id"],
             name="fk_interview_sessions_job_posting_id_job_postings",
-            ondelete="SET NULL",
         ),
         sa.ForeignKeyConstraint(
             ["retry_of_interview_id"],

@@ -67,8 +67,10 @@ class InterviewSession(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     analysis_job_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("analysis_jobs.id", ondelete="CASCADE"), nullable=False
     )
-    job_posting_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("job_postings.id", ondelete="SET NULL"), nullable=True
+    # 공고 필수 (features/interview/service.py). 참조 중인 공고는 지울 수 없어야 하므로
+    # ondelete 를 SET NULL 로 두지 않는다.
+    job_posting_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("job_postings.id"), nullable=False
     )
     # retry 로 만든 세션이면 원본을 가리킨다. 원본의 run·공고·repo 조합을 복사한다.
     retry_of_interview_id: Mapped[uuid.UUID | None] = mapped_column(
