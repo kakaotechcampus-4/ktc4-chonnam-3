@@ -43,7 +43,7 @@ class ScoreCriterion(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "score_criteria"
     __table_args__ = (
         UniqueConstraint("score_key", name="uq_score_criteria_score_key"),
-        CheckConstraint(check_in("score_key", SCORE_KEYS), name="score_criteria_key"),
+        CheckConstraint(check_in("score_key", SCORE_KEYS), name="key"),
     )
 
     score_key: Mapped[str] = mapped_column(String(30), nullable=False)
@@ -89,10 +89,8 @@ class DomainQuestionFrame(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         UniqueConstraint(
             "domain_category", "axis", "display_order", name="uq_domain_frames_category_axis_order"
         ),
-        CheckConstraint(
-            check_in("domain_category", DOMAIN_CATEGORIES), name="domain_frames_category"
-        ),
-        CheckConstraint(check_in("axis", QUESTION_FRAME_AXES), name="domain_frames_axis"),
+        CheckConstraint(check_in("domain_category", DOMAIN_CATEGORIES), name="category"),
+        CheckConstraint(check_in("axis", QUESTION_FRAME_AXES), name="axis"),
     )
 
     domain_category: Mapped[str] = mapped_column(String(20), nullable=False)

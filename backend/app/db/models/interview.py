@@ -48,10 +48,8 @@ class InterviewSession(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     __tablename__ = "interview_sessions"
     __table_args__ = (
-        CheckConstraint(check_in("status", INTERVIEW_STATUSES), name="interview_sessions_status"),
-        CheckConstraint(
-            check_in("answer_mode", ANSWER_MODES), name="interview_sessions_answer_mode"
-        ),
+        CheckConstraint(check_in("status", INTERVIEW_STATUSES), name="status"),
+        CheckConstraint(check_in("answer_mode", ANSWER_MODES), name="answer_mode"),
         # 같은 run 에 활성 면접 1개만 (session_limit_exceeded).
         Index(
             "uq_interview_sessions_active_per_run",
@@ -130,8 +128,8 @@ class InterviewTurn(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "interview_turns"
     __table_args__ = (
         UniqueConstraint("interview_session_id", "turn_no", name="uq_interview_turns_session_turn"),
-        CheckConstraint(check_in("persona", PERSONAS), name="interview_turns_persona"),
-        CheckConstraint(check_in("status", TURN_STATUSES), name="interview_turns_status"),
+        CheckConstraint(check_in("persona", PERSONAS), name="persona"),
+        CheckConstraint(check_in("status", TURN_STATUSES), name="status"),
     )
 
     interview_session_id: Mapped[uuid.UUID] = mapped_column(

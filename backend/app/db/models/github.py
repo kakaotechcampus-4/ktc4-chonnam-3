@@ -89,8 +89,8 @@ class RepoAnalysis(Base, UUIDPrimaryKeyMixin, TimestampMixin):
             "prompt_version",
             name="uq_repo_analyses_repo_level_sha_prompt",
         ),
-        CheckConstraint(check_in("analysis_level", ANALYSIS_LEVELS), name="repo_analyses_level"),
-        CheckConstraint(check_in("status", REPO_ANALYSIS_STATUSES), name="repo_analyses_status"),
+        CheckConstraint(check_in("analysis_level", ANALYSIS_LEVELS), name="level"),
+        CheckConstraint(check_in("status", REPO_ANALYSIS_STATUSES), name="status"),
     )
 
     repository_id: Mapped[uuid.UUID] = mapped_column(

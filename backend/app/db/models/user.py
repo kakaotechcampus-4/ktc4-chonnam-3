@@ -33,7 +33,7 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __table_args__ = (
         CheckConstraint(
             check_in("status", USER_STATUSES),
-            name="users_status",
+            name="status",
         ),
     )
 
@@ -55,7 +55,7 @@ class GithubAccount(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __table_args__ = (
         CheckConstraint(
             check_in("token_status", TOKEN_STATUSES),
-            name="github_accounts_token_status",
+            name="token_status",
         ),
     )
 

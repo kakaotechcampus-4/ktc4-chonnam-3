@@ -38,10 +38,10 @@ class UserDocument(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     __tablename__ = "user_documents"
     __table_args__ = (
-        CheckConstraint(check_in("doc_type", DOCUMENT_TYPES), name="user_documents_doc_type"),
+        CheckConstraint(check_in("doc_type", DOCUMENT_TYPES), name="doc_type"),
         CheckConstraint(
             check_in("extract_status", DOCUMENT_EXTRACT_STATUSES),
-            name="user_documents_extract_status",
+            name="extract_status",
         ),
         Index("ix_user_documents_user_id", "user_id"),
     )

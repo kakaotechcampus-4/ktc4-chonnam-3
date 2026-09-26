@@ -455,19 +455,20 @@ def _create_analysis_tables() -> None:
         sa.UniqueConstraint("analysis_job_id", "repository_id", name="uq_candidates_job_repo"),
         sa.UniqueConstraint("analysis_job_id", "base_rank", name="uq_candidates_job_base_rank"),
         sa.CheckConstraint(
-            "filter_status IN ('eligible', 'excluded')", name="ck_candidates_filter_status"
+            "filter_status IN ('eligible', 'excluded')",
+            name="ck_analysis_repo_candidates_filter_status",
         ),
         sa.CheckConstraint(
             "filter_reason IN "
             "('private', 'fork', 'archived', 'no_language', 'too_small', 'inaccessible')"
             " OR filter_reason IS NULL",
-            name="ck_candidates_filter_reason",
+            name="ck_analysis_repo_candidates_filter_reason",
         ),
         sa.CheckConstraint(
             "selection_reason IN "
             "('portfolio_mentioned', 'base_rank_top', 'high_contribution', 'other')"
             " OR selection_reason IS NULL",
-            name="ck_candidates_selection_reason",
+            name="ck_analysis_repo_candidates_selection_reason",
         ),
     )
     op.create_index(
@@ -496,7 +497,7 @@ def _create_analysis_tables() -> None:
         sa.UniqueConstraint("analysis_job_id", "page_no", name="uq_candidate_pages_job_page"),
         sa.CheckConstraint(
             "status IN ('pending', 'running', 'succeeded', 'failed')",
-            name="ck_candidate_pages_status",
+            name="ck_analysis_repo_candidate_pages_status",
         ),
     )
 
@@ -533,9 +534,9 @@ def _create_analysis_tables() -> None:
         sa.UniqueConstraint("analysis_job_id", "repository_id", name="uq_match_scores_job_repo"),
         sa.CheckConstraint(
             "candidate_source IN ('rule_filter', 'portfolio', 'both')",
-            name="ck_match_scores_candidate_source",
+            name="ck_repo_match_scores_candidate_source",
         ),
-        sa.CheckConstraint("score >= 0 AND score <= 100", name="ck_match_scores_score_range"),
+        sa.CheckConstraint("score >= 0 AND score <= 100", name="ck_repo_match_scores_score_range"),
     )
 
 
@@ -943,12 +944,12 @@ def _create_knowledge_tables() -> None:
         sa.CheckConstraint(
             "domain_category IN "
             "('finance', 'game', 'travel', 'shopping', 'medical', 'mobility', 'etc')",
-            name="ck_domain_frames_category",
+            name="ck_domain_question_frames_category",
         ),
         sa.CheckConstraint(
             "axis IN "
             "('privacy_sensitive_data', 'reliability_operations', 'user_experience_context')",
-            name="ck_domain_frames_axis",
+            name="ck_domain_question_frames_axis",
         ),
     )
 
