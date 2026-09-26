@@ -125,8 +125,7 @@ async def test_answer_turn_mismatch(db: AsyncSession) -> None:
     interview, _ = await _setup(db, current_turn=2)
     await make_turn(db, interview, 1, answered=True)
     await make_turn(db, interview, 2)
-    await db.commit()
-    interview_id = interview.id  # 거부 경로의 rollback 이 ORM 객체를 만료시킨다
+    interview_id = interview.id
 
     assert not await _answer(db, interview_id, 3, "앞선 턴")  # 없는 턴
     assert not await _answer(db, interview_id, 1, "지난 턴")  # 현재 턴 아님
@@ -135,7 +134,7 @@ async def test_answer_turn_mismatch(db: AsyncSession) -> None:
 
 async def test_answer_duplicate_keeps_first(db: AsyncSession) -> None:
     interview, _ = await _setup(db)
-    interview_id = interview.id  # 거부 경로의 rollback 이 ORM 객체를 만료시킨다
+    interview_id = interview.id
     await _ask(db, interview_id)
 
     assert await _answer(db, interview_id, 1, "첫 답변")
@@ -147,6 +146,5 @@ async def test_answer_duplicate_keeps_first(db: AsyncSession) -> None:
 async def test_answer_not_in_progress(db: AsyncSession) -> None:
     interview, _ = await _setup(db, status="completed", current_turn=1)
     await make_turn(db, interview, 1)
-    await db.commit()
 
     assert not await _answer(db, interview.id, 1, "종료 후 답변")

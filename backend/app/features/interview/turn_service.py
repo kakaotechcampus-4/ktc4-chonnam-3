@@ -62,8 +62,9 @@ async def save_question(
         .returning(InterviewSession.current_turn)
         .execution_options(synchronize_session=False)
     )
+    # 거부 경로는 쓴 게 없어 rollback 하지 않는다 — rollback 은 세션 객체를 만료시키고
+    # 호출자의 미커밋 작업까지 지운다. 트랜잭션 종료는 세션을 연 쪽이 맡는다.
     if turn_no is None:
-        await db.rollback()
         return None
 
     turn = InterviewTurn(
@@ -132,8 +133,7 @@ async def save_answer(
         .returning(InterviewTurn.id)
         .execution_options(synchronize_session=False)
     )
-    if saved is None:
-        await db.rollback()
+    if saved is None:  # 쓴 게 없어 rollback 하지 않는다 (save_question 참고)
         return False
     await db.commit()
     return True
