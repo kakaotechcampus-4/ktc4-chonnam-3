@@ -6,7 +6,8 @@ Create Date: 2026-09-21
 
 수동 작성이다 (task-02). autogenerate 는 참고용으로만 썼다.
 
-downgrade 가능 범위: 이 migration 이 만든 테이블과 pgcrypto extension 전부를 되돌린다.
+downgrade 가능 범위: 이 migration 이 만든 테이블을 전부 되돌린다.
+pgcrypto extension 은 다른 스키마가 쓸 수 있어 되돌리지 않는다.
 데이터는 복구하지 않는다 — 운영 DB 에서는 쓰지 않는다.
 """
 
