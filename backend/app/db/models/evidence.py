@@ -50,7 +50,7 @@ class Evidence(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
         UUID(as_uuid=True), ForeignKey("repositories.id", ondelete="SET NULL"), nullable=True
     )
     source_type: Mapped[str] = mapped_column(String(20), nullable=False)
-    # commit SHA 또는 branch. 이게 없으면 나중에 같은 내용을 다시 꺼낼 수 없다.
+    # commit SHA. 이게 없으면 나중에 같은 내용을 다시 꺼낼 수 없다.
     git_ref: Mapped[str] = mapped_column(String(40), nullable=False)
     path: Mapped[str | None] = mapped_column(Text, nullable=True)
     snippet: Mapped[str] = mapped_column(Text, nullable=False)
