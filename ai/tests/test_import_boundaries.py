@@ -9,7 +9,9 @@ FORBIDDEN_IMPORT_ROOTS = {
     "arq",
     "backend",
     "fastapi",
+    "httpx",
     "openai",
+    "pydantic_settings",
     "redis",
     "sqlalchemy",
 }
@@ -46,6 +48,8 @@ def _direct_forbidden_imports(source):
         ("from fastapi import FastAPI", ("fastapi",)),
         ("from sqlalchemy.orm import Session", ("sqlalchemy",)),
         ("from openai.resources import Responses", ("openai",)),
+        ("from httpx import AsyncClient", ("httpx",)),
+        ("from pydantic_settings import BaseSettings", ("pydantic_settings",)),
     ),
 )
 def test_direct_import_checker_distinguishes_dependency_boundaries(source, expected):

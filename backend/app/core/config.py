@@ -6,12 +6,69 @@ docs/layer-rules.md 2절 · .env.example / task-01
 from functools import lru_cache
 from typing import Annotated, Literal
 
-from pydantic import field_validator
+from devon_ai.contracts import CallLimits
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 AppEnv = Literal["local", "dev", "prod"]
 CookieSameSite = Literal["lax", "strict", "none"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
+
+
+def _reject_boolean_timeout(value: object) -> object:
+    if isinstance(value, bool):
+        raise ValueError("llm_timeout_seconds must be a number")
+    return value
+
+
+def _reject_non_integer_limit(value: object) -> object:
+    if isinstance(value, (bool, float)):
+        raise ValueError("LLM integer limits must be integers")
+    return value
+
+
+# 설정을 읽을 때 잘못된 숫자 타입이 먼저 변환되면 호출 시 검증에서 구분할 수 없다.
+LLMTimeout = Annotated[float, BeforeValidator(_reject_boolean_timeout)]
+LLMInteger = Annotated[int, BeforeValidator(_reject_non_integer_limit)]
+
+
+class LLMSettings(BaseModel):
+    """이미 읽은 설정에서 실제 LLM 호출에 필요한 값만 검증한다.
+
+    환경을 다시 읽거나 누락된 실행 상한을 채우지 않는다. 미설정이면 호출 전에 실패한다.
+    """
+
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    openai_api_key: SecretStr = Field(min_length=1)
+    llm_default_model: str = Field(min_length=1)
+    llm_timeout_seconds: LLMTimeout = Field(gt=0, allow_inf_nan=False)
+    llm_max_output_tokens: LLMInteger = Field(gt=0)
+    llm_max_input_bytes: LLMInteger = Field(gt=0)
+    llm_max_response_bytes: LLMInteger = Field(gt=0)
+
+    @field_validator("openai_api_key")
+    @classmethod
+    def validate_api_key(cls, value: SecretStr) -> SecretStr:
+        if not value.get_secret_value().strip():
+            raise ValueError("openai_api_key must not be blank")
+        return value
+
+    @field_validator("llm_default_model")
+    @classmethod
+    def validate_model_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("llm_default_model must not be blank")
+        return value.strip()
+
+    def call_limits(self) -> CallLimits:
+        """AI에는 환경변수나 비밀키 대신 공급자와 무관한 제한값만 전달한다."""
+        return CallLimits(
+            timeout_seconds=self.llm_timeout_seconds,
+            max_output_tokens=self.llm_max_output_tokens,
+            max_input_bytes=self.llm_max_input_bytes,
+            max_response_bytes=self.llm_max_response_bytes,
+        )
 
 
 class Settings(BaseSettings):
@@ -26,6 +83,8 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        # SecretStr 변환 전의 입력도 검증 오류 문자열에 노출되지 않게 한다.
+        hide_input_in_errors=True,
     )
 
     # ── 앱 ──
@@ -62,10 +121,15 @@ class Settings(BaseSettings):
     # ── LLM ──
     # 모델명을 코드 상수로 두지 않는다. 아래는 seed 가 읽는 기본값이고
     # 실제 사용값은 prompt_versions.model 등 DB 에 저장한다 (backend/CLAUDE.md).
-    openai_api_key: str = ""
-    llm_default_model: str = "gpt-5.6-luna"
-    llm_timeout_seconds: int = 60
-    llm_max_retries: int = 1
+    openai_api_key: SecretStr | None = None
+    llm_default_model: str | None = "gpt-5.6-luna"
+    # 비어 있는 LLM 설정이 health 등 일반 앱 기동을 막지 않도록 호출 시점에 필수 검증한다.
+    llm_timeout_seconds: LLMTimeout | None = None
+    llm_max_output_tokens: LLMInteger | None = None
+    llm_max_input_bytes: LLMInteger | None = None
+    llm_max_response_bytes: LLMInteger | None = None
+    # ADR 0010의 자동 재시도 1회(총 시도 2회)를 표시하며 변경 가능한 호출 예산이 아니다.
+    llm_max_retries: LLMInteger = Field(default=1, ge=1, le=1)
 
     # ── 정책 · 분석 ──
     analysis_run_ttl_seconds: int = 7200
@@ -90,6 +154,27 @@ class Settings(BaseSettings):
         "domain_lead": 2,
         "hr_manager": 1,
     }
+
+    @field_validator(
+        "openai_api_key",
+        "llm_default_model",
+        "llm_timeout_seconds",
+        "llm_max_output_tokens",
+        "llm_max_input_bytes",
+        "llm_max_response_bytes",
+        mode="before",
+    )
+    @classmethod
+    def _empty_llm_value_is_unset(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
+
+    def require_llm(self) -> LLMSettings:
+        """캐시된 설정만 검증하며 비밀키와 네 실행 상한이 준비되지 않으면 실패한다."""
+        return LLMSettings.model_validate(self, from_attributes=True)
+
+    def call_limits(self) -> CallLimits:
+        """LLM 설정을 먼저 검증한 뒤 AI 호출에 전달할 상한을 만든다."""
+        return self.require_llm().call_limits()
 
     @field_validator("persona_turn_quota", mode="before")
     @classmethod

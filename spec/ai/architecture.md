@@ -43,7 +43,11 @@
 
 확인 기준 커밋은 `8dabd55`이며, 확인 당시 `backend/app/`의 AI 관련 모듈·주요 BE 모듈은 비어 있거나 모듈 주석만 있었다. `agents/contracts.py`에도 실제 계약 클래스는 없다. worker 등록, ORM, migration, seed, 테스트 fixture가 동작한다고 가정하지 않는다.
 
-이후 설치 가능한 `devon_ai` 골격과 `ai/tests`의 구조 검사를 추가했다. AI 모듈은 여전히 docstring만 있으며 실제 계약 클래스·Director·task 함수는 없다. 기존 BE의 AI 파일은 향후 연결 계층 안내로 남는다. 현재 검사 결과는 [검증 기록](verification.md)을 따른다.
+이후 설치 가능한 `devon_ai` 패키지와 task-02~03의 내부 계약·순수 검증·주입 호출 경계를 구현했다. BE에는 설정·OpenAI transport·prompt 로딩/seed를 연결했다. [구현 인계](designs/2026-09-23-ai-foundation.md)에 범위를 기록하며 분석 task·서비스 실행 통합은 후속 작업이다. 현재 검사 기준은 [검증 기록](verification.md)을 따른다.
+
+추가로 [Director 기본 질문 경로](designs/2026-09-23-director-question-path.md)를 구현했다.
+호출자가 준비한 목적의 질문 생성·참조 검사·독립 검토·성공/실패 반환을 제공하며,
+Director의 목적 자동 선정·도구 실행과 실제 서비스 연결은 포함하지 않는다.
 
 FE의 면접·분석·리포트 화면도 구현 검증 근거가 없고, 기존 타입에는 음성 계약 흔적이 있다. 세부 근거는 [원본 검토](source-audit.md)를 따른다. 문서의 FIX는 요구사항 상태이지 구현 상태가 아니다.
 

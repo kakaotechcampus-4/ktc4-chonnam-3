@@ -6,15 +6,37 @@
 
 모든 검사는 `통과`, `실패`, `보류`, `미실행`, `범위 밖`으로 구분한다. 빈 테스트 수집, import 성공, README 명령 예시, 정적 형식 검사만으로 AI 기능·모델 품질·서비스 흐름이 통과했다고 기록하지 않는다.
 
-현재 작성된 테스트는 패키지 구조·설치 경계를 대상으로 한다. callable facade와 실제 Director·task·모델 호출이 없으므로 DB·Redis·API·worker·실제 모델 평가는 별도 근거가 없는 한 미실행이다.
+패키지 구조·설치 검사 외에 task-02~03 계약·레포 검증·fake callable과 BE의 HTTP 호출·설정·prompt loader/seed 검사가 있다. 외부 HTTP/DB 응답을 대체한 검사와 실제 환경 검사를 구분한다. DB·Redis·API·worker·실제 모델 평가는 별도 근거가 없는 한 미실행이다.
+
+2026-09-23 task-01~03 검증: 양쪽 locked sync·Ruff·format·mypy 통과, AI `pytest -q` **90 passed**. 후속 로컬 PostgreSQL 15.19 검증 13개를 추가하고 `TEST_POSTGRES_URL`을 주입한 BE 전체 검사는 **133 passed**다. sdist/wheel 빌드와 별도 venv 설치 후 저장소 밖 11개 모듈 import도 통과했다. wheel 15개 entry에는 runtime·py.typed·metadata만 포함된다. 실제 OpenAI 호출은 키 미설정으로 미실행이다. PostgreSQL 검증은 별도 임시 DB에서 prompt 스키마·loader·seed만 확인했으며 현재 브랜치의 전체 migration·서비스 DB 연결 완료를 의미하지 않는다. 상세 로컬 결과는 Git 제외 `ai/report/foundation-verification-results.md`에, 재사용할 코드 경계는 [구현 인계](../../spec/ai/designs/2026-09-23-ai-foundation.md)에 기록했다.
+
+실제 DB 검사는 [test_prompt_postgres.py](../../backend/tests/llm_tasks/test_prompt_postgres.py)에서 수행한다. 실행 방법과 격리 범위는 [BE 테스트 안내](../../backend/docs/testing.md#실제-postgresql-프롬프트-검증)를 따른다. `TEST_POSTGRES_URL`이 없으면 해당 13개 검사는 skip되므로, 기존 단위 검사 통과를 실제 DB 검증으로 보고하지 않는다.
+
+2026-09-23 [Director 첫 구현](../../spec/ai/designs/2026-09-23-director-question-path.md) 후
+최종 검증: AI **137 passed**(Director 47개 포함), 실제 PostgreSQL URL을 주입한 BE
+**147 passed**(Director HTTP 연결 14개·PostgreSQL 13개 포함). 양쪽 Ruff·format·mypy 통과.
+Director JSON Schema는 별도 검사 환경에서 정상 1개·오류 4개 입력을 검증했고, 공유 계약 검사도
+schema 2개·부분 OpenAPI·양성/음성 fixture 7개를 통과했다. schema 검사 도구는 AI runtime 의존성에
+추가하지 않았다. 모델 응답과 의미 검토는 테스트 대역이며 실제 provider·검토 품질·DB/WS 면접 연결은 미검증이다.
+
+2026-09-23 PR #56 리뷰 수정 후 `develop`의 BE setup(`b444c64`)을 함께 검증했다.
+양쪽 `uv sync --locked --python 3.12`와 Ruff·format·mypy가 통과했고, AI **138 passed**
+(Director 47개), 실제 PostgreSQL URL을 주입한 BE **231 passed**, skip 0개
+(Director HTTP 연결 15개·PostgreSQL 13개)다. Director schema v2는 정상 1개·오류 5개,
+공유 계약 검사는 schema 2개·부분 OpenAPI·fixture 7개를 통과했다. JSON 깊이 64/65,
+영구 HTTP 오류·quota·Retry-After·오류 본문 중단·공유 호출 대기와 attempts를 회귀 검증했다.
+로컬 PostgreSQL 15.19의 임시 테스트 schema가 모두 삭제됐음을 확인하고 서버를 종료했다.
+Linux 실행은 WSL 미설치 및 Docker 엔진 미기동으로 미실행이다. Windows에서 명시적 깊이
+상한과 파서 RecursionError 처리를 각각 확인했지만 Linux 검증 통과로 간주하지 않는다.
+실제 모델·독립 검토 품질·전체 migration 및 서비스 E2E는 여전히 미실행이다.
 
 ## 기능별 검증 위치
 
 작업의 선행 관계는 [구현 작업 지도](pipeline.md)를 따른다. 현재 존재하는 구조 검사는 [test_package.py](../tests/test_package.py), [test_import_boundaries.py](../tests/test_import_boundaries.py), BE의 [설치 연결 검사](../../backend/tests/agents/test_ai_package_imports.py)다.
 
-아래는 **추가 예정이며 현재 없는 테스트 파일**이다. 경로를 문서에 적었다는 이유로 이미 테스트가 수집되거나 기능이 구현된 것으로 보고하지 않는다. 해당 기능의 승인된 범위를 구현할 때 생성하고, 각 task에 명시한 정상·실패·보류 사례를 작성한다. 아직 없는 테스트 경로로 실행한 수집 오류는 해당 기능 검증 결과가 아니다.
+아래 task-02/03 및 task-10 기본 생성 경로 테스트는 구현되어 있다. 나머지 task-04~13 경로는 **추가 예정**이며 존재·수집을 별도로 확인한다. task-02의 `ai/tests/test_repository_contracts.py`는 L1/L2 계약 검증이며 실제 분석 함수 검사가 아니다. BE 호출 경계는 `backend/tests/integrations/test_llm_client.py`, Director 연결은 `test_director_boundary.py`, 설정은 `tests/core/test_llm_config.py`, prompt는 `tests/llm_tasks/test_prompt_loader.py`·`test_prompt_seed.py`에서 검사한다.
 
-| 작업 | 추가 예정 위치, 저장소 루트 기준 | 주요 검증 경계 |
+| 작업 | 검증 위치, 저장소 루트 기준 | 주요 검증 경계 |
 | --- | --- | --- |
 | [02 계약](task-02-contracts.md) | `ai/tests/test_contracts.py` | 검토 fixture와 실제 채택 계약의 구분, 필드·참조·변환 |
 | [03 호출 경계](task-03-llm-boundary.md) | `ai/tests/test_llm_boundary.py` | fake client, parse/schema/호출 실패, attempt·metadata |
@@ -24,7 +46,7 @@
 | [07 도메인](task-07-domain-frames.md) | `ai/tests/agents/director/test_domain_frames.py` | 주입 frame·fallback·목적·가정형 표현 |
 | [08 Evidence](task-08-evidence-tools.md) | `ai/tests/agents/director/test_evidence_tools.py` | 조회 조건·실행 상태·범위·원문 연결 |
 | [09 답변](task-09-answer-analysis.md) | `ai/tests/llm_tasks/test_answer_analysis.py` | 세 축·평가 가능 여부·보완·원문 보존 |
-| [10 Director](task-10-director.md) | `ai/tests/agents/director/test_director.py` | 허용 행동·질문 검증·턴 정책·후속 질문 |
+| [10 Director](task-10-director.md) | `ai/tests/agents/director/test_director.py`, `backend/tests/integrations/test_director_boundary.py` | 준비된 목적의 생성·참조·독립 검토·실패·상한; 턴 정책·서비스 연결은 후속 |
 | [11 리포트](task-11-report.md) | `ai/tests/llm_tasks/test_report.py` | 서술·Persona 관찰·Turn/Evidence 연결·점수 분리 |
 | [12 평가](task-12-evaluation.md) | `ai/tests/test_eval_data_boundaries.py` | source group·입력/정답 분리·결과 기록·채점기 대조 |
 | [13 BE 연결](task-13-backend-integration.md) | `backend/tests/agents/test_ai_integration.py`, 해당 `backend/tests/features/` | AI 결과 수용·저장·큐·전송·복구; 설치 smoke와 별도 |

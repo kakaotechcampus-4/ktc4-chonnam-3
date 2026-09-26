@@ -31,9 +31,52 @@
 | Report | lazy generation 202/200/409, `feedback_json`, profile summary enqueue |
 | Events | 고정 10개 외 event_name 거부 |
 
-## LLM 실패
+## 실제 PostgreSQL 프롬프트 검증
 
-- timeout/provider 오류/parsing 실패는 자동 1회 재시도.
+`tests/llm_tasks/test_prompt_postgres.py`는 실제 PostgreSQL에서 prompt loader와 초기 seed를 검사한다.
+LLM이나 운영 prompt는 필요하지 않다. 테스트 전용 DB를 준비한 뒤 backend 디렉터리에서 실행한다.
+
+```powershell
+# 테스트 전용 접속 URL을 설정한다. 실제 비밀번호를 문서/로그에 남기지 않는다.
+$env:TEST_POSTGRES_URL = 'postgresql+asyncpg://TEST_USER:TEST_PASSWORD@127.0.0.1:TEST_PORT/TEST_DATABASE'
+uv run pytest -q tests/llm_tasks/test_prompt_postgres.py
+# 같은 DB 설정을 포함한 전체 BE 검사
+uv run pytest -q
+```
+
+이 검사는 `.env`나 `DATABASE_URL`을 자동으로 사용하지 않는다. `TEST_POSTGRES_URL`이 없으면
+13개 검사는 skip되며, 명시한 URL이 연결되지 않으면 실패한다. 접속 계정은 테스트 DB에서 schema를
+생성·삭제할 수 있어야 한다. 각 검사가 UUID 기반 전용 schema를 만들고 끝나면 해당 schema만 삭제한다.
+Docker가 있으면 기존 `docker-compose.yml`의 PostgreSQL 15를 사용할 수 있다. Windows에서는
+PostgreSQL 공식 [Windows 다운로드 안내](https://www.postgresql.org/download/windows/)의
+설치 없는 바이너리로도 임시 인스턴스를 실행할 수 있다.
+
+현재 브랜치에는 실행 가능한 DB migration이 없으므로 테스트 fixture는 DB branch의 고정 커밋
+`c731c5b87d8811885bf5f2edb07ec54569e1a7eb`, `backend/migrations/versions/0001_initial.py`에 있는
+prompt_versions 테이블과 두 UNIQUE 제약만 사용한다. 전체 migration 검증으로 보고하지 않는다.
+DB 구현 병합 후에는 fixture를 실제 migration과 계속 일치시킨다.
+
+검증 범위는 7개 prompt 등록·재실행, 기존 버전 보존·활성 전환, 조회 없음/중복, model/template 충돌,
+commit 전 타 세션 가시성, 호출자 rollback, task/version UNIQUE 및 활성 버전 부분 UNIQUE다.
+동시 seed는 독립 세션에서 `pg_blocking_pids`로 실제 transaction lock 대기를 확인하고,
+동일 입력 성공·다른 본문 충돌을 검사한다.
+
+2026-09-23 로컬 PostgreSQL **15.19**에서 해당 **13개 통과**, 같은 설정의 전체 BE **133개 통과**.
+이후 임시 인스턴스는 종료했으며, 프로젝트 `.env`와 기존 서비스 DB 설정은 변경하지 않았다.
+
+2026-09-23 PR #56 리뷰 수정과 `develop`의 BE setup(`b444c64`) 반영 후 다시 실행했다.
+로컬 PostgreSQL **15.19**의 13개를 포함해 전체 BE **231 passed**, skip 0개다.
+Ruff·format·mypy도 통과했다. 테스트 schema 잔여 0개를 확인하고 임시 서버를 종료했다.
+LLM HTTP는 mock 검증이며 실제 모델 호출·전체 migration·서비스 E2E는 미실행이다.
+
+## LLM 실패 처리
+
+- timeout·재시도 가능한 provider 오류·parsing 실패는 최대 1회 재시도.
+- 영구 HTTP 요청 오류·quota/결제 한도 소진은 provider 실패로 즉시 종료한다. 일시적 제한의 Retry-After는 요청 timeout 이내에서만 대기하며 서버 최소 대기를 줄이지 않는다.
+- 같은 budget의 재호출과 대기 중 취소 뒤에도 다음 시도는 남은 Retry-After 대기를 지킨다.
+- 큰 HTTP 오류도 provider로 분류하며 정상 HTTP 응답의 byte 초과는 budget으로 처리한다.
+- JSON container 깊이 64/65 경계와 파서 RecursionError 경로를 별도로 검사한다.
+- 공유 budget은 총 2회지만 결과 attempts는 이번 호출분만 반환한다. 두 번째 부분 요청에는 시도 번호 2만 포함한다.
 - schema 실패도 공통 호출 계층에서 자동 1회 재시도할 수 있다.
 - semantic 실패는 재호출하지 않는다.
 - 2회 실패 시 `llm_timeout`, `llm_parse_failed`, `llm_failed`.

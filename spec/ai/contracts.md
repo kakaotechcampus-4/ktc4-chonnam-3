@@ -2,7 +2,7 @@
 
 작성일: 2026-09-12. 갱신일: 2026-09-22. 상태: [0014](decisions/0014-minimal-change-revision.md)의 질문 기준·분석·판단 구성과 저장 흐름, [0015](decisions/0015-existing-contracts-and-tool-results.md)의 기존 Context·Question·Evidence 기본 필드와 ToolResult 다섯 필드·네 상태·부분 오류 해석은 Accepted다. 명시한 기본 표현 외 상세 객체·참조·공개 변환 등 미채택 부분은 **Proposed**다.
 
-이 문서는 공개 API나 승인된 DB schema를 대체하지 않는다. [패키지 설계](designs/2026-09-12-ai-package-structure.md)에 따른 AI 원본 위치는 `ai/src/devon_ai/contracts.py`이며 현재 실제 클래스가 없다. 기존 `backend/app/agents/contracts.py`도 연결 계층 안내만 있다. 패키지 구조 승인은 AI-L02의 타입 채택 승인이 아니다. 0014·0015에서 채택한 필드·값·저장 위치는 유지하고, 나머지 상세 객체·참조·변환은 AI·BE가 검토하여 테스트 fixture에 고정한다. 공개 camelCase와 내부 snake_case 변환은 service/schema 계층의 책임이다.
+이 문서는 공개 API나 승인된 DB schema를 대체하지 않는다. [패키지 설계](designs/2026-09-12-ai-package-structure.md)에 따른 AI 원본 위치는 `ai/src/devon_ai/contracts.py`다. task-02~03의 Python 계약·순수 검증과 BE 호출 경계는 [구현 인계](designs/2026-09-23-ai-foundation.md)에 기록했다. 0014·0015에서 채택한 필드·값·저장 위치는 유지하고, 상세 객체·참조·변환은 기존 표현을 따라 테스트 fixture에 고정한다. 공개 camelCase와 내부 snake_case 변환은 service/schema 계층의 책임이다.
 
 아래 필드 표와 enum은 명시적으로 Accepted인 범위 외에는 fixture로 검토할 후보이며, 이 문서만으로 migration·공개 API·WS enum 추가를 승인하지 않는다. 기존 FIX와 [0008 후보 정책](decisions/0008-ai-candidate-policy.md) 등 명시된 Accepted 정책만 승인 범위에서 확정된 요구사항이다.
 
@@ -67,6 +67,8 @@
 
 실제 연결할 자료가 없는 질문의 evidence_refs·jd_requirement_ids는 빈 목록이다. 필수 근거 유실·준비 실패를 빈 목록으로 바꾸거나 ID를 지어내지 않는다. Question의 상세 직렬화와 공개 메시지 변환은 기존 서비스 책임이다.
 
+준비된 목적을 사용하는 [Director 기본 생성 경로](designs/2026-09-23-director-question-path.md)는 모델 출력에서 question_contract를 제외하고 입력 원본을 코드로 결합한다. 이 경로의 evidence_refs·jd_requirement_ids는 Context에 등록되었으면서 준비 계약 basis_refs의 같은 kind에 포함된 ID만 선택할 수 있다. 모델 원시 schema v2의 다섯 필드와 최종 Question의 기존 여섯 필드를 구분하며, 독립 검토가 정확한 문장·원본 계약에 결합되었는지도 검사한다.
+
 ### Question Contract 저장 형식
 
 [0014 결정](decisions/0014-minimal-change-revision.md)에 따라 기존 다섯 필드를 해당 질문의 `interview_turns.question_contract` JSONB에 저장한다. 별도 기준 테이블이나 JSON 안의 필수 `schema_version` 필드는 추가하지 않는다.
@@ -101,7 +103,7 @@
 
 ## AnswerAnalysis
 
-과거 스켈레톤의 `specificity`, `verified_claims`, `unverified_claims` 표기는 아래 0014의 채택 필드를 대체하지 않는다. `specificity`를 충분성·정확성·기여의 통합 점수로 사용하지 않는다. 실제 계약 클래스와 BE 연결은 아직 구현되지 않았다.
+과거 스켈레톤의 `specificity`, `verified_claims`, `unverified_claims` 표기는 아래 0014의 채택 필드를 대체하지 않는다. `specificity`를 충분성·정확성·기여의 통합 점수로 사용하지 않는다. 순수 계약·검증은 구현되어 있으며 실제 답변 분석 생성·저장 service 연결은 후속 task다.
 
 [0014 결정](decisions/0014-minimal-change-revision.md)에 따라 기존 최상위 필드와 아래 명시한 값은 유지·채택한다. 목록 항목·근거 참조·판단 객체의 상세 형식은 AI-L02에서 기존 자료 표현에 맞춰 정한다.
 
@@ -191,11 +193,17 @@ L1의 생성 요약은 0006에 따라 프로젝트의 기능·역할을 설명�
 
 입력은 `task_name`, 실제 provider/model 설정, prompt/version, schema/version, 검증된 task input, timeout·호출 budget이다. 출력은 검증된 data 또는 typed failure와 호출 metadata다. token을 받지 못했을 때 0으로 추정하지 않는다.
 
-기존 FIX: timeout/provider 오류/JSON parsing 실패는 **자동 1회 재시도**, 총 2회 실패하면 중단한다. schema 실패도 같은 공통 호출 계층에서 최대 1회 재시도할 수 있다. 내부 error_code는 `llm_timeout`, `llm_parse_failed`, `llm_failed`를 사용하고 외부 flow reason으로 매핑한다.
+기존 FIX의 총 2회 상한을 유지한다. timeout·재시도 가능한 provider 오류·JSON parsing·schema 실패는 공통 호출 계층에서 최대 1회 재시도한다. 2026-09-23 PR #56 리뷰 반영으로 HTTP 400·401·403·404 등 영구적인 요청 오류와 429의 quota/결제 한도 소진은 `provider` 실패로 즉시 종료한다. HTTP 408·409·429의 일시적 제한·5xx는 남은 공유 예산 안에서 재시도한다. 내부 error_code는 `llm_timeout`, `llm_parse_failed`, `llm_failed`를 유지하고 외부 flow reason으로 매핑한다.
+
+일시적 429 및 재시도 가능한 오류의 `Retry-After`는 초 또는 HTTP-date로 해석한다. 대기 상한은 요청의 `timeout_seconds`이며 서버가 요구한 최소 대기가 이를 넘으면 줄여서 재시도하지 않고 종료한다. 일시적 429의 헤더가 없거나 잘못됐으면 `min(1초, timeout_seconds)`의 0.5~1배 범위에서 한 번 대기한다. 각 HTTP 시도 timeout과 대기 상한은 별개이며 함수 전체 deadline을 뜻하지 않는다. 취소는 전파한다. 이번 호출에 남은 시도가 없으면 대기 없이 반환하되, 같은 `CallBudget`을 재사용하는 다음 호출은 저장된 대기 시점의 잔여 시간을 지켜야 한다.
+
+JSON 객체·배열의 깊이는 루트 container 1부터 최대 64로 제한하며 scalar는 container 깊이에 포함하지 않는다. 반복문으로 검사하고 파서 자체 `RecursionError`도 처리한다. 공급자 봉투의 오류는 `provider`, 모델 출력의 오류는 `parse`다. HTTP 오류는 성공 응답의 byte budget과 분리한다. 재시도가 허용된 429 본문은 quota 판별을 위해 응답 byte 상한까지만 읽어 보호된 metadata에 보존하고, 다른 HTTP 오류는 상태만 기록하며 본문은 읽지 않는다. 원문은 일반 로그에 쓰지 않는다.
 
 [0008 결정](decisions/0008-ai-candidate-policy.md)에 따라 후보 실패는 parse, schema, semantic 실패로 구분한다. 어떤 invalid 결과도 성공 빈 객체, 추측한 기본값, 누락값 보충이나 ad hoc repair로 통과시키지 않는다. L1 batch의 유효한 항목은 보존하고 잘못된 항목만 실패로 분리하며, 실패는 현재 task에 한정하고 자료·문답 원문을 보존한다. semantic 실패는 Sprint 1에서 재호출하지 않는다.
 
 같은 논리 작업의 attempt는 공통 LLM gateway/task 호출 계층에서만 관리한다. SDK·provider retry와 ARQ retry가 곱해지지 않도록 SDK/provider retry는 끄거나 최소화하고, ARQ `max_tries=1`을 사용한다. 깨진 JSON을 위한 별도 repair prompt는 Sprint 1에 추가하지 않는다. task별 timeout·token·context·tool budget은 별도 설정으로 남는다.
+
+`ModelResult.attempts`는 이번 `call_model` 실행에서 발생한 기록만 반환한다. 같은 `CallBudget`의 첫 결과가 `[1]`이면 다음 호출분은 `[2]`이며, 실제 호출 없는 예산 소진·종료 결과는 빈 tuple이다. attempt 번호와 총 2회 상한은 공유 작업 전체에서 유지한다. 저장자는 각 결과를 수집하고, 전송 실패로 같은 결과를 다시 저장하는 경우의 멱등성은 저장 계층에서 별도로 처리한다.
 
 raw output·model·prompt_version·schema_version·input/output tokens·latency·attempt·error를 필요한 범위에서 보존한다. [0018의 자료 선택](decisions/0018-existing-baseline-bulk-resolution.md#ai-l18-후속-내부-비교-검증-자료)에 따라 실제 문답·연결 분석·리포트·실패 기록은 필요한 팀 검수자의 후속 내부 비교 검증에도 보관·재사용한다. 최종 내부 비교 검증 뒤에도 보관하며 별도의 자동 삭제 기한은 두지 않는다. task별 영구 저장 위치·마스킹·실제 권한·복사본 및 파생 자료 관리는 구현에서 확인한다. 공개 로그에 원문을 출력하는 것으로 저장 요구사항을 대신하지 않는다.
 

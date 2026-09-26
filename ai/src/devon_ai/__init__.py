@@ -1,1 +1,1 @@
-"""DEVON AI package skeleton; see spec/ai/architecture.md. Product behavior is unimplemented."""
+"""DEVON AI의 공통 계약·검증 패키지. 기능 실행은 각 task 모듈이 맡는다."""
