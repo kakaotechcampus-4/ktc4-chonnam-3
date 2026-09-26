@@ -139,6 +139,19 @@ async def test_unhandled_exception_becomes_internal_error(error_app: FastAPI) ->
     error = _assert_envelope(response.json())
     assert error["reason"] == Reason.INTERNAL_ERROR.value
     assert "비밀이 새면 안 된다" not in response.text
+    # ServerErrorMiddleware(사용자 미들웨어보다 바깥)로 곧장 새지 않고
+    # RequestIdMiddleware 를 통과했는지 — 안쪽 catch 미들웨어가 없으면 이 헤더가 빠진다.
+    assert "X-Request-ID" in response.headers
+
+
+async def test_method_not_allowed_keeps_allow_header(error_client: httpx.AsyncClient) -> None:
+    """405 는 envelope 로 바뀌어도 HTTP 표준이 요구하는 Allow 헤더를 유지해야 한다."""
+    response = await error_client.get("/echo")
+
+    assert response.status_code == 405
+    error = _assert_envelope(response.json())
+    assert error["reason"] == Reason.INVALID_REQUEST.value
+    assert "Allow" in response.headers
 
 
 def test_every_reason_has_status_and_message() -> None:
