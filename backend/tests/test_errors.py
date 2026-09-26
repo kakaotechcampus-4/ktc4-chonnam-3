@@ -29,7 +29,7 @@ from app.main import create_app
 REPRESENTATIVE_REASONS = [
     (Reason.INVALID_REPOSITORY, 400),
     (Reason.UNAUTHENTICATED, 401),
-    (Reason.TOKEN_INVALID, 403),
+    (Reason.GITHUB_TOKEN_INVALID, 403),
     (Reason.RUN_IN_PROGRESS, 409),
     (Reason.DOCUMENT_TOO_LARGE, 413),
     (Reason.UNSUPPORTED_DOCUMENT_TYPE, 415),

@@ -21,9 +21,12 @@ logger = get_logger(__name__)
 
 # 라우팅 단계에서 FastAPI 가 직접 내는 HTTPException 의 상태코드 -> reason.
 # 여기 없는 4xx 는 invalid_request, 5xx 는 internal_error 로 접는다.
+# ⚠ 403 은 매핑하지 않는다 — github_token_invalid/account_suspended/account_withdrawn
+#   모두 403 이라 상태코드만으로는 구분할 수 없고, 우리 인증 코드는 AppError 를 직접
+#   raise 하므로 이 fallback 을 타지 않는다. 다른 라이브러리의 HTTPException(403) 이
+#   섞였을 때 잘못된 도메인 reason 을 내보내는 쪽보다 invalid_request 로 접는 쪽이 안전하다.
 _REASON_BY_STATUS: dict[int, Reason] = {
     401: Reason.UNAUTHENTICATED,
-    403: Reason.TOKEN_INVALID,
     404: Reason.NOT_FOUND,
     413: Reason.DOCUMENT_TOO_LARGE,
     415: Reason.UNSUPPORTED_DOCUMENT_TYPE,
