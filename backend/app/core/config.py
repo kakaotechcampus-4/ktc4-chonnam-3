@@ -55,15 +55,15 @@ class Settings(BaseSettings):
     github_client_id: str = ""
     github_client_secret: str = ""
     github_login_scope: str = "read:user"
-    github_link_scope: str = "read:user,repo"
+    github_link_scope: str = "read:user"
     github_redirect_uri: str = "http://localhost:8000/api/auth/github/callback"
     token_encryption_key: str = ""
 
     # ── LLM ──
     # 모델명을 코드 상수로 두지 않는다. 아래는 seed 가 읽는 기본값이고
     # 실제 사용값은 prompt_versions.model 등 DB 에 저장한다 (backend/CLAUDE.md).
-    anthropic_api_key: str = ""
-    llm_default_model: str = "5.5 Luna"
+    openai_api_key: str = ""
+    llm_default_model: str = "gpt-5.6-luna"
     llm_timeout_seconds: int = 60
     llm_max_retries: int = 1
 
@@ -113,11 +113,6 @@ class Settings(BaseSettings):
     def is_prod(self) -> bool:
         """prod 환경 여부. 쿠키 secure 강제나 문서 노출 차단 판단에 쓴다."""
         return self.app_env == "prod"
-
-    @property
-    def cors_origins(self) -> list[str]:
-        """CORS 허용 origin 목록. 쿠키 인증이라 와일드카드를 쓰지 않는다."""
-        return [self.frontend_origin]
 
 
 @lru_cache
