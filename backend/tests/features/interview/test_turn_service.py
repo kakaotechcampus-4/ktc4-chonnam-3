@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import InterviewSession, InterviewTurn, TurnEvidence
-from app.features.interview.turn_service import save_answer, save_question
+from app.features.interview.turn_service import complete_interview, save_answer, save_question
 
 from .factories import make_evidence, make_interview, make_repo, make_run, make_turn, make_user
 
@@ -148,3 +148,30 @@ async def test_answer_not_in_progress(db: AsyncSession) -> None:
     await make_turn(db, interview, 1)
 
     assert not await _answer(db, interview.id, 1, "종료 후 답변")
+
+
+async def test_complete_after_last_answer(db: AsyncSession) -> None:
+    interview, _ = await _setup(db, current_turn=9)
+    await make_turn(db, interview, 9, answered=True)
+
+    assert await complete_interview(db, interview_id=interview.id) is True
+    await db.refresh(interview)
+    assert interview.status == "completed"
+    assert interview.completed_at is not None
+
+
+@pytest.mark.parametrize(
+    ("overrides", "last_answered"),
+    [
+        ({"current_turn": 8}, True),  # total_turns 미도달
+        ({"current_turn": 9}, False),  # 마지막 턴 미답변
+        ({"current_turn": 9, "status": "completed"}, True),  # 이미 종료
+    ],
+)
+async def test_complete_blocked(
+    db: AsyncSession, overrides: dict[str, Any], last_answered: bool
+) -> None:
+    interview, _ = await _setup(db, **overrides)
+    await make_turn(db, interview, overrides["current_turn"], answered=last_answered)
+
+    assert await complete_interview(db, interview_id=interview.id) is False

@@ -137,3 +137,32 @@ async def save_answer(
         return False
     await db.commit()
     return True
+
+
+async def complete_interview(db: AsyncSession, *, interview_id: uuid.UUID) -> bool:
+    """마지막 턴 답변 후 면접을 completed 로 바꾸고 commit 한다.
+
+    입력: 면접 id.
+    출력: 바꿨으면 True. 진행 중이 아니거나 total_turns 미도달이거나 마지막 턴이 미답변이면 False.
+    """
+    last_answered = exists().where(
+        InterviewTurn.interview_session_id == InterviewSession.id,
+        InterviewTurn.turn_no == InterviewSession.current_turn,
+        InterviewTurn.status == "answered",
+    )
+    done = await db.scalar(
+        update(InterviewSession)
+        .where(
+            InterviewSession.id == interview_id,
+            InterviewSession.status == "in_progress",
+            InterviewSession.current_turn == InterviewSession.total_turns,
+            last_answered,
+        )
+        .values(status="completed", completed_at=datetime.now(UTC))
+        .returning(InterviewSession.id)
+        .execution_options(synchronize_session=False)
+    )
+    if done is None:  # 쓴 게 없어 rollback 하지 않는다 (save_question 참고)
+        return False
+    await db.commit()
+    return True
