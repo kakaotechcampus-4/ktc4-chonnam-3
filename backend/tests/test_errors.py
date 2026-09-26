@@ -20,10 +20,9 @@ from app.core.errors import (
     REPO_ANALYSIS_ERROR_CODES,
     STATUS_BY_REASON,
     AppError,
-    Reason,
-    to_run_status,
 )
 from app.main import create_app
+from app.shared.enums import Reason, to_run_status
 
 # 완료 조건이 요구하는 대표 상태코드별 reason.
 REPRESENTATIVE_REASONS = [

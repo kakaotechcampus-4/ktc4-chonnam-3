@@ -15,8 +15,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from app.core.errors import AppError, Reason
+from app.core.errors import AppError
 from app.core.logging import get_logger
+from app.shared.enums import Reason
 
 logger = get_logger(__name__)
 
