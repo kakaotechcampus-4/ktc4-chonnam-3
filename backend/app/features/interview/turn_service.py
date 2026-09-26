@@ -1,7 +1,8 @@
 """한 턴의 DB 쓰기 — T1 질문 / T2 답변 / T3 분석 / T4 판단.
 T1: interview_sessions.current_turn +1 → interview_turns INSERT(status='asked', depth,
     parent_turn_no) → turn_evidences INSERT(usage='question_basis'). 한 트랜잭션.
-T2: answer_text UPDATE, status='answered' (제출 1회)
+T2: answer_text UPDATE, status='answered' (제출 1회). 현재 턴의 asked 행만 바꾼다 —
+    turn mismatch·이미 답변된 turn 은 저장하지 않는다.
 T3: analysis UPDATE
 T4: decision UPDATE + interview_sessions.context_state / turn_count / elapsed_sec 갱신
 ★ depth 1=주제 시작, 2+=꼬리질문. 새 주제로 넘어가면 1로 리셋.
@@ -9,8 +10,8 @@ T4: decision UPDATE + interview_sessions.context_state / turn_count / elapsed_se
   tech_lead는 가능한 한 근거를 연결하고 domain_lead·hr_manager는 근거 없이도 허용한다.
   첫 HR 질문은 evidence가 없어도 되며 Sprint 1 문서 Claim 생성·연결은 요구하지 않는다.
   답변에서 검증 가능한 주장이 나오면 후속 근거를 evaluation_basis로 연결한다.
-★ 질문 값(persona·문장·근거 id)은 Director 출력을 인자로 받는다. T1 은 구현됨,
-  T2~T4 와 WS 연결은 구현 대기다.
+★ 질문 값(persona·문장·근거 id)은 Director 출력을 인자로 받는다. T1·T2 는 구현됨,
+  T3·T4 와 WS 연결은 구현 대기다.
 
 확정본 §5 / task-15
 """
@@ -19,7 +20,7 @@ import uuid
 from collections.abc import Collection
 from datetime import UTC, datetime
 
-from sqlalchemy import exists, insert, literal, or_, select, update
+from sqlalchemy import Integer, cast, exists, func, insert, literal, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Evidence, InterviewSession, InterviewTurn, TurnEvidence
@@ -97,3 +98,42 @@ async def save_question(
 
     await db.commit()
     return turn
+
+
+async def save_answer(
+    db: AsyncSession, *, interview_id: uuid.UUID, turn_no: int, answer_text: str
+) -> bool:
+    """T2 — 현재 턴 답변을 저장하고 commit 한다.
+
+    입력: 면접 id, 클라이언트가 보낸 turn, 답변 원문.
+    출력: 저장했으면 True. 진행 중이 아니거나 현재 턴이 아니거나 이미 답변된 턴이면 False.
+    """
+    now = datetime.now(UTC)
+    is_current = exists().where(
+        InterviewSession.id == interview_id,
+        InterviewSession.status == "in_progress",
+        InterviewSession.current_turn == turn_no,
+    )
+    # 조건 확인과 저장을 UPDATE 한 번으로 — 동시 중복 제출은 턴 행 락에서 한쪽만 통과한다.
+    saved = await db.scalar(
+        update(InterviewTurn)
+        .where(
+            InterviewTurn.interview_session_id == interview_id,
+            InterviewTurn.turn_no == turn_no,
+            InterviewTurn.status == "asked",
+            is_current,
+        )
+        .values(
+            answer_text=answer_text,
+            status="answered",
+            answered_at=now,
+            answer_duration_sec=cast(func.extract("epoch", now - InterviewTurn.asked_at), Integer),
+        )
+        .returning(InterviewTurn.id)
+        .execution_options(synchronize_session=False)
+    )
+    if saved is None:
+        await db.rollback()
+        return False
+    await db.commit()
+    return True

@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import InterviewSession, InterviewTurn, TurnEvidence
-from app.features.interview.turn_service import save_question
+from app.features.interview.turn_service import save_answer, save_question
 
 from .factories import make_evidence, make_interview, make_repo, make_run, make_turn, make_user
 
@@ -93,3 +93,60 @@ async def test_foreign_evidence_rejected(db: AsyncSession) -> None:
     assert await db.scalar(select(InterviewTurn)) is None
     await db.refresh(interview)
     assert interview.current_turn == 0
+
+
+async def _answer(db: AsyncSession, interview_id: uuid.UUID, turn_no: int, text: str) -> bool:
+    return await save_answer(db, interview_id=interview_id, turn_no=turn_no, answer_text=text)
+
+
+async def _turn(db: AsyncSession, interview_id: uuid.UUID, turn_no: int) -> InterviewTurn:
+    turn = await db.scalar(
+        select(InterviewTurn)
+        .where(InterviewTurn.interview_session_id == interview_id, InterviewTurn.turn_no == turn_no)
+        .execution_options(populate_existing=True)
+    )
+    assert turn is not None
+    return turn
+
+
+async def test_answer_saved(db: AsyncSession) -> None:
+    interview, _ = await _setup(db)
+    await _ask(db, interview.id)
+
+    assert await _answer(db, interview.id, 1, "저는 백엔드 개발자입니다")
+
+    turn = await _turn(db, interview.id, 1)
+    assert (turn.status, turn.answer_text) == ("answered", "저는 백엔드 개발자입니다")
+    assert turn.answered_at is not None
+    assert turn.answer_duration_sec is not None and turn.answer_duration_sec >= 0
+
+
+async def test_answer_turn_mismatch(db: AsyncSession) -> None:
+    interview, _ = await _setup(db, current_turn=2)
+    await make_turn(db, interview, 1, answered=True)
+    await make_turn(db, interview, 2)
+    await db.commit()
+    interview_id = interview.id  # 거부 경로의 rollback 이 ORM 객체를 만료시킨다
+
+    assert not await _answer(db, interview_id, 3, "앞선 턴")  # 없는 턴
+    assert not await _answer(db, interview_id, 1, "지난 턴")  # 현재 턴 아님
+    assert (await _turn(db, interview_id, 2)).status == "asked"
+
+
+async def test_answer_duplicate_keeps_first(db: AsyncSession) -> None:
+    interview, _ = await _setup(db)
+    interview_id = interview.id  # 거부 경로의 rollback 이 ORM 객체를 만료시킨다
+    await _ask(db, interview_id)
+
+    assert await _answer(db, interview_id, 1, "첫 답변")
+    assert not await _answer(db, interview_id, 1, "두 번째 답변")
+
+    assert (await _turn(db, interview_id, 1)).answer_text == "첫 답변"
+
+
+async def test_answer_not_in_progress(db: AsyncSession) -> None:
+    interview, _ = await _setup(db, status="completed", current_turn=1)
+    await make_turn(db, interview, 1)
+    await db.commit()
+
+    assert not await _answer(db, interview.id, 1, "종료 후 답변")
