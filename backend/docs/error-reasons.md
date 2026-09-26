@@ -37,6 +37,7 @@
 | 면접 생성 | `too_many_repositories` | 400 |
 | 면접 생성 | `invalid_repository` | 400 |
 | 면접 생성 | `session_limit_exceeded` | 409 |
+| 면접 생성 | `run_expired` | 410 |
 | 면접 준비 | `prep_failed` | 409 |
 | 면접 준비 | `repo_unreachable` | 409 |
 | 면접 준비 재시도 | `prep_in_progress` | 409 |
