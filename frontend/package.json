@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint src",
     "test": "playwright test",
+    "test:proxy": "node --test tests-node/*.test.mjs",
     "test:integration": "playwright test --config playwright.integration.config.ts",
     "format": "prettier --write src",
     "preview": "vite preview"
