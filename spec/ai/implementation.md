@@ -147,8 +147,13 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
 
 - 결정: [ADR 0021](decisions/0021-domain-category-signal.md).
 - 구현: `backend/app/llm_tasks/domain_signal.py`의 `detect_domain_signal(PostingContent)`.
-  공고 본문 4개 필드의 키워드로 7종 중 하나를 판정하고, 근거를 `DomainSignalMatch`로 반환한다.
-- 검증: `backend`에서 `uv run --locked python -m pytest tests/llm_tasks/test_domain_signal.py`
-  7 passed, 변경 파일 대상 `ruff check`·`ruff format --check`·`mypy` 통과.
+  공고 본문 4개 필드의 키워드를 필드 가중치(4/3/2/1)로 합산해 단독 1위 category를 판정하고,
+  근거를 `DomainSignalMatch`로 반환한다.
+- 검증: `backend`에서 `uv run python -m pytest tests/llm_tasks/test_domain_signal.py`
+  9 passed, 변경 파일 대상 `ruff check`·`ruff format --check`·`mypy` 통과.
+- 실제 원티드 공고 4건(2026-09-28, 로컬 스크립트로 수동 확인): 281356 `medical`, 341487 `etc`,
+  359638 `shopping`은 공고 내용과 맞았다. 380611은 주요 업무가 광고 플랫폼인데 우대사항 한 줄의
+  "이커머스"만으로 `shopping`이 되어 근거가 약했다. 4건은 품질 측정이 아니라 동작 확인 수준이다.
 - 남은 작업: 분석 파이프라인에서 호출해 `postings.domain_category`에 기록하는 연결은 미구현이다.
-  실제 공고로 판정 품질을 측정하지 않았다.
+  359638처럼 회사가 원티드 자격요건 칸에 우대 문장("~이면 좋아요")을 넣으면 `jd_extract`가
+  `required`로 저장하는 문제를 확인했으나 이번 범위에서 다루지 않았다.
