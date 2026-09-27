@@ -40,7 +40,7 @@
 | `turn_no`, `total_turns` | 현재 질문 번호와 FIX 상한 9 |
 | `persona_counts` | 이미 확정·제시된 질문의 Persona별 횟수 |
 | `allowed_personas` | [공통 0004](../shared/decisions/0004-flexible-persona-allocation-restoration.md)에 따라 남은 턴으로 기술 최소 5턴·도메인과 HR 합산 최소 3턴을 충족할 수 있는 후보; 기술 목표는 6턴이며 첫 질문은 HR로 제한하고 Controller가 계산 |
-| `jd_requirements` | 저장된 ID, 원문, requirement_type, source field, tech_tags |
+| `jd_requirements` | 저장된 ID, 원문, category, source field, tech_tags |
 | `repositories` | 선택 repo ID, 고정 ref, primary 여부, 성공 분석과 분석 범위 |
 | `history` | 질문·Persona·제출 답변·판정·참조 ID; 사실과 요약 구분 |
 | `current_question_contract` | 전달 전에 확정한 질문 목적과 확인내용 |
@@ -179,7 +179,7 @@ tool_error만으로 확보 근거를 버리거나 사용자 감점·Director 전
 | --- | --- | --- | --- |
 | `repo_shallow_v1` | repo별 목적·주요 기능·project_types·tech_stack·프로젝트 기능/역할 요약·분석 한계 | 입력 repo와 일대일 대응, README 주장/코드 확인 구분; 요약 필드 매핑 별도 합의 | 기존 LLM 방향 유지 |
 | `repo_deep_v1` | architecture_summary·notable_areas·확인한 기술·분석 범위 | primary repo ref 고정, notable areas 1~5와 실제 파일 연결 | 기존 LLM 방향 유지 |
-| `jd_extract_v1` | 저장 가능한 요구사항·원문 연결 | required/preferred/unknown, Wanted 필드를 추측으로 변경 금지 | LLM 비호출, 구조화 필드 규칙 변환 |
+| `jd_extract_v1` | 저장 가능한 요구사항·원문 연결 | required/preferred/responsibility, Wanted 필드를 추측으로 변경 금지 | LLM 비호출, 구조화 필드 규칙 변환 |
 | `answer_analysis_v1` | 질문 범위 안의 정성 평가·검증할 주장 | 답변 인용·Contract key·evidence 관계 일치 | 기존 LLM 방향 유지 |
 | `director_v1` | 유효한 다음 질문 또는 bounded Tool 요청 | Persona·9턴·권한·반복·전제 제약 | 기존 LLM 방향 유지 |
 | `report_v1` | 종합·Persona 피드백과 실제 문답 근거 | 미관찰 인정, 원문 불변, 확정한 공개 점수 구조 유지·미검수 세부 채점 기준의 임의 생성 금지 | 기존 LLM 방향 유지 |

@@ -653,7 +653,7 @@ class PersonaCount(_Contract):
 class JDRequirement(_Contract):
     id: str
     text: str
-    requirement_type: Literal["required", "preferred", "unknown"]
+    category: Literal["required", "preferred", "responsibility"]
     source_field: str
     tech_tags: tuple[str, ...]
 
