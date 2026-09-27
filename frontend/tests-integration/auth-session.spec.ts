@@ -104,6 +104,22 @@ test('public callback proxy carries state and the real session survives reload, 
   await expect(page).toHaveURL('http://localhost:5173/login');
   expect((await context.cookies()).some((cookie) => cookie.name === 'devon_session')).toBe(false);
   expect((await context.request.get('/api/me')).status()).toBe(401);
+
+  // SPA 로그아웃 직후 같은 탭에서 OAuth를 다시 거치면 새 문서의 요청 차단 상태가 초기화된다.
+  await startOAuth('/api/auth/github/login');
+  await expect(page).toHaveURL('http://localhost:5173/home');
+  await expect(
+    page.getByRole('heading', { name: '안녕하세요, Browser Octocat 님!' }),
+  ).toBeVisible();
+  const nextSession = (await context.cookies()).find((cookie) => cookie.name === 'devon_session');
+  expect(nextSession?.value).toBeTruthy();
+  expect(nextSession?.value).not.toBe(session.value);
+  expect((await context.request.get('/api/me')).status()).toBe(200);
+
+  await page.goto('/mypage');
+  await page.getByRole('button', { name: '로그아웃', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: '로그아웃', exact: true }).click();
+  await expect(page).toHaveURL('http://localhost:5173/login');
   await page.goto('/home');
   await expect(page).toHaveURL('http://localhost:5173/login');
   expect(await page.content()).not.toContain('browser-private-github-token');

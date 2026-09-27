@@ -25,7 +25,7 @@ import { isSessionEnding } from '@/shared/queryClient';
 export const BASE = '/api';
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  // Mounted observers can refetch as their cache is cleared, before navigation finishes.
+  // 캐시 정리 중 아직 마운트된 observer가 새 조회를 시작해도 HTTP 요청을 보내지 않는다.
   if (isSessionEnding()) throw new DOMException('Session ended', 'AbortError');
   const res = await fetch(`${BASE}${path}`, {
     ...options,

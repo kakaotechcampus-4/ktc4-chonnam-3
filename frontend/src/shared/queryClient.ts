@@ -2,6 +2,8 @@ import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 
 import { isApiError } from '@/types/api';
 
+// OAuth 로그인은 전체 페이지 이동으로 새 문서를 로드할 때 이 상태를 초기화한다.
+// SPA 로그인으로 바꾸면 종료 상태의 초기화 정책도 함께 변경해야 한다.
 let leavingSession = false;
 
 export function isSessionEnding() {
@@ -16,7 +18,19 @@ export async function clearSessionQueries() {
 }
 
 function handleAuthError(error: unknown) {
-  if (!isApiError(error) || !('status' in error)) return;
+  if (!isApiError(error)) {
+    if (error instanceof DOMException && error.name === 'AbortError') return;
+    // 예외 이름·메시지·스택에 응답 원문이 섞일 수 있어 고정된 분류만 기록한다.
+    const type =
+      error instanceof SyntaxError
+        ? 'SyntaxError'
+        : error instanceof TypeError
+          ? 'TypeError'
+          : 'UnknownError';
+    console.error('Unexpected non-API error', type);
+    return;
+  }
+  if (!('status' in error)) return;
   const reason = error.error.reason;
   const unauthenticated = error.status === 401 && reason === 'unauthenticated';
   const blocked =
