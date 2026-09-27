@@ -253,3 +253,162 @@ async def test_canonical_link_callback_is_bound_to_starting_user(client, app, db
     )
     assert response.status_code == 302
     assert response.headers["location"] == "/login?error=invalid_state"
+
+
+async def test_concurrent_first_login_uses_one_identity(app, db, github):
+    from app.db.models.user import GithubAccount, User
+    from app.features.auth.oauth import GitHubProfile, OAuthToken
+    from app.features.auth.service import upsert_github_user
+
+    profile = GitHubProfile(5001, "concurrent", "Concurrent", None, 0)
+
+    async def create_user():
+        async with app.state.session_factory() as session:
+            return await upsert_github_user(
+                session, app.state.cipher, profile, OAuthToken("private", "read:user")
+            )
+
+    first, second = await asyncio.gather(create_user(), create_user())
+    assert first.id == second.id
+    assert await db.scalar(select(func.count()).select_from(User)) == 1
+    assert await db.scalar(select(func.count()).select_from(GithubAccount)) == 1
+
+
+async def test_relink_rechecks_account_status_after_provider_call(app, db, client, github):
+    from app.core.errors import AppError, Reason
+    from app.db.models.user import User
+    from app.features.auth.oauth import GitHubProfile, OAuthToken
+    from app.features.auth.service import upsert_github_user
+
+    await login(client)
+    # This session already authenticated the user before the external OAuth request.
+    user = (await db.scalars(select(User))).one()
+    assert user.status == "active"
+    async with app.state.session_factory() as moderation:
+        blocked = await moderation.get(User, user.id)
+        blocked.status = "suspended"
+        await moderation.commit()
+    with pytest.raises(AppError) as error:
+        await upsert_github_user(
+            db,
+            app.state.cipher,
+            GitHubProfile(1001, "octocat", "Octo", None, 3),
+            OAuthToken("new-token", "read:user"),
+            user.id,
+        )
+    assert error.value.reason == Reason.ACCOUNT_SUSPENDED
+
+
+async def test_logout_failure_does_not_claim_success_or_expire_cookie(
+    client, app, github, monkeypatch
+):
+    from redis.exceptions import ConnectionError
+
+    await login(client)
+
+    async def unavailable(*args, **kwargs):
+        raise ConnectionError("test outage")
+
+    monkeypatch.setattr(app.state.sessions.redis, "delete", unavailable)
+    response = await client.post("/api/auth/logout")
+    assert response.status_code == 500
+    assert response.json()["error"]["reason"] == "internal_error"
+    assert "devon_session" not in response.cookies
+
+
+async def test_session_slide_reaches_json_redirect_and_sse(client, app, redis, github):
+    from app.core.deps import current_user
+
+    @app.get("/auth-test-redirect")
+    async def redirect(user=Depends(current_user)):
+        return RedirectResponse("/home")
+
+    @app.get("/auth-test-stream")
+    async def stream(user=Depends(current_user)):
+        return StreamingResponse(iter(["data: authenticated\n\n"]), media_type="text/event-stream")
+
+    response = await login(client)
+    sid = response.cookies["devon_session"]
+    for path in ("/api/me", "/auth-test-redirect", "/auth-test-stream"):
+        await redis.expire(f"auth:sess:{sid}", 30)
+        response = await client.get(path)
+        assert response.status_code in (200, 307)
+        assert response.cookies["devon_session"] == sid
+        assert "Max-Age=1209600" in response.headers["set-cookie"]
+        assert await redis.ttl(f"auth:sess:{sid}") > 1209500
+
+
+async def test_redis_outage_is_server_error_not_expired_session(client, app, github, monkeypatch):
+    from redis.exceptions import ConnectionError
+
+    await login(client)
+
+    async def unavailable(*args, **kwargs):
+        raise ConnectionError("test outage")
+
+    monkeypatch.setattr(app.state.sessions.redis, "get", unavailable)
+    response = await client.get("/api/me")
+    assert response.status_code == 500
+    assert response.json()["error"]["reason"] == "internal_error"
+
+
+async def test_wrong_origin_cannot_logout(client, app, github):
+    await login(client)
+    response = await client.post(
+        "/api/auth/logout", headers={"origin": "https://untrusted.example"}
+    )
+    assert response.status_code == 403
+    assert (await client.get("/api/me")).status_code == 200
+
+
+async def test_websocket_uses_same_session_dependency_and_sliding_cookie(app, client, github):
+    from app.core.deps import current_user
+
+    @app.websocket("/auth-test-websocket")
+    async def websocket(websocket: WebSocket, user=Depends(current_user)):
+        await websocket.accept()
+        await websocket.send_json({"id": str(user.id)})
+        await websocket.close()
+
+    response = await login(client)
+    sid = response.cookies["devon_session"]
+
+    async def connect(cookie, origin):
+        messages = []
+        scope = {
+            "type": "websocket",
+            "asgi": {"version": "3.0"},
+            "http_version": "1.1",
+            "scheme": "ws",
+            "path": "/auth-test-websocket",
+            "raw_path": b"/auth-test-websocket",
+            "query_string": b"",
+            "root_path": "",
+            "headers": [(b"cookie", cookie.encode()), (b"origin", origin.encode())],
+            "client": ("127.0.0.1", 1234),
+            "server": ("test", 80),
+            "subprotocols": [],
+            "extensions": {"websocket.http.response": {}},
+        }
+
+        async def receive():
+            return {"type": "websocket.connect"}
+
+        async def send(message):
+            messages.append(message)
+
+        await app(scope, receive, send)
+        return messages
+
+    messages = await connect(f"devon_session={sid}", app.state.settings.frontend_origin)
+    assert messages[0]["type"] == "websocket.accept"
+    assert any(
+        name == b"set-cookie" and b"Max-Age=1209600" in value
+        for name, value in messages[0]["headers"]
+    )
+    for cookie, origin in [
+        ("", app.state.settings.frontend_origin),
+        (f"devon_session={sid}", "https://untrusted.example"),
+    ]:
+        messages = await connect(cookie, origin)
+        assert not any(message["type"] == "websocket.accept" for message in messages)
