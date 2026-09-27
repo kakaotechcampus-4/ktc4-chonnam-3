@@ -1,6 +1,6 @@
 # task-13 - Backend 통합과 인계
 
-상태: 구현 가이드. AI package 설치 smoke만 존재하며 실제 facade·service 연결은 미구현이다.
+상태: 구현 가이드. AI package 설치 smoke, 공통 호출·Director 질문 경로의 HTTP adapter 검사가 존재한다. 실제 면접 service·저장·WS 연결은 미구현이다.
 
 ## 목표
 

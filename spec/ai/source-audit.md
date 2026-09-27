@@ -59,7 +59,7 @@
 ### 모델, 근거, 리포트
 
 - Sprint 1의 모든 LLM 작업은 설정·seed에서 읽는 `5.5 Luna` 기준선으로 실행한다. 코드 상수로 고정하지 않고 실제 모델 문자열, prompt version, token, latency를 기록한다 (`backend/architecture.md:12-17`, `report.md:523-545`).
-- timeout/provider 오류와 JSON parse/schema 실패는 공통 LLM 호출 계층에서 자동 1회 재시도한 뒤 실패 처리한다. semantic 실패는 재호출하지 않으며, 깨진 JSON을 복구해 downstream에 전달하지 않는다.
+- timeout·재시도 가능한 provider 오류와 JSON parse/schema 실패는 공통 LLM 호출 계층에서 최대 1회 재시도한 뒤 실패 처리한다. semantic 실패는 재호출하지 않으며, 깨진 JSON을 복구해 downstream에 전달하지 않는다. 2026-09-23 PR #56 리뷰에서 영구 HTTP 오류·quota 소진의 즉시 종료 및 일시적 제한의 유한 대기를 구체화했다. 현행 기준은 [호출 계약](contracts.md#model-gateway와-실패)을 따른다.
 - `question_basis`와 `evaluation_basis`를 구분한다. `tech_lead` 질문에는 가능한 한 질문 근거를 연결하고, 답변의 검증 가능한 주장은 제한된 Evidence Retriever로 후속 확인한다 (`interview.md:100-117`).
 - 리포트는 lazy generation이고 Persona별 피드백은 `interview_reports.feedback_json`에 둔다. 성공 후 profile summary job을 enqueue하며 Sprint 1 summary는 완료 면접에 사용된 repository의 단순 집계가 중심이다 (`report.md`가 아닌 `spec/backend/features/report.md:5-27,35-43`).
 

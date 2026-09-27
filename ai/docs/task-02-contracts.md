@@ -1,11 +1,15 @@
 # task-02 - AI 내부 계약 검토와 채택
 
-> 상태: 구현 가이드. AI runtime과 내부 DTO/schema/Protocol은 아직 구현되지 않았다.
+> 상태: 채택된 계약·순수 검증과 fixture 구현. DB 존재·권한·영구 저장 및 공개 API 연결은 후속 서비스 작업.
 > 선행: [전체 순서](pipeline.md), [task-01 패키지 셋업](task-01-setup.md)
 
 ## 목표
 
 `devon_ai`와 BE 연결 계층이 공유할 내부 입력·출력 후보를 fixture로 검토하고, 승인된 범위만 명시적 계약으로 채택한다. 문서의 Proposed 필드가 존재한다는 이유만으로 저장 schema, 공개 API 또는 Python Protocol을 확정하지 않는다.
+
+## 현재 구현
+
+[구현 인계](../../spec/ai/designs/2026-09-23-ai-foundation.md)에 Python 표현·생산자·소비자와 저장 경계를 기록했다. `contracts.py`의 frozen dataclass, 구조 decode, 참조·인용·행동·고정 SHA/path 검증과 검증 완료 결과 직렬화를 사용한다. 레포 입력/출력은 task-04/05가 재사용하며 실제 분석 생성은 포함하지 않는다. 아래 체크리스트에는 서비스·운영 검증 항목도 있으므로 단위 테스트 통과만으로 모두 완료 처리하지 않는다.
 
 ## 근거
 
@@ -27,9 +31,9 @@
 
 ## 대상 파일과 책임
 
-- [ai/src/devon_ai/contracts.py](../src/devon_ai/contracts.py): 채택된 내부 계약과 순수 검증 경계의 구현 위치다. 현재 로컬은 docstring뿐이며, 상세 타입·참조·변환은 채택 범위에 맞춰 구체화한다.
+- [ai/src/devon_ai/contracts.py](../src/devon_ai/contracts.py): 채택된 내부 계약과 순수 검증·직렬화 구현이다. DB 존재·권한 확인은 BE가 수행한다.
 - [backend/app/agents/contracts.py](../../backend/app/agents/contracts.py): 채택된 AI 계약의 BE adapter와 service/public 변환 경계만 맡는다.
-- `ai/tests/test_contracts.py` (추가 예정, 현재 없음): 비식별 후보 fixture, 정상·오류 검증, 계층 간 의존성 검사를 둔다.
+- `ai/tests/test_contracts.py`, `test_repository_contracts.py`: 비식별 후보 fixture, 정상·오류·참조·부분 실패를 검사한다. 기존 `test_import_boundaries.py`는 의존 방향을 검사한다.
 - DB migration, ORM, 공개 OpenAPI/WS schema, 새 Agent·gateway·provider 모듈은 이 작업의 대상이 아니다.
 
 ## 작업

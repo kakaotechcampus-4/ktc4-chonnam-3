@@ -2,7 +2,7 @@
 
 이 문서는 재사용 가능한 구현 체크리스트의 연결 지도다. 서비스 pipeline 원본은 [AI 아키텍처의 확정 흐름](../../spec/ai/architecture.md)과 [BE pipeline](../../backend/docs/pipeline.md)이며, 이 작업 번호로 외부 분석 단계·worker 순서·계약을 변경하지 않는다.
 
-현재 상태는 설치 가능한 패키지 골격이다. `task-01`의 구조 검사와 별개로 `task-02`부터 `task-13`의 기능·통합·평가 구현은 완료되지 않았다. [레이어 규칙](layer-rules.md)과 [검증 안내](testing.md)를 공통으로 적용한다.
+task-01~03의 패키지·계약·공통 호출 기반을 구현했다. [구현 인계](../../spec/ai/designs/2026-09-23-ai-foundation.md)에 현재 callable과 검증 범위를 기록했다. [task-10 첫 구현](../../spec/ai/designs/2026-09-23-director-question-path.md)은 준비된 목적의 질문 생성·독립 검토 경로다. task-04~13의 나머지 기능·통합·평가와 실제 provider 검증은 후속 작업이다. 프롬프트 조회·seed는 로컬 PostgreSQL에서 검증했다. [레이어 규칙](layer-rules.md)과 [검증 안내](testing.md)를 공통으로 적용한다.
 
 ## 작업을 선택하는 순서
 
