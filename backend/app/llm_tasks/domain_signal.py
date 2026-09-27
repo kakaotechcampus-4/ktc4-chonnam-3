@@ -36,14 +36,25 @@ _TEXT_CATEGORIES: tuple[DomainCategory, ...] = (
 
 # 키워드는 "그 도메인 서비스를 다룬다"는 원문 신호만 담는다. 기술 스택명(React 등)이나
 # 회사명 패턴은 포함하지 않는다 — company_name 필드 자체를 매칭 대상에서 제외하는 것과
-# 같은 이유다.
+# 같은 이유다. 결제·예약·재고·물류·운송처럼 여러 도메인에 공통으로 나오는 기능 단어도
+# 충돌만 만들므로 넣지 않는다.
 _CATEGORY_KEYWORDS: dict[DomainCategory, tuple[str, ...]] = {
-    "finance": ("금융", "결제", "핀테크", "증권", "은행", "보험", "송금", "대출", "자산관리"),
+    "finance": ("금융", "핀테크", "증권", "은행", "보험", "송금", "대출", "자산관리"),
     "game": ("게임", "게이밍", "e스포츠", "MMORPG", "게임 서버"),
-    "travel": ("여행", "숙박", "항공", "예약", "호텔", "관광"),
-    "shopping": ("커머스", "쇼핑", "이커머스", "리테일", "재고", "물류"),
+    "travel": ("여행", "숙박", "항공", "호텔", "관광"),
+    "shopping": ("커머스", "쇼핑", "이커머스", "리테일"),
     "medical": ("의료", "헬스케어", "병원", "건강관리", "제약", "바이오"),
-    "mobility": ("모빌리티", "배차", "택시", "차량 호출", "운송", "라이더"),
+    "mobility": ("모빌리티", "배차", "택시", "차량 호출", "라이더"),
+}
+
+# 직무 자체를 설명하는 필드일수록 도메인 신호가 강하다. 우대사항은 "있으면 좋은 경험"이라
+# 필수 요건과 같은 가장 낮은 가중치를 준다.
+# ponytail: 고정 가중치, 오분류 사례가 쌓이면 0021 범위 안에서 조정
+_FIELD_WEIGHTS: dict[str, int] = {
+    "position": 3,
+    "main_tasks": 2,
+    "requirements": 1,
+    "preferred_points": 1,
 }
 
 
@@ -69,9 +80,9 @@ class DomainSignalResult:
     """신뢰 가능한 단일 신호가 없으면 `etc`."""
 
     matches: tuple[DomainSignalMatch, ...]
-    """category 판정 근거. `category`가 `etc`이면서 `matches`가 비어 있으면 신호 자체가
-    없었다는 뜻이고, `matches`가 있는데 `etc`이면 서로 다른 category가 충돌해 신뢰하지
-    못했다는 뜻이다 — 두 경우를 API 응답으로 구분하려면 이 차이를 그대로 전달한다."""
+    """판정된 category의 근거. `etc`이면서 `matches`가 비어 있으면 신호 자체가 없었다는
+    뜻이고, `matches`가 있는데 `etc`이면 1위 category가 동점이라 고르지 못했다는 뜻이다
+    (이때는 동점 category들의 근거를 모두 담는다)."""
 
 
 def detect_domain_signal(posting: PostingContent) -> DomainSignalResult:
@@ -79,20 +90,26 @@ def detect_domain_signal(posting: PostingContent) -> DomainSignalResult:
     `posting.company_name`·`posting.industry`는 참조하지 않는다.
 
     1. `position`·`main_tasks`·`requirements`·`preferred_points` 원문에서 키워드를 찾는다.
-    2. 정확히 하나의 category만 발견되면 채택한다. 두 개 이상이 동시에 발견되면(예: 커머스
-       공고의 "결제 API") 서로 다른 신호가 충돌한 것이므로 `etc`로 fallback한다.
-    3. 신호가 전혀 없어도 `etc`다.
+    2. category별로 근거 필드의 가중치(`_FIELD_WEIGHTS`)를 합산해 1위가 단독이면 채택한다.
+       예: 주요 업무의 "커머스"(2)가 우대사항의 "게임"(1)보다 앞선다.
+    3. 1위가 동점이면 어느 쪽인지 추측하지 않고 `etc`다. 신호가 전혀 없어도 `etc`다.
     """
     matches_by_category = _match_text_fields(posting)
     if not matches_by_category:
         return DomainSignalResult(category="etc", matches=())
 
-    if len(matches_by_category) > 1:
-        conflicting = tuple(m for ms in matches_by_category.values() for m in ms)
-        return DomainSignalResult(category="etc", matches=conflicting)
+    scores = {
+        category: sum(_FIELD_WEIGHTS[m.source_field] for m in ms)
+        for category, ms in matches_by_category.items()
+    }
+    top = max(scores.values())
+    leaders = [c for c, score in scores.items() if score == top]
+    if len(leaders) > 1:
+        tied = tuple(m for c in leaders for m in matches_by_category[c])
+        return DomainSignalResult(category="etc", matches=tied)
 
-    ((category, matches),) = matches_by_category.items()
-    return DomainSignalResult(category=category, matches=tuple(matches))
+    (category,) = leaders
+    return DomainSignalResult(category=category, matches=tuple(matches_by_category[category]))
 
 
 def _match_text_fields(posting: PostingContent) -> dict[DomainCategory, list[DomainSignalMatch]]:

@@ -44,25 +44,31 @@ def test_single_text_signal_is_adopted():
     assert result.matches[0].keyword == "여행"
 
 
-def test_conflict_within_one_sentence_falls_back_to_etc():
+def test_generic_feature_words_do_not_create_a_conflict():
+    """결제·예약은 여러 도메인에 공통인 기능 단어라 키워드가 아니다 (0021)."""
     result = detect_domain_signal(_posting(main_tasks=["숙박 예약 서비스의 결제 연동 개발"]))
 
-    # "결제"(finance)와 "숙박"(travel)이 같은 문장에 동시에 있어 충돌하므로 etc로 남는다.
-    assert result.category == "etc"
-    assert {m.keyword for m in result.matches} == {"결제", "숙박"}
+    assert result.category == "travel"
+    assert {m.keyword for m in result.matches} == {"숙박"}
 
 
-def test_conflicting_category_signals_fall_back_to_etc_but_keep_matches():
+def test_stronger_field_wins_over_weaker_conflicting_signal():
     result = detect_domain_signal(
-        _posting(
-            main_tasks=["커머스 서비스의 결제 API 개발"], preferred_points=["게임 서버 운영 경험"]
-        )
+        _posting(main_tasks=["커머스 서비스의 API 개발"], preferred_points=["게임 서버 운영 경험"])
+    )
+
+    # main_tasks(2) > preferred_points(1)
+    assert result.category == "shopping"
+    assert {m.keyword for m in result.matches} == {"커머스"}
+
+
+def test_tied_top_score_falls_back_to_etc_but_keeps_matches():
+    result = detect_domain_signal(
+        _posting(requirements=["금융 서비스 개발 경험"], preferred_points=["게임 서버 운영 경험"])
     )
 
     assert result.category == "etc"
-    categories_found = {m.keyword for m in result.matches}
-    assert "커머스" in categories_found or "결제" in categories_found
-    assert "게임" in categories_found
+    assert {m.keyword for m in result.matches} == {"금융", "게임"}
 
 
 def test_company_industry_is_never_used_as_a_signal():
