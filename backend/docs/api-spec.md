@@ -1,13 +1,13 @@
 # API 스펙 구현 기준
 
-공통 API 계약의 원본은 `spec/shared/contracts/openapi.yaml`이다. 이 파일은 백엔드 구현자가 읽는 보조 설명이다.
+일반 REST/fetch API 계약의 원본은 `spec/shared/contracts/openapi.yaml`이다. WS·SSE·브라우저 이동 경로는 `frontend/docs/api-spec.md`를 따른다. 범위 구분은 [공통 계약 안내](../../spec/shared/contracts/README.md)가 원본이며, 이 파일은 백엔드 구현자가 읽는 보조 설명이다.
 
 ## 원칙
 
 - API field는 camelCase.
 - Python/Pydantic 내부와 DB는 snake_case.
 - 모든 4xx/5xx는 `error.reason`, `error.message`, `error.details` envelope를 사용한다.
-- FE 문서와 충돌하면 `spec/shared/contracts/openapi.yaml`을 우선한다.
+- 일반 REST/fetch API가 FE 문서와 충돌하면 `spec/shared/contracts/openapi.yaml`을 우선한다. WS·SSE·브라우저 이동 경로는 위 예외 구분을 유지한다.
 - `PENDING_*` 항목은 임의로 확정하지 않는다.
 
 ## Sprint 1 주요 API

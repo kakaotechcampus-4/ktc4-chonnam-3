@@ -11,6 +11,30 @@
 
 문서 없이 공고 URL만으로 분석할 수 있다. 공고는 필수이고, Wanted fetch/extract 실패 또는 unsupported site는 hard blocker다.
 
+## Wanted 공고 수집·분류
+
+공고는 면접 분석의 원문으로 사용한다. 채용이 마감되었더라도 본문을 가져올 수 있으면 분석한다. Wanted의 `status`, `due_time`만으로 수집을 실패 처리하지 않는다. HTTP·네트워크 오류, 잘못된 응답, 빈 본문은 `jd_fetch_failed`, 본문은 있지만 추출 가능한 구조화 항목이 없으면 `jd_extraction_failed`로 처리한다.
+
+API `category`는 화면의 항목 구분이고, DB·AI의 `requirement_type`은 필수·우대 여부다. 기존 [API enum](../../shared/contracts/openapi.yaml)과 [DB enum](../../../backend/docs/db-schema.md)을 각각 유지하며 다음과 같이 변환한다.
+
+| Wanted 원문 필드 (`source_field`) | DB·AI `requirement_type` | API `category` |
+| --- | --- | --- |
+| `requirements` | `required` | `required` |
+| `preferred_points` | `preferred` | `preferred` |
+| `main_tasks` | `unknown` | `responsibility` |
+
+주요 업무만으로 필수·우대 여부를 추측하지 않는다. `unknown`은 `responsibility`의 별칭이 아니며, 원문 출처가 `main_tasks`일 때만 API에서 주요 업무로 표시한다. 다른 출처의 `unknown`을 주요 업무로 바꾸지 않는다.
+
+`JdRequirementDraft`는 API `category`와 함께 계산 속성 `requirement_type`, `source_field`를 제공한다. 저장 호출부는 두 속성을 명시적으로 읽고 원문 출처도 보존해야 재조회 후 같은 화면 분류를 복원할 수 있다. `category`를 DB `requirement_type`에 그대로 저장하지 않는다. 이 변환은 기존 enum을 연결하는 규칙이며 새 DB enum이나 컬럼을 추가하지 않는다.
+
+### 공고 재조회와 이전 자료 보존
+
+[0014 결정](../../ai/decisions/0014-minimal-change-revision.md)에 따라 normalized Wanted URL로 재사용 가능한 현재 성공 자료를 찾는다. 재사용 기간은 [현재 로컬 기준 채택 결정](../../shared/decisions/0002-local-policy-baseline.md)에 따라 `fetched_at` 기준 7일(`JD_REUSE_TTL_DAYS=7`)이다. 재조회한 내용이 같으면 기존 자료를 재사용하고, 내용이 바뀌면 새 `job_postings` ID와 그에 연결된 요구사항 ID로 저장한다.
+
+이전 공고·요구사항을 덮어쓰거나 삭제 후 재삽입하지 않는다. 이미 확정된 run·면접·질문·리포트는 당시 자료 ID를 계속 참조하며, 새 면접도 해당 run에 확정된 자료를 사용한다. 새 분석 run은 재사용 규칙에 맞는 현재 자료를 선택한다. 별도 공고 이력 테이블이나 질문별 본문 복사본은 만들지 않는다.
+
+이는 기존 URL 재사용 규칙에 당시 자료를 보존하는 DB 저장 동작을 보완한 결정이다. 내용 동일성의 비교 필드·정규화, 재확인 시각의 저장·갱신과 동시 수집의 중복 방지 제약은 AI-L02·AI-L03·AI-L12에서 정한다. 7일 정책의 채택은 재사용 기능 구현 완료를 뜻하지 않는다. 실제 구현은 재사용 기간, 동일 내용 재사용, 변경 내용의 새 ID, 이전 참조 보존을 검증해야 한다.
+
 ## 단계
 
 분석 step key는 7개로 고정한다.
@@ -31,7 +55,7 @@
 - 첫 batch 10개는 단순 상위 10개가 아니라 혼합 전략으로 구성한다.
 - 첫 batch는 JD 수집·추출보다 먼저 확정되므로 JD signal을 사용하지 않는다.
 - 첫 batch는 포트폴리오 GitHub URL 언급 repo 최대 3개, base rank top 최대 5개, high contribution 최대 2개를 중복 제거해 최대 10개로 만든다.
-- JD 기반 score와 추천 이유는 `match_score` 단계와 후속 candidate page/ranking에서만 사용한다.
+- JD 기반 추천 이유는 `match_score` 단계와 후속 candidate page/ranking에서만 사용한다. [0017 결정](../../ai/decisions/0017-recommendation-score-deferral.md)에 따라 Sprint 1 숫자 match score는 보류한다.
 - 제외 repo도 `filter_status='excluded'`, `filter_reason`으로 저장한다. 기본 응답에는 `eligible`만 노출한다.
 
 주요 필드:
@@ -46,6 +70,12 @@
 - `ranking_signals JSONB`
 - `filter_status`: `eligible`, `excluded`
 - `filter_reason`: `private`, `fork`, `archived`, `no_language`, `too_small`, `inaccessible`
+
+Sprint 1 추천 카드는 기존 `recommended`, `recommendReason`, `matchedRequirementIds`와 최대 5개 추천을 유지하며 필수·nullable `matchScore`는 null을 반환한다. null만으로 실패나 추천 제외를 판단하지 않고 새 점수 정렬을 추가하지 않는다. 기존 `repo_match_scores`의 null 저장·응답 변환은 구현 시 확인한다.
+
+[0018 결정](../../ai/decisions/0018-existing-baseline-bulk-resolution.md)에 따라 공고 기술 태그와 유효한 L1 기술 목록을 직접 비교하고, 일치 기술이 있는 선택 가능 저장소 중 기존 run 후보 순서에서 앞 5개까지 추천한다. 모든 page를 합쳐 0~5개이며, 후보 수집 순위를 JD 적합도 순위로 재해석하거나 추가 LLM 호출을 만들지 않는다. 공고 기술 정보가 없거나 일치가 없으면 정상 미추천이며 직접 선택은 유지한다.
+
+추천 이유는 기술 관련성만 설명한다. 공고 전체 기술 태그가 각 요구사항에 복사되어 있으므로 `matchedRequirementIds`는 해당 문장에서도 일치 기술이 확인될 때만 연결하고 없으면 빈 목록을 사용한다. 경력 연수·요건 충족을 단정하지 않으며, 추천 갱신이 사용자의 기존 선택을 덮어쓰지 않는다. 이 채택은 실제 매칭·저장·응답 구현 완료를 뜻하지 않는다.
 
 ## 더 보기
 
@@ -76,7 +106,7 @@ FE 상태 매핑:
 중복 요청 재사용은 `POST /analysis-runs`에만 적용한다.
 
 - fingerprint: `user_id`, normalized `posting_url`, `document_id` 또는 문서 해시/추출 GitHub URL 목록.
-- 같은 fingerprint의 `queued/running` job이 있으면 기존 `runId`를 반환한다.
+- 같은 fingerprint의 `queued/running` job이 있으면 새 job을 만들지 않고 `409 run_in_progress`와 공통 오류 본문의 `error.details.runId`로 기존 run ID를 반환한다. FE는 이 ID로 기존 분석 진행 화면으로 이동한다.
 - 종료 상태(`succeeded`, `partial`, `failed`, `canceled`)면 새 run 생성을 허용한다.
 
 ## 선택 가능 조건

@@ -77,10 +77,12 @@ WS path는 realtime `sessionId` 기준 `/api/ws/interviews/{sessionId}`다. REST
 - 기본 9턴.
 - Sprint 1은 9턴 완료 시 종료. Director 조기 종료 없음.
 - 첫 질문은 `hr_manager` 고정이고 evidence 없이 허용한다.
-- 2턴부터 Director가 persona를 선택한다.
+- 2턴부터 Director가 persona를 선택한다. 첫 질문 이후의 persona 순서는 고정하지 않는다.
 - `tech_lead` 목표 6턴, 최소 5턴.
-- `domain_lead + hr_manager` 합산 최소 3턴.
-- `domain_lead`와 `hr_manager` 사이 3턴 배분은 고정하지 않고 Director가 판단한다.
+- `domain_lead + hr_manager` 합산 최소 3턴. 첫 HR 질문도 이 횟수에 포함한다.
+- `domain_lead`와 `hr_manager` 사이의 배분은 고정하지 않고 Director가 판단한다. 전체 9턴과 최소 횟수를 지키는 범위에서 HR을 다시 선택할 수 있다.
+
+[기존 배분 복원 결정](../../shared/decisions/0004-flexible-persona-allocation-restoration.md)에 따른 확정 정책이며, Director의 횟수 제어 구현·검증은 별도 작업이다.
 
 기술 질문은 모든 선택 repo를 균등하게 다루지 않는다. primary repo 1~2개 중심으로 근거 있는 꼬리질문 품질을 우선한다.
 

@@ -1,6 +1,6 @@
 # task-08 - 제한 Evidence Tool
 
-상태: 구현 가이드. 추가 조회·결과 해석 정책은 승인됐지만 Tool runtime과 실제 I/O는 아직 구현되지 않았다.
+상태: 구현 가이드. 추가 조회·결과 해석 정책, 기존 Evidence·ToolResult 필드 구성과 부분 오류 처리는 승인됐지만 Tool runtime과 실제 I/O는 아직 구현되지 않았다.
 
 ## 목표
 
@@ -16,9 +16,9 @@
 - [0008 AI 후보 검증·선택 정책](../../spec/ai/decisions/0008-ai-candidate-policy.md)의 Evidence 후보 우선순위
 - [0009 AI 평가 방법과 비교 실험](../../spec/ai/decisions/0009-ai-evaluation-method.md)의 검색 실패 원인 분리·통제 비교
 - [0002 Sprint 1 vector 검색 미도입 결정](../../spec/ai/decisions/0002-sprint1-vector-search.md)
-- [AI 내부 계약의 Evidence·ToolResult 제안](../../spec/ai/contracts.md)
+- [AI 내부 계약의 Evidence·ToolResult](../../spec/ai/contracts.md#evidence와-toolresult)와 [0015 기존 계약 채택](../../spec/ai/decisions/0015-existing-contracts-and-tool-results.md)
 - [작업 Context의 Evidence 최소화와 보호](../../spec/ai/features/job-context.md)
-- [잔여 결정 목록의 AI-L02·AI-L04·AI-L08·AI-L12](../../later.md)
+- [구현·검수 인계](pipeline.md#기존-id별-구현검수-인계)의 AI-L02·AI-L04·AI-L08·AI-L12
 
 ## 선행 조건
 
@@ -52,6 +52,7 @@
 - [ ] notable area가 디렉터리면 합의된 열거 방식 없이 `read_file`하거나 재귀 탐색하지 않는다.
 - [ ] AI가 인접 후보를 새로 열거하지 않고 BE가 supplied allowed scope로 준 후보만 사용한다.
 - [ ] 미조회와 정상 조회 후 미발견을 분리한다.
+- [ ] ToolResult는 채택된 다섯 필드·네 상태와 부분 오류 규칙을 따른다. 같은 실행의 오류에도 검증된 items는 보존하며 독립 실행의 성공 결과를 소급 실패로 바꾸지 않는다.
 - [ ] 정상 미발견은 `unverified`, 분석 부족과 Tool 장애는 감점 없는 검증 불가로 해석한다.
 - [ ] 실제 코드 불일치는 버전·조건을 확인할 중립 후속 질문이 필요한 충돌 후보로 둔다.
 - [ ] `found`도 주장 사실성·개인 기여를 자동 확정하지 않고 원문과 관계를 별도 판단한다.
@@ -67,6 +68,7 @@
 - [ ] 세 조건 모두 참인 사례와 조건별 하나씩 거짓인 세 사례를 대조한다.
 - [ ] 이미 있는 직접 근거, 정확한 파일, 사전 검증된 인접 후보의 우선순위와 source 적합성을 검사한다.
 - [ ] 미조회, `not_found`, `insufficient_analysis`, `tool_error`, 실제 불일치를 구분한다.
+- [ ] 일부 확보 뒤 오류, 독립 실행의 성공 후 다른 실행 실패, invalid 결과를 대조한다. 실제 확인 범위·미완료 범위·오류와 확보한 유효 근거가 계약대로 구분되는지 검사한다.
 - [ ] 잘못된 ref, 무관한 유사 파일, 다른 사용자 repo, traversal, 외부 지시 README를 거절한다.
 - [ ] path가 같아도 ref가 다르면 같은 Evidence로 채택하지 않는지 검사한다.
 - [ ] Tool 성공과 claim 지지, commit 존재와 개인 기여가 분리되는지 검사한다.
@@ -88,8 +90,8 @@
 ## 결정 대기와 재개 조건
 
 - AI-L08: 디렉터리 열거·인접 후보 생성, 실제 Tool I/O, 주변 범위·깊이·개수와 byte/token/time 상한이 합의되면 제한 검색을 연결한다.
-- AI-L02: Tool 요청·결과·Evidence의 필드, enum, null, version, 저장 참조가 채택되면 타입과 serializer를 고정한다.
-- AI-L04: 호출 budget·timeout·재시도 주체와 소진 처리가 정해지면 runtime loop를 연결한다.
+- AI-L02: [0015](../../spec/ai/decisions/0015-existing-contracts-and-tool-results.md)의 기존 Evidence·ToolResult 필드 구성과 부분 오류 처리를 따른다. 미채택 Tool 요청·상세 참조·저장 계약은 기존 방식에 맞춰 구체화한다. 별도 조회 사본은 만들지 않으며 실제 조회·실패·중단 사유의 영구 보존 위치는 AI-L18과 함께 정한다.
+- AI-L04: 0010의 공통 LLM 호출 계층 재시도 책임을 유지한다. 호출 budget·timeout·소진 처리를 구현·측정으로 구체화한 뒤 runtime loop를 연결한다.
 - AI-L12: Evidence/conflict의 중복 키와 transaction·재실행 정책이 정해지면 durable 저장 완료를 검증한다.
 - Sprint 2 검색 확장은 실제 실패 기록과 별도 결정 전에는 이 작업에 포함하지 않는다.
 - AI-L20·AI-L26: 통제 비교 결과가 있어도 후속 검색 범위·vector·모델 전략은 별도 승인 뒤에만 재개한다.

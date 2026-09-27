@@ -7,17 +7,17 @@
 - 면접 준비에 필요한 입력과 준비 완료 조건을 AI·BE 사이의 점검표로 고정한다.
 - 이 작업은 새 AI Context Builder, Agent 또는 package를 만드는 작업이 아니다.
 - 선택·권한·DB/Redis·pipeline·첫 질문 저장은 BE 책임으로 유지한다.
-- 미결정 schema나 준비 성공 기준을 추측하지 않고 독립 fixture 검증부터 진행한다.
+- 확정된 준비 성공 기준을 따르고 미채택 상세 schema나 미구현 동작을 추측하지 않으며 독립 fixture 검증부터 진행한다.
 
 ## 근거
 
 - [작업 Context의 Context Builder 입력·멱등성과 stale 결과 차단](../../spec/ai/features/job-context.md)
 - [Director와 텍스트 면접의 준비와 첫 질문](../../spec/ai/features/interviewer.md)
-- [AI 내부 계약의 Context 입력·Question Contract 제안](../../spec/ai/contracts.md)
+- [AI 내부 계약의 Context 입력](../../spec/ai/contracts.md#context-입력)과 [Question·Question Contract](../../spec/ai/contracts.md#question과-question-contract)
 - [0008 AI 후보 검증·선택 정책](../../spec/ai/decisions/0008-ai-candidate-policy.md)의 L2 관찰과 질문 복구 경계
 - [BE 면접 명세의 prepareStep·실패 상태](../../spec/backend/features/interview.md)
 - [BE pipeline의 analysis_run과 interview_prep](../../backend/docs/pipeline.md)
-- [잔여 결정 목록의 AI-L02·AI-L06·AI-L09·AI-L11~AI-L14](../../later.md)
+- [AI 결정 기록](../../spec/ai/decisions/README.md)과 [구현·검수 인계](pipeline.md#기존-id별-구현검수-인계)의 AI-L02·AI-L06·AI-L09·AI-L11~AI-L14 관련 범위
 
 ## 선행 조건
 
@@ -39,6 +39,7 @@
 ## 작업
 
 - [ ] 현재 사용자, analysis run, interview가 서로 일치하는지 검사하는 fixture를 만든다.
+- [ ] [0015](../../spec/ai/decisions/0015-existing-contracts-and-tool-results.md)에서 채택한 Context·Question 필드와 기본 표현을 따른다. 첫 질문 전 값과 실제로 없는 참조를 표현하되 필수 자료의 누락·준비 실패를 빈 값으로 숨기지 않는다.
 - [ ] 선택 저장소 1~5개, 성공한 L1, primary 1~2개라는 FIX 조건을 입력 사례에 반영한다.
 - [ ] primary의 L2와 `notable_areas`가 같은 `snapshot_head_sha`를 가리키는지 검사한다.
 - [ ] 다른 사용자 repo, 선택에서 제외된 repo, 다른 ref의 분석·Evidence를 입력에서 거절한다.
@@ -48,7 +49,7 @@
 - [ ] 첫 질문은 `hr_manager`이며 코드 Evidence 없이 허용되는 fixture를 둔다.
 - [ ] 경력·개인 기여를 추정하지 않는 자기소개 질문 후보만 허용한다.
 - [ ] 질문·Persona·Question Contract 후보가 전달 전에 함께 검증되는 경계를 표시한다.
-- [ ] Question Contract 저장 구조가 미정이면 fixture 검토까지만 하고 DB column을 추가하지 않는다.
+- [ ] Question Contract는 `interview_turns.question_contract`의 [저장 형식](../../spec/ai/contracts.md#question-contract-저장-형식)을 따른다. DB migration·실제 저장 검증은 BE 연결 작업에서 수행하고 문서 채택과 구분한다.
 - [ ] 준비 성공과 `preparing_failed`를 구분하고 이를 사용자 이탈 `abandoned`로 바꾸지 않는다.
 - [ ] PostgreSQL을 원본으로 두고 Redis snapshot hit/miss/expiry/손상 복구 사례를 정의한다.
 - [ ] Redis snapshot이 종료 상태나 최신 DB turn보다 우선하지 않는지 검사한다.
@@ -80,7 +81,7 @@
 
 ## 결정 대기와 재개 조건
 
-- AI-L02: Context·Question Contract의 필드, enum, null, version, 저장 위치가 채택되면 실제 타입·변환 검증을 재개한다.
+- AI-L02: Question Contract의 기존 다섯 항목·저장 형식과 [0015](../../spec/ai/decisions/0015-existing-contracts-and-tool-results.md)의 Context·Question 필드 구성·기본 표현을 따른다. 미채택 상세 타입·참조·공개 변환은 기존 구조에 맞춰 구체화하며 DB·공개 API 전체가 채택된 것으로 확대하지 않는다.
 - AI-L06: L2 부분 실패와 `preparing_failed` 매핑이 합의되면 readiness 판정을 고정한다.
 - AI-L09: 유효 후보 없음의 실제 반환 계약과 BE/FE 준비 상태·사용자 복구 매핑이 합의되면 첫 질문 실패 연결을 고정한다.
 - AI-L11: worker signature·payload·timeout·retry 책임이 정해지면 실제 enqueue 연결을 재개한다.

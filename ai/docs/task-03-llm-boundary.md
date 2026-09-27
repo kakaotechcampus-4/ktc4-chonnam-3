@@ -1,37 +1,48 @@
 # task-03 - provider 중립 LLM 경계
 
-> 상태: 구현 가이드. 실제 provider 연결과 AI runtime 호출은 아직 구현되지 않았다.
+> 상태: provider 중립 호출 계약과 BE OpenAI HTTP transport·설정·prompt loader·초기 seed 구현. 로컬 PostgreSQL 15.19의 prompt 조회·seed·트랜잭션·동시성 검증 통과. 실제 모델 계정·운영 prompt 품질 검증은 미실행.
 > 선행: [전체 순서](pipeline.md), [task-01 패키지 셋업](task-01-setup.md), [task-02 내부 계약](task-02-contracts.md)
 
 ## 목표
 
 AI 로직은 주입된 모델 호출 경계만 소비하고, 구체 transport·인증·설정·prompt 조회는 기존 BE 파일이 소유하게 한다. 실제 provider를 가정하지 않는 fake로 호출·실패 정책을 검토하며 새 AI gateway 클래스나 모듈을 만들지 않는다.
 
+## 현재 구현
+
+[구현 인계](../../spec/ai/designs/2026-09-23-ai-foundation.md)의 사용법을 따른다. `ModelRequest`와 validator를 주입된 `ModelCall`에 전달하며 `ModelResult`가 검증 결과 또는 typed failure를 반환한다. BE `call_model`이 OpenAI Responses 요청·실패 분류·재시도를 맡고, 부분 배치 재요청도 동일한 `CallBudget`의 총 2회 상한을 공유한다. raw output은 metadata에 보존하되 repr/log에서 제외한다. 별도 SDK 의존성은 추가하지 않았다.
+
+운영 제한값 4개는 `.env.example`에서 명시적으로 설정해야 한다. 초기 seed는 외부에서 검수된 7개 PromptSpec과 transaction을 받아 실행한다. DB migration·운영 prompt 본문·ARQ job·실제 모델 평가는 이 구현의 완료 주장에 포함하지 않는다.
+
+Director 첫 구현에서 `ModelRequest.max_attempts`(기본 2, 허용 1~2)를 추가했다.
+공통 호출 계층이 요청별 상한과 공유 CallBudget의 총 2회 상한을 함께 지키며,
+남은 호출이 1인 요청에 자동 재시도를 덧붙이지 않는다.
+
 ## 근거
 
 - [AI 내부 계약](../../spec/ai/contracts.md)의 `Model Gateway와 실패`, `task별 structured output 범위`
 - [AI 작업 Context](../../spec/ai/features/job-context.md)의 `LLM 경계`
 - [AI 아키텍처](../../spec/ai/architecture.md)의 `책임과 의존 방향`, `공통 품질 원칙`
-- [AI 구현 기준선](../../spec/ai/decisions/0001-ai-baseline.md)의 논리 모델과 실제 API 식별자 구분
+- [0011 모델 선택](../../spec/ai/decisions/0011-sprint1-model-selection.md)의 OpenAI `gpt-5.6-luna` 확정과 실제 접근·품질 검증의 구분
+- [0018 기존안 유지](../../spec/ai/decisions/0018-existing-baseline-bulk-resolution.md)의 AI-L01 연결·검증 작업 인계
 - [0008 AI 후보 검증·선택 정책](../../spec/ai/decisions/0008-ai-candidate-policy.md)의 구조화 후보 실패
 - [0009 AI 평가 방법과 비교 실험](../../spec/ai/decisions/0009-ai-evaluation-method.md)의 합성 입력 격리·통제 비교
-- [의사결정 대기 목록](../../later.md)의 `AI-L01`, `AI-L02`, `AI-L04`, `AI-L18`
+- [구현·검수 인계](pipeline.md#기존-id별-구현검수-인계)의 `AI-L01`, `AI-L02`, `AI-L04`, `AI-L18`
 - 기존 BE [LLM client](../../backend/app/integrations/llm/client.py), [설정 진입점](../../backend/app/core/config.py), [prompt loader](../../backend/app/llm_tasks/prompt_loader.py)
 
 ## 선행 조건
 
-- provider 독립 fake와 순수 성공·실패 fixture는 AI-L01 전에 작성할 수 있다.
+- provider 독립 fake와 순수 성공·실패 fixture는 실제 transport 연결 전에 작성할 수 있다.
 - 주입 callable의 정확한 signature, 요청/응답 타입 또는 Protocol은 AI-L02에서 채택된 계약만 사용한다.
-- 실제 provider, 호출 가능한 model ID, 인증 설정과 기능은 AI-L01 확인 전 코드·seed·문서 기본값으로 만들지 않는다.
-- parse/schema/semantic 실패 구분과 invalid 후보의 fail-closed 처리는 Accepted다. attempt는 공통 LLM gateway/task 호출 계층에서만 관리하며 timeout/provider/parse/schema 실패는 총 2회까지 호출하고 semantic 실패는 재호출하지 않는다. timeout과 task별 token/context/tool budget은 AI-L04에 남아 있다.
-- 사용자 원문·raw output·호출 metadata의 production 보존은 AI-L18의 위치·권한·마스킹·보존 결정 뒤 연결한다.
+- 공급자 OpenAI와 API 모델 ID `gpt-5.6-luna`는 0011로 확정됐으며 기존 BE 설정·seed에서 읽어 주입한다. 인증·SDK/client 연결, 실제 계정 접근과 task별 schema·도구 호출·품질은 AI-L01의 구현·검증 작업이며 모델 선택만으로 완료 처리하지 않는다.
+- parse/schema/semantic 실패 구분과 invalid 후보의 fail-closed 처리는 Accepted다. attempt는 공통 LLM gateway/task 호출 계층에서만 관리하며 timeout·재시도 가능한 provider·parse·schema 실패는 총 2회까지 호출하고 semantic 실패는 재호출하지 않는다. 영구 HTTP 오류·quota 소진은 즉시 종료하고 일시적 제한은 요청 timeout 이내에서 대기한다. 상태별 분류·JSON 깊이 상한·호출분 attempts 반환은 [내부 호출 계약](../../spec/ai/contracts.md#model-gateway와-실패)을 따른다. task별 실행값의 운영 검증은 별도다.
+- 사용자 원문·raw output·호출 metadata의 실제 보존은 0018의 확정한 내부 보관·재사용 정책에 맞춰 저장 위치·권한·마스킹·보관 연결을 확인한 뒤 적용한다.
 
 ## 대상 파일과 책임
 
-- [backend/app/integrations/llm/client.py](../../backend/app/integrations/llm/client.py): 구체 SDK transport, 응답 metadata 수집과 provider/transport 실패 매핑을 맡는다.
+- [backend/app/integrations/llm/client.py](../../backend/app/integrations/llm/client.py): httpx 기반 transport, 응답 metadata 수집과 provider/transport 실패 매핑을 맡는다.
 - [backend/app/core/config.py](../../backend/app/core/config.py): 승인된 provider credential, model ID, timeout/budget 설정의 단일 환경 진입점이다.
 - [backend/app/llm_tasks/prompt_loader.py](../../backend/app/llm_tasks/prompt_loader.py): DB session을 받는 유일한 LLM task 경계로 prompt 문자열·version과 승인된 설정을 로드한다.
-- `ai/tests/test_llm_boundary.py` (추가 예정, 현재 없음): provider 독립 fake, timeout/provider/parse 실패와 metadata fixture를 둔다.
+- `ai/tests/test_llm_boundary.py`: provider 독립 callable과 값·metadata 계약을 검사한다. `backend/tests/integrations/test_llm_client.py`는 실제 HTTP adapter를 MockTransport로 검사하며 설정·loader·seed 검사도 BE에서 실행한다.
 - `devon_ai` task는 BE/SDK/DB를 import하지 않고 주입값만 소비한다. 별도 `gateway.py`, provider package, facade 또는 client class를 추가하지 않는다.
 
 ## 작업
@@ -42,7 +53,7 @@ AI 로직은 주입된 모델 호출 경계만 소비하고, 구체 transport·�
 - [ ] `prompt_loader`가 task 이름에 맞는 prompt 문자열과 version을 로드하고 task에 DB session을 넘기지 않게 한다.
 - [ ] prompt, model ID, credential을 AI 소스나 task 상수로 하드코딩하지 않는다.
 - [ ] AI-L02에서 채택한 task 계약과 ADR 0008의 semantic 검증을 통과하기 전에는 어느 계층도 provider 응답을 downstream 성공으로 확정하지 않게 한다.
-- [ ] timeout/provider 오류/JSON parse/schema 실패의 공통 호출 계층 재시도 1회를 정책 fixture로 표현한다.
+- [ ] timeout·재시도 가능한 provider 오류·JSON parse/schema 실패의 공통 호출 계층 재시도 1회와 영구 HTTP 오류·quota 소진의 즉시 종료를 정책 fixture로 표현한다.
 - [ ] semantic 실패는 재호출하지 않고 typed failure로 반환한다.
 - [ ] SDK·client·task·worker의 중복 재시도로 총 호출 수가 곱해지는 시나리오를 실패 사례로 둔다.
 - [ ] 어떤 invalid 후보도 빈 성공·추측한 기본값·누락값 보충·ad hoc repair로 바꾸지 않고 task 범위 typed failure로 반환한다.
@@ -69,13 +80,13 @@ AI 로직은 주입된 모델 호출 경계만 소비하고, 구체 transport·�
 - [ ] provider 독립 fake와 기존 BE transport/config/prompt loader의 책임이 분리되어 있다.
 - [ ] 새 AI gateway 클래스·모듈·Protocol 또는 승인되지 않은 설정 필드가 없다.
 - [ ] 실패 분류·fail-closed 정책과 metadata 경계가 승인된 결정에 맞게 검증된다.
-- [ ] 실제 model ID, 운영 budget, 보존 정책이 확인되기 전 production 호출 완료로 표시하지 않는다.
+- [ ] 확정 모델의 실제 계정 접근·호출과 task별 적합성, 운영 budget과 보존 정책의 적용을 확인하기 전 production 호출 완료로 표시하지 않는다.
 - [ ] ADR 0009의 비교 방법 적용을 실제 수치 목표·provider 선택·출시 승인으로 해석하지 않는다.
 
 ## 결정 대기와 재개 조건
 
-- AI-L01은 AI·BE가 provider, 실제 model ID, 인증 설정, 지원 기능과 버전 기록 방식을 검증하면 실제 transport 연결을 재개한다.
-- AI-L02는 AI·BE가 정확한 task 입력·출력·실패 계약과 schema version을 채택하면 해당 계약의 runtime 검증을 재개한다.
+- AI-L01은 0011·0018의 OpenAI `gpt-5.6-luna` 선택을 유지하고, AI·BE가 인증·SDK/client·transport 연결과 실제 모델·버전 기록을 구현한다. 계정 접근과 task별 schema·도구 호출·지연·비용·품질은 실제 연결·평가로 확인한다.
+- AI-L02는 0014·0015에서 채택한 입력·출력 구성과 저장 위치를 사용한다. 상세 타입·참조·실패 연결과 호출 metadata의 schema version은 기존 경계에 맞춰 구체화하고 runtime에서 검증한다.
 - AI-L04는 attempt 관리 주체와 semantic 재호출 여부는 0010으로 해소했다. AI·BE가 timeout·token·Context·동시성 budget과 소진 처리를 기록하면 production 제한 연결을 재개한다.
-- AI-L18은 운영 담당과 저장 위치, 접근권한, 마스킹, 보존·삭제, metadata 범위를 승인하면 실제 원문·raw output 기록을 재개한다.
-- 이 결정들 전에도 Proposed fixture 기반 fake, 설정값 양수·일관성 검사, 중복 retry 차단 시나리오는 계속 진행한다.
+- AI-L18은 [0018](../../spec/ai/decisions/0018-existing-baseline-bulk-resolution.md)의 확정한 내부 보관·재사용 정책을 따른다. 실제 자료 권한·저장 위치·접근·마스킹·보관·metadata 연결을 확인하면 실제 원문·raw output 기록을 진행한다.
+- 실제 연결 전에도 채택 범위와 미채택 상세를 구분한 fixture 기반 fake, 설정값 양수·일관성 검사, 중복 retry 차단 시나리오는 계속 진행한다.

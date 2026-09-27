@@ -29,7 +29,9 @@ FORBIDDEN_MODULE_ROOTS = {
     "arq",
     "backend",
     "fastapi",
+    "httpx",
     "openai",
+    "pydantic_settings",
     "redis",
     "sqlalchemy",
 }

@@ -12,7 +12,7 @@
 - 선택 문서는 선택 입력이다. Sprint 1에서는 추출한 GitHub URL만 후보 신호로 사용하고 Claim을 만들지 않는다.
 - [0002 결정](../decisions/0002-sprint1-vector-search.md)에 따라 Sprint 1에는 embedding/vector 검색을 도입하지 않는다. pgvector extension 선설치 없이 기존 분석·추천 경로를 구현하며, BE 반영 확인과 Sprint 2 도입 여부·모델·차원·chunk·migration은 별도 대기로 남긴다.
 
-근거: [분석 Run](../../backend/features/analysis-run.md), [면접](../../backend/features/interview.md), [문서](../../backend/features/documents.md), [백엔드 DB 기준](../../../backend/docs/db-schema.md), [AI 검토 사항](../../../ForAI.md).
+근거: [분석 Run](../../backend/features/analysis-run.md), [면접](../../backend/features/interview.md), [문서](../../backend/features/documents.md), [백엔드 DB 기준](../../../backend/docs/db-schema.md). 과거 AI 검토 원본 `ForAI.md`는 현재 저장소에 없으며, 후속 결정은 [AI 결정 목록](../decisions/README.md)에서 확인한다.
 
 ## 분석 단계
 
@@ -48,7 +48,7 @@ Wanted의 구조화 필드를 원문으로 사용한다. `jd_requirements.requir
 - `preferred`
 - `unknown`
 
-이 계약에서 `responsibility`를 새 enum 값으로 만들지 않는다. 담당 업무를 별도로 보존해야 하면 기존 Wanted 원문 위치와 데이터 모델 안에서 표현하며, schema 변경은 백엔드 승인을 받는다. `tech_tags`는 Wanted `skill_tags`에서 가져오며 LLM이 누락된 태그를 추측해 채우지 않는다.
+이 계약에서 `responsibility`를 DB·AI `requirement_type`의 새 enum 값으로 만들지 않는다. 주요 업무는 `unknown`과 원문 출처 `main_tasks`로 구분한다. API 표시 분류와의 변환은 [분석 Run의 Wanted 공고 수집·분류](../../backend/features/analysis-run.md#wanted-공고-수집분류)를 따른다. `unknown`만으로 주요 업무라고 판단하지 않는다. 기존 Wanted 원문 위치와 데이터 모델 안에서 출처를 보존하며, schema 변경은 백엔드 승인을 받는다. `tech_tags`는 Wanted `skill_tags`에서 가져오며 LLM이 누락된 태그를 추측해 채우지 않는다.
 
 [0006 결정](../decisions/0006-task-llm-usage-policy.md)에 따라 Sprint 1 Wanted-only 분류는 구조화 필드를 규칙으로 변환하며 LLM을 호출하지 않는다. `jd_extract` 단계와 검증·저장은 유지하고 수집/추출 실패를 LLM 추측으로 메우지 않는다. `jd_extract_v1`은 기존 prompt version 목록에 남기며 deterministic 변환 version·출처 기록의 실제 저장 방식은 AI·BE 검토사항이다. prompt version을 다른 종류의 버전 필드로 재정의하거나 비호출 작업을 LLM 실행으로 기록하지 않는다.
 
@@ -89,7 +89,7 @@ L2의 `notable_areas`가 없거나 path가 해당 분석의 고정 SHA에서 확
 
 0008에 따라 L2 관찰은 고정 SHA의 실제 source와 읽은 내용이 주장을 뒷받침할 때만 사용한다. source는 유효하지만 언어·도구 기능이나 읽은 범위가 부족하면 확인 가능한 관찰과 한계를 함께 남기며, 읽지 않은 경로의 동작·아키텍처를 추론하지 않는다. 사용 가능한 관찰과 제한되거나 무효인 관찰은 구분하되 지원 언어·parser 목록과 context limitations의 정확한 저장 필드는 계속 AI·BE 검토 대상이다.
 
-근거: [기획 결정](../../../report.md), [AI L1 task 골격](../../../ai/src/devon_ai/llm_tasks/repo_shallow.py), [AI L2 task 골격](../../../ai/src/devon_ai/llm_tasks/repo_deep.py). 기존 BE task 파일은 연결 경계로 남으며 수집·저장은 BE가 맡는다.
+근거: [AI L1 task 골격](../../../ai/src/devon_ai/llm_tasks/repo_shallow.py), [AI L2 task 골격](../../../ai/src/devon_ai/llm_tasks/repo_deep.py). 과거 기획 결정 원본 `report.md`는 현재 저장소에 없으며, 현행 L2 관찰 정책은 [0008 결정](../decisions/0008-ai-candidate-policy.md)을 따른다. 기존 BE task 파일은 연결 경계로 남으며 수집·저장은 BE가 맡는다.
 
 ## 추천
 
@@ -98,8 +98,12 @@ L2의 `notable_areas`가 없거나 path가 해당 분석의 고정 SHA에서 확
 - `matchScore`, 추천 여부, 추천 이유, 연결한 requirement 식별자를 같은 결과로 관리한다.
 - 추천 이유는 실제 JD requirement와 분석에서 확인한 저장소 정보만 사용한다.
 - 분석 대기 또는 실패를 낮은 적합도로 변환하지 않는다.
-- match score 공식과 scale은 아직 고정되어 있지 않다. 임의의 `0`, 기본 점수 또는 근거 없는 백분율을 저장하거나 반환하지 않는다.
-- 공개 RepositoryCard의 `matchScore`는 optional/nullable다. 산식이 아직 없으면 미계산 상태를 이 계약 범위에서 표현할 수 있다. FE가 필수 정렬·표시에 사용하는 조건과 내부 저장 정책은 BE·FE와 맞추고, 존재하지 않는 점수를 만들어 성공시키지 않는다. 리포트의 필수 number 계약과 혼동하지 않는다.
+- [0017 결정](../decisions/0017-recommendation-score-deferral.md)에 따라 Sprint 1 숫자 추천 점수는 보류한다. 산식·스케일·점수 정렬·동률 규칙을 새로 추가하지 않으며 `0`, 기본 점수 또는 기술 태그 일치율로 대체하지 않는다.
+- 공개 RepositoryCard의 `matchScore`는 공통 OpenAPI의 **필수·nullable 필드를 유지하고 null을 반환**한다. null만으로 실패·추천 제외를 판단하지 않으며 추천 표시·이유·최대 5개 추천과 기존 카드 제공 순서를 유지한다.
+- [0018 결정](../decisions/0018-existing-baseline-bulk-resolution.md)에 따라 기존 공고 기술 태그와 유효한 L1 기술 목록을 직접 비교한다. 확인된 일치 기술이 있는 선택 가능 저장소를 추천 후보로 삼고, 같은 run의 기존 후보 순서에서 앞 5개까지 추천한다. 상한은 모든 page를 합쳐 5개이며 각 page마다 새로 적용하지 않는다. 별도 점수 정렬·모델 호출을 추가하거나 후보 수집 순위를 JD 적합도 순위로 설명하지 않는다.
+- 공고 기술 정보가 없거나 일치 기술이 없으면 정상 미추천이다. 5개를 채우기 위해 관련성을 추정하거나 분석 실패로 바꾸지 않으며, 사용자는 기존 선택 가능 조건을 만족하는 저장소를 직접 선택할 수 있다. 추천 갱신으로 사용자가 직접 선택·해제한 상태를 덮어쓰지 않는다.
+- 외부 `match_score` 단계와 기존 `repo_match_scores` 저장 위치를 유지한다. 실제 null 저장·직렬화·근거 연결은 구현 시 확인하며 새 저장 구조를 먼저 추가하지 않는다. 숫자 미계산을 추천 기능 전체 보류로 확대하지 않고 리포트의 필수 number 계약도 유지한다.
+- 추천 이유는 확인한 일치 기술의 관련성만 설명한다. 현재 JD 변환은 공고 전체 기술 태그를 각 요구사항에 복사하므로, `matchedRequirementIds`에는 해당 요구사항 문장에서도 일치 기술을 확인한 경우만 연결하고 없으면 빈 목록을 사용한다. 예를 들어 Python 일치는 Python 경력 연수나 자격요건 충족을 뜻하지 않는다.
 - vector 검색이 없어도 추천, L2 준비, 제한된 Evidence 조회가 동작해야 한다.
 
 ## 실패와 검증
@@ -108,6 +112,7 @@ L2의 `notable_areas`가 없거나 path가 해당 분석의 고정 SHA에서 확
 - Wanted fetch 실패, Wanted extract 실패, GitHub 접근 실패, LLM timeout, LLM parse 실패를 같은 오류로 합치지 않는다.
 - 테스트는 GitHub, Wanted, LLM을 mock하고 PostgreSQL의 JSONB, 배열, CHECK, UNIQUE, INDEX를 실제 기준으로 검증한다.
 - 최소 검증은 batch 식별자 대응, parse/schema/semantic 실패 구분, 부분 성공 보존, cache hit/miss, head SHA 변경, prompt version 변경, notable area path·주장 범위 검증, optional document 없음/실패, 비공개 저장소 차단, 추천 근거 추적을 포함한다.
+- 추천 검증은 기술 정보 없음·일치 없음의 정상 미추천, 기존 후보 순서의 run 전체 0~5개 추천, 여러 page의 합산 상한, 요구사항 문장 근거 없는 ID 제외, 경력 충족 단정 방지와 사용자 선택 보존을 포함한다. 문서 채택만으로 실제 추천·저장 연결을 완료로 판정하지 않는다.
 - 실제 모델 품질 평가는 단위 테스트와 구분하고 model, prompt version, 데이터셋 version, token, latency를 함께 기록한다.
 
 현재 AI 원본은 `ai/src/devon_ai/`의 docstring 중심 skeleton이며 실제 분석 함수는 없다. `ai/tests/`와 BE의 설치 연결 smoke test는 패키지 구조를 검사할 뿐 L1/L2 동작을 검증하지 않는다. 파일의 설명을 이미 존재하는 callable 또는 분석 성공 근거로 인용하지 않는다.

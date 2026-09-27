@@ -1,7 +1,8 @@
-"""자소서 → document_claims 추출.
-★ kind='cover_letter' 만 대상. portfolio 는 claim 을 만들지 않는다 (URL 파싱만).
-★ 1차 추출 타입은 tech_decision / contribution 2종. achievement · motivation 은
-CHECK 에만 남기고 추출하지 않는다 — 커버리지 지표가 희석된다. 상한 10개.
+"""Sprint 2 문서 Claim 추출의 예정 위치. 추출 기능은 미구현이다.
 
-확정본 §3 document_claims / task-09
+Sprint 1은 document_claims 테이블만 만들고 row 생성·Claim 추출은 하지 않는다.
+Sprint 1 문서 preview의 텍스트·GitHub URL 추출과 구분한다.
+자소서·포트폴리오 Claim의 상세 범위·형식·상한은 Sprint 2 착수 시 검토한다.
+
+spec/ai/features/extensions.md
 """

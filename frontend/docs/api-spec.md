@@ -5,6 +5,8 @@
 
 각 엔드포인트는 **Endpoint / Request / Response / UI states / Failure** 5단 구조로 기술한다. `UI states`는 이 API가 어느 화면에서 어떻게 쓰이는지(분기·배지·버튼 노출), `Failure`는 실패 응답 코드·reason만 담는다.
 
+일반 HTTP API의 요청·응답 원본은 [OpenAPI](../../spec/shared/contracts/openapi.yaml)다. 이 문서는 [공통 계약 안내](../../spec/shared/contracts/README.md)에 따라 WebSocket(#18), SSE(#13), 브라우저 이동(#1·#2·#7·#8)의 원본이며 나머지는 FE용 설명이다. 차이가 있으면 OpenAPI와 [이관·보류 현황](../../spec/shared/contracts/migration.md)을 먼저 확인한다. 문서의 확정 기준과 로컬 구현·mock의 반영 상태는 구분하며 과거 변경 이력은 당시 기록으로 보존한다.
+
 ## 공통 규약
 
 | 항목 | 규칙 |
@@ -13,11 +15,30 @@
 | 배열 빈 값 | `[]` — null 금지 |
 | 객체 빈 값 | `null` 허용 (명시된 필드만) |
 | 날짜 | ISO 8601 문자열 |
-| 필드 생략 | 금지 |
-| 인증 | JWT — HttpOnly 쿠키 전달. 모든 요청에 `credentials: 'include'` |
+| 필드 생략 | OpenAPI의 required·optional 정의를 따른다. nullable과 optional은 구분한다. |
+| 인증 | Sprint 1: 기존 Redis 서버 세션·HttpOnly `devon_session` 쿠키. 모든 요청에 `credentials: 'include'` |
 | 배포 | FE·BE 단일 DuckDNS+Caddy 배포. same-origin이므로 CORS 설정 불필요, API base URL은 상대경로 |
 
 ### 인증 구조
+
+[0003 결정](../../spec/shared/decisions/0003-sprint1-session-auth.md)에 따라 Sprint 1은 기존 Redis의 `auth:sess:{sid}`에 로그인 세션을 저장하고 브라우저에는 식별자만 전달한다. JWT·refresh는 Sprint 2로 보류한다. 아래 명세 정리는 실제 서버·FE·MSW 인증 구현 완료를 뜻하지 않는다.
+
+| 용도 | 쿠키명 | 만료 | Path |
+| --- | --- | --- | --- |
+| 로그인 세션 | `devon_session` | 14일 sliding (`1209600`초) | `/` |
+
+운영 HTTPS 환경의 쿠키 예시:
+
+```
+Set-Cookie: devon_session=<sid>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=1209600
+```
+
+`Secure`는 운영 HTTPS 환경에서 사용한다. 유효한 인증 요청에서 Redis TTL과 HTTP 응답의 쿠키 만료를 함께 14일로 연장하며 FE는 별도 갱신 요청을 보내지 않는다. REST·SSE·WS는 같은 쿠키로 인증한다. GitHub 토큰(`github_accounts.access_token_encrypted`)은 로그인 쿠키나 공개 응답에 담지 않고 서버가 조회한다.
+
+<details>
+<summary>이전 JWT 인증안 — Sprint 2 참고 기록, 세부 미확정</summary>
+
+아래는 이전 설계의 보존 기록이며 Sprint 1 요구사항이 아니다. 토큰 수명·클레임·저장·로테이션·자동 갱신은 Sprint 2 착수 시 검토한다.
 
 | 토큰 | 쿠키명 | 만료 | Path |
 | --- | --- | --- | --- |
@@ -39,6 +60,8 @@ Access Token 클레임
 
 GitHub 토큰(`github_accounts.access_token_encrypted`)은 JWT에 담지 않는다. 서버가 조회한다.
 
+</details>
+
 ### enum
 
 ```
@@ -47,7 +70,7 @@ interviewStatus:  preparing | in_progress | completed | preparing_failed | aband
 runStatus:        running | completed | failed
 stepKey:          doc_extract | repo_select | repo_detail | jd_fetch
                   | jd_extract | repo_analyze | match_score
-prepareStepKey:   analyze_repo | build_persona | compose_question | set_criteria
+prepareStepKey:   analyze_repo | build_persona | set_criteria | compose_question
 stepStatus:       pending | running | completed | failed | skipped
 answerMode:       text            (2차에 voice 추가)
 repoStatus:       succeeded | partial | failed
@@ -90,31 +113,25 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
 
 ### 인증 에러 reason (공통 참조)
 
-`accessToken`을 쓰는 모든 엔드포인트에 적용된다. 각 엔드포인트의 `Failure`에서는 "공통 인증 에러 참고"로 링크하고 그 엔드포인트 고유 실패만 별도로 적는다.
+`devon_session`을 쓰는 모든 엔드포인트에 적용된다. 각 엔드포인트의 `Failure`에서는 "공통 인증 에러 참고"로 링크하고 그 엔드포인트 고유 실패만 별도로 적는다.
 
 | reason | 코드 | 의미 | 프론트 처리 |
 | --- | --- | --- | --- |
-| `unauthenticated` | 401 | `accessToken` 쿠키 없음 | `/login` 이동 |
-| `access_token_expired` | 401 | 서명 유효, `exp` 초과 | `/auth/refresh` 1회 → 원 요청 재시도 |
-| `access_token_invalid` | 401 | 서명 불일치·변조 | 전체 clear → `/login` |
-| `refresh_token_invalid` | 401 | 리프레시 만료·재사용 감지 | 전체 clear → `/login` |
+| `unauthenticated` | 401 | 로그인 쿠키 없음 · Redis 세션 만료/유실/무효 | 전체 clear → `/login`, refresh 재시도 없음 |
 | `account_suspended` | 403 | `users.status = 'suspended'` | 정지 안내 |
 | `account_withdrawn` | 403 | `users.status = 'withdrawn'` | 재가입 불가 안내 |
 | `github_token_invalid` | 403 | `github_accounts.token_status`가 `expired`·`revoked` | GitHub 재연동 유도 |
 
-### 401 인터셉터 정책
+### 401 처리 정책
 
 ```
-401 수신
-├─ reason === 'access_token_expired'
-│   ├─ 갱신 진행 중이면 → 그 Promise를 await (single-flight)
-│   ├─ 아니면 → POST /auth/refresh
-│   ├─ 성공 → 원 요청 1회 재시도
-│   └─ 실패 → queryClient.clear() → /login
-└─ 그 외 → queryClient.clear() → /login
+401 unauthenticated 수신
+  └─ queryClient.clear() → /login
 ```
 
-재시도는 1회만. 갱신은 single-flight(로테이션 충돌 방지). `/auth/refresh` 자신은 인터셉터 제외.
+Query·Mutation에 같은 처리를 적용한다. 401에 refresh 호출이나 원 요청 자동 재시도를 하지 않으며 이미 로그인 화면이면 반복 이동하지 않는다. 현재 공통 처리는 미완료이며 [auth 구현 작업](task-07-auth.md)에서 연결·검증한다.
+
+Redis 조회 장애는 세션 만료·유실과 구분한다. 정상 인증이나 `401 unauthenticated`로 처리하지 않고 기존 공통 오류 계약의 서버 오류로 처리한다.
 
 ### CSRF
 
@@ -128,7 +145,7 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
 | --- | --- | --- | --- |
 | 1 | GET | `/auth/github/login` | 브라우저 이동 |
 | 2 | GET | `/auth/github/callback` | 프론트 무관 |
-| 3 | POST | `/auth/refresh` | fetch |
+| 3 | POST | `/auth/refresh` | Sprint 2 예약 — Sprint 1 호출 없음 |
 | 4 | POST | `/auth/logout` | fetch |
 | 5 | GET | `/me` | fetch |
 | 6 | GET | `/me/profile` | fetch |
@@ -144,17 +161,18 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
 | 22 | GET | `/analysis-runs/{runId}/candidates` | fetch |
 | 16 | POST | `/interviews` | fetch |
 | 17 | GET | `/interviews/{id}` | fetch |
+| 23 | POST | `/interviews/{id}/prepare/retry` | fetch |
 | 18 | GET *(Upgrade)* | `/ws/interviews/{sessionId}` | WebSocket |
 | 19 | GET | `/interviews/{id}/report` | fetch |
 | 20 | POST | `/interviews/{id}/retry` | fetch |
-| 21 | POST | `/interviews/{id}/feedback-disagreements` | fetch |
+| 21 | POST | `/interviews/{id}/feedback-disagreements` | 계약 잔존, Sprint 1 제공·호출 제외 |
 
-총 22개. 번호는 아래 "최종 엔드포인트 목록"·`shared/queryKeys.ts` 참조 번호와 같다. 22번은 `analysis-runs` 계열끼리 묶어 읽도록 15번 뒤에 배치했다.
+총 23개. 번호는 아래 "최종 엔드포인트 목록"·`shared/queryKeys.ts` 참조 번호와 같다. 22번은 `analysis-runs` 계열끼리 묶어 읽도록 15번 뒤에 배치했고, 23번은 준비 화면 흐름을 따라 17번 뒤에 두었다.
 
 > 브라우저 이동 경로는 `shared/api.ts`에 넣지 않는다. `<a href>` 또는 `window.location`으로 처리한다.
 > 
 
-> `sessionId`·`session_limit_exceeded`·`already_connected`의 "세션"은 면접 세션(`interview_sessions`)을 뜻한다. 인증 세션은 존재하지 않는다.
+> `sessionId`·`session_limit_exceeded`·`already_connected`의 "세션"은 면접 세션(`interview_sessions`)을 뜻한다. Redis 로그인 세션(`auth:sess:{sid}`)과는 별개이며 공개 면접 ID는 바꾸지 않는다.
 > 
 
 ---
@@ -173,14 +191,14 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
 Location: https://github.com/login/oauth/authorize
             ?client_id=<client_id>
             &redirect_uri=<callback>
-            &scope=read:user%20user:email
+            &scope=read:user
             &state=<random>
 Set-Cookie: oauthState=<random>; HttpOnly; Secure; SameSite=Lax; Path=/auth/github; Max-Age=600
 ```
 
 | 항목 | 값 |
 | --- | --- |
-| `scope` | `read:user`, `user:email` (Private 레포 미지원이므로 `repo` 불필요) |
+| `scope` | 로그인·연동 모두 `read:user`. 기존 BE 설정을 따르며 public 저장소 읽기에 `repo`·`public_repo` 권한은 요청하지 않음 |
 | `state` | 서버 생성 랜덤값 — `oauthState` 쿠키에 저장 (CSRF 방어) |
 
 **UI states**
@@ -213,10 +231,11 @@ Set-Cookie: oauthState=<random>; HttpOnly; Secure; SameSite=Lax; Path=/auth/gith
 
 ```
 Location: /home
-Set-Cookie: accessToken=<jwt>;  HttpOnly; Secure; SameSite=Lax; Path=/;             Max-Age=900
-Set-Cookie: refreshToken=<jwt>; HttpOnly; Secure; SameSite=Lax; Path=/auth/refresh; Max-Age=1209600
+Set-Cookie: devon_session=<sid>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=1209600
 Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 ```
+
+서버는 Redis 로그인 세션을 생성하고 위 쿠키를 발급한다. `Secure`는 운영 HTTPS 환경 기준이며 로그인 세션은 14일 sliding 정책을 따른다.
 
 동의 거부 시
 
@@ -243,7 +262,14 @@ Location: /login?error=denied
 
 ---
 
-## 3. POST /auth/refresh
+## 3. POST /auth/refresh — Sprint 2 예약
+
+기존 참조 번호만 유지한다. Sprint 1 서버 세션 인증에서는 이 API를 제공·호출하지 않는다. 현재 코드에 남은 `api.refresh`·MSW 핸들러·smoke 검사는 후속 정리 대상이다.
+
+<details>
+<summary>이전 JWT refresh안 — 과거 기록, Sprint 2 착수 시 재검토</summary>
+
+아래 요청·응답·로테이션·실패 처리는 이전안이며 현재 구현 요구사항이나 Sprint 2 세부 확정이 아니다.
 
 **Request**
 
@@ -271,6 +297,8 @@ Set-Cookie: refreshToken=<new_jwt>; HttpOnly; Secure; SameSite=Lax; Path=/auth/r
 | 401 | `refresh_token_invalid` |
 | 403 | `account_suspended` · `account_withdrawn` |
 
+</details>
+
 ---
 
 ## 4. POST /auth/logout
@@ -284,11 +312,10 @@ Set-Cookie: refreshToken=<new_jwt>; HttpOnly; Secure; SameSite=Lax; Path=/auth/r
 `204 No Content`
 
 ```
-Set-Cookie: accessToken=;  Max-Age=0; Path=/
-Set-Cookie: refreshToken=; Max-Age=0; Path=/auth/refresh
+Set-Cookie: devon_session=; Max-Age=0; Path=/
 ```
 
-리프레시 토큰은 서버 DB에서 삭제한다. 액세스 토큰은 무효화하지 않으며 남은 유효기간(최대 15분)까지 서명이 유효하다. 이미 만료된 상태여도 `204`로 응답한다 (멱등). GitHub 토큰은 삭제하지 않는다.
+현재 로그인 쿠키에 대응하는 Redis `auth:sess:{sid}`를 삭제하고 쿠키를 만료시킨다. 쿠키나 세션이 이미 없거나 만료된 상태여도 `204`로 응답한다(멱등). 다른 로그인 세션과 GitHub 토큰은 삭제하지 않는다.
 
 **UI states**
 
@@ -330,7 +357,7 @@ Set-Cookie: refreshToken=; Max-Age=0; Path=/auth/refresh
 
 | 코드 | reason |
 | --- | --- |
-| 401 | `unauthenticated` · `access_token_expired` · `access_token_invalid` |
+| 401 | `unauthenticated` |
 
 ---
 
@@ -387,7 +414,7 @@ Set-Cookie: refreshToken=; Max-Age=0; Path=/auth/refresh
 
 | 코드 | reason |
 | --- | --- |
-| 401 | `unauthenticated` · `access_token_expired` · `access_token_invalid` |
+| 401 | `unauthenticated` |
 
 ---
 
@@ -408,7 +435,7 @@ Location: https://github.com/login/oauth/authorize?...&state=<random>
 Set-Cookie: oauthState=<random>; HttpOnly; Secure; SameSite=Lax; Path=/auth/github; Max-Age=600
 ```
 
-`302` → `/login` — `accessToken`이 없거나 만료된 경우.
+`302` → `/login` — 로그인 쿠키가 없거나 Redis 세션이 만료·유실·무효인 경우.
 
 > 이 경로는 브라우저 이동이므로 401 인터셉터가 동작하지 않는다. 만료 시 JSON 401이 아니라 `/login`으로 302한다.
 > 
@@ -436,7 +463,7 @@ Location: /home
 Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 ```
 
-`github_accounts.token_status`를 `valid`로 갱신한다. 액세스 토큰 쿠키는 재발급하지 않는다.
+`github_accounts.token_status`를 `valid`로 갱신한다. 기존 DEVON 로그인 세션을 유지하며 새 JWT를 발급하지 않는다. 세션 만료 연장은 공통 sliding 정책을 따른다.
 
 **UI states**
 
@@ -469,7 +496,7 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
       { "name": "Java", "ratio": 31 }
     ],
     "projectTypes": ["백엔드 API 서버", "결제·트랜잭션"],
-    "roleSummary": "2개 레포의 README와 커밋 이력을 종합하면 백엔드 API 설계와 DB·캐시 최적화를 가장 자주 맡았습니다."
+    "roleSummary": "면접 답변에서 백엔드 API 설계와 DB·캐시 최적화를 담당했다고 설명했습니다."
   },
   "recentInterviews": [
     {
@@ -589,13 +616,13 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 
 ## 11. POST /documents/preview
 
-BE `spec/backend/features/documents.md` 기준(Sprint 1 FIX). 자기소개서·포트폴리오 파일은 `analysis-runs`에 직접 싣지 않고 먼저 이 엔드포인트로 업로드해 `documentId`를 발급받는다. Sprint 1은 자소서/포트폴리오 claim을 추출하지 않고 텍스트·GitHub URL만 저장한다.
+BE `spec/backend/features/documents.md`와 [0010 결정](../../spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md) 기준이다. Sprint 1은 포트폴리오를 `analysis-runs`에 직접 싣지 않고 이 엔드포인트로 먼저 업로드해 `documentId`를 발급받는다. 자소서는 preview 대상이 아니며 claim 추출은 Sprint 2다. 아래 응답 명세와 실제 추출·저장 구현 완료는 구분한다.
 
 **Request** `multipart/form-data`
 
 | 필드 | 타입 | 필수 | 상한 |
 | --- | --- | --- | --- |
-| `file` | file (.pdf/.docx/.txt/.md) | ✅ | 10MB |
+| `file` | file (.pdf/.docx/.txt/.md) | ✅ | 20MB |
 
 > `.pdf`는 텍스트 레이어가 있는 파일만 지원한다(스캔 이미지 PDF는 추출 실패). `.hwp`·이미지·`.ppt/.pptx`는 미지원.
 `Content-Type` 헤더를 직접 지정하지 않는다. 브라우저가 boundary와 함께 자동 생성해야 한다.
@@ -618,7 +645,7 @@ BE `spec/backend/features/documents.md` 기준(Sprint 1 FIX). 자기소개서·�
 
 공고입력 화면에서 파일 선택 즉시(백그라운드) 호출한다. `extractStatus: 'failed'`여도 hard blocker가 아니다 — 사용자가 계속 진행을 선택하면 `POST /analysis-runs`를 `documentId` 없이 호출한다. 이 경우 `doc_extract`는 `skipped`로 응답된다.
 
-**`PENDING_TEAM`**: `documentId`는 단수 계약이다. 공고입력 화면은 자기소개서·포트폴리오 업로더가 2개인데 이걸 어떻게 매핑할지(각각 preview 호출 후 한쪽만 채택 / 병합) 팀 확인 필요.
+**확정**: [0010 결정](../../spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md)에 따라 Sprint 1의 preview는 포트폴리오 전용이다. `documentId`는 단일 portfolio preview ID를 유지하며 자소서는 preview POST 대상이 아니다. 화면·호출 코드의 반영 여부는 별도로 검증한다.
 
 **Failure**
 
@@ -668,7 +695,7 @@ Location: /analysis-runs/run_abc123
 | 400 | `job_url_required` | 입력창 에러 |
 | 400 | `unsupported_site` | "지원하지 않는 사이트예요" |
 | 400 | `url_unreachable` | "공고를 불러올 수 없어요" |
-| 409 | `run_in_progress` | 응답의 `runId`로 4-2-v2 이동 |
+| 409 | `run_in_progress` | `error.details.runId`로 기존 분석 진행 화면(4-2-v2) 이동 |
 
 > 공고 수집·추출 실패는 잡 생성 후 발생하므로 `202`로 응답하고 `failureReason`으로 전달한다(`GET /analysis-runs/{runId}` 참고). `unsupported_site`·`url_unreachable`만 잡 생성 전에 판별 가능하므로 `400`이다.
 > 
@@ -711,7 +738,7 @@ data: {"type":"failed","reason":"github_token_invalid"}
 
 `skipped`도 `step` 이벤트로 1회 전송한다. 전송하지 않으면 SSE만 구독한 화면은 해당 스텝을 초기값 `pending`인 채로 유지하게 되어 `GET /analysis-runs/{runId}` 결과와 어긋난다.
 
-인증은 연결 수립 시 1회 검증한다. 연결 유지 중 액세스 토큰이 만료되어도 스트림을 끊지 않는다.
+`devon_session` 인증은 연결 수립 시 1회 검증한다. 연결 유지 중 로그인 세션 만료를 이유로 기존 스트림을 끊는 정책은 추가하지 않는다. 새 연결은 세션을 다시 확인한다.
 
 **UI states**
 
@@ -751,7 +778,7 @@ data: {"type":"failed","reason":"github_token_invalid"}
 }
 ```
 
-`documentId` 없이 생성된 run (자기소개서·포트폴리오 미첨부)
+`documentId` 없이 생성된 run (포트폴리오 미첨부)
 
 ```json
 {
@@ -785,7 +812,7 @@ data: {"type":"failed","reason":"github_token_invalid"}
 `steps[]`는 항상 `stepKey` 7개를 모두 포함한다. 실행하지 않은 단계도 키를 생략하지 않고 `skipped`로 표기한다(공통 규약 "필드 생략 금지"). `skipped`인 스텝은 `progress` 계산에서 제외한다.
 
 > 분석 실패도 HTTP 200이다. `status: "failed"` + `failureReason`으로 판단한다.
-레포 일부만 분석 실패한 경우는 잡 실패가 아니다. `status: "completed"`로 응답하고 개별 레포의 `status`·`errorCode`로 전달한다(`GET /analysis-runs/{runId}/result` 참고).
+DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장소의 결과는 `GET /analysis-runs/{runId}/result`로 조회할 수 있다([부분 실패 기준](../../spec/backend/features/analysis-run.md#부분-실패)). 개별 저장소의 `status: 'partial'`과는 다른 범위다. 실패 화면에서 성공 결과로 이동하는 경로는 [task-09](task-09-analysis.md)에 제안만 기록했으며 화면 수정은 보류 중이다.
 > 
 
 **UI states**
@@ -866,7 +893,7 @@ data: {"type":"failed","reason":"github_token_invalid"}
       "recommended": true,
       "candidateSource": "both",
       "recommendReason": "공고의 Redis 캐싱 경험과 직접 연관돼요.",
-      "matchScore": 92,
+      "matchScore": null,
       "matchedRequirementIds": ["req_003", "req_007"]
     }
   ]
@@ -906,16 +933,18 @@ data: {"type":"failed","reason":"github_token_invalid"}
 
 `doc_extract`가 `skipped`인 run에서는 `candidateSource`가 `portfolio`·`both`인 레포가 없고, `mentionedRepoCount`·`matchedRepoCount`는 `0`이다.
 
+[0017 결정](../../spec/ai/decisions/0017-recommendation-score-deferral.md)에 따라 Sprint 1은 `matchScore` 필드를 생략하지 않고 null을 반환한다. 숫자 계산·표시·점수 정렬은 보류하며 null만으로 실패나 추천 제외를 판단하지 않는다. 기존 mock의 숫자 예시는 후속 반영 대상이다.
+
 **UI states**
 
 5a-v2 레포 확정 화면.
 
 - `jdRequirements[]`는 `category`로 그룹핑해 `displayOrder` 순으로 우측에 표시(읽기 전용). 상한 20개.
-- `recommended: true`(최대 5개)인 레포는 기본 체크 상태.
+- 선택 가능한 `succeeded` 레포 중 `recommended: true`(최대 5개)인 레포는 기본 체크 상태. 로컬 화면의 선택 조건 보완은 task-09에서 보류 중이다.
 - `candidateSource` 배지: `rule_filter` 없음 / `portfolio`·`both` → 📎 포트폴리오.
 - `mentionedRepoCount ≠ matchedRepoCount`면 "포트폴리오에 언급된 3개 중 2개를 찾았어요" 안내. 매칭 실패는 정상 상황이며 오류로 처리하지 않는다. 두 값이 모두 `0`이면(미첨부) 이 안내를 표시하지 않는다.
 - `repositories[].status === 'failed'`면 카드를 회색 처리하고 `errorCode`별 문구를 띄운다. `matchScore`·`recommendReason`은 `null`이다.
-- `status: 'partial'`은 카드를 표시하되 `matchScore`를 낮게 반영한 상태다. 별도 문구는 없다.
+- `status: 'partial'`은 카드를 표시하되 기존 서버 기준상 선택 대상은 아니다. 낮은 숫자 점수로 표현하지 않는다. 선택 조건·안내의 화면 반영은 task-09의 보류 상태를 유지한다.
 
 | `errorCode` | 문구 | 재시도 |
 | --- | --- | --- |
@@ -1108,7 +1137,7 @@ data: {"type":"failed","reason":"github_token_invalid"}
 | `preparing_failed` | `0` | 1b — `lastError`로 배너 렌더 (WS 재연결 불필요) |
 | `abandoned` | — | "중단된 면접이에요" 안내 후 `/home` |
 
-`abandoned`인 경우 마지막 턴은 `answer: null`로 남는다.
+`abandoned`여도 이미 저장한 답변 원문은 보존한다. 마지막 턴이 미답변일 때만 `answer: null`로 남으며, 답변 저장 후 분석·질문 생성 중 명시적으로 나간 경우 저장된 답변을 지우지 않는다.
 
 1b에서 "레포 다시 선택"은 이 응답의 `runId`로 `/interview/repos/{runId}`(5a-v2)에 진입한다.
 
@@ -1117,6 +1146,36 @@ data: {"type":"failed","reason":"github_token_invalid"}
 | 코드 | reason |
 | --- | --- |
 | 404 | `not_found` |
+
+---
+
+## 23. POST /interviews/{id}/prepare/retry
+
+준비 단계가 실패한 뒤 "다시 시도"를 눌렀을 때 호출한다. 서버는 실패한 `prepareStepKey`부터 다시 실행하고, 성공한 단계는 재실행하지 않는다. 세션과 `session_repositories`는 그대로 유지된다.
+
+2026-09-10에는 WS `prepareRetry` 메시지로 설계했으나 `spec/ai/decisions/0010:32`에서 REST로 확정했다. 재시도 거절을 상태코드로 구분할 수 있고, 만료 토큰 복구가 401 인터셉터를 타며, 새로고침 후 소켓이 없는 상태에서도 보낼 수 있다.
+
+**Request**
+
+없음.
+
+**Response**
+
+`204 No Content`
+
+재실행 진행 상황은 이 응답이 아니라 WS `prepareStep` 이벤트로 받는다. 소켓이 열려 있으면 그대로 두고 호출하며, 닫혀 있으면 응답을 확인한 뒤 연다.
+
+**UI states**
+
+1b(준비 실패) `다시 시도` 버튼 클릭 시 호출. 성공하면 실패 배너를 내리고 실패 단계만 `pending`으로 되돌린 뒤 `prepareStep`을 기다린다. 재연결로 이전 시도의 `error`가 늦게 도착할 수 있으므로, 새 시도의 첫 `prepareStep`을 받으면 배너를 한 번 더 비운다.
+
+**Failure**
+
+| 코드 | reason | 화면 처리 |
+| --- | --- | --- |
+| 409 | `prep_in_progress` | 이미 재실행 중. 배너 없이 진행 화면 유지 |
+| 409 | `prep_failed` | `preparing_failed` 상태가 아님. `GET /interviews/{id}`로 상태 재확인 |
+| 410 | `session_expired` | 재시도 버튼을 내리고 `레포 다시 선택하기`만 남긴다 |
 
 ---
 
@@ -1132,28 +1191,26 @@ data: {"type":"failed","reason":"github_token_invalid"}
 GET /ws/interviews/sess_xyz789 HTTP/1.1
 Upgrade: websocket
 Connection: Upgrade
-Cookie: accessToken=<jwt>
+Cookie: devon_session=<sid>
 ```
 
-인증은 핸드셰이크 시 1회 검증한다. 연결 유지 중 액세스 토큰이 만료되어도 연결을 끊지 않는다. 재연결 시에는 핸드셰이크를 다시 하므로, `onclose` 후 `GET /interviews/{id}`를 호출해 토큰을 갱신하고 `turns`를 확보한 다음 재연결한다.
+Redis 로그인 세션 인증은 핸드셰이크 시 1회 검증한다. 연결 유지 중 로그인 세션 만료를 이유로 기존 연결을 끊는 정책은 추가하지 않는다. `onclose` 후 `GET /interviews/{id}`로 세션 유효성을 확인하고 `turns`를 확보한 다음 재연결한다. 세션 만료·유실로 `401 unauthenticated`이면 refresh 없이 캐시를 비우고 `/login`으로 이동한다. 로그인 세션 식별자와 면접 `sessionId`는 별개다.
 
-WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재연결(`GET` → WS 재연결)이 실패해야 서버가 `abandoned`로 확정한다(`ForFE.md` #3 FE 결정).
+`abandoned`는 명시적 이탈 확인 또는 레포 재선택으로 새 면접을 만들 때만 설정한다([0010 결정](../../spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md)). 연결 끊김·재연결 실패·로그인 세션 만료만으로 면접 상태를 바꾸지 않는다.
 
 클라이언트 → 서버
 
 ```json
-{ "type": "prepareRetry" }
-{ "type": "answer", "text": "상품 조회 성능을 높이기 위해 캐시로 사용했습니다." }
+{ "type": "answer", "turn": 3, "text": "상품 조회 성능을 높이기 위해 캐시로 사용했습니다." }
 ```
 
 | type | 필드 |
 | --- | --- |
-| `prepareRetry` | — |
-| `answer` | `text` (string, 최대 2000자) |
+| `answer` | `turn` (number), `text` (string, 최대 2000자) |
 
-`prepareRetry`는 준비 단계가 실패한 뒤 "다시 시도"를 눌렀을 때 보낸다. 서버는 실패한 `prepareStepKey`부터 다시 실행하고, 성공한 단계는 재실행하지 않는다. 세션과 `session_repositories`는 그대로 유지된다.
+Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시도는 WS가 아니라 `POST /interviews/{id}/prepare/retry`(#23)로 처리한다 — `spec/ai/decisions/0010:32`.
 
-`answer`는 제출 버튼 클릭 시 1회 전송한다. 초안 저장은 없다. 2000자 초과 시 `answer_too_long`.
+`answer`는 제출 버튼 클릭 시 1회 전송한다. 초안 저장은 없다. 2000자 초과 시 `answer_too_long`. `turn`은 그 답변이 어느 질문에 대한 것인지 서버가 판별하는 값이다 (`spec/ai/decisions/0010:30`). 서버는 현재 답변 가능한 turn과 다르면 `answer_stale_turn`으로 거절한다.
 
 **Response**
 
@@ -1187,7 +1244,7 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 
 `prepareStep.status`는 `pending`·`running`·`completed`·`failed` 4개만 사용한다. `prepareStepKey` 4단계는 모두 필수 실행이므로 `skipped`가 오지 않는다 — `skipped`는 `stepKey`(#13 · #14) 전용이다.
 
-`answerReceived`는 서버가 답변 수신·저장을 완료했다는 신호다. `answer` 전송 후 이 메시지를 받기 전까지 제출 중 상태를 유지하고 입력창을 잠근다.
+`answerReceived`는 서버가 답변 수신·저장을 완료했다는 신호다. 수신하면 제출 중 상태는 해제하지만 다음 `question`까지 새 답변 입력은 잠근다. Sprint 1은 `question` 수신 자체가 질문 전달 완료이므로 `questionEnd`를 기다리지 않는다.
 
 준비 단계가 실패하면 해당 단계에 `prepareStep`을 `status: "failed"`로 보낸 뒤 `error`를 보낸다. 이후 단계는 `pending`으로 남는다.
 
@@ -1203,9 +1260,9 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 **UI states**
 
 - 5a2-v2: 체크리스트를 유지한 상태에서 실패 단계만 ✕로 바꾸고 배너를 띄운다. `prepareCompleted` 수신 시 5b-v2로 전환.
-- 5b-v2: `question`으로 질문 표시, `answer` 제출 → `answerReceived`까지 입력창 잠금, `thinking`/`evidenceCheck` 인디케이터, `interviewEnd` 시 5c-v2로 이동.
+- 5b-v2: `question`으로 질문 표시, `answer` 제출 → `answerReceived`까지 제출 중 상태 → 다음 `question`까지 입력 잠금 유지. `thinking`/`evidenceCheck` 인디케이터, `interviewEnd` 시 5c-v2로 이동.
 - `evidenceCheck` 배너는 다른 서버 메시지 수신 시 해제, 30초간 메시지 없으면 타임아웃 해제.
-- `error` 수신 시 `recoverable`로 분기: `true`면 해당 턴/단계 재시도, `false`면 세션 종료 안내.
+- `error`는 `reason`과 `recoverable`을 함께 보고 아래 원인별 처리로 분기한다. `true`만으로 해당 턴이나 LLM 작업을 다시 실행하지 않으며, `false`이면 오류 안내와 해당 복구 경로를 표시한다.
 
 `error.reason` 값
 
@@ -1213,16 +1270,21 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 | --- | --- | --- | --- |
 | `answer_too_long` | `ERR_ANSWER_TOO_LONG` | `true` | 같은 턴 재제출 |
 | `answer_rejected` | `ERR_ANSWER_REJECTED` | `true` | 같은 턴 재제출 (저장 실패) |
+| `answer_stale_turn` | `ERR_ANSWER_STALE_TURN` | `true` | 지나간 턴에 보낸 답변 — 초안을 버리고 현재 질문으로 |
 | `question_failed` | `ERR_QUESTION_FAILED` | `true` | 자동 1회 재시도 |
-| `question_gen_timeout` | `ERR_QUESTION_GEN_TIMEOUT` | `true` | 준비 실패 화면 — `prepareRetry` |
-| `persona_build_failed` | `ERR_PERSONA_BUILD_FAILED` | `true` | 준비 실패 화면 — `prepareRetry` |
-| `criteria_set_failed` | `ERR_CRITERIA_SET_FAILED` | `true` | 준비 실패 화면 — `prepareRetry` |
-| `repo_analyze_failed` | `ERR_REPO_ANALYZE_FAILED` | `true` | 준비 실패 화면 — `prepareRetry` |
-| `github_api_rate_limited` | `ERR_GITHUB_RATE_LIMITED` | `true` | 준비 실패 화면 — 대기 후 `prepareRetry` |
+| `question_gen_timeout` | `ERR_QUESTION_GEN_TIMEOUT` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
+| `persona_build_failed` | `ERR_PERSONA_BUILD_FAILED` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
+| `criteria_set_failed` | `ERR_CRITERIA_SET_FAILED` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
+| `repo_analyze_failed` | `ERR_REPO_ANALYZE_FAILED` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
+| `github_api_rate_limited` | `ERR_GITHUB_RATE_LIMITED` | `true` | 준비 실패 화면 — 대기 후 `POST /interviews/{id}/prepare/retry` |
 | `repo_unreachable` | `ERR_REPO_UNREACHABLE` | `false` | "레포에 접근할 수 없어요" — 레포 재선택 |
 | `github_token_invalid` | `ERR_GITHUB_TOKEN_INVALID` | `false` | GitHub 재연동 유도 |
 
-`recoverable: false`면 서버가 세션을 종료하고 연결을 닫는다. `code`는 화면에 그대로 노출하는 표시용 식별자로, `occurredAt`과 함께 배너 하단에 표기한다. `step`은 준비 단계 오류일 때만 값이 있고 진행 중 오류에서는 `null`이다.
+[0010 결정](../../spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md)에 따라 LLM의 timeout/provider 오류·parse/schema 실패는 공통 호출 계층에서만 자동 1회 재시도한다(최초 호출 포함 최대 2회). semantic 실패는 재호출하지 않는다. `question_failed`의 기존 `recoverable: true`는 FE의 추가 재시도나 재연결을 통한 LLM 재호출을 허용한다는 뜻이 아니다. 허용된 시도 후에도 질문 생성에 실패하면 [기존 면접 실패 정책](../../spec/ai/features/interviewer.md#공개-메시지와-보류-항목)에 따라 오류 안내·기록 보존·명시적 나가기와 새 면접 흐름을 유지하며, 진행 중 면접의 새 수동 이어가기를 추가하지 않는다.
+
+`recoverable: false`면 서버가 WS 연결을 닫는다. 오류 안내나 연결 종료만으로 DB 상태를 `completed` 또는 `abandoned`로 바꾸지 않는다. 정상 완료는 9번째 답변 처리 완료, `abandoned`는 명시적 나가기 확인·레포 재선택에 따른다. 오류 전달·종료 요청·실패 기록 복원의 실제 연결은 구현·검증 대상이다.
+
+`code`는 화면에 그대로 노출하는 표시용 식별자로, `occurredAt`과 함께 배너 하단에 표기한다. `step`은 준비 단계 오류일 때만 값이 있고 진행 중 오류에서는 `null`이다.
 
 `repo_unreachable`의 "레포 재선택"은 `GET /interviews/{id}`의 `runId`로 5a-v2에 진입한다.
 
@@ -1246,7 +1308,7 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 
 | 코드 | 상황 |
 | --- | --- |
-| 401 | `accessToken` 쿠키 없음 · 만료 · 변조 |
+| 401 | `unauthenticated` — 로그인 쿠키 없음 · 세션 만료/유실/무효 |
 | 409 | 이미 종료된 면접 세션 · `already_connected` |
 
 > `already_connected`는 이전 연결이 살아 있는 경우다. 새로고침 재연결을 막지 않도록 서버는 기존 연결을 종료한 뒤 신규 연결을 허용한다.
@@ -1377,7 +1439,7 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 | 탭 | 필드 |
 | --- | --- |
 | 종합리포트 | `headline` · `totalScore` · `summary` · `scores` · `coverage` |
-| 면접관별 피드백 | `agentFeedbacks` — `disagreementSubmitted`로 이의 제기 버튼 상태 결정 |
+| 면접관별 피드백 | `agentFeedbacks` — Sprint 1 이의 제기 버튼은 비활성. `disagreementSubmitted` 연동은 #21의 후속 범위 |
 | 면접 기록 | `turns` |
 
 **Failure**
@@ -1389,6 +1451,8 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 ## 20. POST /interviews/{id}/retry
 
 원본 면접 세션의 `runId`·레포 조합을 복사해 새 세션을 만든다.
+
+허용 상태는 FE의 기존 `original_not_completed` 설명과 BE 명세의 `completed`·`abandoned` 허용이 다르며 OpenAPI는 409만 정의한다. 이번 문서 정리에서는 세부 조건을 임의 확정하지 않는다([report의 계약 차이](../../spec/frontend/features/report.md#계약-차이와-구현-범위)).
 
 **Request**
 
@@ -1424,6 +1488,8 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 
 ## 21. POST /interviews/{id}/feedback-disagreements
 
+**범위 주의:** [이관 현황](../../spec/shared/contracts/migration.md)의 기존 결정에 따라 Sprint 1은 API 제공·호출 대상이 아니며 버튼은 비활성이다. OpenAPI·FE 타입·mock에 계약이 남아 있어 아래 구조와 번호를 보존하지만, 이를 Sprint 1 기능 활성화로 해석하지 않는다. 계약 파일 잔존 내용의 정합화와 실제 구현은 후속 작업이다.
+
 `{id}`는 `interviewId`다. 리포트는 면접당 1개이고 `GET /interviews/{id}/report` 응답에 `reportId`가 없으므로, FE가 보유한 식별자는 `interviewId`뿐이다. 서버가 내부적으로 `reports` 행을 따로 관리하더라도 경로 파라미터는 `interviewId`를 받는다.
 
 **Request**
@@ -1458,7 +1524,7 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 
 **UI states**
 
-5c-v2 이의 제기 모달 제출 → 성공 시 `disagreementSubmitted: true`로 버튼 비활성(재조회 기반, 로컬 플래그 아님) → `interview(id).report` 캐시 무효화. 제출 단위는 `(interviewId, persona)`, persona당 1회.
+Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagreementSubmitted: true`로 버튼 비활성(재조회 기반, 로컬 플래그 아님) → `interview(id).report` 캐시 무효화. 제출 단위는 `(interviewId, persona)`, persona당 1회. Sprint 1 호출·모달 구현 지시가 아니다.
 
 **Failure**
 
@@ -1484,7 +1550,7 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 
 계층 구조라 `['interview', id]`를 무효화하면 하위 `report`까지 함께 무효화된다. `POST /interviews/{id}/feedback-disagreements`도 같은 `interviewId`를 쓰므로 무효화 대상이 그대로 대응된다.
 
-`POST /auth/refresh`는 queryKey를 갖지 않는다. 인터셉터 내부에서만 호출한다.
+`POST /auth/refresh`(#3)는 Sprint 2 예약이다. Sprint 1에는 queryKey도 호출부도 두지 않는다.
 
 ## 캐시 무효화
 
@@ -1496,8 +1562,7 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 | 피드백 이의 제출 | `interview(id).report` |
 | `GET /auth/github/link/callback` 복귀 | `me`, `home` |
 | `POST /auth/logout` | 전체 `clear()` |
-| `POST /auth/refresh` 성공 | 없음 |
-| `POST /auth/refresh` 실패 | 전체 `clear()` |
+| `401 unauthenticated` | 전체 `clear()` 후 `/login` |
 
 ---
 
@@ -1528,7 +1593,7 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 | 21 | POST | `/interviews/{id}/feedback-disagreements` | fetch | `accessToken` |
 | 22 | GET | `/analysis-runs/{runId}/candidates` | fetch | `accessToken` |
 
-총 22개.
+총 23개.
 
 `shared/api.ts`에 넣지 않는 것: 1, 2, 7, 8 (브라우저 이동 또는 프론트 무관). 3은 인터셉터 내부에서만 호출한다.
 
@@ -1539,7 +1604,9 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 | 브라우저 이동 | 1, 7 |
 | 프론트 무관 (서버 302) | 2, 8 |
 | `fetch` GET | 5, 6, 9, 10, 14, 15, 17, 19, 22 |
-| `fetch` POST | 3, 4, 12, 16, 20, 21 |
+| `fetch` POST | 4, 12, 16, 20 |
+| 계약 잔존, Sprint 1 제공·호출 제외 | 21 (이의 제기, 기존 Sprint 2 범위) |
+| Sprint 2 예약 | 3 (`POST /auth/refresh`) |
 | `fetch` POST (multipart) | 11 |
 | `EventSource` | 13 |
 | `WebSocket` | 18 |
@@ -1560,10 +1627,10 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 | 분석 실패 | 4-3-v2 | `/analysis-runs/{runId}` R · `/analysis-runs` W (재시도) · `/auth/github/link` (이동) |
 | 레포 확정 | 5a-v2 | `/analysis-runs/{runId}/result` R · `/analysis-runs/{runId}/candidates` R (더보기) · `/interviews` W |
 | 면접 준비 | 5a2-v2 | `/interviews/{id}` R · `/ws/interviews/{sessionId}` S |
-| 면접 준비 실패 | 1b | `/interviews/{id}` R (`lastError`·`runId`) · `/ws/interviews/{sessionId}` S (`prepareRetry`) · `/analysis-runs/{runId}/result` R (레포 재선택) |
+| 면접 준비 실패 | 1b | `/interviews/{id}` R (`lastError`·`runId`) · `/interviews/{id}/prepare/retry` W · `/analysis-runs/{runId}/result` R (레포 재선택) |
 | 면접 진행 | 5b-v2 | `/ws/interviews/{sessionId}` S · `/interviews/{id}` R (재연결 복구) |
-| 리포트 | 5c-v2 | `/interviews/{id}/report` R · `/interviews/{id}/feedback-disagreements` W · `/interviews/{id}/retry` W |
-| 전역 | — | `/me` R (인증 가드) · `/auth/refresh` W (인터셉터) · `/auth/logout` W |
+| 리포트 | 5c-v2 | `/interviews/{id}/report` R · `/interviews/{id}/retry` W. 이의 제기는 Sprint 1 호출 제외(#21 범위 주의) |
+| 전역 | — | `/me` R (인증 가드) · `/auth/logout` W · 401 시 캐시 정리와 로그인 이동 |
 
 > 화면별 상세 설명은 각 엔드포인트의 `UI states`를 참고한다. 이 표는 화면 하나가 여러 엔드포인트를 조합하는 지점만 빠르게 훑기 위한 색인이다.
 > 
@@ -1596,12 +1663,12 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 
 5a2-v2  면접 준비 (WS 연결)
   ├─ prepareCompleted → 5b-v2
-  └─ error            → 1b ─(prepareRetry)→ 5a2-v2
+  └─ error            → 1b ─(POST /interviews/{id}/prepare/retry)→ 5a2-v2
                            └─(레포 다시 선택 · runId)→ 5a-v2
 
 5b-v2   면접 진행 (WS 유지)
   ├─ interviewEnd → 5c-v2
-  └─ 이탈         → 재연결 실패 시 status='abandoned'
+  └─ 명시적 이탈 확인·레포 재선택 → status='abandoned' (연결 끊김·인증 만료만으로 전환하지 않음)
 
 5c-v2   리포트
   └─ POST /interviews/{id}/retry → 201 → 5a2-v2
@@ -1665,4 +1732,6 @@ WS 연결이 끊겨도 즉시 `abandoned` 처리하지 않는다 — FE의 재�
 | 2026-09-17 | `GET /interviews/{id}` 응답에 **`runId`** 필드 추가 — 1b(준비 실패)·`repo_unreachable`에서 "레포 다시 선택"으로 5a-v2에 진입하려면 `/analysis-runs/{runId}/result`가 필요한데, 새로고침 시 FE가 `runId`를 보유하지 않아 경로가 끊겼다 |
 | 2026-09-17 | **`POST /reports/{id}/feedback-disagreements` → `POST /interviews/{id}/feedback-disagreements`** — `{id}`는 `interviewId`다. 리포트는 면접당 1개이고 #19 응답에 `reportId`가 없어 FE가 보유한 식별자는 `interviewId`뿐이다. 제출 단위 표기도 `(reportId, persona)` → `(interviewId, persona)`로 정정, `404 not_found` 추가 |
 | 2026-09-17 | #13 SSE에 **구독 전 `GET /analysis-runs/{runId}` 스냅샷 호출 명시** — 스트림은 구독 시점 이후 델타만 전달하므로 새로고침 시 이전 `step` 이벤트를 복구할 수 없다 |
+| 2026-09-23 | **준비 재시도를 WS `prepareRetry` → `POST /interviews/{id}/prepare/retry`(#23)로 이동** — `spec/ai/decisions/0010:32`(Accepted, 2026-09-15) 반영. 거절 reason `prep_in_progress`(409)·`session_expired`(410) 신설, 성공은 `204` |
+| 2026-09-23 | WS `answer`에 **`turn` 추가** — `spec/ai/decisions/0010:30` 반영. 불일치 시 `answer_stale_turn` 신설 |
 | 2026-09-17 | #19의 **`202 Accepted`를 Failure → Response로 이동** (생성 중은 실패가 아님), `error.retryAfter`와 본문 최상위 `retryAfter`의 위치 차이 명시 |

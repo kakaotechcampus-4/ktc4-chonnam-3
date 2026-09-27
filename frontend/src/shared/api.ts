@@ -106,4 +106,13 @@ export const api = {
   submitFeedbackDisagreement: (id: string, body: FeedbackDisagreementRequest) =>
     requestJson<void>(`/interviews/${id}/feedback-disagreements`, 'POST', body),
   analysisRunEventsUrl: (runId: string) => `${BASE}/analysis-runs/${runId}/events`,
+  /** 준비 실패 재시도. 진행 상황은 응답이 아니라 WS prepareStep 으로 온다. api-spec.md #23. */
+  retryPrepare: (id: string) => request<void>(`/interviews/${id}/prepare/retry`, { method: 'POST' }),
+
+  /**
+   * WebSocket은 request() 래퍼를 거치지 않는다. BASE(`/api`)를 직접 붙여야
+   * Caddy의 `/api/*` reverse proxy를 타고 핸드셰이크가 성립한다.
+   */
+  interviewSocketUrl: (sessionId: string) =>
+    `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${BASE}/ws/interviews/${sessionId}`,
 };

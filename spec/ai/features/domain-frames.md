@@ -48,6 +48,8 @@
 
 ## Seed와 변경 관리
 
+[0018 일괄 정리](../decisions/0018-existing-baseline-bulk-resolution.md)에 따라 기존 7개 category·21개 개발 후보·etc fallback·BE seed 소유권을 그대로 유지한다. 일반 입력·version·저장 표현은 구현 검토, 운영 문구의 실제 독립·도메인·한국어 검수는 자료 작업으로 [인계](../../../ai/docs/pipeline.md#기존-id별-구현검수-인계)한다. 문구별 선택을 사용자에게 반복하지 않으며 개발 후보를 검수된 운영 seed로 자동 승격하지 않는다.
+
 개발용 후보 유지와 생성 정책 승인은 운영 seed의 최종 문구 승인·독립 검수 완료를 뜻하지 않는다. 이번 결정에서 기존 21개 문구는 수정하지 않았으며, 검수자나 활성 version을 새로 지정하지 않는다.
 
 `domain_question_frames`는 Sprint 1에 사용하는 운영 데이터다. 질문 문구를 Director 코드나 prompt 문자열에 하드코딩하지 않는다. seed 재실행은 idempotent해야 하며, 팀 검수 후 데이터와 연결된 version을 바꾸어 반영할 수 있어야 한다.
