@@ -70,6 +70,12 @@ def test_reserved_path_is_not_treated_as_owner() -> None:
     assert normalize_github_url("https://github.com/settings/profile") is None
 
 
+def test_other_host_with_github_in_path_is_not_treated_as_github() -> None:
+    """진짜 호스트가 다른 URL의 하위 경로에 우연히 github.com/owner/repo 가 있는 경우."""
+    assert normalize_github_url("https://example.com/github.com/alice/repo") is None
+    assert extract_github_full_names("https://example.com/github.com/alice/repo") == []
+
+
 def test_extract_keeps_order_and_deduplicates() -> None:
     text = """
     주요 프로젝트: https://github.com/Alice/devon-api

@@ -1,262 +1,186 @@
-"""원티드 어댑터 — 1차 유일. /wd/{id} → /api/chaos/jobs/v1/{id}/details 공개 JSON.
+"""원티드 어댑터 — 1차 유일. /wd/{id} → /api/chaos/jobs/v1/{id}/details 공개 JSON
 position / intro / main_tasks / requirements / preferred_points / benefits / skill_tags /
-industry_name 이 항목별로 이미 나뉘어 온다. content_form='text'. 헤드리스 브라우저 불필요.
+industry_name 이 항목별로 이미 나뉘어 옴. content_form='text'. 헤드리스 브라우저 불필요
+채용 마감 여부(status/due_time)는 분석 차단 조건이 아니다. 본문 수집·검증 결과로 판단한다.
 
 확정본 §3 3사 비교 / task-09
 
-실제 응답으로 확인한 구조 (2026-09-21):
-
-    {"application": null,
-     "job": {"id": 123456, "status": "close",
-             "detail": {"position", "intro", "main_tasks", "requirements",
-                        "preferred_points", "benefits", "hire_rounds"},
-             "company": {"id", "name", "industry_name", "company_tags"},
-             "skill_tags": [{"tag_type_id": 1411, "text": "Git"}],
-             "category_tag": {"parent_tag": {"text"}, "child_tags": [{"text"}]}}}
-
-  data 래퍼가 없고 position 은 job.detail 안에 있다. 없는 공고는 404 +
-  {"error_code": 11001, "message": "job not found exception"} 이다.
-  키 이름으로 깊이 탐색하는 방식은 유지한다 — 문서화되지 않은 외부 API 라
-  경로를 고정하면 구조가 조금만 바뀌어도 전부 실패한다.
+주의: 아래 JSON 경로(`job.detail.*`)는 공개 문서가 없는 비공식 엔드포인트라 실제 응답으로 확인함
+실제 공고 2건(job id 380611, 341487)으로 검증하며 position·skill_tags 경로 오류 발견해 수정함
+`tests/contract/` 고정 픽스처로 대조하는 작업은 아직 안 함
 """
+
+from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
 from app.integrations.jd.base import (
-    JD_ERROR_EXTRACTION_FAILED,
-    JD_ERROR_FETCH_FAILED,
-    JD_ERROR_NOT_A_JOB_POSTING,
-    ContentForm,
-    JdFetchResult,
-    JdParseStatus,
-    JdRequirementItem,
-    JobPostingPayload,
-    failure,
-)
-from app.shared.enums import JdCategory
-
-WANTED_HOSTS = frozenset({"wanted.co.kr", "www.wanted.co.kr"})
-_POSTING_ID = re.compile(r"/wd/(?P<posting_id>\d+)")
-_DETAILS_URL = "https://www.wanted.co.kr/api/chaos/jobs/v1/{posting_id}/details"
-_CANONICAL_URL = "https://www.wanted.co.kr/wd/{posting_id}"
-
-# 줄머리 글머리표. 원티드 본문은 줄바꿈으로 항목이 나뉜다.
-_BULLET = re.compile(r"^\s*(?:[-•·*–—]|\d+[.)])\s*")
-
-# 확정본이 적어둔 항목 이름 -> 계약 category.
-# 자격요건=required, 우대사항=preferred, 주요업무=responsibility 로 openapi JdCategory 와 맞는다.
-_FIELD_CATEGORY: tuple[tuple[str, JdCategory], ...] = (
-    ("main_tasks", JdCategory.RESPONSIBILITY),
-    ("requirements", JdCategory.REQUIRED),
-    ("preferred_points", JdCategory.PREFERRED),
+    PostingContent,
+    PostingContentEmptyError,
+    PostingInvalidResponseError,
+    PostingUnreachableError,
+    UnsupportedSiteError,
 )
 
-DEFAULT_REQUIREMENT_LIMIT = 20
-DEFAULT_TIMEOUT_SECONDS = 10.0
+WANTED_HOSTS = {"www.wanted.co.kr", "wanted.co.kr"}
+_WANTED_PATH_RE = re.compile(r"/wd/(?P<job_id>[0-9]+)/?")
+_DETAIL_URL = "https://www.wanted.co.kr/api/chaos/jobs/v1/{job_id}/details"
+_TIMEOUT_SECONDS = 10.0
 
 
-def _find_value(payload: object, key: str) -> Any:
-    """중첩 dict/list 에서 key 를 처음 만나는 값으로 돌려준다.
-
-    입력: 파싱된 JSON, 찾을 키. 출력: 값, 없으면 None.
-    구조는 모듈 docstring 에 적어뒀지만 경로를 고정하지 않는다 — 문서화되지 않은
-    외부 API 라 중첩이 조금만 바뀌어도 전부 실패하는 편보다 낫다.
-    """
-    if isinstance(payload, dict):
-        if key in payload:
-            return payload[key]
-        for value in payload.values():
-            found = _find_value(value, key)
-            if found is not None:
-                return found
-    elif isinstance(payload, list):
-        for item in payload:
-            found = _find_value(item, key)
-            if found is not None:
-                return found
-    return None
-
-
-def _as_text(value: object) -> str | None:
-    """문자열 필드를 정리한다. 입력: 임의 값. 출력: 비어 있지 않은 문자열 또는 None."""
-    if not isinstance(value, str):
+def extract_job_id(url: str) -> str | None:
+    """`https://www.wanted.co.kr/wd/12345` 형태에서 `12345`를 뽑음. 매칭 안 되면 None"""
+    try:
+        # 세미콜론 뒤의 잘못된 경로도 검사하도록 경로 전체를 보존한다.
+        parsed = urlsplit(url)
+        # 포트 접근 시 비숫자·범위 밖 포트도 ValueError로 검증된다.
+        _ = parsed.port
+        if parsed.scheme not in {"http", "https"} or parsed.hostname not in WANTED_HOSTS:
+            return None
+    except ValueError:
         return None
-    stripped = value.strip()
-    return stripped or None
-
-
-def _split_lines(value: object) -> list[str]:
-    """여러 줄 본문을 항목 목록으로 자른다. 입력: 본문. 출력: 글머리표를 뗀 줄 목록."""
-    text = _as_text(value)
-    if text is None:
-        return []
-    lines = []
-    for raw_line in text.splitlines():
-        line = _BULLET.sub("", raw_line).strip()
-        if line:
-            lines.append(line)
-    return lines
-
-
-def _skill_tags(payload: object) -> list[str]:
-    """skill_tags 를 문자열 목록으로 만든다. dict 목록과 문자열 목록을 모두 받는다."""
-    raw = _find_value(payload, "skill_tags")
-    if not isinstance(raw, list):
-        return []
-    tags: list[str] = []
-    for item in raw:
-        if isinstance(item, str):
-            tag = _as_text(item)
-        elif isinstance(item, dict):
-            # 실제 응답은 {"tag_type_id": 1411, "text": "Git"} 이다.
-            # title/name 은 attraction_tags·company_tags 쪽 형태라 폴백으로만 둔다.
-            tag = (
-                _as_text(item.get("text"))
-                or _as_text(item.get("title"))
-                or _as_text(item.get("name"))
-            )
-        else:
-            tag = None
-        if tag is not None and tag not in tags:
-            tags.append(tag)
-    return tags
-
-
-def _requirements(payload: object, limit: int) -> list[JdRequirementItem]:
-    """항목별 본문을 jd_requirements 목록으로 만든다.
-
-    입력: 파싱된 JSON, 최대 개수. 출력: display_order 가 1부터 매겨진 목록.
-    순서는 주요업무 -> 자격요건 -> 우대사항으로, 공고를 위에서 읽는 순서와 같다.
-    """
-    items: list[JdRequirementItem] = []
-    for field_name, category in _FIELD_CATEGORY:
-        for line in _split_lines(_find_value(payload, field_name)):
-            if len(items) >= limit:
-                return items
-            items.append(
-                JdRequirementItem(category=category, text=line, display_order=len(items) + 1)
-            )
-    return items
-
-
-def _company_name(payload: object) -> str | None:
-    """회사명을 찾는다. company.name 과 company_name 양쪽을 본다."""
-    company = _find_value(payload, "company")
-    if isinstance(company, dict):
-        name = _as_text(company.get("name"))
-        if name is not None:
-            return name
-    return _as_text(_find_value(payload, "company_name"))
+    # 쿼리에 들어 있는 다른 공고 주소를 ID로 읽지 않고, 실제 경로만 검사한다.
+    match = _WANTED_PATH_RE.fullmatch(parsed.path)
+    return match.group("job_id") if match else None
 
 
 class WantedAdapter:
-    """원티드 공개 JSON 어댑터. Sprint 1 은 이 어댑터 하나만 쓴다."""
+    site_adapter = "wanted"
 
-    name = "wanted"
-
-    def __init__(
-        self,
-        *,
-        client: httpx.AsyncClient | None = None,
-        requirement_limit: int = DEFAULT_REQUIREMENT_LIMIT,
-        timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
-    ) -> None:
-        """입력: 주입할 httpx client(테스트용), 요구사항 상한, timeout. 출력: 없음."""
+    def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         self._client = client
-        self._requirement_limit = requirement_limit
-        self._timeout_seconds = timeout_seconds
 
-    def supports(self, url: str) -> bool:
-        """원티드 공고 URL 인지. 입력: 원본 URL. 출력: bool."""
-        return self._posting_id(url) is not None
+    async def fetch(self, url: str) -> PostingContent:
+        job_id = extract_job_id(url)
+        if job_id is None:
+            # resolver는 호스트를 선택하고, 어댑터는 공고 경로까지 검증한다.
+            raise UnsupportedSiteError(f"원티드 URL에서 job id를 못 찾음: {url}")
 
-    def normalize_url(self, url: str) -> str | None:
-        """https://www.wanted.co.kr/wd/{id} 로 정규화한다.
+        detail_url = _DETAIL_URL.format(job_id=job_id)
 
-        입력: 원본 URL. 출력: 정규 URL, 원티드 공고가 아니면 None.
-        job_postings 재사용 판정 키라서 query·hash·slash 차이를 모두 없앤다.
-        """
-        posting_id = self._posting_id(url)
-        if posting_id is None:
-            return None
-        return _CANONICAL_URL.format(posting_id=posting_id)
-
-    async def fetch(self, url: str) -> JdFetchResult:
-        """공고를 가져와 구조화한다. 입력: 원본 URL. 출력: JdFetchResult."""
-        posting_id = self._posting_id(url)
-        if posting_id is None:
-            return failure(self.name, JD_ERROR_NOT_A_JOB_POSTING)
-
-        fetch_url = _DETAILS_URL.format(posting_id=posting_id)
+        owns_client = self._client is None
+        client = self._client or httpx.AsyncClient(timeout=_TIMEOUT_SECONDS)
         try:
-            response = await self._get(fetch_url)
-        except httpx.HTTPError:
-            # timeout 과 연결 실패.
-            return failure(self.name, JD_ERROR_FETCH_FAILED)
+            try:
+                response = await client.get(detail_url)
+            except httpx.HTTPError as exc:
+                raise PostingUnreachableError(str(exc)) from exc
 
-        if response.status_code == httpx.codes.NOT_FOUND:
-            # {"error_code": 11001, "message": "job not found exception"} — 삭제된 공고다.
-            return failure(self.name, JD_ERROR_NOT_A_JOB_POSTING)
-        if response.status_code >= httpx.codes.BAD_REQUEST:
-            return failure(self.name, JD_ERROR_FETCH_FAILED)
+            if response.status_code == 404:
+                raise PostingUnreachableError(f"원티드 공고를 찾을 수 없음: {detail_url}")
+            if response.status_code >= 400:
+                raise PostingUnreachableError(
+                    f"원티드 응답 실패: {response.status_code} {detail_url}"
+                )
 
-        try:
-            raw = response.json()
-        except ValueError:
-            return failure(self.name, JD_ERROR_FETCH_FAILED)
+            try:
+                payload = response.json()
+            except ValueError as exc:
+                raise PostingUnreachableError("원티드 응답이 JSON이 아님") from exc
+        finally:
+            # 외부에서 주입한 클라이언트는 호출부가 재사용할 수 있으므로 닫지 않는다.
+            if owns_client:
+                await client.aclose()
 
-        if not isinstance(raw, dict):
-            return failure(self.name, JD_ERROR_EXTRACTION_FAILED)
+        return self._parse(detail_url, payload)
 
-        position = _as_text(_find_value(raw, "position"))
-        company_name = _company_name(raw)
-        if position is None and company_name is None:
-            # 공고 JSON 이 아니거나 삭제된 공고다.
-            return failure(self.name, JD_ERROR_NOT_A_JOB_POSTING)
+    def _parse(self, fetch_url: str, payload: object) -> PostingContent:
+        if not isinstance(payload, dict):
+            raise PostingInvalidResponseError("원티드 응답이 JSON 객체가 아님")
+        job = _object_field(payload.get("job"))
+        if not job:
+            # 응답이 data로 감싸진 형식도 동일한 객체 검증을 거쳐 읽는다.
+            job = _object_field(_object_field(payload.get("data")).get("job"))
+        detail = _object_field(job.get("detail"))
+        company = _object_field(job.get("company"))
 
-        requirements = _requirements(raw, self._requirement_limit)
-        payload = JobPostingPayload(
-            source=self.name,
-            normalized_url=_CANONICAL_URL.format(posting_id=posting_id),
-            raw_url=url,
+        # 실제 응답(2026-09-14, job id 380611)엔 job.position/job.title 이 둘 다 없고
+        # detail.position 에만 있었음 — 나머지 둘은 혹시 몰라 폴백으로 남겨둠
+        position = (
+            _optional_text(detail.get("position"))
+            or _optional_text(job.get("position"))
+            or _optional_text(job.get("title"))
+        )
+        company_name = _optional_text(company.get("name"))
+        industry = _optional_text(company.get("industry_name"))
+
+        requirements = _split_paragraphs(detail.get("requirements"))
+        preferred_points = _split_paragraphs(detail.get("preferred_points"))
+        main_tasks = _split_paragraphs(detail.get("main_tasks"))
+        intro = _optional_text(detail.get("intro"))
+
+        # 실제 응답(job id 341487)엔 태그 이름이 "name"이 아니라 "text" 키에 있었음
+        tag_values = job.get("skill_tags")
+        if tag_values is None:
+            tag_values = []
+        if not isinstance(tag_values, list):
+            raise PostingInvalidResponseError("원티드 skill_tags가 목록이 아님")
+        skill_tags = []
+        for tag in tag_values:
+            text = tag.get("text") if isinstance(tag, dict) else tag
+            if not isinstance(text, str):
+                raise PostingInvalidResponseError("원티드 기술 태그의 text가 문자열이 아님")
+            if text.strip():
+                skill_tags.append(text.strip())
+
+        raw_text_parts = [
+            part
+            for part in (
+                position,
+                intro,
+                *main_tasks,
+                *requirements,
+                *preferred_points,
+            )
+            if part and part.strip()
+        ]
+        raw_text = "\n".join(raw_text_parts)
+
+        if not raw_text and not requirements and not preferred_points and not main_tasks:
+            raise PostingContentEmptyError(f"원티드 공고 본문이 비어있음: {fetch_url}")
+
+        return PostingContent(
+            site_adapter=self.site_adapter,
             fetch_url=fetch_url,
-            source_posting_id=posting_id,
+            content_form="text",
+            raw_text=raw_text,
             position=position,
             company_name=company_name,
-            skill_tags=_skill_tags(raw),
+            industry=industry,
             requirements=requirements,
-            content_form=ContentForm.TEXT,
-            raw_payload=raw,
-        )
-        # 공고는 받았지만 요구사항이나 직무명이 비면 부분 성공이다.
-        complete = position is not None and bool(requirements)
-        return JdFetchResult(
-            adapter=self.name,
-            status=JdParseStatus.SUCCEEDED if complete else JdParseStatus.PARTIAL,
-            payload=payload,
+            preferred_points=preferred_points,
+            main_tasks=main_tasks,
+            skill_tags=skill_tags,
         )
 
-    async def _get(self, fetch_url: str) -> httpx.Response:
-        """details 응답을 가져온다. 입력: API URL. 출력: Response.
 
-        상태코드는 호출부가 본다 — 404 와 나머지 오류의 error_code 가 다르다.
-        """
-        if self._client is not None:
-            return await self._client.get(fetch_url)
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-            return await client.get(fetch_url)
+def _object_field(value: object) -> dict[str, Any]:
+    """누락·null인 선택 객체는 허용하되 목록·숫자 등 잘못된 타입은 거부한다."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise PostingInvalidResponseError("원티드 응답의 객체 필드 형식이 올바르지 않음")
+    return value
 
-    @staticmethod
-    def _posting_id(url: str) -> str | None:
-        """URL 에서 공고 번호를 뽑는다. 호스트가 원티드가 아니면 None."""
-        try:
-            parsed = httpx.URL(url if "://" in url else f"https://{url}")
-        except (httpx.InvalidURL, ValueError, TypeError):
-            return None
-        if parsed.host.lower() not in WANTED_HOSTS:
-            return None
-        match = _POSTING_ID.search(parsed.path)
-        return match.group("posting_id") if match else None
+
+def _optional_text(value: object) -> str | None:
+    """숫자나 객체를 문자열로 바꿔 실제 공고 내용처럼 저장하지 않는다."""
+    if value is not None and not isinstance(value, str):
+        raise PostingInvalidResponseError("원티드 응답의 텍스트 필드가 문자열이 아님")
+    return value
+
+
+def _split_paragraphs(value: object) -> list[str]:
+    """원티드 필드는 리스트(항목별) 또는 개행 구분 단일 문자열로 올 수 있어 둘 다 받음"""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [line.strip() for line in value.splitlines() if line.strip()]
+    # 잘못된 항목을 조용히 버리면 누락된 요구사항을 정상 추출로 오인할 수 있다.
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise PostingInvalidResponseError("원티드 본문 필드가 문자열 또는 문자열 목록이 아님")
+    return [item.strip() for item in value if item.strip()]

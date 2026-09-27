@@ -1,106 +1,112 @@
-"""공고 사이트 어댑터 프로토콜. fetch(url) → (fetch_url, raw_text, image_urls, content_form).
-DB 를 모른다.
+"""공고 사이트 어댑터 프로토콜. fetch(url) → PostingContent
+DB 모름
 
 확정본 §3 site_adapter / task-09
-
-어댑터는 HTTP 호출과 구조화까지만 한다. job_postings 재사용 판정(fetched_at 24시간)과
-행 저장은 service 가 한다.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from enum import StrEnum
-from typing import Any, Protocol
-
-from app.shared.enums import JdCategory
-
-# job_postings.parse_error_code (docs/error-reasons.md)
-JD_ERROR_UNSUPPORTED_SITE = "unsupported_site"
-JD_ERROR_FETCH_FAILED = "jd_fetch_failed"
-JD_ERROR_EXTRACTION_FAILED = "jd_extraction_failed"
-JD_ERROR_NOT_A_JOB_POSTING = "not_a_job_posting"
+from typing import Protocol
 
 
-class ContentForm(StrEnum):
-    """본문이 글자로 오는지 이미지로 오는지.
+@dataclass(frozen=True, slots=True)
+class PostingContent:
+    """어댑터가 공고 페이지에서 얻어낸 원본 내용
 
-    Sprint 1 의 Wanted 는 text 다. 본문이 이미지인 사이트(사람인 등)는 Sprint 2 다.
+    `site_adapter`가 이미 항목별로 필드를 분리해 주는 경우(예: 원티드)에는
+    ``requirements`` / ``preferred_points`` / ``main_tasks`` / ``skill_tags`` 를 채움 —
+    이 필드들이 채워져 있으면 jd_extract 단계는 LLM 호출 없이 그대로 매핑함
+    향후 비구조화 어댑터는 ``raw_text``를 사용할 수 있다.
+    현재 제너릭 어댑터는 본문을 수집하지 않고 미지원 사이트 오류를 발생시킨다.
     """
 
-    TEXT = "text"
-    IMAGE = "image"
+    site_adapter: str
+    """어댑터 식별자. `job_postings.site_adapter` 에 그대로 저장됨. 예: "wanted", "generic\""""
 
-
-class JdParseStatus(StrEnum):
-    """공고 수집 결과. job_postings.parse_status 와 같은 값이다."""
-
-    SUCCEEDED = "succeeded"
-    PARTIAL = "partial"
-    FAILED = "failed"
-
-
-@dataclass(frozen=True, slots=True)
-class JdRequirementItem:
-    """요구사항 한 줄. jd_requirements 행 하나가 된다."""
-
-    category: JdCategory
-    text: str
-    display_order: int
-
-
-@dataclass(frozen=True, slots=True)
-class JobPostingPayload:
-    """어댑터가 만든 공고 한 건. service 가 job_postings 로 옮긴다."""
-
-    source: str
-    normalized_url: str
-    raw_url: str
-    # 실제로 호출한 주소. 어댑터별 성공률을 비교할 때 무엇을 쳤는지 알아야 한다.
     fetch_url: str
-    source_posting_id: str | None = None
+    """공고 수집에 요청한 URL"""
+
+    content_form: str
+    """"text" | "image" | "mixed". `job_postings.content_form` CHECK 값과 동일"""
+
+    raw_text: str = ""
+    """구조화 실패 시에도 항상 채워지는 대표 텍스트 (구조화 필드가 있으면 이어붙인 요약)"""
+
+    image_urls: list[str] = field(default_factory=list)
+
     position: str | None = None
     company_name: str | None = None
+    industry: str | None = None
+
+    requirements: list[str] = field(default_factory=list)
+    """필수 요건 — API·DB `category` 모두 required"""
+
+    preferred_points: list[str] = field(default_factory=list)
+    """우대 사항 — API·DB `category` 모두 preferred"""
+
+    main_tasks: list[str] = field(default_factory=list)
+    """주요 업무 — API·DB `category` 모두 responsibility"""
+
     skill_tags: list[str] = field(default_factory=list)
-    requirements: list[JdRequirementItem] = field(default_factory=list)
-    content_form: ContentForm = ContentForm.TEXT
-    image_urls: list[str] = field(default_factory=list)
-    raw_payload: dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True, slots=True)
-class JdFetchResult:
-    """어댑터 호출 결과.
-
-    adapter 는 실패해도 반드시 채운다 — site_adapter 컬럼이 어댑터별 성공률 비교 축이다.
-    """
-
-    adapter: str
-    status: JdParseStatus
-    payload: JobPostingPayload | None = None
-    error_code: str | None = None
+    """어댑터가 이미 정규화해 준 기술 태그. `jd_requirements.tech_tags` 원천이라
+    LLM 의 기술명 추측 불필요 (원티드 한정)"""
 
     @property
-    def succeeded(self) -> bool:
-        return self.status is not JdParseStatus.FAILED
+    def is_structured(self) -> bool:
+        """requirements/preferred_points/main_tasks 가 이미 항목별로 분리돼 왔는지
+
+        True 면 jd_extract 단계는 LLM 호출 없이 그대로 매핑"""
+        return bool(self.requirements or self.preferred_points or self.main_tasks)
 
 
-class JobPostingAdapter(Protocol):
-    """공고 사이트 어댑터. Sprint 1 구현체는 Wanted 하나뿐이다."""
+class PostingFetchError(Exception):
+    """공고 수집 실패 공통 베이스. `.code` 는 `job_postings.parse_error_code` 값과 동일
 
-    name: str
+    docs/error-reasons.md ④ 참고. 어댑터의 네트워크·응답·빈 본문 실패는 모두
+    `jd_fetch_failed` 로 저장한다. `unsupported_site` 는 별도 계약 코드다.
+    """
 
-    def supports(self, url: str) -> bool:
-        """이 어댑터가 처리할 URL 인지. 입력: 원본 URL. 출력: bool."""
+    code: str
+
+    def __init__(self, message: str | None = None) -> None:
+        super().__init__(message or self.code)
+
+
+class UnsupportedSiteError(PostingFetchError):
+    code = "unsupported_site"
+
+
+class PostingUnreachableError(PostingFetchError):
+    """HTTP·네트워크 오류 또는 JSON 해석 실패로 공고를 읽지 못한 경우."""
+
+    code = "jd_fetch_failed"
+
+
+class PostingContentEmptyError(PostingFetchError):
+    """응답은 받았지만 사용할 공고 본문이 없는 경우."""
+
+    code = "jd_fetch_failed"
+
+
+class PostingInvalidResponseError(PostingFetchError):
+    """응답 구조나 필드 타입이 달라 공고 내용을 신뢰할 수 없는 경우."""
+
+    code = "jd_fetch_failed"
+
+
+class JdAdapter(Protocol):
+    """공고 사이트별 어댑터가 구현해야 하는 인터페이스"""
+
+    site_adapter: str
+
+    async def fetch(self, url: str) -> PostingContent:
+        """`url` 에서 공고 내용을 가져옴. 마감 공고도 본문에 접근 가능하면 수집한다.
+
+        Raises:
+            UnsupportedSiteError: 이 어댑터가 다룰 수 없는 URL
+            PostingUnreachableError: HTTP 오류·네트워크 실패·JSON 해석 실패
+            PostingContentEmptyError: 텍스트·이미지 둘 다 없음
+            PostingInvalidResponseError: 외부 응답 구조나 필드 타입이 올바르지 않음
+        """
         ...
-
-    def normalize_url(self, url: str) -> str | None:
-        """재사용 판정에 쓸 정규 URL. 입력: 원본 URL. 출력: 정규 URL, 못 만들면 None."""
-        ...
-
-    async def fetch(self, url: str) -> JdFetchResult:
-        """공고를 가져와 구조화한다. 입력: 원본 URL. 출력: JdFetchResult."""
-        ...
-
-
-def failure(adapter: str, error_code: str) -> JdFetchResult:
-    """실패 결과를 만든다. 입력: 어댑터 이름, error_code. 출력: JdFetchResult."""
-    return JdFetchResult(adapter=adapter, status=JdParseStatus.FAILED, error_code=error_code)

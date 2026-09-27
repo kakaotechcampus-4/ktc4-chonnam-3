@@ -50,7 +50,9 @@ const queryClient = new QueryClient({
 
 ## 4. 401 전역 처리
 
-`QueryCache`의 `onError`에서 처리한다. 화면마다 개별 처리하지 않는다.
+현재 로컬에는 조회 요청을 처리하는 `QueryCache.onError`만 있다. 아래 초기 예시에는 변경 요청 처리와 캐시 정리가 빠져 있으므로 구현 완료 기준으로 쓰지 않는다.
+
+[0003 결정](../../spec/shared/decisions/0003-sprint1-session-auth.md)에 따라 Query와 Mutation 모두 `401 unauthenticated`이면 사용자 캐시를 비우고 로그인으로 이동해야 한다. 인증 오류에는 위의 일반 `retry: 1`을 적용하지 않고 refresh·요청 재전송을 하지 않는다. Redis 장애는 로그인 만료가 아닌 서버 오류로 구분한다. 상세 보완·검증은 [task-07-auth](task-07-auth.md)를 따른다.
 
 ```ts
 queryCache: new QueryCache({
@@ -69,7 +71,7 @@ queryCache: new QueryCache({
 
 - [ ] `QueryClientProvider`가 앱을 감싼다
 - [ ] queryKeys가 모든 조회 엔드포인트를 커버
-- [ ] 401 응답 시 로그인 화면으로 이동
+- [ ] Query·Mutation의 `401 unauthenticated`에서 캐시 정리 후 로그인 이동; refresh·인증 재시도 없음
 - [ ] `npm run build` 통과
 
 ## 커밋

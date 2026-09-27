@@ -9,20 +9,25 @@ from pathlib import Path
 from app.core.config import Settings
 
 ENV_EXAMPLE = Path(__file__).resolve().parents[1] / ".env.example"
-ENV_LINE = re.compile(r"^(?P<key>[A-Z][A-Z0-9_]*)=")
+ENV_LINE = re.compile(r"^(?P<key>[A-Z][A-Z0-9_]*)=(?P<value>[^#]*)")
 
 # .env.example 에만 있고 Settings 에 없어도 되는 키 (스프린트2 예약 등).
 UNMAPPED_KEYS: set[str] = set()
 
 
-def _env_example_keys() -> set[str]:
-    """.env.example 에서 주석 처리되지 않은 키 이름을 모은다."""
-    keys: set[str] = set()
+def _env_example_items() -> list[tuple[str, str]]:
+    """.env.example 에서 주석 처리되지 않은 (키, 값) 을 순서대로 모은다. 값의 인라인 주석은 뗀다."""
+    items: list[tuple[str, str]] = []
     for line in ENV_EXAMPLE.read_text(encoding="utf-8").splitlines():
         matched = ENV_LINE.match(line.strip())
         if matched:
-            keys.add(matched.group("key"))
-    return keys
+            items.append((matched.group("key"), matched.group("value").strip()))
+    return items
+
+
+def _env_example_keys() -> set[str]:
+    """.env.example 에서 주석 처리되지 않은 키 이름을 모은다."""
+    return {key for key, _ in _env_example_items()}
 
 
 def test_env_example_keys_all_exist_in_settings() -> None:
@@ -33,13 +38,36 @@ def test_env_example_keys_all_exist_in_settings() -> None:
     assert not missing, f".env.example 에만 있는 키: {sorted(missing)}"
 
 
+def test_env_example_has_no_duplicate_keys() -> None:
+    """같은 키가 두 번 있으면 뒤의 값이 조용히 이긴다."""
+    keys = [key for key, _ in _env_example_items()]
+    duplicated = sorted({key for key in keys if keys.count(key) > 1})
+
+    assert not duplicated, f".env.example 에 중복된 키: {duplicated}"
+
+
+def test_env_example_defaults_match_settings() -> None:
+    """값이 있는 키는 Settings 기본값과 같아야 한다. 빈 값(비밀 키)은 건너뛴다."""
+    settings = Settings(_env_file=None)
+    diff = {
+        key: (value, getattr(settings, key.lower()))
+        for key, value in _env_example_items()
+        if value
+        and key not in UNMAPPED_KEYS
+        and key.lower() in Settings.model_fields
+        and str(getattr(settings, key.lower())).lower() != value.lower()
+    }
+
+    assert not diff, f"(.env.example, Settings) 기본값 불일치: {diff}"
+
+
 def test_settings_load_without_env_file() -> None:
     """.env 가 없는 환경(CI·컨테이너)에서도 기본값으로 뜬다."""
     settings = Settings(_env_file=None)
 
     assert settings.app_env == "local"
     assert settings.api_prefix == "/api"
-    assert settings.llm_default_model == "5.5 Luna"
+    assert settings.llm_default_model == "gpt-5.6-luna"
 
 
 def test_persona_turn_quota_parses_env_string() -> None:

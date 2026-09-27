@@ -1,6 +1,8 @@
-"""claim ↔ evidence 대조 판정 → evidence_conflicts.
-⏸ 2차. 1차에는 테이블만 있고 행을 만들지 않는다 (document_claims.repository_hint 가
-2차에 채워져야 대조가 성립한다). verdict 는 항상 unresolved 로 시작한다.
+"""Sprint 2 문서 Claim과 코드 근거의 대조 경계. 기능은 미구현이다.
 
-확정본 §3 스프린트 경계 / 2차
+이 모듈의 문서 Claim 대조는 Sprint 1에서 실행하지 않는다. 별개로 Sprint 1 답변과
+코드의 차이는 evidence_conflicts에 source='answer_vs_code', claim_id=NULL,
+verdict='unresolved'로 저장하는 기존 service 책임을 유지한다.
+
+spec/ai/features/evidence-retrieval.md · spec/ai/features/extensions.md
 """

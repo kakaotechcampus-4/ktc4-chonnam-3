@@ -24,7 +24,6 @@ dependencies = [
     # 문서 텍스트 추출 (task-09). pdf 는 텍스트 레이어만 읽는다 - OCR 은 범위 밖.
     "pypdf",
     "python-docx",
-    "anthropic",
     "devon-ai",
 ]
 
@@ -41,6 +40,7 @@ dev = [
     # uvicorn[standard] 로 딸려 오지만 전이 의존에 기대지 않는다.
     "pyyaml",
     "types-pyyaml",
+    "lxml-stubs>=0.5.1",
 ]
 
 [tool.mypy]

@@ -11,4 +11,6 @@
 
 기능별 상세 검증 시나리오는 spec/frontend/features/<기능>.md에, 구현 완료 체크리스트는 frontend/docs/task-*.md에 둔다. 이 문서는 팀 전체가 보는 공통 검수 기준만 유지한다.
 
+현재 `frontend/package.json`에는 `test` 스크립트가 없다. 브라우저용 `frontend/docs/msw-smoke-check.js`는 수동 실행 스크립트이며 OpenAPI 전체·실제 인증·WS·실서버 동작을 자동 검증하지 않는다. 설계 문서에 보존된 과거 통과 기록과 현재 실행 결과를 구분한다. 면접 준비·진행 화면의 로컬 골격과 task 문서의 미완료·수정 보류 항목도 구현 완료로 세지 않는다.
+
 이 표는 팀이 결과를 검수하는 기준이다. AI의 실행 명령·PR 준비 순서는 CLAUDE.md와 .claude/skills/에서 관리한다.

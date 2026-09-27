@@ -1,11 +1,11 @@
 # 작업 04 — API 타입 정의
 
-> 선행: `docs/api-spec.md` 확정 (토요일 회의 후)
+> 기준: [공통 계약의 원본·예외 범위](../../spec/shared/contracts/README.md), [이관·보류 현황](../../spec/shared/contracts/migration.md)
 > 산출물: `src/types/api.ts`
 
 ## 목표
 
-명세의 요청·응답 구조를 TypeScript 타입으로 옮긴다. **이 파일이 FE·BE 계약서 역할을 한다.**
+일반 HTTP API는 `spec/shared/contracts/openapi.yaml`, WebSocket·SSE·브라우저 이동 경로는 `docs/api-spec.md`를 기준으로 요청·응답 구조를 TypeScript 타입으로 옮긴다. `src/types/api.ts`는 계약을 사용하는 FE 타입이며 별도의 계약 원본이 아니다. 아래 예시는 구현 기준이며 현재 코드의 일치·완료를 보증하지 않는다.
 
 ## 규칙
 
@@ -40,7 +40,7 @@ export type PrepareStepKey =
   | 'build_persona'
   | 'set_criteria'
   | 'compose_question';
-export type StepStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 export type Persona = 'tech_lead' | 'hr_manager' | 'domain_lead';
 export type ScoreKey =
   | 'project_understanding'
@@ -60,20 +60,24 @@ export type ReasonType =
 ## 2. 공통 에러 타입
 
 ```ts
-export type ApiError = {
+export type ApiErrorBody = {
   error: {
     reason: string;
     message: string;
     retryAfter?: number;
+    details?: Record<string, unknown>;
   };
 };
+
+// HTTP 상태코드는 클라이언트에서 덧붙이며 응답 본문에는 없다.
+export type ApiError = ApiErrorBody & { status: number };
 ```
 
 `reason`은 종류가 많고 늘어날 수 있으므로 union으로 고정하지 않는다. 프론트는 특정 값만 분기하고 나머지는 `message`를 그대로 노출한다.
 
 ## 3. 작성할 타입 목록
 
-`docs/api-spec.md`의 응답 예시를 기준으로 아래를 정의한다.
+위 원본 구분에 따라 아래 타입을 정의한다. 일반 HTTP API는 예시 JSON만 복사하지 않고 OpenAPI의 required·nullable·enum을 대조한다.
 
 | 엔드포인트 | 타입명 |
 | --- | --- |
@@ -90,13 +94,17 @@ export type ApiError = {
 | WS 메시지 | `WsClientMessage` · `WsServerMessage` (아래 4번 참조) |
 | `GET /interviews/{id}/report` | `ReportResponse` · `ScoreItem` · `AgentFeedback` |
 | `POST /interviews/{id}/retry` | `CreateInterviewResponse` 재사용 |
-| `POST /reports/{id}/feedback-disagreements` | `FeedbackDisagreementRequest` |
+| `POST /interviews/{id}/feedback-disagreements` | `FeedbackDisagreementRequest` — 잔존 계약상 경로. Sprint 1 제공·호출 제외 |
 
 리다이렉트 엔드포인트(`/auth/github/*`)는 응답 body가 없으므로 타입이 없다.
+
+이의 제기는 OpenAPI에 경로가 남아 있지만 `migration.md`의 기존 결정대로 Sprint 2 범위다. 이 문서가 Sprint 1 호출 구현을 승인하는 것은 아니며, [report의 계약 차이](../../spec/frontend/features/report.md#계약-차이와-구현-범위)를 먼저 확인한다.
 
 ## 4. WebSocket 메시지 타입
 
 `type` 필드로 판별하는 union으로 정의한다.
+
+[0010 결정](../../spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md)에 따라 Sprint 1은 `answer`에 `turn`·`text`를 전달한다. `prepareRetry`는 WS 메시지가 아니며 준비 재시도는 REST로 호출한다. 아래 타입과 다른 로컬 WS 타입은 화면 연결 시 수정·검증할 대상이다.
 
 ```ts
 export type WsClientMessage =

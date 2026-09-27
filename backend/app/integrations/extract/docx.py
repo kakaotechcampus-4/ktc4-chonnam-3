@@ -11,6 +11,7 @@ from zipfile import BadZipFile
 import docx
 from docx.opc.exceptions import PackageNotFoundError
 from docx.table import Table
+from lxml.etree import XMLSyntaxError
 
 from app.integrations.extract.base import (
     EXTRACT_ERROR_CORRUPTED,
@@ -46,7 +47,9 @@ def extract_docx_text(data: bytes, *, max_chars: int = 0) -> ExtractionResult:
     try:
         document = docx.Document(io.BytesIO(data))
     # BadZipFile 은 OSError 계열이 아니다 — docx 는 zip 이라 깨진 파일이 여기로 온다.
-    except (PackageNotFoundError, BadZipFile, KeyError, ValueError, OSError):
+    # XMLSyntaxError 는 SyntaxError 계열이라 위 예외들과 공통 조상이 없다 — zip은 멀쩡한데
+    # 내부 document.xml 이 깨진 경우(예: 손상된 저장) 여기로 온다.
+    except (PackageNotFoundError, BadZipFile, KeyError, ValueError, OSError, XMLSyntaxError):
         return failed(EXTRACT_ERROR_CORRUPTED)
 
     lines: list[str] = [

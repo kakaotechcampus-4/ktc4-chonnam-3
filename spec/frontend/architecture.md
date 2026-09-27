@@ -10,7 +10,7 @@
 | frontend/src/routes.tsx, providers.tsx | 라우팅·전역 Provider |
 
 현재 기술 기반: React·TypeScript·Vite. 상세 실행법은 frontend/README.md.
-API 명세 이관 상태는 spec/shared/contracts/migration.md에 기록한다.
+API 타입은 [공통 계약의 원본·예외 범위](../shared/contracts/README.md)를 따른다. 개별 이관·보류 상태는 [계약 이관 현황](../shared/contracts/migration.md)에서 확인한다.
 
 ## 폴더 구조 / 배치 기준
 
@@ -26,7 +26,7 @@ src/
 │  ├─ api.ts        # API 클라이언트 wrapper
 │  ├─ queryKeys.ts  # TanStack Query 키 팩토리
 │  └─ components/   # 공용 UI 컴포넌트 (AppHeader 등)
-├─ types/         # API 요청/응답 타입 (docs/api-spec.md 기준)
+├─ types/         # API 요청/응답 타입 (공통 계약의 원본·예외 범위 기준)
 ├─ routes.tsx     # 라우트 정의
 ├─ providers.tsx  # 전역 Provider (QueryClient 등)
 └─ main.tsx       # 엔트리 포인트

@@ -5,6 +5,10 @@
 검토 기준: `feature/spec-ai-docs`, `8dabd55`.
 상태: 기준선 감사 완료. 세부 설계는 각 문서의 상태를 따른다.
 
+후속 안내(2026-09-22): 아래 모델 표기는 감사 당시 이력이다. 현행 Sprint 1 모델은 [0011 결정](decisions/0011-sprint1-model-selection.md)의 OpenAI `gpt-5.6-luna`를 따른다. 실제 연결·계정 접근·task별 품질 검증 완료를 뜻하지 않는다.
+
+후속 정책 안내(2026-09-22): 아래 면접 배분은 감사 당시 이력이다. [공통 0002](../shared/decisions/0002-local-policy-baseline.md)에서 채택한 6/2/1 고정 배분은 [공통 0004](../shared/decisions/0004-flexible-persona-allocation-restoration.md)로 대체해 기술 목표 6턴·최소 5턴, 도메인·HR 합산 최소 3턴과 개별 배분 비고정을 복원했다. 정상 9턴·첫 HR 질문·조기 종료 없음과 포트폴리오 상한 20MB·공고 재사용 7일은 유지한다.
+
 이 문서는 AI 구현 명세가 어떤 원본을 따라야 하는지와 현재 자료 사이의 충돌을 기록한다. 원본 문서를 대체하지 않으며, 미합의 항목을 확정하지 않는다.
 
 ## 원본 우선순위
@@ -12,7 +16,7 @@
 1. 사용자의 현재 지시와 승인 범위.
 2. [공통 계약](../shared/contracts/README.md), [계약 이관표](../shared/contracts/migration.md), `openapi.yaml`에 명시된 `FIX` 계약.
 3. [공통 용어](../shared/glossary.md)와 Sprint 1 `FIX` 상태의 기능·아키텍처 문서.
-4. [기획 변경·확정 Report](../../report.md)의 확정 항목.
+4. 과거 원본 `report.md`의 기획 변경·확정 항목(현재 저장소에 없음). 후속 결정은 [AI 결정 목록](decisions/README.md)에서 확인한다.
 5. Sprint 1 `FIX` 명세가 명시적으로 연결한 `backend/docs/*` 구현 체크리스트와 운영 가이드. 상위 계약을 바꾸지는 못하지만 구현 순서와 상세 경계를 함께 확인한다.
 6. `PENDING_FE`, `PENDING_AI`, `PENDING_TEAM` 항목. 결정되기 전에는 구현값을 만들지 않는다. 2026-09-15의 [0010 결정](decisions/0010-sprint1-interface-runtime-decisions.md)이 해소한 항목은 해당 결정을 우선한다.
 7. `context/*` 회의 기록과 검토 초안. 승인된 기준과 일치하는 배경 설명만 참고하고, 차이는 변경 제안으로 다룬다.
@@ -55,7 +59,7 @@
 ### 모델, 근거, 리포트
 
 - Sprint 1의 모든 LLM 작업은 설정·seed에서 읽는 `5.5 Luna` 기준선으로 실행한다. 코드 상수로 고정하지 않고 실제 모델 문자열, prompt version, token, latency를 기록한다 (`backend/architecture.md:12-17`, `report.md:523-545`).
-- timeout/provider 오류와 JSON parse/schema 실패는 공통 LLM 호출 계층에서 자동 1회 재시도한 뒤 실패 처리한다. semantic 실패는 재호출하지 않으며, 깨진 JSON을 복구해 downstream에 전달하지 않는다.
+- timeout·재시도 가능한 provider 오류와 JSON parse/schema 실패는 공통 LLM 호출 계층에서 최대 1회 재시도한 뒤 실패 처리한다. semantic 실패는 재호출하지 않으며, 깨진 JSON을 복구해 downstream에 전달하지 않는다. 2026-09-23 PR #56 리뷰에서 영구 HTTP 오류·quota 소진의 즉시 종료 및 일시적 제한의 유한 대기를 구체화했다. 현행 기준은 [호출 계약](contracts.md#model-gateway와-실패)을 따른다.
 - `question_basis`와 `evaluation_basis`를 구분한다. `tech_lead` 질문에는 가능한 한 질문 근거를 연결하고, 답변의 검증 가능한 주장은 제한된 Evidence Retriever로 후속 확인한다 (`interview.md:100-117`).
 - 리포트는 lazy generation이고 Persona별 피드백은 `interview_reports.feedback_json`에 둔다. 성공 후 profile summary job을 enqueue하며 Sprint 1 summary는 완료 면접에 사용된 repository의 단순 집계가 중심이다 (`report.md`가 아닌 `spec/backend/features/report.md:5-27,35-43`).
 

@@ -4,11 +4,11 @@
 - 날짜: 2026-09-12
 - 관련 PR: 없음
 - 검토자: 현재 사용자 승인
-- 연결 항목: [later.md의 AI-L10](../../../later.md)
+- 연결 항목: [AI-L10 — 구현·검수 인계](../../../ai/docs/pipeline.md#기존-id별-구현검수-인계)
 
 ## 맥락
 
-[ForAI 3](../../../ForAI.md)은 도메인 frame, `etc` fallback과 기술 질문 중복 방지를 AI 검토사항으로 남겼다. category 7개·각 3개 frame은 기존 FIX이며, [도메인 프레임 문서](../features/domain-frames.md)에 21개 후보가 있다.
+과거 원본 `ForAI.md` 3항(현재 저장소에 없음)은 도메인 frame, `etc` fallback과 기술 질문 중복 방지를 AI 검토사항으로 남겼다. category 7개·각 3개 frame은 기존 FIX이며, [도메인 프레임 문서](../features/domain-frames.md)에 21개 후보가 있다.
 
 사용자는 기존 문구를 개발용 후보로 유지하면서 다음 질문 생성 정책을 승인했다. 이는 운영 seed의 최종 문구 승인·검수 완료가 아니다.
 

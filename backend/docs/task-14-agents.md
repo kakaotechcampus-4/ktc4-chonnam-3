@@ -13,9 +13,9 @@
 
 - Agent는 Director 하나만 둔다.
 - Evidence Retriever는 Director tool로 구현한다.
-- AI 패키지의 LLM task 위치는 repo_shallow, repo_deep, answer_analysis, report다. 기존 jd_extract와 profile_summary의 BE 경계는 유지하며 [0006 정책](../../spec/ai/decisions/0006-task-llm-usage-policy.md)에 따라 Sprint 1 Wanted 규칙 변환·프로필 확정 집계는 LLM을 호출하지 않는다. 일곱 prompt version 목록은 유지한다.
+- AI 패키지의 LLM task 위치는 repo_shallow, repo_deep, answer_analysis, report다. 기존 jd_extract와 profile_summary의 BE 경계는 유지한다. [0006 정책](../../spec/ai/decisions/0006-task-llm-usage-policy.md)의 Wanted 규칙 변환과 프로필 언어·유형 집계는 LLM을 호출하지 않으며, 개인 역할 요약은 [0019 결정](../../spec/ai/decisions/0019-sprint1-profile-role-summary-restoration.md)에 따라 Sprint 1 LLM 구현 대상이다. 근거 없는 개인 기여를 생성하지 않는다. 일곱 prompt version 목록은 유지한다.
 - `doc_claims`, 문서-코드 conflict 확장은 Sprint 2.
-- 모든 LLM 작업은 Sprint 1에서 `5.5 Luna` 모델을 사용한다.
+- 모든 LLM 작업은 Sprint 1에서 [0011 결정](../../spec/ai/decisions/0011-sprint1-model-selection.md)의 OpenAI `gpt-5.6-luna`를 사용한다. 모델은 기존 BE 설정·seed·loader 경로로 주입하며 실제 SDK/client 연결·계정 접근·품질 검증은 별도 구현 작업이다.
 - prompt version은 작업별로 저장한다.
 - JSON parsing 실패는 1회 재시도 후 실패 처리한다.
 - raw output, model, prompt_version, input/output tokens, latency_ms를 가능한 범위에서 저장한다.

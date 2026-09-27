@@ -36,9 +36,9 @@ class CamelModel(BaseModel):
 class CamelResponse(CamelModel):
     """응답 전용 base.
 
-    FastAPI 는 response_model 직렬화에서 by_alias 를 기본으로 쓰지 않으므로
-    라우터에서 response_model_by_alias=True 를 믿지 말고 이 base 를 쓴다.
-    serialization_alias 가 걸린 상태라 model_dump() 기본값도 camelCase 다.
+    FastAPI response_model 경로는 response_model_by_alias 기본값(True)으로 이미 camelCase 다.
+    이 base 는 그 경로 밖 — 일반 Python 코드의 model_dump()·model_dump_json() —
+    에서도 by_alias 를 넘기지 않고 기본으로 camelCase 가 나오게 하려고 둔다.
     """
 
     model_config = ConfigDict(

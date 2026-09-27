@@ -7,6 +7,7 @@ spec/backend/features/documents.md / task-09
 """
 
 import io
+import zipfile
 
 import docx
 import pytest
@@ -184,6 +185,22 @@ def test_docx_empty_fails() -> None:
 def test_docx_corrupted_fails() -> None:
     """docx 는 zip 이라 깨진 파일이 BadZipFile 로 온다."""
     result = extract_docx_text(b"not a docx")
+
+    assert result.error_code == EXTRACT_ERROR_CORRUPTED
+
+
+def test_docx_corrupted_inner_xml_fails() -> None:
+    """zip 자체는 멀쩡한데 word/document.xml 이 깨진 경우 (XMLSyntaxError)."""
+    zin = zipfile.ZipFile(io.BytesIO(build_docx(["hello"])))
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "word/document.xml":
+                data = b"<broken not xml at all"
+            zout.writestr(item, data)
+
+    result = extract_docx_text(buffer.getvalue())
 
     assert result.error_code == EXTRACT_ERROR_CORRUPTED
 

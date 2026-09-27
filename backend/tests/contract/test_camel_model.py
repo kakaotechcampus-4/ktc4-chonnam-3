@@ -34,6 +34,20 @@ def _load_api_error_schema() -> dict[str, Any]:
     return schema
 
 
+# openapi type -> Python 타입. bool 은 int 의 하위 타입이라 integer 에서 따로 막는다.
+_OPENAPI_TYPES: dict[str, type] = {"string": str, "integer": int, "object": dict}
+
+
+def _assert_matches_openapi_types(error: dict[str, Any], properties: dict[str, Any]) -> None:
+    """envelope 의 각 필드 값이 openapi properties 의 type 과 맞는지 본다."""
+    for key, value in error.items():
+        expected = properties[key]["type"]
+        assert expected in _OPENAPI_TYPES, f"대조표에 없는 openapi type: {expected}"
+        assert isinstance(value, _OPENAPI_TYPES[expected]), (key, expected, value)
+        if expected == "integer":
+            assert not isinstance(value, bool), (key, value)
+
+
 def test_response_has_no_snake_case_key() -> None:
     dumped = _Sample(run_id="r1", estimated_seconds=20).model_dump()
 
@@ -87,12 +101,15 @@ def test_error_envelope_matches_openapi_api_error() -> None:
     # 계약이 요구하는 키가 전부 있고, 계약에 없는 키를 새로 만들지 않는다.
     assert set(error_schema["required"]) <= set(error)
     assert set(error) <= set(error_schema["properties"])
+    _assert_matches_openapi_types(error, error_schema["properties"])
 
 
 def test_error_envelope_retry_after_is_camel_case() -> None:
+    error_schema = _load_api_error_schema()["properties"]["error"]
     envelope = AppError(Reason.NOT_READY, retry_after=3).to_envelope()
     error = envelope["error"]
 
     assert isinstance(error, dict)
     assert "retryAfter" in error
     assert "retry_after" not in error
+    _assert_matches_openapi_types(error, error_schema["properties"])

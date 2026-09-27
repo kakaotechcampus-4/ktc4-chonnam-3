@@ -9,11 +9,13 @@
 
 import re
 
-# (?<![\w.-]) 가 gist.github.com 을 막는다 — 앞에 점이 있으면 매치하지 않는다.
+# (?<![\w.-/]) 가 gist.github.com 을 막는다 — 앞에 점이 있으면 매치하지 않는다.
+# "/" 도 같이 막아야 한다 — 안 막으면 "https://example.com/github.com/alice/repo" 처럼
+# 진짜 호스트가 다른 URL의 하위 경로에 우연히 "github.com/owner/repo" 가 있어도 매치돼 버린다.
 # owner 는 GitHub 규칙대로 영숫자와 하이픈만, 하이픈으로 시작하지 않는다.
 # repo 는 영숫자와 . _ - 를 허용한다.
 _GITHUB_URL = re.compile(
-    r"(?<![\w.-])"
+    r"(?<![\w.\-/])"
     r"(?:https?://)?"
     r"(?:www\.)?"
     r"github\.com/"
