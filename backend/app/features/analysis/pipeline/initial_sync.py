@@ -95,6 +95,8 @@ async def run_initial_sync(
     job_id: UUID,
     http: httpx.AsyncClient,
     cipher: TokenCipher,
+    *,
+    redis: ArqRedis,
 ) -> None:
     """Collect public repositories; DB records describe success and every failure."""
     started_at = datetime.now(UTC)
@@ -161,6 +163,7 @@ async def run_initial_sync(
             .values(is_accessible=False)
         )
         for repo in repositories:
+            # 목록·상세 수집이 공유하는 표준 dataclass를 DB 컬럼 이름으로 직렬화한다.
             values = asdict(repo)
             values.update(user_id=user_id, is_accessible=True, synced_at=synced_at)
             await db.execute(
@@ -213,5 +216,25 @@ async def run_initial_sync(
             )
         )
         await db.commit()
+        if error_code == "token_invalid":
+            # 실패 확정 전 재연동은 running 작업을 재사용했을 수 있다. commit 뒤 최신
+            # 토큰을 다시 읽어 후속 수집을 보장하고, 그 이후 재연동은 OAuth enqueue가 맡는다.
+            replacement = (
+                await db.execute(
+                    select(GithubAccount.id, GithubAccount.access_token_encrypted)
+                    .join(User, User.id == GithubAccount.user_id)
+                    .where(
+                        GithubAccount.user_id == user_id,
+                        GithubAccount.token_status == "valid",
+                        User.status == "active",
+                    )
+                )
+            ).one_or_none()
+            await db.commit()
+            if replacement is not None and (
+                replacement[0] != account_id or replacement[1] != token_snapshot
+            ):
+                # OAuth와 동시에 예약해도 기존 활성 작업을 재사용하며 토큰은 큐에 넣지 않는다.
+                await enqueue_initial_sync(db, redis, user_id)
         if isinstance(exc, asyncio.CancelledError):
             raise
