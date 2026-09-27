@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.db.models.knowledge import PromptVersion
 from app.llm_tasks.prompt_loader import (
     PromptConfigurationError,
     PromptNotFoundError,
@@ -43,35 +44,9 @@ async def prompt_sessions():
     try:
         async with engine.begin() as connection:
             await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
-            # Exact prompt_versions table/index DDL from DB branch commit
-            # c731c5b87d8811885bf5f2edb07ec54569e1a7eb:
-            # backend/migrations/versions/0001_initial.py:55-81,902-924.
-            # Current branch has only DB skeletons; this does not test its full migration.
-            await connection.execute(
-                text(
-                    """
-                    CREATE TABLE prompt_versions (
-                        id UUID DEFAULT gen_random_uuid() NOT NULL,
-                        task_name VARCHAR(50) NOT NULL,
-                        version VARCHAR(20) NOT NULL,
-                        model TEXT NOT NULL,
-                        template TEXT NOT NULL,
-                        is_active BOOLEAN DEFAULT false NOT NULL,
-                        notes TEXT,
-                        created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
-                        updated_at TIMESTAMPTZ DEFAULT now() NOT NULL,
-                        CONSTRAINT pk_prompt_versions PRIMARY KEY (id),
-                        CONSTRAINT uq_prompt_versions_task_version UNIQUE (task_name, version)
-                    )
-                    """
-                )
-            )
-            await connection.execute(
-                text(
-                    "CREATE UNIQUE INDEX uq_prompt_versions_active_per_task "
-                    "ON prompt_versions (task_name) WHERE is_active"
-                )
-            )
+            # 실제 ORM의 컬럼·제약·인덱스를 사용해 복사한 DDL과의 불일치를 막는다.
+            # 전체 migration의 upgrade/downgrade 검증은 별도 격리 DB에서 수행한다.
+            await connection.run_sync(PromptVersion.__table__.create)
         created = True
         yield async_sessionmaker(engine, expire_on_commit=False)
     finally:
