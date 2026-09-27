@@ -117,6 +117,8 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
 
 `devon_session`을 쓰는 모든 엔드포인트에 적용된다. 각 엔드포인트의 `Failure`에서는 "공통 인증 에러 참고"로 링크하고 그 엔드포인트 고유 실패만 별도로 적는다.
 
+아래 HTTP 상태는 일반 API 오류에 적용한다. 브라우저 callback(#2·#8)의 알려진 실패는 해당 절의 `302 /login?error=<표시 코드>` 규약을 따른다.
+
 | reason | 코드 | 의미 | 프론트 처리 |
 | --- | --- | --- | --- |
 | `unauthenticated` | 401 | 로그인 쿠키 없음 · Redis 세션 만료/유실/무효 | 전체 clear → `/login`, refresh 재시도 없음 |
@@ -231,7 +233,7 @@ GitHub OAuth App의 **Expire user access tokens는 OFF**로 유지한다. `offli
 
 | 필드 | 필수 | 비고 |
 | --- | --- | --- |
-| `code` | ✅ | 1회용, 약 10분 유효 |
+| `code` | ✅ | 동의 성공 시 필수; 1회용, 약 10분 유효 |
 | `state` | ✅ | `oauthState` 쿠키값 및 Redis의 일회용 state와 대조; 저장된 목적·사용자 바인딩 확인 |
 | `error` | ❌ | 사용자 동의 거부 시 |
 
@@ -247,7 +249,7 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 
 서버는 Redis 로그인 세션을 생성하고 위 쿠키를 발급한다. `Secure`는 운영 HTTPS 환경 기준이며 로그인 세션은 14일 sliding 정책을 따른다.
 
-동의 거부 시
+state 검증을 통과한 로그인 동의 거부 시
 
 ```
 Location: /login?error=denied
@@ -260,18 +262,29 @@ Location: /login?error=denied
 
 **UI states**
 
-프론트 로직 없음(서버 302만 처리). 복귀 후 홈은 `analysisStatus: 'syncing'`으로 시작한다.
+callback 자체는 서버가 처리한다. 성공 복귀 후 홈은 `analysisStatus: 'syncing'`으로 시작한다. 실패 복귀 시 로그인 화면은 아래 허용된 `error` 값에 고정 안내를 표시한다. 등록되지 않은 값은 무시하며 오류 배너 없이 기본 GitHub 로그인 버튼을 표시한다. query나 공급자 원문을 그대로 표시하지 않는다.
+
+기본 버튼은 `/api/auth/github/login`으로 이동한다. 검증된 재연동 실패의 `flow=link`와 재시도 가능한 표시 코드가 함께 있으면 버튼은 `/api/auth/github/link`로 이동해 새 state·PKCE로 재연동을 시작한다. `flow`는 화면 선택용이며 인증 근거가 아니다. 임의의 재시도 URL을 query로 받지 않는다.
 
 **Failure**
 
-| 코드 | reason |
-| --- | --- |
-| 400 | `invalid_state` · `invalid_code` |
-| 403 | `account_suspended` · `account_withdrawn` |
-| 502 | `provider_unavailable` |
-| 500 | `internal_error` — Redis·DB·초기 job enqueue 등 내부 실패 |
+알려진 callback 실패는 JSON 대신 `302`와 고정된 `Location: /login?error=<표시 코드>`를 반환한다.
 
-재연동 state에서는 #8의 실패 조건도 적용한다. callback 응답은 `Cache-Control: no-store`, `Referrer-Policy: no-referrer`를 사용하며 state 쿠키를 만료시킨다.
+| 표시 코드 | 조건 |
+| --- | --- |
+| `denied` | state 검증 후 GitHub 동의 거부 |
+| `invalid_state` | 쿠키 불일치, state 만료·재사용, 목적 또는 재연동 사용자 불일치 |
+| `invalid_code` | code 누락·무효 또는 처리할 수 없는 공급자 오류 |
+| `provider_unavailable` | GitHub 연결·응답 실패 |
+| `provider_configuration` | 지원하지 않는 GitHub expiry·refresh 토큰 설정; API reason은 `provider_unavailable` 유지 |
+| `github_already_linked` | 재연동에서 기존 계정과 다른 GitHub 사용자 ID |
+| `account_suspended` · `account_withdrawn` | 정지·탈퇴 계정 |
+
+재연동 state의 일회용 검증이 끝나고 현재 활성 사용자가 시작 사용자와 일치한 경우에만 `denied`·`invalid_code`·`provider_unavailable`·`provider_configuration`·`github_already_linked`에 `&flow=link`를 붙인다. `invalid_state`, 사용자 불일치, 정지·탈퇴에는 붙이지 않는다. 재연동 세션 만료·유실은 기존대로 `/login`으로 `302`하며 새 로그인 세션을 만들지 않는다. #8 호환 경로에도 같은 규칙을 적용한다.
+
+Redis·세션·DB·초기 job enqueue 등 내부 실패는 `500 internal_error` JSON envelope를 유지하며 로그인 안내로 바꾸지 않는다. 일반 REST의 reason·HTTP 상태·envelope는 그대로다. `denied`와 `provider_configuration`은 callback 표시 코드이며 API `Reason`에 추가하지 않는다.
+
+callback 응답은 `Cache-Control: no-store`, `Referrer-Policy: no-referrer`를 사용하며 state 쿠키를 만료시킨다. state 일회 소비와 PKCE 검증을 유지하고, 원래 query의 code·state·토큰·공급자 원문은 redirect URL에 복사하지 않는다.
 
 ---
 
@@ -467,7 +480,7 @@ Set-Cookie: oauthState=<random>; HttpOnly; Secure; SameSite=Lax; Path=/auth/gith
 
 이전 경로의 호환 처리다. 현재 `/auth/github/link`에서 시작한 OAuth도 GitHub에는 #2의 `/auth/github/callback`을 보낸다. 추가 callback 등록은 필요 없다. 이 호환 경로는 `link` 목적의 state만 허용하며 로그인 state를 거부한다.
 
-**Request** (Query) — `code`, `state` (login 콜백과 동일)
+**Request** (Query) — `code`, `state`, `error` (#2 공통 callback과 동일)
 
 **Response**
 
@@ -482,17 +495,17 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 
 **UI states**
 
-프론트 로직 없음. 복귀 후 `me`·`home` 쿼리를 무효화해 재연동 배너를 내린다.
+성공 복귀 후 `me`·`home` 쿼리를 무효화해 재연동 배너를 내린다. 실패 시 #2와 같은 고정 안내를 표시한다. 검증된 재연동 실패에만 `flow=link`를 붙이며 재시도 버튼은 고정된 `/api/auth/github/link`로 이동한다.
 
 **Failure**
 
-| 코드 | reason |
+| 코드 | 응답 |
 | --- | --- |
-| 409 | `github_already_linked` |
-| 400 | `invalid_state` · `invalid_code` |
-| 403 | `account_suspended` · `account_withdrawn` |
-| 502 | `provider_unavailable` |
-| 500 | `internal_error` |
+| 302 | `/login?error=<표시 코드>` — #2의 허용 코드·`flow=link` 조건 적용 |
+| 302 | `/login` — 재연동 세션 만료·유실, 새 세션 생성 없음 |
+| 500 | `internal_error` JSON envelope — Redis·세션·DB·enqueue 등 내부 실패 |
+
+로그인 목적의 state는 `invalid_state`로 거부하며 `flow=link`를 붙이지 않는다. 정지·탈퇴·사용자 불일치도 일반 로그인 안내로 돌아간다. state 일회 소비·PKCE, state 쿠키 정리, `no-store`·`no-referrer`와 민감한 query 제외는 #2와 동일하다.
 
 ---
 
