@@ -57,14 +57,23 @@ def test_stronger_field_wins_over_weaker_conflicting_signal():
         _posting(main_tasks=["커머스 서비스의 API 개발"], preferred_points=["게임 서버 운영 경험"])
     )
 
-    # main_tasks(2) > preferred_points(1)
+    # main_tasks(3) > preferred_points(1)
     assert result.category == "shopping"
     assert {m.keyword for m in result.matches} == {"커머스"}
 
 
-def test_tied_top_score_falls_back_to_etc_but_keeps_matches():
+def test_requirements_outweigh_preferred_points():
+    """우대사항을 필수 요건처럼 다루지 않는다 (W5 완료 기준)."""
     result = detect_domain_signal(
         _posting(requirements=["금융 서비스 개발 경험"], preferred_points=["게임 서버 운영 경험"])
+    )
+
+    assert result.category == "finance"
+
+
+def test_tied_top_score_falls_back_to_etc_but_keeps_matches():
+    result = detect_domain_signal(
+        _posting(requirements=["금융 서비스 개발 경험", "게임 서버 운영 경험"])
     )
 
     assert result.category == "etc"

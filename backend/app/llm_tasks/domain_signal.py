@@ -48,12 +48,12 @@ _CATEGORY_KEYWORDS: dict[DomainCategory, tuple[str, ...]] = {
 }
 
 # 직무 자체를 설명하는 필드일수록 도메인 신호가 강하다. 우대사항은 "있으면 좋은 경험"이라
-# 필수 요건과 같은 가장 낮은 가중치를 준다.
+# 필수 요건보다 낮게 둔다 — 우대를 필수처럼 다루지 않는다는 W5 완료 기준과 같은 방향이다.
 # ponytail: 고정 가중치, 오분류 사례가 쌓이면 0021 범위 안에서 조정
 _FIELD_WEIGHTS: dict[str, int] = {
-    "position": 3,
-    "main_tasks": 2,
-    "requirements": 1,
+    "position": 4,
+    "main_tasks": 3,
+    "requirements": 2,
     "preferred_points": 1,
 }
 
@@ -91,7 +91,7 @@ def detect_domain_signal(posting: PostingContent) -> DomainSignalResult:
 
     1. `position`·`main_tasks`·`requirements`·`preferred_points` 원문에서 키워드를 찾는다.
     2. category별로 근거 필드의 가중치(`_FIELD_WEIGHTS`)를 합산해 1위가 단독이면 채택한다.
-       예: 주요 업무의 "커머스"(2)가 우대사항의 "게임"(1)보다 앞선다.
+       예: 필수 요건의 "금융"(2)이 우대사항의 "게임"(1)보다 앞선다.
     3. 1위가 동점이면 어느 쪽인지 추측하지 않고 `etc`다. 신호가 전혀 없어도 `etc`다.
     """
     matches_by_category = _match_text_fields(posting)

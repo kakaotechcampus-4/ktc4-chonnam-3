@@ -14,7 +14,7 @@ category 7종(`finance`·`game`·`travel`·`shopping`·`medical`·`mobility`·`e
 ## 결정
 
 1. **규칙 기반 판정**: LLM을 호출하지 않는다. 공고의 `position`·`main_tasks`·`requirements`·`preferred_points` 원문에서 category 키워드를 찾는다. 결제·예약·재고·물류·운송처럼 여러 도메인에 공통으로 나오는 기능 단어는 키워드로 쓰지 않는다.
-2. **필드 가중치 합산, 단독 1위만 채택**: 근거 필드 가중치(`position` 3, `main_tasks` 2, `requirements`·`preferred_points` 1)를 category별로 합산해 1위가 단독이면 채택한다. 1위가 동점이면 `etc`, 신호가 없어도 `etc`다.
+2. **필드 가중치 합산, 단독 1위만 채택**: 근거 필드 가중치(`position` 4, `main_tasks` 3, `requirements` 2, `preferred_points` 1)를 category별로 합산해 1위가 단독이면 채택한다. 1위가 동점이면 `etc`, 신호가 없어도 `etc`다.
 3. **회사 단위 값은 쓰지 않음**: `company_name`과 원티드 `company.industry_name`(`PostingContent.industry`)은 판정에 쓰지 않는다.
 4. **NULL과 `etc` 구분**: `postings.domain_category`의 NULL은 "아직 판정하지 않음"에만 쓴다. 판정을 실행하면 항상 7종 중 하나를 기록한다. `etc`는 신호가 없거나 충돌했다는 뜻이다.
 5. **근거는 저장하지 않음**: 판정 근거(원문 필드·문장·키워드)는 함수 결과로만 돌려주고 DB에 저장하지 않는다. 근거를 저장하라는 명세가 없고, 저장하려면 BE 스키마를 바꿔야 한다.
@@ -23,7 +23,7 @@ category 7종(`finance`·`game`·`travel`·`shopping`·`medical`·`mobility`·`e
 
 - Sprint 1 Wanted 처리는 구조화 필드를 규칙으로 변환하고 LLM을 호출하지 않는다([0006](0006-task-llm-usage-policy.md)). 판정 방식도 이 방향을 따른다.
 - `industry_name`은 공고가 아니라 회사에 붙은 값이다. 직무와 관계없이 같은 회사의 모든 공고가 같은 값을 받으므로 회사명 기준 분류와 위험이 같다. 실제 공고 2건(`부동산`, `판매, 유통`)에서도 7종 키워드와 일치하지 않아 판정에 기여하지 못했다. 본문 키워드와 방향이 같을 때만 보조 근거로 쓰는 안은 결과를 거의 바꾸지 않으면서 규칙만 복잡하게 만들어 채택하지 않았다.
-- 처음에는 category가 두 개 이상 나오면 모두 `etc`로 두었으나, 커머스 공고의 우대사항 한 줄이나 "결제" 같은 기능 단어만으로도 `etc`가 되어 누락이 지나치게 많았다. 직무를 설명하는 필드일수록 도메인 신호가 강하므로 가중치로 우열을 가리고, 우열이 없는 동점일 때만 추측을 피하려고 0005의 `etc` fallback을 적용한다.
+- 처음에는 category가 두 개 이상 나오면 모두 `etc`로 두었으나, 커머스 공고의 우대사항 한 줄이나 "결제" 같은 기능 단어만으로도 `etc`가 되어 누락이 지나치게 많았다. 직무를 설명하는 필드일수록 도메인 신호가 강하므로 가중치로 우열을 가리고(우대사항은 필수 요건보다 낮게 두어 W5 완료 기준 "우대를 필수로 바꾸지 않기"와 맞춘다), 우열이 없는 동점일 때만 추측을 피하려고 0005의 `etc` fallback을 적용한다.
 
 ## 영향
 
