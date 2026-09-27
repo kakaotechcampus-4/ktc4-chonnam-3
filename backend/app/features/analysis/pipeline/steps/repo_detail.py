@@ -1,14 +1,17 @@
 """step 3 · L0-b 추가 매핑. 후보 레포만 fetch_level='detail' 로 승격.
-레포당 4회 — languages / readme / commits?per_page=1 / commits?per_page=1&author={login}
-★ head_sha 와 commit_count 를 따로 부르지 않는다: commits?per_page=1 의 body[0].sha 가
-  head_sha, Link 헤더 rel='last' 의 page=N 이 commit_count.
+languages / README / 기본 브랜치 head SHA / 전체·사용자 커밋 수를 수집한다.
 
 확정본 §2 M2 비용 최적화 / task-08
 """
 
 from collections.abc import Awaitable, Callable
 
-from app.integrations.github.base import GITHUB_ERROR_RATE_LIMITED, RepoDetail, RepoSummary
+from app.integrations.github.base import (
+    GITHUB_ERROR_RATE_LIMITED,
+    GITHUB_ERROR_TOKEN_INVALID,
+    RepoDetail,
+    RepoSummary,
+)
 from app.integrations.github.client import DEFAULT_README_MAX_CHARS, GithubClient
 
 # 입력: rate limit 이 풀릴 때까지 남은 초. `gh:rl:{githubUserId}` Redis 키 TTL 로 쓴다.
@@ -29,13 +32,13 @@ async def collect_repo_details(
           README 길이 상한, rate limit 감지 시 호출할 콜백.
     출력: {full_name: RepoDetail}.
 
-    한 레포에서라도 rate limit 이 걸리면 그 뒤 레포는 호출하지 않는다 — 남은 quota 가
-    0인 채로 GitHub 을 계속 때려봐야 전부 실패할 뿐이다. 그때까지 모은 결과는 버리지 않고,
-    호출하지 못한 나머지는 rate_limited 로 채워 반환한다(호출부가 repo_analyses.status=
-    'partial'/'failed' 판정에 그대로 쓸 수 있게).
+    rate_limited 또는 token_invalid를 만나면 이후 레포 호출을 중단한다.
+    이미 수집한 결과를 보존하고 호출하지 못한 레포에는 중단 원인을 그대로 남긴다.
+    토큰 폐기 상태 저장과 run의 partial/failed 판정은 호출부가 맡는다.
     """
     results: dict[str, RepoDetail] = {}
-    rate_limited_at: int | None = None
+    stopped_at: int | None = None
+    stop_error: str | None = None
 
     for index, repo in enumerate(repos):
         detail = await client.fetch_repo_detail(
@@ -43,13 +46,18 @@ async def collect_repo_details(
         )
         results[repo.full_name] = detail
         if GITHUB_ERROR_RATE_LIMITED in detail.errors:
-            rate_limited_at = index
+            stop_error = GITHUB_ERROR_RATE_LIMITED
             if on_rate_limited and detail.rate_limit_retry_after_seconds is not None:
                 await on_rate_limited(detail.rate_limit_retry_after_seconds)
+        elif GITHUB_ERROR_TOKEN_INVALID in detail.errors:
+            # 무효 토큰은 다른 저장소에서도 사용할 수 없으므로 배치 전체를 멈춘다.
+            stop_error = GITHUB_ERROR_TOKEN_INVALID
+        if stop_error is not None:
+            stopped_at = index
             break
 
-    if rate_limited_at is not None:
-        for repo in repos[rate_limited_at + 1 :]:
-            results[repo.full_name] = RepoDetail(errors=[GITHUB_ERROR_RATE_LIMITED])
+    if stopped_at is not None and stop_error is not None:
+        for repo in repos[stopped_at + 1 :]:
+            results[repo.full_name] = RepoDetail(errors=[stop_error])
 
     return results

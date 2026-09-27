@@ -89,6 +89,8 @@ class RepoDetail:
     # rate_limited 가 하나라도 나면 그때의 남은 초. 여러 번 나도 가장 처음 값을 쓴다 —
     # 어차피 같은 rate limit window 안이라 reset 시각은 같다.
     rate_limit_retry_after_seconds: int | None = None
+    # 저장소 단위 404의 증거만 전달한다. 일시적인 장애는 후보 제외 사유가 아니다.
+    repository_inaccessible: bool = False
 
     @property
     def is_partial(self) -> bool:

@@ -326,14 +326,14 @@ async def test_partial_detail_carries_retry_after_seconds() -> None:
     assert detail.rate_limit_retry_after_seconds == 42
 
 
-async def test_retry_after_seconds_is_none_without_header() -> None:
+async def test_missing_reset_still_provides_a_safe_rate_limit_wait() -> None:
     async with _client(
         lambda request: httpx.Response(403, headers={"x-ratelimit-remaining": "0"})
     ) as client:
         with pytest.raises(GithubApiError) as caught:
             await GithubClient("tok", client=client).fetch_languages("octocat/devon-api")
 
-    assert caught.value.retry_after_seconds is None
+    assert caught.value.retry_after_seconds == 60
 
 
 async def test_retry_after_header_wins_over_ratelimit_reset() -> None:

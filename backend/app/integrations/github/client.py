@@ -244,6 +244,7 @@ class GithubClient:
         user_commit_count: int | None = None
         retry_after: int | None = None
         stopped = False
+        repository_inaccessible = False
 
         def _record(error: GithubApiError) -> None:
             nonlocal retry_after, stopped
@@ -257,6 +258,8 @@ class GithubClient:
             try:
                 languages = await self.fetch_languages(repo.full_name)
             except GithubApiError as error:
+                # README·브랜치의 404와 달리 languages의 404는 저장소 접근 불가 증거다.
+                repository_inaccessible = error.status_code == httpx.codes.NOT_FOUND
                 _record(error)
 
         if not stopped:
@@ -264,6 +267,7 @@ class GithubClient:
                 readme_text, readme_truncated = await self.fetch_readme(
                     repo.full_name, max_chars=readme_max_chars
                 )
+                repository_inaccessible = False
             except GithubApiError as error:
                 _record(error)
 
@@ -271,18 +275,22 @@ class GithubClient:
         if not stopped and branch:
             try:
                 head_sha = await self.fetch_head_sha(repo.full_name, branch)
+                repository_inaccessible = False
             except GithubApiError as error:
                 _record(error)
 
         if not stopped:
             try:
                 commit_count = await self.count_commits(repo.full_name)
+                # 총 개수가 미확정이어도 정상 페이지를 받았다면 저장소에는 접근한 것이다.
+                repository_inaccessible = False
             except GithubApiError as error:
                 _record(error)
 
         if not stopped and login:
             try:
                 user_commit_count = await self.count_commits(repo.full_name, author=login)
+                repository_inaccessible = False
             except GithubApiError as error:
                 _record(error)
 
@@ -295,6 +303,7 @@ class GithubClient:
             user_commit_count=user_commit_count,
             errors=errors,
             rate_limit_retry_after_seconds=retry_after,
+            repository_inaccessible=repository_inaccessible,
         )
 
 
@@ -318,12 +327,11 @@ def _is_rate_limited(response: httpx.Response) -> bool:
     return "secondary rate limit" in message.lower()
 
 
-def _retry_after_seconds(response: httpx.Response) -> int | None:
-    """rate limit 이 풀릴 때까지 남은 초. 없으면 None.
+def _retry_after_seconds(response: httpx.Response) -> int:
+    """rate limit 재요청까지 기다릴 초를 계산한다.
 
-    `Retry-After`(초 단위, secondary rate limit)를 `x-ratelimit-reset`(epoch 초, primary)
-    보다 먼저 본다 — GitHub 가 secondary rate limit 에는 reset epoch 를 안 줄 수 있다.
-    최소 1초를 보장한다 — 0 이하 TTL 로 Redis SET 을 호출하지 않기 위함이다.
+    Retry-After를 우선하고, primary quota가 소진됐을 때만 reset을 사용한다.
+    그 외에는 GitHub 지침에 따라 최소 60초 대기한다. Redis TTL은 항상 양수다.
     """
     retry_after = response.headers.get("retry-after")
     if retry_after is not None:
@@ -332,14 +340,15 @@ def _retry_after_seconds(response: httpx.Response) -> int | None:
         except ValueError:
             pass
 
-    reset_at = response.headers.get("x-ratelimit-reset")
-    if reset_at is None:
-        return None
-    try:
-        remaining = int(reset_at) - int(time.time())
-    except ValueError:
-        return None
-    return max(remaining, 1)
+    if response.headers.get("x-ratelimit-remaining") == "0":
+        reset_at = response.headers.get("x-ratelimit-reset")
+        if reset_at is not None:
+            try:
+                return max(int(reset_at) - int(time.time()), 1)
+            except ValueError:
+                pass
+    # Secondary 제한은 primary reset 시각과 무관하다. 헤더가 불완전해도 대기를 남긴다.
+    return 60
 
 
 def _decode_readme(payload: Any) -> str | None:
