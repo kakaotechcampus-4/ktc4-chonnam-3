@@ -12,6 +12,7 @@ tech_tags 원천이므로 LLM 추측 불필요. 상한 20개
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Literal
 
@@ -26,6 +27,9 @@ _CATEGORY_SOURCES: dict[JdCategory, str] = {
     "preferred": "preferred_points",
     "responsibility": "main_tasks",
 }
+
+# 원티드 본문의 줄머리 목록 기호("• ", "∘ ", "- " 등). 내용이 아니라 서식이므로 떼어낸다.
+_LEADING_BULLET = re.compile(r"^[•∘◦▪■●○\-*]+\s*")
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +77,10 @@ def build_requirement_drafts(posting: PostingContent) -> list[JdRequirementDraft
     tech_tags 는 원티드가 공고 전체 단위로만 주므로(문장별 태깅 없음), 모든 행에
     동일한 `posting.skill_tags`를 붙인다. 이 태그는 공고 전체의 기술 목록이며,
     각 문장에서 해당 기술을 직접 요구한다는 뜻은 아니다.
+
+    줄머리 목록 기호는 떼어낸다. 합계가 `MAX_REQUIREMENTS`를 넘으면 필수 요건을 먼저 담고,
+    남은 자리는 우대와 주요 업무가 한 줄씩 번갈아 나눈다 — 우대가 길다는 이유로 주요 업무가
+    통째로 잘리지 않게 한다. 남는 항목의 표시 순서는 카테고리별 원문 순서 그대로다.
     """
     if not posting.is_structured:
         # 구조화된 요구사항 필드가 하나도 없으면 결정적으로 실패한다.
@@ -80,11 +88,15 @@ def build_requirement_drafts(posting: PostingContent) -> list[JdRequirementDraft
             "jd_extraction_failed", "구조화되지 않은 공고 추출은 아직 지원하지 않음"
         )
 
+    texts_by_category = {
+        category: [t for t in (_strip_bullet(raw) for raw in getattr(posting, field)) if t]
+        for category, field in _CATEGORY_SOURCES.items()
+    }
+    quota = _quota({c: len(ts) for c, ts in texts_by_category.items()})
+
     drafts: list[JdRequirementDraft] = []
-    for category, field_name in _CATEGORY_SOURCES.items():
-        for text in getattr(posting, field_name):
-            if len(drafts) >= MAX_REQUIREMENTS:
-                return drafts
+    for category, texts in texts_by_category.items():
+        for text in texts[: quota[category]]:
             drafts.append(
                 JdRequirementDraft(
                     category=category,
@@ -99,3 +111,21 @@ def build_requirement_drafts(posting: PostingContent) -> list[JdRequirementDraft
         raise JdExtractionError("jd_extraction_failed", "요구사항 0건")
 
     return drafts
+
+
+def _strip_bullet(text: str) -> str:
+    return _LEADING_BULLET.sub("", text).strip()
+
+
+def _quota(counts: dict[JdCategory, int]) -> dict[JdCategory, int]:
+    """카테고리별로 담을 개수. 필수 요건 우선, 나머지는 한 줄씩 번갈아 `MAX_REQUIREMENTS`까지."""
+    quota = dict.fromkeys(counts, 0)
+    quota["required"] = min(counts["required"], MAX_REQUIREMENTS)
+    remaining = MAX_REQUIREMENTS - quota["required"]
+    rest: tuple[JdCategory, ...] = ("preferred", "responsibility")
+    while remaining and any(quota[c] < counts[c] for c in rest):
+        for category in rest:
+            if remaining and quota[category] < counts[category]:
+                quota[category] += 1
+                remaining -= 1
+    return quota
