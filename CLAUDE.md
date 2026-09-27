@@ -23,11 +23,11 @@
 - AI의 실행 순서·파일 편집 계획: .claude/scratch/plans/. 개인 인계·추론 메모: .claude/scratch/.
 - 임시 실행 로그: <팀>/report/. 팀에 공유할 요구사항·결정·검증 근거는 spec/ 또는 PR에 남긴다.
 - 실행 계획에 합의해야 할 설계가 생기면 관련 spec 문서에 제안한다. 임시 계획을 명세 원본으로 취급하지 않는다.
-- 기존 frontend/docs·backend/docs는 아직 이관 전이다. spec/README.md의 원본 링크를 따른다. 내용을 복제하거나 기존 파일을 자동 삭제하지 않는다.
+- 기존 frontend/docs·backend/docs의 원본 유지·API 이관 범위는 spec/README.md의 안내를 따른다. 내용을 복제하거나 기존 파일을 자동 삭제하지 않는다.
 
 ## 변경·검증
 - 명세를 바꿀 때 spec에서 먼저 영향·상태를 확인하고 관련 구현·테스트·소비 팀을 함께 검토한다.
-- 공통 계약은 전환 초안이다. spec/shared/contracts/migration.md의 충돌을 임의로 합의 처리하지 않는다.
+- 공통 API의 원본·예외 범위는 spec/shared/contracts/README.md를 따른다. spec/shared/contracts/migration.md에 남은 개별 충돌·보류를 임의로 합의 처리하지 않는다.
 - 수정한 팀 지침의 실제 검증 명령을 실행하고 통과·실패·미실행·범위 밖을 구분한다.
 - 계약 검사: 루트에서 python3 .claude/scripts/check_contracts.py. 부분 형식 검사만으로 전체 서비스 검증을 주장하지 않는다.
 - 스켈레톤·README의 실행 예시는 실행 성공의 증거가 아니다.

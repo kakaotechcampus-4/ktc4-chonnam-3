@@ -30,7 +30,7 @@ backend AI 연결 -> devon_ai
 - integrations에서 DB model import.
 - agents/director에 `AsyncSession` 주입.
 - 프롬프트, 루브릭, persona, domain frame을 코드에 하드코딩.
-- 모델명을 코드 상수로 고정. Sprint 1 기본값은 seed/config에서 `5.5 Luna`로 읽는다.
+- 모델명을 코드 상수로 고정. Sprint 1 기본값은 seed/config에서 `gpt-5.6-luna`로 읽는다.
 - `os.environ`을 `core/config.py` 밖에서 직접 읽기.
 - `HTTPException` 직접 raise.
 - 깨진 LLM JSON을 downstream에 전달.
@@ -69,7 +69,7 @@ backend AI 연결 -> devon_ai
 ## LLM 규칙
 
 - 작업별 prompt version을 사용한다.
-- Sprint 1 model은 `5.5 Luna`.
+- Sprint 1 공급자·모델은 [0011 결정](../../spec/ai/decisions/0011-sprint1-model-selection.md)의 OpenAI `gpt-5.6-luna`다. SDK/client 연결·계정 접근·작업별 품질은 구현·검증할 작업이다.
 - timeout/provider 오류/JSON parsing 실패는 자동 1회 재시도.
 - 2회 실패 시 error_code를 남기고 중단한다.
 - raw output, model, prompt version, token, latency를 가능한 범위에서 저장한다.

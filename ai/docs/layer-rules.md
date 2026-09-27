@@ -2,7 +2,7 @@
 
 이 문서는 개발 경로 안내다. 서비스 요구사항과 계약의 원본은 [AI 아키텍처](../../spec/ai/architecture.md), [AI 기능 명세](../../spec/ai/features/), [공통 계약](../../spec/shared/contracts/README.md)이다. 패키지 배치는 [승인된 설계](../../spec/ai/designs/2026-09-12-ai-package-structure.md)를 따른다.
 
-구체적인 작업 순서와 task별 담당 파일·결정 대기 지점은 [구현 작업 지도](pipeline.md)를 따른다. Context 준비와 도메인 frame은 협업·정책 단위이며 별도 AI 모듈이나 Agent를 추가하라는 뜻이 아니다.
+구체적인 작업 순서와 task별 담당 파일·구현·검수 조건은 [구현 작업 지도](pipeline.md)를 따른다. Context 준비와 도메인 frame은 협업·정책 단위이며 별도 AI 모듈이나 Agent를 추가하라는 뜻이 아니다.
 
 ## 의존 방향
 
@@ -23,7 +23,7 @@ service -> permission and state check -> DB commit -> notification
 
 | AI 원본 (`ai/src/devon_ai/`) | 책임 | BE 연결·I/O (`backend/app/`) |
 | --- | --- | --- |
-| `contracts.py` | 향후 채택할 내부 입력·출력 경계 | `agents/contracts.py`, service/schema 변환 |
+| `contracts.py` | 채택된 내부 입력·출력 계약의 구현 위치 | `agents/contracts.py`, service/schema 변환 |
 | `agents/director/agent.py` | 질문·행동 후보를 만드는 단일 Director | service/Controller의 상태·Turn·Persona 확정 |
 | `agents/director/tools.py` | 주입된 도구의 요청·결과 해석 경계 | 실제 조회·권한·ref/path·budget 검증 adapter |
 | `llm_tasks/repo_shallow.py` | L1 후보 결과 | GitHub 수집·저장, pipeline |
@@ -44,14 +44,14 @@ service -> permission and state check -> DB commit -> notification
 | 답변 해석·판정 | [답변 평가](../../spec/ai/features/answer-evaluation.md) | AI `llm_tasks/answer_analysis.py` |
 | 코드 근거·충돌 | [Evidence](../../spec/ai/features/evidence-retrieval.md) | AI `agents/director/tools.py`; 실제 조회·권한·저장은 BE |
 | 도메인 질문 | [도메인 프레임](../../spec/ai/features/domain-frames.md) | BE `domain_question_frames` seed, 주입된 frame을 사용하는 Director |
-| 피드백·요약 | [리포트와 프로필](../../spec/ai/features/report-profile.md) | AI `llm_tasks/report.py`; profile 확정 집계·worker·저장은 BE |
+| 피드백·요약 | [리포트와 프로필](../../spec/ai/features/report-profile.md) | AI `llm_tasks/report.py`; profile 통계 집계·역할 요약의 기존 호출 경계·worker·저장은 BE. 역할 요약은 0019의 LLM 사용을 따름 |
 | 음성 등 후속 기능 | [확장 경계](../../spec/ai/features/extensions.md) | Sprint 2 검토 후 별도 작업 |
 
 ## 계약 상태
 
 - 기존 `report.md`와 `spec/`의 FIX 및 후속 [Accepted 결정](../../spec/ai/decisions/README.md)의 승인 범위를 구현 기준으로 사용한다. 출처 충돌은 [source audit](../../spec/ai/source-audit.md)와 [baseline 결정](../../spec/ai/decisions/0001-ai-baseline.md)을 확인한다. 부분 결정의 승인 범위를 저장·API 계약 전체로 확대하지 않는다.
-- [내부 계약](../../spec/ai/contracts.md)의 새 DTO·enum·Protocol·JSON 구조는 Proposed다. AI-L02는 PENDING이며 패키지 구조 승인이 타입 채택 승인은 아니다. AI·BE가 fixture·변환·저장 책임을 합의하기 전에는 구현 계약으로 확정하지 않는다.
+- [내부 계약](../../spec/ai/contracts.md)은 0014·0015에서 채택한 평면 필드·값·Turn 저장 위치와 미채택 상세 객체·참조·공개 변환을 구분한다. 채택된 범위의 타입·검증 구현은 진행하며 상세 연결은 기존 구조 안에서 fixture로 확인한다. 패키지 구조나 문서 채택을 실제 저장·서비스 연결 완료로 보지 않는다.
 - 공통 API·DB 의미 변경은 [공통 계약 이관 상태](../../spec/shared/contracts/migration.md)를 확인하고 관련 팀 결정 없이 확정하지 않는다.
-- `5.5 Luna`는 프로젝트 모델 선택 표기다. 실제 provider와 호출 가능한 model ID가 확인되기 전에는 mock client로 작업한다.
+- Sprint 1 공급자와 API 모델 ID는 [0011 결정](../../spec/ai/decisions/0011-sprint1-model-selection.md)의 OpenAI `gpt-5.6-luna`로 확정됐다. [0018 결정](../../spec/ai/decisions/0018-existing-baseline-bulk-resolution.md)에 따라 실제 인증·SDK/client 연결, 계정 접근과 task별 schema·품질 검증은 구현 작업으로 남기며 mock 통과를 실제 연결 완료로 보지 않는다.
 - prompt, domain frame, model ID, 평가 기준을 함수 내부 상수에 넣지 않고 정해진 BE config·seed·loader 경로에서 주입한다.
 - 별도 AI server, port, worker, container, network contract를 추가하지 않는다.

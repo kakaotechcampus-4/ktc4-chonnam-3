@@ -1,4 +1,5 @@
-"""Reserve the AI-L02 boundary described in spec/ai/contracts.md.
+"""AI 내부 계약의 원본 위치. 상세 기준은 spec/ai/contracts.md를 따른다.
 
-DTO, schema, and Protocol adoption is deferred; this module remains unimplemented.
+ADR 0014·0015에서 기존 필드와 턴 저장 구조를 채택했다.
+실제 타입·참조 검증·직렬화·서비스 연결은 아직 구현·검수해야 한다.
 """

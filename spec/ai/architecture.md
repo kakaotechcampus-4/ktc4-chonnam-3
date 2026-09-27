@@ -4,7 +4,7 @@
 
 이 문서는 서비스 AI의 책임·연결·개발 범위를 정의한다. 기존 확정사항을 정리하고, 상세 내부 설계는 Proposed로 구분한다. 현재 코드가 이 구조로 실행된다는 의미는 아니다. Claude 작업 진입점은 [ai/README.md](../../ai/README.md)다.
 
-코드 배치는 [승인된 패키지 설계](designs/2026-09-12-ai-package-structure.md)를 따른다. AI 소스 원본은 `ai/src/devon_ai/`이며 기존 BE API·worker가 로컬 패키지를 import한다. 별도 AI 서버는 없고, 내부 입력·출력 계약의 Proposed 상태는 바뀌지 않는다.
+코드 배치는 [승인된 패키지 설계](designs/2026-09-12-ai-package-structure.md)를 따른다. AI 소스 원본은 `ai/src/devon_ai/`이며 기존 BE API·worker가 로컬 패키지를 import한다. 별도 AI 서버는 없다. 내부 입력·출력 계약은 [0014](decisions/0014-minimal-change-revision.md)·[0015](decisions/0015-existing-contracts-and-tool-results.md)의 채택 범위와 아직 구현·검증하지 않은 상세를 구분한다.
 
 ## 문서 지도
 
@@ -13,7 +13,7 @@
 | [원본 검토](source-audit.md) | context·ForAI·report·FE/BE/DB·스켈레톤 간 충돌과 적용 기준 |
 | [기준 결정](decisions/0001-ai-baseline.md) | FIX 유지와 승인 범위 |
 | [Sprint 1 vector 미도입](decisions/0002-sprint1-vector-search.md) | AI-L20의 승인 범위, BE 전달사항과 후속 보류 |
-| [의사결정 대기 목록](../../later.md) | 미결정 항목의 통합 목록, 영향과 결정 시점 |
+| [구현·검수 인계](../../ai/docs/pipeline.md#기존-id별-구현검수-인계) · [Sprint 2 후속 목록](features/extensions.md#sprint-2-착수-시-검토할-사항) | 채택한 방향의 실제 구현·검수와 후속 기능의 미정 범위를 구분 |
 | [내부 계약](contracts.md) | 데이터 소유권, LLM 출력 제안, 검증·재시도 |
 | [레포 분석·추천](features/repository-analysis.md) | L0/L1/L2, Wanted, 추천, 캐시, 부분 실패 |
 | [작업·면접 Context](features/job-context.md) | ARQ 입력, 준비 자료, 판단 입력 구성 |
@@ -21,7 +21,7 @@
 | [답변 평가](features/answer-evaluation.md) | 평가 범위, 충분성·정확성·기여, 보류 |
 | [근거 검색](features/evidence-retrieval.md) | 검색 범위, 출처, answer_vs_code |
 | [도메인 프레임](features/domain-frames.md) | Sprint 1 seed 후보와 역할 제한 |
-| [리포트·프로필](features/report-profile.md) | lazy 생성, 피드백, 점수 보류 |
+| [리포트·프로필](features/report-profile.md) | lazy 생성, 피드백, 확정 점수 구조와 세부 기준 검수 |
 | [후속 기능](features/extensions.md) | 음성·Claim·도메인 자료·이미지 |
 | [검증](verification.md) | 계약·상태·모델 평가·완료 판단 |
 
@@ -31,13 +31,15 @@
 - Agent는 Director 하나다. `tech_lead`, `hr_manager`, `domain_lead`는 Director의 질문 관점이며 독립 Agent가 아니다.
 - 면접 답변은 양방향 텍스트 WebSocket, 분석 진행 알림은 SSE다. 기존 계약에 없는 답변 POST나 면접 SSE를 추가하지 않는다.
 - 기본 9턴을 완료하면 종료한다. Director의 자율 조기 종료는 Sprint 1에 없다.
-- Sprint 1 모델 선택 표기는 `5.5 Luna`다. provider·실제 API model ID·구조화 출력 성능은 별도 확인사항이다.
+- Sprint 1 LLM 모델은 [0011 결정](decisions/0011-sprint1-model-selection.md)에 따라 OpenAI `gpt-5.6-luna`다. 인증·SDK/client·호출 경로와 실제 모델 버전 기록은 기존 BE 소유권 안에서 구현한다. [0018](decisions/0018-existing-baseline-bulk-resolution.md)에 따라 상세 연결을 별도 사용자 질문으로 만들지 않으며 실제 계정 접근과 task별 품질은 검증한다.
 - Sprint 1 embedding/vector 검색과 pgvector extension 선설치는 [0002 결정](decisions/0002-sprint1-vector-search.md)에 따라 미도입이다. BE 반영 확인과 Sprint 2 도입 여부·세부 설계는 별도 대기다. 공개 리포트 점수는 0~100 score 6개와 단순 평균 `totalScore`를 사용하며, 항목별 세부 기준 seed는 자료 보강에 따라 갱신할 수 있다.
 - 선택 문서 preview와 GitHub URL 추출은 Sprint 1에 있다. 문서 Claim·STT/TTS·이미지 공고 판독은 후속이다.
 
 수정 중인 `context/AI.md`의 세 역할 재구성, HTTPS/SSE 면접, 조기 종료, 별도 면접 Worker는 [검토 기록](source-audit.md)의 변경 제안으로 남긴다. 이를 기존 API와 혼합하지 않는다.
 
 ## 현재 구현 상태
+
+2026-09-22 사용자 선택에 따라 현재 검증 범위는 **팀 내부·실제 사용자 문답**이며 후속 내부 비교 검증을 위한 보관·재사용을 채택했다. 최종 내부 비교 검증 뒤에도 보관하며 별도의 자동 삭제 기한은 두지 않는다. [0018](decisions/0018-existing-baseline-bulk-resolution.md)의 범위를 따르고 상세 구현·자료 검수는 [작업 인계](../../ai/docs/pipeline.md#기존-id별-구현검수-인계)에서 확인한다. 외부 서비스 출시·자료 공개가 승인된 것은 아니다.
 
 확인 기준 커밋은 `8dabd55`이며, 확인 당시 `backend/app/`의 AI 관련 모듈·주요 BE 모듈은 비어 있거나 모듈 주석만 있었다. `agents/contracts.py`에도 실제 계약 클래스는 없다. worker 등록, ORM, migration, seed, 테스트 fixture가 동작한다고 가정하지 않는다.
 
@@ -93,10 +95,10 @@ Turn마다 ARQ job을 추가하거나 준비·면접 Worker를 물리적으로 �
 | 레포 분석·실패·캐시 식별 | `repo_analyses`와 분석 pipeline |
 | run 후보 순서·페이지 상태 | `analysis_repo_candidates`, `analysis_repo_candidate_pages` |
 | 공고 요구사항 | `job_postings`, `jd_requirements` |
-| 질문·답변·분석·결정 | `interview_turns` 중심; analysis/decision의 정확한 컬럼·JSONB 구조는 검토안 |
+| 질문·답변·분석·결정 | 기존 `interview_turns` 중심; [0014](decisions/0014-minimal-change-revision.md)에 따라 `question_contract`, `analysis`, `decision` JSONB에 기존 필드 구성으로 저장. 기존 T3/T4 순서를 유지하며 미채택 상세 형식·실패 기록 위치는 AI-L02·AI-L18 |
 | 면접 상태와 선택 코드 ref | `interview_sessions`, `session_repositories` |
 | 근거·용도·충돌 | `evidences`, `turn_evidences`, `evidence_conflicts` |
-| 피드백·점수 | `interview_reports.feedback_json`, `report_scores`; 점수는 미합의 |
+| 피드백·점수 | `interview_reports.feedback_json`, `report_scores`; 0~100 점수 6개·단순 평균은 확정, 세부 평가 기준 작성·검수와 실제 연결은 미완료 |
 | 운영 prompt·frame | `prompt_versions`, `domain_question_frames` |
 
 이는 [DB 명세](../../backend/docs/db-schema.md)의 소유권이다. 새 내부 JSON 필드·실패 원문 저장 위치를 확정한 물리 스키마는 [내부 계약](contracts.md) 검토 후 BE와 맞춘다. 제외된 `eval_cases`, `eval_runs`, `tool_calls`, `report_persona_feedbacks` 테이블을 편의상 만들지 않는다.
@@ -114,4 +116,4 @@ PostgreSQL을 원본으로 사용한다. Redis Context snapshot은 기본 TTL 2�
 
 ## 연결 완료의 조건
 
-AI 함수의 반환값만 확인해서 서비스를 완료로 판정하지 않는다. 실제 선택 자료부터 분석·질문·답변·전환·종료·기록·리포트까지 [검증 기준](verification.md)에 따라 확인한다. 텍스트 WS와 이벤트 이름은 구현할 수 있는 FIX다. 점수, WS 식별자·준비 실패 snapshot·stale 제출·재연결 같은 미합의 항목이 요구된 수용 조건에 영향을 주면 해당 완료 판정을 보류한다.
+AI 함수의 반환값만 확인해서 서비스를 완료로 판정하지 않는다. 실제 선택 자료부터 분석·질문·답변·전환·종료·기록·리포트까지 [검증 기준](verification.md)에 따라 확인한다. 점수 구조·WS 식별자·텍스트 메시지·준비 실패 복구·명시적 이탈 정책은 [0010](decisions/0010-sprint1-interface-runtime-decisions.md)의 확정 범위를 따른다. 세부 채점 기준 검수, 실제 snapshot 저장·복원, 지연·중복 제출과 재연결 처리는 구현·검증 증거가 있어야 연결 완료로 판단한다.

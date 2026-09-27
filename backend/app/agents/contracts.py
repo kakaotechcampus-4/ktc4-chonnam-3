@@ -1,5 +1,6 @@
-"""Backend adapter boundary for canonical contracts in ``devon_ai.contracts``.
+"""``devon_ai.contracts``의 AI 내부 계약과 백엔드를 연결할 위치.
 
-The backend retains service state, persistence, and translation responsibility. This module
-exposes no facade until the AI contracts are approved and implemented.
+서비스 상태·저장·데이터 변환은 백엔드가 담당한다. ADR 0014·0015에서 기존 필드와
+턴 저장 구조를 채택했으며 상세 변환과 연결 계층은 아직 미구현이다.
+확정 범위는 spec/ai/contracts.md를 따른다.
 """

@@ -15,16 +15,16 @@
 - [0005 도메인 질문 생성과 개발용 후보 유지 결정](../../spec/ai/decisions/0005-domain-question-policy.md)
 - [0008 AI 후보 검증·선택 정책](../../spec/ai/decisions/0008-ai-candidate-policy.md)의 도메인 frame 후보 선택
 - [Director와 텍스트 면접의 Persona·질문 검증](../../spec/ai/features/interviewer.md)
-- [AI 내부 계약의 Question·domain_frames 제안](../../spec/ai/contracts.md)
+- [AI 내부 계약의 Question·domain_frames](../../spec/ai/contracts.md)
 - [BE 도메인 seed 작업](../../backend/docs/task-03-seed.md)
-- [잔여 결정 목록의 AI-L02·AI-L10](../../later.md)
+- [0018 기존안 일괄 채택](../../spec/ai/decisions/0018-existing-baseline-bulk-resolution.md)과 [구현·검수 인계](pipeline.md#기존-id별-구현검수-인계)
 
 ## 선행 조건
 
-- [전체 AI pipeline](pipeline.md)과 [task-02 내부 계약](task-02-contracts.md)의 Proposed 경계를 확인한다.
+- [전체 AI pipeline](pipeline.md)과 [task-02 내부 계약](task-02-contracts.md)의 채택 범위·상세 구현 경계를 확인한다.
 - [task-06 Context 준비](task-06-context-preparation.md)에서 검증된 category 입력만 받는다는 전제를 둔다.
 - 21개 후보의 구조, 승인된 생성 정책과 frame 우선순위는 비식별 fixture로 즉시 검증할 수 있다.
-- 실제 seed 설치, table column, 검토 metadata와 활성 version은 BE·도메인 검수자의 합의 전에는 진행하지 않는다.
+- 기존 seed 구조의 저장·검수 metadata·활성 version을 BE와 연결하고, 운영 활성화 전 독립·도메인·한국어 검수를 수행한다. 개발 후보 채택을 운영 검수 통과로 취급하지 않는다.
 
 ## 대상 파일과 책임
 
@@ -54,7 +54,7 @@
 - [ ] 답변에 검증 가능한 코드 주장이 생긴 경우에만 기존 Evidence 흐름에 넘긴다.
 - [ ] 질문 문구를 prompt나 Director 코드에 하드코딩하지 않고 주입 경계를 유지한다.
 - [ ] Persona는 기존 `domain_lead`를 사용하고 별도 Agent·package·taxonomy를 추가하지 않는다.
-- [ ] domain/HR 각각의 새 최소 횟수나 고정 교대 규칙을 만들지 않는다.
+- [ ] Persona 횟수는 [현행 9턴 정책](../../spec/ai/features/interviewer.md#고정-9턴-정책)을 따르고 고정 교대 규칙을 추가하지 않는다.
 - [ ] 세 축의 고정 순환·축별 최소 횟수·relevance 점수·모든 축 소진 의무를 만들지 않는다.
 
 ## 검증
@@ -76,10 +76,12 @@
 - [ ] 21개 후보 원문과 세 축 구조가 변경되지 않는다.
 - [ ] Director 정책과 BE seed 운영 책임이 분리된다.
 - [ ] 별도 Agent·점수·외부 지식 조회·하드코딩이 없다.
-- [ ] 운영 seed 설치와 활성 version 검증은 실제 승인 전 완료로 표시되지 않는다.
+- [ ] 운영 seed의 독립·도메인·한국어 검수와 실제 설치·활성 version 검증을 마치기 전 완료로 표시하지 않는다.
 
-## 결정 대기와 재개 조건
+## 구현·검수 인계
 
-- AI-L10: 운영 문구의 독립·도메인 검수, category 신뢰 입력, 활성 version·저장 방식이 승인되면 BE seed 설치와 실제 조회 연결을 재개한다.
-- AI-L02: `domain_frames` 참조와 Question Contract의 정확한 필드·version·저장 위치가 채택되면 타입 검증을 고정한다.
-- AI-L04: 실제 모델 호출·재작성 횟수와 budget이 정해지기 전에는 정책 위반 후보를 무제한 재생성하지 않는다.
+[0018](../../spec/ai/decisions/0018-existing-baseline-bulk-resolution.md)과 [작업 지도](pipeline.md#기존-id별-구현검수-인계)에 따라 기존 방향을 유지하고 다음 실제 확인을 남긴다. 같은 설계 선택을 사용자에게 다시 묻는 조건이 아니다.
+
+- AI-L10: 21개 개발 후보의 실제 독립·도메인·한국어 검수, category 근거 입력, 기존 seed 저장·활성 version·검수 metadata와 조회 연결을 확인한다.
+- AI-L02: Question Contract는 [저장 형식](../../spec/ai/contracts.md#question-contract-저장-형식)을 따른다. 채택한 `domain_frames` 입력·참조의 상세 표현은 기존 생산자·소비자에 맞춰 구현한다.
+- AI-L04: 실제 모델 호출·재작성 budget은 운영 조건과 대표 사례 측정으로 설정하며 무제한 재생성을 허용하지 않는다.

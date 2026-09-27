@@ -22,6 +22,8 @@ import {
   reportReady,
 } from '../db';
 import { candidatePages } from '../fixtures/analysis';
+import { retryPrepare, streamPrepareFrom } from '../ws/prepare';
+import { clientsForSession } from '../ws/interview';
 import {
   TOTAL_TURNS,
   completedTurns,
@@ -160,6 +162,33 @@ export const interviewHandlers = [
         repositoryNames: reportRepositoryNames,
         completedAt: reportCompletedAt,
       });
+    },
+  ),
+
+  /**
+   * 준비 실패 재시도. 0010 결정으로 WS `prepareRetry` 메시지를 대체했다.
+   *
+   * 진행 상황(`prepareStep` → `prepareCompleted` → 첫 `question`)은 계약대로 WS 로 나간다.
+   * 열린 연결이 있으면 지금 흘려보내고, 없으면 다음 연결이 경과 시간 기준으로 이어받는다.
+   * 응답 코드·실패 reason 은 계약에 없다. 설계 문서 D15.
+   */
+  http.post<IdParams, never, Res<undefined>>(
+    path('/interviews/:id/prepare/retry'),
+    async ({ params }) => {
+      const record = getInterview(String(params.id));
+      if (!record) {
+        return errorResponse(404, 'not_found', '면접을 찾을 수 없어요.');
+      }
+      if (interviewStatus(record) !== 'preparing_failed') {
+        return errorResponse(409, 'prep_failed', '준비 실패 상태에서만 다시 시도할 수 있어요.');
+      }
+
+      retryPrepare(record);
+      await delay(200);
+      for (const client of clientsForSession(record.sessionId)) {
+        void streamPrepareFrom(client, record);
+      }
+      return new HttpResponse(null, { status: 202 });
     },
   ),
 

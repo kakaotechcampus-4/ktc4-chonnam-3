@@ -72,3 +72,49 @@ W10~W11을 숨은 보충 작업 기간으로 사용하지 않는다. 이 문서�
 - 확장으로 들어온 실패·미발견·낮은 인식 품질을 사용자 역량이나 사실 오류로 자동 변환하지 않는다.
 - provider·모델·format·API·DB·점수 정책을 명시적 결정 없이 고정하지 않는다.
 - 실제 확장 검증은 [AI 검증](../verification.md)의 계약, 모델, 통합, 전체 서비스 단계를 분리해 기록한다.
+
+## Sprint 2 착수 시 검토할 사항
+
+2026-09-22 [0018 일괄 정리](../decisions/0018-existing-baseline-bulk-resolution.md)에 따라 기존 later.md의 AI-L20~26을 이곳으로 옮겼다. 아래 7개 항목의 도입 여부·세부는 여전히 미정이다. 현재 Sprint 1의 사용자 질문으로 반복하지 않고, 해당 기능의 실제 채택·착수 전에 범위·시점·담당을 확인한다. 항목 이동이 Sprint 2 도입 승인이나 구현 완료를 뜻하지 않는다.
+
+### AI-L20. 후속 vector·검색 범위 도입
+
+- 검토·시점: AI·BE·팀, Sprint 2 검색 확장 채택·착수 전.
+- 남은 결정: Sprint 2 도입 여부·대상 task·효용/비용 채택 기준, embedding model·dimension·chunk·재색인·저장소, full tree/global search 확장 여부·시점.
+- 근거: [0002 결정과 BE 반영 확인](../decisions/0002-sprint1-vector-search.md), [0009 평가 방법](../decisions/0009-ai-evaluation-method.md), [근거 검색](../features/evidence-retrieval.md), [이관 상태](../../shared/contracts/migration.md).
+
+### AI-L21. 음성 입력·출력과 보존
+
+- 검토·시점: AI·FE·BE·팀, Sprint 2 음성 착수 전.
+- 남은 결정: realtime 또는 STT/TTS 조합, provider/model·Persona별 voice ID, 오디오 형식·길이·저장/삭제/다시 듣기, 전사 확인·수정·재녹음, 텍스트 병행/전환, 브라우저 상태·wire·실패 복구.
+- 근거: [후속 기능](../features/extensions.md), [원본 검토](../source-audit.md).
+
+### AI-L22. 문서 Claim과 문서·코드 충돌
+
+- 검토·시점: AI·BE·FE, Sprint 2 Claim 추출·사용 전.
+- 남은 결정: Claim schema·추출/사용 시점·원문 위치·version·검증 상태, 사용자 확인/수정/제외, document_claims FK·보존, 문서 conflict source·처리·API.
+- 근거: [후속 Claim](../features/extensions.md), [기준 결정](../decisions/0001-ai-baseline.md).
+
+### AI-L23. 외부 도메인 자료 조회
+
+- 검토·시점: AI·자료 검수 담당·BE, Sprint 2 Domain Knowledge 조회 전.
+- 남은 결정: 자료 출처·사용 권한·지역·기준 시점·검수자, corpus/공개 검색/DB/vector 방식, 갱신 주기·적용 조건·인용·미지원 처리. vector 선택은 AI-L20과 연결.
+- 근거: [외부 도메인 자료](../features/extensions.md), [도메인 프레임](../features/domain-frames.md).
+
+### AI-L24. 공고 URL의 이미지 판독
+
+- 검토·시점: AI·BE·FE, Sprint 2 이미지 공고 처리 전.
+- 남은 결정: 동일 공고 URL 경로에서 지원할 이미지·format·OCR provider, 텍스트와 이미지의 충돌·누락·품질 판정, 실패 reason·원문 보존·동의.
+- 근거: [이미지 입력 경계](../features/extensions.md).
+
+### AI-L25. 리포트 이의 제기와 재평가
+
+- 검토·시점: 팀·AI·BE·FE, Sprint 2 이의 제기 기능 전.
+- 남은 결정: 제출 단위·Persona 식별·중복 방지, 검토 책임·응답 기한·상태, 원문·평가·점수에 미치는 영향, 재채점·재생성 허용 범위.
+- 근거: [이의 제기 경계](../features/extensions.md), [리포트](../features/report-profile.md).
+
+### AI-L26. 실측에 따른 Sprint 2 모델·검색 전략 선택
+
+- 검토·시점: AI·팀, 인프라 영향 시 BE; 모델 분리·음성·검색 조합 변경 전.
+- 남은 결정: 실제 비교 결과에 따른 단일 모델 유지 또는 task별 분리, 고비용 task 개선안, vector 도입 시 prompt 구성과 버전·캐시 변경. 음성 선택은 AI-L21, vector는 AI-L20과 연결.
+- 근거: [0009 평가 방법](../decisions/0009-ai-evaluation-method.md), [내부 계약](../contracts.md), [검증](../verification.md).

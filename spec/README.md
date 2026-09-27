@@ -18,14 +18,15 @@ spec/ai는 서비스 AI 기능의 명세다. 코딩 AI용 규칙 폴더가 아�
 설계 초안은 Proposed, 승인된 설계는 Accepted로 구분한다. 세션별 편집 순서·추론 메모는 spec에 넣지 않는다.
 
 ## 기존 문서와의 전환
-이번 수정은 이전 검수 초안의 배치를 변경한다. 기존 develop 문서는 아직 자동 이동·삭제하지 않았다.
+공통 API의 원본 구분은 [현행 계약 안내](shared/contracts/README.md)와 병합된 [PR #35](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/35)를 따른다. 일반 API 요청·응답은 `spec/shared/contracts/openapi.yaml`, WebSocket·SSE·브라우저 이동 경로는 `frontend/docs/api-spec.md`가 기준이다. 기존 문서는 자동 이동·삭제하지 않는다.
 
 | 기존 원본 | 목표 명세 영역 | 현재 처리 |
 | --- | --- | --- |
-| frontend/docs/api-spec.md, frontend/src/types/api.ts | spec/shared/contracts/ | /me·공통 오류만 부분 이관 초안 |
-| backend/docs/api-spec.md, error-reasons.md | spec/shared/contracts/ | 상충 항목을 migration.md에서 추적 |
+| frontend/docs/api-spec.md | spec/shared/contracts/ | 일반 API는 OpenAPI 기준. WebSocket·SSE·브라우저 이동 경로는 기존 FE 문서가 원본 |
+| frontend/src/types/api.ts | 공통 API 계약을 사용하는 FE 구현 타입 | 별도 계약 원본이 아니며 현행 공통 계약에 맞춰 검증 |
+| backend/docs/api-spec.md, error-reasons.md | spec/shared/contracts/ | 공통 계약과 다른 부분은 현행 원본을 우선하며 개별 충돌·보류는 migration.md에서 추적 |
 | backend/docs/layer-rules.md, db-schema.md, pipeline.md | spec/backend/ | 현 원본 유지, architecture·기능 문서에서 참조 |
 | backend/docs/testing.md, deploy.md 등 | 검수 후 관련 팀 spec 또는 실행 가이드 | 이번에 이동하지 않음 |
 
-범위·명칭·프로토콜이 일치하고 팀 검수를 마친 문서부터 이관한다. 이관 완료 시 기존 위치는 링크 안내로 대체하여 원본을 하나로 유지한다.
-원본 이관 전에는 새 spec을 전체 구현의 최종 기준으로 선언하지 않는다.
+아직 원본으로 유지하는 DB·pipeline·운영 등의 문서는 범위·명칭·프로토콜이 일치하고 팀 검수를 마친 뒤 이관한다. 이관 완료 시 기존 위치는 링크 안내로 대체한다.
+API 기준 문서가 정해진 것과 전체 문서 이관·기능 구현·검증 완료는 구분한다. 개별 보류와 구현 상태는 [계약 이관 현황](shared/contracts/migration.md) 및 관련 기능·검증 문서에서 확인한다. 과거의 `/me`·공통 오류만 이관하는 초안은 [결정 이력](shared/decisions/0001-contract-migration.md)으로 보존한다.

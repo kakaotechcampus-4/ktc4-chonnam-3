@@ -4,7 +4,7 @@
 - 날짜: 2026-09-12
 - 관련 PR: 없음
 - 검토자: 현재 사용자 승인
-- 연결 항목: `later.md`의 `AI-L19`, `AI-L20`, `AI-L26`
+- 연결 항목: [AI-L19 — 구현·검수 인계](../../../ai/docs/pipeline.md#기존-id별-구현검수-인계), [AI-L20·AI-L26 — Sprint 2 검토](../features/extensions.md#sprint-2-착수-시-검토할-사항)
 
 ## 맥락
 
