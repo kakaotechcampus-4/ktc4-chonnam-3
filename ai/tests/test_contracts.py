@@ -1,4 +1,4 @@
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
@@ -20,12 +20,38 @@ def test_decode_builds_frozen_nested_contract_and_ignores_unowned_extra_fields(
     contract_data: dict[str, object],
 ) -> None:
     contract_data["schema_version"] = "not-owned-here"
+    contract_data["required_points"] = [
+        {"key": "choice", "description": "선정 이유", "confidence": 0.9}
+    ]
+    contract_data["basis_refs"] = [{"kind": "evidence", "id": "ev-1", "text": "모델 설명"}]
     result = c.decode(c.QuestionContract, contract_data)
 
+    assert result.required_points == (c.RequiredPoint("choice", "선정 이유"),)
     assert result.basis_refs == (c.BasisRef("evidence", "ev-1"),)
     assert not hasattr(result, "schema_version")
+    stored = c.to_data(_checked_question(contract_data))["question_contract"]
+    assert "confidence" not in stored["required_points"][0]
+    assert "text" not in stored["basis_refs"][0]
     with pytest.raises(FrozenInstanceError):
         result.purpose = "changed"
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("required_points", [{"description": "선정 이유", "confidence": 0.9}]),
+        ("required_points", [{"key": None, "description": "선정 이유", "confidence": 0.9}]),
+        ("basis_refs", [{"kind": "evidence", "id": " ", "text": "설명"}]),
+        ("basis_refs", [{"kind": "unknown", "id": "ev-1", "text": "설명"}]),
+        ("basis_refs", ["ev-1"]),
+    ],
+)
+def test_extra_fields_do_not_bypass_owned_field_validation(contract_data, field, value):
+    contract_data["schema_version"] = "not-owned-here"
+    contract_data[field] = value
+    with pytest.raises(c.ContractError) as failure:
+        c.decode(c.QuestionContract, contract_data)
+    assert failure.value.stage == "schema"
 
 
 @pytest.mark.parametrize(
@@ -135,6 +161,134 @@ def test_answer_analysis_checks_quotes_question_scope_and_evidence(
             evidence_refs=frozenset({"ev-1"}),
             allowed_locations=frozenset(),
         )
+
+
+@pytest.fixture
+def multi_point_question(contract_data):
+    contract_data["required_points"] = [
+        {"key": "choice", "description": "선정 이유"},
+        {"key": "reads", "description": "조회 특성"},
+        {"key": "writes", "description": "수정 특성"},
+    ]
+    return _checked_question(contract_data)
+
+
+@pytest.mark.parametrize("sufficiency", [None, "partial", "insufficient"])
+def test_deferred_points_preserve_observations_without_becoming_missing(
+    multi_point_question, sufficiency
+) -> None:
+    deferred = "선정 이유와 수정 특성" if sufficiency == "insufficient" else "수정 특성"
+    limitations = (f"{deferred}은 추가 확인 필요",)
+    analysis = replace(
+        _analysis(),
+        sufficiency=sufficiency,
+        covered_points=() if sufficiency == "insufficient" else _analysis().covered_points,
+        missing_points=("reads",),
+        limitations=limitations,
+    )
+    checked = c.validate_analysis(
+        analysis,
+        question=multi_point_question,
+        answer_text="부하를 줄이려고 캐시를 선택했습니다",
+        evidence_refs=frozenset({"ev-1"}),
+        allowed_locations=frozenset(),
+    )
+    assert checked.data.sufficiency == sufficiency
+    assert checked.data.covered_points == analysis.covered_points
+    assert checked.data.missing_points == ("reads",)
+    assert checked.data.limitations == limitations
+    stored = c.to_data(checked)
+    assert stored["missing_points"] == ["reads"]
+    assert stored["covered_points"] == (
+        []
+        if sufficiency == "insufficient"
+        else [{"key": "choice", "answer_quotes": ["부하를 줄이려고"]}]
+    )
+    assert stored["limitations"] == list(limitations)
+
+
+@pytest.mark.parametrize("sufficiency", [None, "partial", "insufficient"])
+def test_deferred_points_require_a_reason(multi_point_question, sufficiency) -> None:
+    analysis = replace(
+        _analysis(),
+        sufficiency=sufficiency,
+        missing_points=("reads",),
+        contribution_scope=c.ContributionScope("self", ("부하를 줄이려고",)),
+        limitations=(),
+    )
+    with pytest.raises(c.ContractError) as failure:
+        c.validate_analysis(
+            analysis,
+            question=multi_point_question,
+            answer_text="부하를 줄이려고 캐시를 선택했습니다",
+            evidence_refs=frozenset({"ev-1"}),
+            allowed_locations=frozenset(),
+        )
+    assert failure.value.stage == "semantic"
+    assert failure.value.field == (
+        "unevaluable sufficiency" if sufficiency is None else "point coverage"
+    )
+
+
+@pytest.mark.parametrize(
+    "sufficiency,covered_keys,missing,field",
+    [
+        ("sufficient", ("choice",), (), "point coverage"),
+        ("sufficient", ("choice", "reads", "writes"), ("reads",), "sufficiency"),
+        ("partial", ("choice", "reads", "writes"), (), "missing points required"),
+        ("partial", (), ("choice", "reads", "writes"), "partial coverage required"),
+        ("insufficient", ("choice", "reads", "writes"), (), "missing points required"),
+    ],
+)
+def test_limitations_do_not_allow_contradictory_sufficiency(
+    multi_point_question, sufficiency, covered_keys, missing, field
+) -> None:
+    analysis = replace(
+        _analysis(),
+        sufficiency=sufficiency,
+        covered_points=tuple(c.CoveredPoint(key, ("부하를 줄이려고",)) for key in covered_keys),
+        missing_points=missing,
+        limitations=("일부 항목은 추가 확인 필요",),
+    )
+    with pytest.raises(c.ContractError) as failure:
+        c.validate_analysis(
+            analysis,
+            question=multi_point_question,
+            answer_text="부하를 줄이려고 캐시를 선택했습니다",
+            evidence_refs=frozenset({"ev-1"}),
+            allowed_locations=frozenset(),
+        )
+    assert failure.value.stage == "semantic"
+    assert failure.value.field == field
+
+
+@pytest.mark.parametrize(
+    "covered,missing,field",
+    [
+        ((c.CoveredPoint("other", ("부하를 줄이려고",)),), (), "covered_points"),
+        ((c.CoveredPoint("choice", ("부하를 줄이려고",)),) * 2, (), "covered_points"),
+        ((), ("other",), "missing_points"),
+        ((), ("choice", "choice"), "missing_points"),
+        ((c.CoveredPoint("choice", ("원문에 없는 말",)),), (), "answer quotes"),
+        ((c.CoveredPoint("choice", ()),), (), "covered point quotes"),
+    ],
+)
+def test_unknown_sufficiency_still_validates_observed_points(
+    multi_point_question, covered, missing, field
+) -> None:
+    analysis = replace(
+        _analysis(), sufficiency=None, covered_points=covered, missing_points=missing
+    )
+    with pytest.raises(c.ContractError) as failure:
+        c.validate_analysis(
+            analysis,
+            question=multi_point_question,
+            answer_text="부하를 줄이려고 캐시를 선택했습니다",
+            evidence_refs=frozenset({"ev-1"}),
+            allowed_locations=frozenset(),
+        )
+    assert failure.value.stage == "semantic"
+    assert failure.value.field == field
 
 
 def test_unknown_overall_sufficiency_preserves_points_that_were_observed(

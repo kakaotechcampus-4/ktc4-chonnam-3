@@ -205,6 +205,7 @@ def _convert(annotation: object, value: object, name: str, *, wire: bool) -> obj
         if wire and type(value) is dict and is_dataclass(annotation):
             hints = get_type_hints(annotation)
             converted: dict[str, object] = {}
+            # 계약이 소유한 필드만 추출한다. 부가 필드는 버리되 필수값·타입 검증은 유지한다.
             for item in fields(annotation):
                 if item.name in value:
                     converted[item.name] = _convert(
@@ -474,9 +475,14 @@ def validate_analysis(
     _references(covered, keys, "covered_points")
     _references(candidate.missing_points, keys, "missing_points")
     if candidate.sufficiency is None:
+        # 전체 판단을 보류해도 이미 확인한 충족·부족 항목은 그대로 보존한다.
         if not candidate.limitations:
             raise ContractError("semantic", "unevaluable sufficiency")
-    elif set(covered) | set(candidate.missing_points) != keys:
+    # 판단하지 못한 항목은 부족으로 단정하지 않고 한계에 남긴다.
+    # 충분하다는 판정만은 보류 항목 없이 모든 필수 항목을 설명해야 한다.
+    elif set(covered) | set(candidate.missing_points) != keys and (
+        candidate.sufficiency == "sufficient" or not candidate.limitations
+    ):
         raise ContractError("semantic", "point coverage")
     if candidate.evaluation_status != "evaluated" and not candidate.limitations:
         raise ContractError("semantic", "evaluation limitations")
