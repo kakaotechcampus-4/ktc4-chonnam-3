@@ -23,6 +23,8 @@ dependencies = [
     "python-multipart",
     "devon-ai",
     "cryptography>=50.0.1",
+    "pypdf>=6.0",
+    "python-docx>=1.2",
 ]
 
 [tool.uv.sources]
