@@ -107,3 +107,81 @@ DTO 저장 실패와 재연동 경합은 수정 전 실패를 재현한 뒤 통�
   실계정 OAuth·운영 HTTPS 배포 검증은 이번 완료 범위에 포함하지 않는다.
 - develop의 면접 준비 재시도는 직접 `api`를 호출한다. 401 뒤 상태 재조회까지 네트워크 오류로
   실패하면 전역 인증 처리를 거치지 않는 경로는 면접 연결 작업에서 보완한다.
+
+## 2026-09-28 — Task 9 Wanted 저장·재사용과 문서 Preview
+
+기준: develop `7e54047`, 인증 선행 [#57](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/57)
+`0bd0ccd`. [#44](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/44) `a0c1ba7`의
+문서 추출기와 테스트를 재사용했다. 기존 develop의 Wanted 수집·요구사항 변환은 유지한다.
+저장·동시성 선택은 [결정 기록](decisions/0001-task09-persistence.md)을 따른다.
+
+### 변경 범위
+
+- `POST /api/documents/preview`: 기존 세션 인증을 사용한다. PDF/DOCX/TXT/MD, 실제 파일
+  20MiB 상한, 저장된 사용자 소유 문서 ID와 `succeeded/partial/failed` 응답을 구현했다.
+  추출은 threadpool에서 실행하고 파일은 닫는다. 바이너리·claim row는 보관하지 않는다.
+- 본문 및 PDF/DOCX 링크 대상에서 GitHub 저장소 목록을 먼저 얻는다. 이후 URL 주변·프로젝트
+  헤딩 중심으로 보관 텍스트를 축약한다. 초기 설정 `DOCUMENTS_MAX_TEXT_CHARS=50000`은
+  기존 정책 수치를 인용한 것이 아니라 이번 구현의 조정 가능한 기본값이다.
+- 손상 파일·스캔 PDF·빈 파일은 추출 실패로 저장한다. NUL 제거·부분 추출·축약은 partial로
+  표시한다. 손상 링크 메타데이터, DOCX 본문 구조, 본문에서 사용하지 않는 관계 및 PDF 간접
+  URI를 보완했다. 예상하지 못한 코드·DB 오류는 공통 500으로 전달한다.
+- `posting_service.get_or_fetch_posting()`은 Wanted URL을 정규화하고 7일 이내 성공본을
+  재사용한다. 재수집 내용이 같으면 공고·요구사항 ID를 유지하고 확인 시각만 갱신한다.
+  바뀌면 공고·요구사항을 한 transaction으로 새로 저장해 과거 run·면접 참조를 보존한다.
+- 외부 HTTP 호출 뒤 짧은 PostgreSQL URL별 transaction lock에서 자료를 다시 확인해
+  동시 요청의 중복 확정을 막는다. 수집·요구사항 변환 실패는 기존 성공 자료를 덮어쓰지 않는다.
+  `raw_payload`에는 전체 HTTP JSON 대신 어댑터의 원문 그룹·출처 스냅샷을 저장한다.
+- 새 `0002_posting_versions` migration에서 URL UNIQUE를 조회 인덱스로 바꾼다.
+  기존 `0001_initial`은 수정하지 않았다. 여러 버전이 있으면 자료를 삭제하는 대신
+  downgrade를 거절한다.
+- Preview는 file만 받는 공개 계약을 유지하므로 JD 키워드 축약 설명을 수정했다.
+  FE 실행 코드와 7단계 worker 구현은 이번 변경에 포함하지 않는다.
+
+### 실행 결과
+
+Windows·Python 3.12·uv locked 환경에서 전용 PostgreSQL 15와 Redis를 사용했다.
+GitHub·Wanted HTTP는 mock fixture를 사용했으며 LLM은 호출하지 않았다.
+
+| 검증 | 결과 |
+| --- | --- |
+| `backend`: 전체 pytest | 617 passed, skip 0 |
+| 문서 API·추출·GitHub URL 집중 검증 | 98 passed; 네 형식·용량 경계·실제 세션/DB 저장·손상 문서 포함 |
+| 공고 저장·재사용 집중 검증 | 14 passed; 최초/만료 동시 요청·이전 run/면접 참조·실패 보존·원자 rollback 포함 |
+| 새 migration | 기존 행/FK 보존, 두 버전 저장, 위험한 downgrade 거절, 정상 downgrade→upgrade 통과 |
+| Alembic 모델 비교 | `alembic check` 통과 |
+| Ruff check·format, mypy app | 통과; format 213개, mypy 126개 파일 |
+| 의존성 | `uv sync --locked --group dev` 통과 |
+| 공통 계약 검사 | schema 2개·부분 OpenAPI·정상/오류 fixture 7개 통과 |
+| 독립 코드 검토 | DOCX 손상 구조·미참조 링크·PDF 간접 URI를 재현 후 수정; 추가 중요 결함 없음 |
+
+신규 핵심 사례는 수정 전 실패를 확인한 뒤 다시 통과시켰다. 최초 전체 실행의 설정 비교 실패는
+검증 runner가 `DATABASE_URL`을 불필요하게 주입한 원인이었으며, `TEST_DATABASE_URL`만 쓰도록
+실행 환경을 고친 후 위 전체 결과를 확인했다. 공통 계약 검사는 부분 형식 검사이고,
+실제 Wanted 사이트 응답·브라우저 E2E·운영 배포를 검증한 결과는 아니다.
+
+### 후속 연결
+
+- 실제 개발 환경에는 새 의존성을 동기화하고 `alembic upgrade head`를 적용해야 한다.
+  검증용 DB 외의 사용자 DB에는 migration을 실행하지 않았다.
+- Task 11에서 `get_or_fetch_posting()` 결과의 ID를 run에 고정하고
+  `get_posting_requirements()`를 연결한다. 단계 상태·큐·SSE·문서 소유권을 포함한 run 생성은
+  해당 작업에서 구현한다. 이 기록은 분석 전체 흐름의 완료를 뜻하지 않는다.
+- 기존 지시로 보류한 FE 업로드 형식·자소서 제외 변경은 후속 작업이다. OCR, DOCX 머리말·꼬리말
+  및 중첩 표 확장도 구현 범위 밖이며, Preview에서 JD/LLM을 호출하지 않는다.
+
+### PR 준비 시 확인한 선행 변경과 보류
+
+- 한국어 주석으로 파일 전용 요청·세션 소유권, 추출/DB 실행 경계, 실패 문서 저장,
+  원래 URL 표기 보존, 7일 경계와 공고 버전 정렬 이유를 보완했다. 기능 동작은 유지했다.
+  게시할 원본 작업 폴더에서 위 617개 전체 테스트와 Ruff·format·mypy·공통 계약 검사를 다시 통과했다.
+- [#45](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/45) 최신 `e3cc0c7`의
+  포트폴리오 필터 예외는 이 브랜치에 포함하지 않았다. 별도 임시 통합본의 기존 테스트는
+  617개가 통과했지만, 문서 URL과 수집한 full_name의 대소문자 차이를 검사한 추가 사례는
+  6개 실패했다. private 제외 확인 1개는 통과했다. 사용자는 이 검토 뒤 현재 Task 9의
+  게시를 지시했으며, 후보 매칭 수정·관련 명세 문구·BE ADR `0001` 번호 중복은 후속으로 남긴다.
+- [#77](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/77)의 요구사항 목록 기호·20개
+  배분 변경과 [#74](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/74)의 도메인 판정도
+  미반영이다. 병합 후 내용 비교·캐시 및 도메인 저장 연결을 확인해야 한다.
+- develop 대상으로 PR을 작성하므로 미병합 #57의 기존 변경도 비교에 보인다. 이번 변경의
+  기준은 `0bd0ccd`이며 선행 범위와 분리해 검토한다. 기존 `0001_initial`은 develop과 동일하다.

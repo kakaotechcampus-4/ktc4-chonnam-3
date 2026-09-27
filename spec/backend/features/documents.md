@@ -13,7 +13,7 @@
 - 파일 업로드.
 - 텍스트 추출.
 - GitHub URL 추출/정규화.
-- 길이 초과 시 LLM 없이 JD keyword, GitHub URL 주변 문장, 헤딩/프로젝트 섹션 중심으로 축약.
+- GitHub URL 목록을 확보한 뒤 길이 초과 텍스트는 LLM 없이 URL 주변 문장과 헤딩/프로젝트 섹션 중심으로 축약한다. 요청은 file만 받으므로 이 단계에서 JD를 수집하거나 키워드를 추측하지 않는다. [저장 경계 결정](../decisions/0001-task09-persistence.md)을 따른다.
 - `documentId`와 preview 상태를 반환한다.
 
 ## 지원 형식
@@ -34,9 +34,10 @@
 - 포트폴리오 파일 최대 크기: 20MB(20,971,520 bytes). [현재 로컬 기준 채택 결정](../../shared/decisions/0002-local-policy-baseline.md)을 따른다.
 - 파일 바이너리는 Sprint 1에서 저장하지 않는다.
 - DB에는 filename, MIME type, size, extracted_text, extracted_github_urls, extract_status, truncation 여부만 저장한다.
+- extracted_text는 축약 후 보관 텍스트이며, extracted_github_urls는 축약 전 확보한 저장소 목록이다. 내부 추출 실패 원인은 기존 extract_error_code에 기록한다. 보관 텍스트 상한은 DOCUMENTS_MAX_TEXT_CHARS 설정으로 제어하며 초기 구현값은 50,000자다.
 - `document_claims` row 생성은 Sprint 2에서 자소서/포트폴리오 claim 추출을 함께 구현할 때 시작한다.
 
-20MB 정책의 채택은 BE preview API의 크기 검사 구현 완료를 뜻하지 않는다. API 구현 시 같은 상한과 초과 거부를 검증한다.
+BE preview API는 실제 파일 바이트를 검사한다. 상한과 같은 크기는 허용하고 초과하면 413으로 거절한다. 실행 결과는 [구현 기록](../implementation.md)을 따른다.
 
 ## 상태
 

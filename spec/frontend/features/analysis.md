@@ -46,7 +46,7 @@ Sprint 1에서 preview는 포트폴리오 전용이다. 자소서는 `/documents
 
 파일명·크기·추출 내용 등의 기존 DB 저장 설계는 [BE 문서 Preview 명세](../../backend/features/documents.md)를 유지하며, 이를 추가 응답 필드로 노출하지 않는다.
 
-요청에는 선택 필드 `postingUrl`(공고 URL)도 있다 — JD 키워드 기반 축약에 쓰인다. 공고 URL을 먼저 입력받은 뒤 파일을 업로드하면 이 값을 함께 보내는 편이 축약 품질에 유리하다. 파일이 공고 URL보다 먼저 선택되면 이 필드 없이 호출해도 된다(선택 필드).
+요청은 공통 OpenAPI와 실제 호출에 맞춰 `file`만 보낸다. Preview는 공고를 별도로 수집하지 않고 GitHub URL 주변과 프로젝트 섹션으로 축약한다. [BE 저장 경계](../../backend/decisions/0001-task09-persistence.md)를 따른다. 이 계약 설명 정리는 위의 화면 수정 보류를 해제하지 않는다.
 
 `extractStatus === 'failed'`는 hard blocker가 아니다 — "문서 없이 계속 진행" 선택 시 `documentId`를 `analysis-runs` 요청에서 뺀다.
 
