@@ -20,4 +20,5 @@ COPY backend/scripts /srv/backend/scripts
 COPY backend/alembic.ini /srv/backend/alembic.ini
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# OAuth 콜백의 code와 state가 요청 URL과 함께 access log에 기록되지 않게 한다.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
