@@ -82,7 +82,7 @@ AI 기능과 관련되더라도 다음 작업을 `devon_ai`로 옮기거나 중�
 | --- | --- | --- |
 | AI-L01 | 선택한 모델을 설정/seed에서 주입하고 실제 사용값·version 기록. 서비스 인증·SDK/client·호출 경로 연결, 계정 접근·구조화 출력·도구 호출 적합성 검증. 다른 모델·공급자가 필요하면 그때 실제 차이 확인 | task-03·13 |
 | AI-L02 | 기존 Context·Question·Evidence·ToolResult·분석/판단 계약 안에서 타입·null·참조·직렬화 연결. 공고 내용 비교·동시 수집 제약 확인. 실패 원문·조회 중단의 영구 저장 위치는 기존 책임 안에서 확인하고 AI-L18의 자료 정책 적용 | task-02·13 |
-| AI-L03 | JD source_field·requirement_type과 규칙 변환 version 기록, L1 프로젝트 요약의 기존 분석 저장 매핑 확인. prompt version을 변환 version으로 바꾸거나 프로젝트 요약을 개인 역할·description으로 쓰지 않음 | task-04·13, BE JD |
+| AI-L03 | JD source_field·category와 규칙 변환 version 기록, L1 프로젝트 요약의 기존 분석 저장 매핑 확인. prompt version을 변환 version으로 바꾸거나 프로젝트 요약을 개인 역할·description으로 쓰지 않음 | task-04·13, BE JD |
 | AI-L06 | 기존 L2 준비 조건·한계 비공개 유지. 실제 지원 언어·parser·읽기 기능과 실패 repo/path/area의 Context 연결을 fixture로 확인. 아직 읽지 못하는 범위를 지원한다고 선언하지 않음 | task-05·06·08 |
 | AI-L07 | 0017~0018의 직접 기술 비교·기존 run 후보 순서·최대 5개·실제 근거·null 점수를 저장/카드에 연결. 태그 겹침을 전체 요구사항 충족으로 바꾸지 않음 | BE task-10, task-13 |
 | AI-L09 | 기존 재작성/재계획/유효 후보 없음, 미저장 답변 재제출·저장 답변 보완·오류 안내·명시적 나가기를 반환/전송에 연결. 새 수동 이어가기·자동 LLM 반복 없음 | task-09·10·13 |

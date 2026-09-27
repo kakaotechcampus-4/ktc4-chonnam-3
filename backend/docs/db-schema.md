@@ -131,8 +131,11 @@ Sprint 1 DEVON 로그인 세션은 기존 사용자 식별자를 연결한다. �
 - Sprint 1은 Wanted만 지원.
 - `job_postings`는 normalized Wanted URL 기준 재사용을 유지하며, 재조회 내용이 바뀌면 새 공고·요구사항 ID로 저장해 이전 참조를 보존한다. [공고 재조회와 이전 자료 보존](../../spec/backend/features/analysis-run.md#공고-재조회와-이전-자료-보존)을 따른다.
 - `fetched_at` 기준 TTL은 7일(`JD_REUSE_TTL_DAYS=7`).
-- `jd_requirements.requirement_type`: `required`, `preferred`, `unknown`.
-- API 표시용 `category`와 저장 분류를 구분한다. 주요 업무는 `unknown`으로 분류하고 원문 출처를 함께 보존한다. 변환·재조회 규칙은 [분석 Run의 Wanted 공고 수집·분류](../../spec/backend/features/analysis-run.md#wanted-공고-수집분류)를 따른다.
+- `jd_requirements.category`: `required`, `preferred`, `responsibility`.
+  openapi.yaml 의 JdCategory 를 원본으로 한다. `unknown` 버킷은 두지 않으며,
+  어느 항목에도 분류되지 않으면 행을 만들지 않는다. (팀 결정 2026-09-21, PR #41 코멘트 —
+  이전에는 `requirement_type`/`unknown`으로 문서화돼 있었으나 `category`로 통일함, 이슈 #63)
+- 주요 업무(`main_tasks`)는 `category=responsibility`로 저장하고 원문 출처(`source_field`)를 함께 보존한다. 변환·재조회 규칙은 [분석 Run의 Wanted 공고 수집·분류](../../spec/backend/features/analysis-run.md#wanted-공고-수집분류)를 따른다.
 - `skill_tags`를 `tech_tags` 원천으로 사용한다.
 
 ## Report
