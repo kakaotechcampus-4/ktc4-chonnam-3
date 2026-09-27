@@ -538,3 +538,261 @@ async def test_missing_active_prompt_does_not_call_llm_or_create_default_analysi
         await _run(session_factory, run_id, handler)
     _, analyses, _ = await _read(session_factory, run_id)
     assert analyses == []
+
+
+async def test_cache_miss_keeps_original_candidate_batch_position(session_factory):
+    run_id, repo_ids = await _seed(session_factory, count=2)
+    await _run(
+        session_factory,
+        run_id,
+        lambda request: (
+            _github_reply(request)
+            if request.url.host == "api.github.com"
+            else _model_reply(repo_ids)
+        ),
+    )
+
+    def changed(request):
+        if request.url.host == "api.github.com":
+            return _github_reply(request, sha="b" * 40 if "/repo1/" in request.url.path else SHA)
+        return _model_reply(repo_ids[1:], "b" * 40)
+
+    await _run(session_factory, run_id, changed)
+    _, analyses, _ = await _read(session_factory, run_id)
+    fresh = next(row for row in analyses if row.head_sha == "b" * 40)
+    assert fresh.batch_position == 1
+
+
+@pytest.mark.parametrize("case", ["wrong_job_type", "missing_run", "invalid_batch"])
+async def test_rejects_invalid_run_or_batch_before_external_io(session_factory, case):
+    from app.core.errors import AppError
+    from app.shared.enums import Reason
+
+    run_id, _ = await _seed(session_factory)
+    if case == "wrong_job_type":
+        async with session_factory.begin() as session:
+            await session.execute(
+                update(AnalysisJob).where(AnalysisJob.id == run_id).values(job_type="initial_sync")
+            )
+    if case == "missing_run":
+        run_id = uuid.uuid4()
+
+    def unexpected(request):
+        raise AssertionError("잘못된 입력으로 외부 API를 호출함")
+
+    with pytest.raises(AppError) as caught:
+        await _run(
+            session_factory, run_id, unexpected, batch_no=0 if case == "invalid_batch" else 1
+        )
+    assert caught.value.reason == (
+        Reason.INVALID_REQUEST if case == "invalid_batch" else Reason.NOT_FOUND
+    )
+
+
+async def test_later_configuration_failure_does_not_rollback_token_revocation(session_factory):
+    from app.llm_tasks.prompt_loader import PromptNotFoundError
+
+    run_id, _ = await _seed(session_factory)
+    async with session_factory.begin() as session:
+        await session.execute(update(PromptVersion).values(is_active=False))
+
+    def handler(request):
+        assert request.url.host == "api.github.com"
+        return _github_reply(request, unauthorized="author" in request.url.params)
+
+    with pytest.raises(PromptNotFoundError):
+        await _run(session_factory, run_id, handler)
+    async with session_factory() as session:
+        account = (await session.scalars(select(GithubAccount))).one()
+        repo = (await session.scalars(select(Repository))).one()
+    assert account.token_status == "revoked"
+    assert repo.head_sha == SHA
+
+
+async def test_accessibility_change_invalidates_matches_even_with_identical_failure_snapshot(
+    session_factory,
+):
+    run_id, repo_ids = await _seed(session_factory)
+    await _run(
+        session_factory,
+        run_id,
+        lambda request: httpx.Response(500, json={"message": "unavailable"}),
+    )
+    candidates, _, repos = await _read(session_factory, run_id)
+    before = candidates[0].ranking_signals["analysis"].copy()
+    assert candidates[0].filter_status == "eligible" and repos[0].is_accessible
+    async with session_factory.begin() as session:
+        session.add(
+            RepoMatchScore(
+                analysis_job_id=run_id,
+                repository_id=repo_ids[0],
+                candidate_source="rule_filter",
+                is_recommended=False,
+            )
+        )
+    await _run(session_factory, run_id, lambda request: _github_reply(request, inaccessible=True))
+    candidates, _, _ = await _read(session_factory, run_id)
+    assert candidates[0].ranking_signals["analysis"] == before
+    assert candidates[0].filter_status == "excluded"
+    async with session_factory() as session:
+        assert list((await session.scalars(select(RepoMatchScore))).all()) == []
+
+
+async def test_late_unauthorized_response_does_not_revoke_relinked_github_token(session_factory):
+    run_id, _ = await _seed(session_factory)
+
+    async def handler(request):
+        async with session_factory.begin() as session:
+            await session.execute(
+                update(GithubAccount).values(
+                    access_token_encrypted=b"replacement", token_status="valid"
+                )
+            )
+        return _github_reply(request, unauthorized=True)
+
+    await _run(session_factory, run_id, handler)
+    async with session_factory() as session:
+        account = (await session.scalars(select(GithubAccount))).one()
+    assert account.access_token_encrypted == b"replacement" and account.token_status == "valid"
+
+
+async def test_unstorable_readme_is_partial_without_losing_other_repositories(session_factory):
+    run_id, repo_ids = await _seed(session_factory, count=2)
+
+    def handler(request):
+        if request.url.host != "api.github.com":
+            return _model_reply(repo_ids)
+        if request.url.path.endswith("/repo0/readme"):
+            return httpx.Response(
+                200,
+                json={"encoding": "base64", "content": base64.b64encode(b"bad\x00readme").decode()},
+            )
+        return _github_reply(request)
+
+    await _run(session_factory, run_id, handler)
+    candidates, analyses, repos = await _read(session_factory, run_id)
+    assert repos[0].readme_text is None and repos[1].readme_text == "Python service README"
+    snapshots = [candidate.ranking_signals["analysis"] for candidate in candidates]
+    assert [snapshot["status"] for snapshot in snapshots] == ["partial", "succeeded"]
+    assert snapshots[0]["error_code"] == "no_readme" and len(analyses) == 2
+
+
+async def test_unstorable_language_name_is_partial_without_losing_known_languages(session_factory):
+    run_id, repo_ids = await _seed(session_factory)
+
+    def handler(request):
+        if request.url.host != "api.github.com":
+            return _model_reply(repo_ids)
+        if request.url.path.endswith("/languages"):
+            return httpx.Response(200, json={"Python": 100, "bad\x00language": 10})
+        return _github_reply(request)
+
+    await _run(session_factory, run_id, handler)
+    candidates, _, repos = await _read(session_factory, run_id)
+    assert repos[0].languages == {"Python": 100}
+    assert candidates[0].ranking_signals["analysis"]["status"] == "partial"
+
+
+@pytest.mark.parametrize("invalid_tech", ["Py\x00thon", "Py\ud800thon"])
+async def test_unstorable_model_fields_fail_only_the_affected_repository(
+    session_factory, invalid_tech
+):
+    run_id, repo_ids = await _seed(session_factory, count=2)
+
+    def handler(request):
+        if request.url.host == "api.github.com":
+            return _github_reply(request)
+        return _model_reply(repo_ids, invalid_tech=invalid_tech)
+
+    await _run(session_factory, run_id, handler)
+    candidates, analyses, _ = await _read(session_factory, run_id)
+    assert [candidate.ranking_signals["analysis"]["status"] for candidate in candidates] == [
+        "failed",
+        "succeeded",
+    ]
+    failed = next(row for row in analyses if row.repository_id == repo_ids[0])
+    assert failed.error_code == "llm_failed" and failed.tech_stack == [] and failed.result is None
+    assert failed.raw_output is not None
+
+
+async def test_unstorable_raw_model_output_is_retained_as_escaped_failure_record(session_factory):
+    run_id, repo_ids = await _seed(session_factory)
+
+    def handler(request):
+        if request.url.host == "api.github.com":
+            return _github_reply(request)
+        payload = _model_reply(repo_ids).json()
+        payload["output"][0]["content"][0]["text"] = "invalid\x00model\ud800output"
+        return httpx.Response(
+            200,
+            content=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+
+    await _run(session_factory, run_id, handler)
+    _, analyses, _ = await _read(session_factory, run_id)
+    assert analyses[0].status == "failed"
+    assert analyses[0].raw_output == r"invalid\u0000model\ud800output"
+
+
+async def test_candidate_l1_match_card_flow_uses_only_sentence_backed_requirements(session_factory):
+    from sqlalchemy import delete
+
+    from app.core.errors import AppError
+    from app.db.models.posting import JdRequirement, JobPosting
+    from app.features.analysis.candidates import prepare_candidates
+    from app.features.analysis.cards import get_repository_cards
+    from app.features.analysis.matching import refresh_matches
+    from app.shared.enums import Reason
+
+    run_id, repo_ids = await _seed(session_factory, count=2)
+    async with session_factory.begin() as session:
+        await session.execute(delete(AnalysisRepoCandidate))
+        await session.execute(update(Repository).values(size_kb=100))
+        posting = JobPosting(
+            normalized_url="https://www.wanted.co.kr/wd/1",
+            raw_url="https://www.wanted.co.kr/wd/1",
+            parse_status="succeeded",
+            skill_tags=["Python"],
+        )
+        session.add(posting)
+        await session.flush()
+        await session.execute(
+            update(AnalysisJob).where(AnalysisJob.id == run_id).values(job_posting_id=posting.id)
+        )
+        requirements = [
+            JdRequirement(
+                job_posting_id=posting.id,
+                category="required",
+                text=sentence,
+                display_order=n,
+                tech_tags=["Python"],
+            )
+            for n, sentence in enumerate(["Python 개발 경험", "협업 경험"])
+        ]
+        session.add_all(requirements)
+        await session.flush()
+        expected_requirement_id = requirements[0].id
+        await prepare_candidates(
+            session, run_id, portfolio_full_names=["OWNER/REPO0"], min_size_kb=50
+        )
+    await _run(
+        session_factory,
+        run_id,
+        lambda request: (
+            _github_reply(request)
+            if request.url.host == "api.github.com"
+            else _model_reply(repo_ids)
+        ),
+    )
+    async with session_factory.begin() as session:
+        with pytest.raises(AppError) as caught:
+            await get_repository_cards(session, run_id)
+        assert caught.value.reason == Reason.NOT_READY
+    async with session_factory.begin() as session:
+        await refresh_matches(session, run_id)
+        cards = await get_repository_cards(session, run_id)
+    assert len(cards) == 2
+    assert all(card.recommended and card.match_score is None for card in cards)
+    assert all(card.matched_requirement_ids == [expected_requirement_id] for card in cards)
+    assert cards[0].candidate_source == "both" and cards[1].candidate_source == "rule_filter"
