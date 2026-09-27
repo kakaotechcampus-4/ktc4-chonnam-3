@@ -942,6 +942,11 @@ def parse_shallow_batch(
             _sha(cast(str, item["head_sha"]))
             if item["head_sha"] != source.head_sha:
                 raise ContractError("semantic", "head_sha mismatch")
+            # decode는 모르는 키를 버리므로 L2 관찰·개인 기여 값이 빠진 성공이 되지 않게 거절한다.
+            # 다른 ref 결과는 먼저 semantic으로 확정해 재요청 대상이 되지 않게 한다.
+            unexpected = set(item) - {name.name for name in fields(ShallowRepoAnalysis)}
+            if unexpected:
+                raise ContractError("schema", min(unexpected))
             candidate = decode(ShallowRepoAnalysis, item)
         except ContractError as error:
             failures.append(
@@ -970,6 +975,28 @@ def parse_shallow_batch(
             )
         )
     return _checked(ShallowBatchResult(tuple(succeeded), tuple(failures)))
+
+
+def merge_shallow_retry(
+    first: ContractChecked[ShallowBatchResult], retry: ContractChecked[ShallowBatchResult]
+) -> ContractChecked[ShallowBatchResult]:
+    """재요청 결과로 첫 배치의 식별된 schema 실패만 교체한다. 첫 성공과 다른 실패는 보존한다."""
+    base = _checked_data(first, ShallowBatchResult)
+    again = _checked_data(retry, ShallowBatchResult)
+    retried = {
+        item.repository_id
+        for item in base.failed
+        if item.stage == "schema" and item.repository_id is not None
+    }
+    kept = {item.repository_id for item in base.succeeded}
+    failed = [
+        item
+        for item in base.failed
+        if not (item.stage == "schema" and item.repository_id in retried)
+    ]
+    # 재요청 응답이 이미 성공한 저장소를 다시 언급해도 첫 성공을 실패로 뒤집지 않는다.
+    failed += [item for item in again.failed if item.repository_id not in kept]
+    return _checked(ShallowBatchResult(base.succeeded + again.succeeded, tuple(failed)))
 
 
 @dataclass(frozen=True)
