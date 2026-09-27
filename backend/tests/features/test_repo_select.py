@@ -7,10 +7,19 @@ from app.features.analysis.pipeline.steps.repo_select import (
     FILTER_STATUS_EXCLUDED,
     SELECTION_BASE_RANK_TOP,
     SELECTION_PORTFOLIO_MENTIONED,
+    is_inaccessible,
     matched_portfolio_count,
+    reclassify_inaccessible,
     select_candidates,
 )
-from app.integrations.github.base import RepoSummary
+from app.integrations.github.base import (
+    FILTER_INACCESSIBLE,
+    GITHUB_ERROR_NO_README,
+    GITHUB_ERROR_RATE_LIMITED,
+    GITHUB_ERROR_REPO_UNREACHABLE,
+    RepoDetail,
+    RepoSummary,
+)
 
 MIN_SIZE_KB = 50
 
@@ -130,3 +139,80 @@ def test_matched_portfolio_count_ignores_names_not_found() -> None:
 
     found, total = matched_portfolio_count(selections, portfolio_names)
     assert (found, total) == (1, 2)
+
+
+# ── inaccessible (task-08 완료 조건: 7번째 케이스) ─────────────────────────
+
+
+def test_is_inaccessible_when_every_field_failed_with_repo_unreachable() -> None:
+    detail = RepoDetail(errors=[GITHUB_ERROR_REPO_UNREACHABLE, GITHUB_ERROR_REPO_UNREACHABLE])
+    assert is_inaccessible(detail) is True
+
+
+def test_is_not_inaccessible_when_only_rate_limited() -> None:
+    """아직 확인 못 했을 뿐이지 레포가 사라졌는지는 모른다."""
+    detail = RepoDetail(errors=[GITHUB_ERROR_RATE_LIMITED], rate_limit_retry_after_seconds=30)
+    assert is_inaccessible(detail) is False
+
+
+def test_is_not_inaccessible_when_only_readme_missing() -> None:
+    """레포는 있는데 README 만 없는 정상 케이스."""
+    detail = RepoDetail(
+        languages={"Python": 100},
+        head_sha="a" * 40,
+        commit_count=10,
+        errors=[GITHUB_ERROR_NO_README],
+    )
+    assert is_inaccessible(detail) is False
+
+
+def test_is_not_inaccessible_when_some_fields_succeeded() -> None:
+    """일부만 실패한 partial 은 inaccessible 이 아니다 — 레포 자체는 접근 가능하다."""
+    detail = RepoDetail(languages={"Python": 100}, errors=[GITHUB_ERROR_REPO_UNREACHABLE])
+    assert is_inaccessible(detail) is False
+
+
+def test_reclassify_downgrades_eligible_candidate_that_became_inaccessible() -> None:
+    repo = _repo("gone")
+    selections = select_candidates([repo], min_size_kb=MIN_SIZE_KB)
+    details = {"user/gone": RepoDetail(errors=[GITHUB_ERROR_REPO_UNREACHABLE])}
+
+    updated = reclassify_inaccessible(selections, details)
+
+    assert len(updated) == 1
+    assert updated[0].filter_status == FILTER_STATUS_EXCLUDED
+    assert updated[0].filter_reason == FILTER_INACCESSIBLE
+    assert updated[0].selection_reason is None
+    # base_rank 는 원래 순위를 유지한다.
+    assert updated[0].base_rank == selections[0].base_rank
+
+
+def test_reclassify_leaves_healthy_candidate_untouched() -> None:
+    repo = _repo("alive")
+    selections = select_candidates([repo], min_size_kb=MIN_SIZE_KB)
+    details = {"user/alive": RepoDetail(languages={"Python": 100})}
+
+    updated = reclassify_inaccessible(selections, details)
+
+    assert updated == selections
+
+
+def test_reclassify_leaves_already_excluded_candidate_untouched() -> None:
+    """rule filter 로 이미 excluded 된 후보는 repo_detail 대상이 아니라 건드리지 않는다."""
+    repo = _repo("forked", is_fork=True)
+    selections = select_candidates([repo], min_size_kb=MIN_SIZE_KB)
+    assert selections[0].filter_status == FILTER_STATUS_EXCLUDED
+
+    updated = reclassify_inaccessible(selections, {"user/forked": RepoDetail()})
+
+    assert updated == selections
+
+
+def test_reclassify_skips_repos_with_no_detail_result() -> None:
+    """repo_detail 을 아예 부르지 못한(rate limit 로 스킵된) repo 는 그대로 둔다."""
+    repo = _repo("skipped")
+    selections = select_candidates([repo], min_size_kb=MIN_SIZE_KB)
+
+    updated = reclassify_inaccessible(selections, {})
+
+    assert updated == selections

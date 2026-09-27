@@ -9,9 +9,15 @@
 확정본 §2 룰 필터 / task-08
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from app.integrations.github.base import RepoSummary, filter_reason
+from app.integrations.github.base import (
+    FILTER_INACCESSIBLE,
+    GITHUB_ERROR_REPO_UNREACHABLE,
+    RepoDetail,
+    RepoSummary,
+    filter_reason,
+)
 
 # analysis_repo_candidates.selection_reason (docs/db-schema.md CANDIDATE_SELECTION_REASONS)
 SELECTION_PORTFOLIO_MENTIONED = "portfolio_mentioned"
@@ -109,6 +115,59 @@ def matched_portfolio_count(
         if selection.repo.full_name in portfolio_full_names
     }
     return len(matched), len(portfolio_full_names)
+
+
+def reclassify_inaccessible(
+    selections: list[CandidateSelection], details: dict[str, RepoDetail]
+) -> list[CandidateSelection]:
+    """repo_detail(step 3) 결과를 보고 eligible 후보 중 사라진 레포를 excluded/inaccessible 로
+    내린다.
+
+    입력: select_candidates() 결과, {full_name: RepoDetail}(repo_detail.collect_repo_details 출력).
+    출력: 갱신된 CandidateSelection 목록(base_rank·순서는 그대로 유지).
+
+    룰 필터·포폴 매칭 시점에는 레포가 있었더라도, repo_detail 이 실제로 불러본 시점에
+    삭제·private 전환·권한 상실로 전부 실패할 수 있다(base.py FILTER_INACCESSIBLE 의
+    "실제 호출이 실패해야 알 수 있다"가 이 지점이다). rate limit 로 아직 확인 못 했거나
+    README 만 없는 경우는 inaccessible 이 아니다 — is_inaccessible() 이 이를 구분한다.
+    """
+    updated: list[CandidateSelection] = []
+    for selection in selections:
+        detail = details.get(selection.repo.full_name)
+        if (
+            selection.filter_status == FILTER_STATUS_ELIGIBLE
+            and detail is not None
+            and is_inaccessible(detail)
+        ):
+            updated.append(
+                replace(
+                    selection,
+                    filter_status=FILTER_STATUS_EXCLUDED,
+                    filter_reason=FILTER_INACCESSIBLE,
+                    selection_reason=None,
+                )
+            )
+        else:
+            updated.append(selection)
+    return updated
+
+
+def is_inaccessible(detail: RepoDetail) -> bool:
+    """레포 자체가 사라졌는지(삭제·private 전환·권한 상실) 판정한다.
+
+    입력: RepoDetail(repo_detail 의 L0-b 수집 결과). 출력: inaccessible 여부.
+
+    languages/readme/head_sha/commit_count 를 전부 못 얻었고 그 원인에 repo_unreachable
+    (404 등)이 있어야 한다. rate_limited 만 있는 경우(아직 확인 못 했을 뿐 레포가 있는지는
+    모른다)나 no_readme 만 있는 경우(레포는 있는데 README 만 없음)는 inaccessible 이 아니다.
+    """
+    all_fields_empty = (
+        not detail.languages
+        and detail.readme_text is None
+        and detail.head_sha is None
+        and detail.commit_count is None
+    )
+    return all_fields_empty and GITHUB_ERROR_REPO_UNREACHABLE in detail.errors
 
 
 def _pushed_at_sort_key(repo: RepoSummary) -> tuple[bool, object]:
