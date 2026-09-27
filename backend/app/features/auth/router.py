@@ -1,6 +1,7 @@
 """Browser navigation endpoints and idempotent session logout."""
 
 from typing import Annotated
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,22 @@ from app.features.auth.service import finish_oauth
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 Database = Annotated[AsyncSession, Depends(get_db)]
+CALLBACK_ERROR_REASONS = {
+    Reason.INVALID_STATE,
+    Reason.INVALID_CODE,
+    Reason.PROVIDER_UNAVAILABLE,
+    Reason.GITHUB_ALREADY_LINKED,
+    Reason.ACCOUNT_SUSPENDED,
+    Reason.ACCOUNT_WITHDRAWN,
+}
+
+
+def _login_error(display_code: str, retry_link: bool = False) -> RedirectResponse:
+    # 공급자 원문·code·state 대신 서버가 정한 안내 코드만 고정된 로그인 경로로 보낸다.
+    params = {"error": display_code}
+    if retry_link:
+        params["flow"] = "link"
+    return RedirectResponse("/login?" + urlencode(params), status_code=302)
 
 
 def _state_cookie(response: Response, settings: Settings, value: str | None) -> None:
@@ -78,6 +95,7 @@ async def _callback(
     request: Request, db: AsyncSession, expected_purpose: Purpose | None = None
 ) -> Response:
     settings = request.app.state.settings
+    retry_link = False
     try:
         record = await request.app.state.oauth_states.consume(
             request.query_params.get("state"), request.cookies.get("oauthState"), expected_purpose
@@ -85,12 +103,14 @@ async def _callback(
         purpose = record.purpose
         # 연동을 시작한 로그인 세션이 사라지거나 사용자가 바뀌면 계정을 연결하지 않는다.
         user = await _browser_user(request, db) if purpose == "link" else None
+        if user is not None and user.id != record.user_id:
+            raise AppError(Reason.INVALID_STATE)
+        # 재시도 목적은 쿼리가 아니라 검증된 state와 현재 사용자에서만 정한다.
+        retry_link = purpose == "link" and user is not None
         if purpose == "link" and user is None:
             response: Response = RedirectResponse("/login", status_code=302)
-        elif user is not None and user.id != record.user_id:
-            raise AppError(Reason.INVALID_STATE)
         elif request.query_params.get("error") == "access_denied":
-            response = RedirectResponse("/login?error=denied", status_code=302)
+            response = _login_error("denied", retry_link)
         else:
             code = request.query_params.get("code")
             if request.query_params.get("error") or not code or len(code) > 512:
@@ -117,7 +137,22 @@ async def _callback(
                     raise
                 set_session_cookie(response, settings, sid)
     except AppError as error:
-        response = JSONResponse(error.to_envelope(), status_code=error.status_code)
+        if error.reason in CALLBACK_ERROR_REASONS:
+            display_code = error.reason.value
+            if (
+                error.reason == Reason.PROVIDER_UNAVAILABLE
+                and error.details.get("configurationError") is True
+            ):
+                display_code = "provider_configuration"
+            response = _login_error(
+                display_code,
+                retry_link
+                and error.reason
+                in {Reason.INVALID_CODE, Reason.PROVIDER_UNAVAILABLE, Reason.GITHUB_ALREADY_LINKED},
+            )
+        else:
+            # Redis·세션·작업 등록 장애를 로그인 오류로 바꾸지 않고 기존 서버 오류를 유지한다.
+            response = JSONResponse(error.to_envelope(), status_code=error.status_code)
     _state_cookie(response, settings, None)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"

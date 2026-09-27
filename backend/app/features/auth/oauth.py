@@ -172,6 +172,8 @@ class GitHubOAuth:
             raise AppError(
                 Reason.PROVIDER_UNAVAILABLE,
                 message="GitHub 로그인 설정이 서비스와 맞지 않습니다. 관리자에게 문의해주세요.",
+                # 콜백 안내에서도 설정 불일치와 일시적인 연결 장애를 구분한다.
+                details={"configurationError": True},
             )
         return OAuthToken(token, scope)
 

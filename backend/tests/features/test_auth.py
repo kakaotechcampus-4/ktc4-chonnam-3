@@ -95,8 +95,8 @@ async def test_wrong_browser_replay_and_wrong_purpose_do_not_login(client, redis
         params={"code": "code", "state": state},
         headers={"cookie": "oauthState=other"},
     )
-    assert response.status_code == 400
-    assert response.json()["error"]["reason"] == "invalid_state"
+    assert response.status_code == 302
+    assert response.headers["location"] == "/login?error=invalid_state"
     response = await client.get(
         "/api/auth/github/callback",
         params={"code": "code", "state": state},
@@ -108,7 +108,8 @@ async def test_wrong_browser_replay_and_wrong_purpose_do_not_login(client, redis
         params={"code": "code", "state": state},
         headers={"cookie": f"oauthState={state}"},
     )
-    assert replay.status_code == 400
+    assert replay.status_code == 302
+    assert replay.headers["location"] == "/login?error=invalid_state"
     assert "devon_session" not in replay.cookies
     assert len(await redis.keys("auth:sess:*")) == 1
 
@@ -141,8 +142,8 @@ async def test_blocked_accounts_cannot_login_or_access_api(client, db, github, s
     assert response.status_code == 403
     assert response.json()["error"]["reason"] == reason
     response = await login(client)
-    assert response.status_code == 403
-    assert response.json()["error"]["reason"] == reason
+    assert response.status_code == 302
+    assert response.headers["location"] == f"/login?error={reason}"
     assert "devon_session" not in response.cookies
 
 
@@ -176,8 +177,8 @@ async def test_relink_requires_session_and_cannot_change_account(client, db, app
         params={"code": "code", "state": state},
         headers={"cookie": f"oauthState={state}; devon_session={sid}"},
     )
-    assert response.status_code == 409
-    assert response.json()["error"]["reason"] == "github_already_linked"
+    assert response.status_code == 302
+    assert response.headers["location"] == "/login?error=github_already_linked&flow=link"
     await db.refresh(account)
     assert account.github_user_id == 1001
     assert account.access_token_encrypted == old_token
@@ -201,7 +202,8 @@ async def test_canonical_relink_keeps_session_and_legacy_link_rejects_login_stat
         params={"code": "code", "state": state},
         headers={"cookie": f"oauthState={state}; devon_session={sid}"},
     )
-    assert wrong.status_code == 400
+    assert wrong.status_code == 302
+    assert wrong.headers["location"] == "/login?error=invalid_state"
     start = await client.get("/api/auth/github/link")
     state = parse_qs(urlsplit(start.headers["location"]).query)["state"][0]
     response = await client.get(
@@ -249,8 +251,8 @@ async def test_canonical_link_callback_is_bound_to_starting_user(client, app, db
         params={"code": "code", "state": state},
         headers={"cookie": f"oauthState={state}; devon_session={sid}"},
     )
-    assert response.status_code == 400
-    assert response.json()["error"]["reason"] == "invalid_state"
+    assert response.status_code == 302
+    assert response.headers["location"] == "/login?error=invalid_state"
 
 
 async def test_concurrent_first_login_uses_one_identity(app, db, github):
