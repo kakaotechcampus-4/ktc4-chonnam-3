@@ -1,12 +1,13 @@
-"""repo_select 룰 필터 + 포폴 합집합 (task-08)."""
+"""전체 후보 보존, 첫 배치 혼합 선택과 접근 불가 판정."""
 
 from datetime import UTC, datetime, timedelta
+
+import pytest
 
 from app.features.analysis.pipeline.steps.repo_select import (
     FILTER_STATUS_ELIGIBLE,
     FILTER_STATUS_EXCLUDED,
     SELECTION_BASE_RANK_TOP,
-    SELECTION_PORTFOLIO_MENTIONED,
     is_inaccessible,
     matched_portfolio_count,
     reclassify_inaccessible,
@@ -70,22 +71,31 @@ def test_rule_filter_passes_only_matching_repos() -> None:
     assert by_name["private"].filter_reason == "private"
 
 
-def test_rule_filter_passes_top_n_by_pushed_at_and_excludes_rest() -> None:
+def test_candidates_outside_first_batch_remain_eligible() -> None:
     repos = [_repo(f"r{i}", pushed_days_ago=i) for i in range(15)]
 
     selections = select_candidates(repos, min_size_kb=MIN_SIZE_KB, limit=10)
 
     eligible = [s for s in selections if s.filter_status == FILTER_STATUS_ELIGIBLE]
-    assert len(eligible) == 10
-    assert {s.repo.name for s in eligible} == {f"r{i}" for i in range(10)}
-    # limit 을 넘겨 탈락한 r10..r14 는 반환에 아예 포함되지 않는다(초과분 excluded 기록 없음).
-    assert {s.repo.name for s in selections} == {f"r{i}" for i in range(10)}
+    assert len(eligible) == 15
+    assert [s.base_rank for s in selections] == list(range(1, 16))
+    assert [s.repo.name for s in selections if s.batch_no == 1] == ["r0", "r1", "r2", "r3", "r4"]
+    assert all(s.batch_rank is None and s.selection_reason is None for s in selections[5:])
 
 
-def test_portfolio_repo_bypasses_rule_filter() -> None:
+@pytest.mark.parametrize("reason", ["private", "fork", "archived", "no_language", "too_small"])
+def test_portfolio_repo_cannot_bypass_rule_filter(reason: str) -> None:
     repos = [
-        *[_repo(f"r{i}", pushed_days_ago=i) for i in range(10)],  # limit 을 가득 채운다
-        _repo("side_project", pushed_days_ago=99, is_archived=True),
+        _repo("ok"),
+        _repo(
+            "side_project",
+            pushed_days_ago=99,
+            is_private=reason == "private",
+            is_fork=reason == "fork",
+            is_archived=reason == "archived",
+            primary_language=None if reason == "no_language" else "Python",
+            size_kb=10 if reason == "too_small" else 100,
+        ),
     ]
 
     selections = select_candidates(
@@ -96,11 +106,11 @@ def test_portfolio_repo_bypasses_rule_filter() -> None:
     )
 
     side = next(s for s in selections if s.repo.name == "side_project")
-    assert side.filter_status == FILTER_STATUS_ELIGIBLE
-    assert side.filter_reason is None
-    assert side.selection_reason == SELECTION_PORTFOLIO_MENTIONED
-    # base_rank 는 조작하지 않는다 — pushed_at 기준 원래 순위(맨 마지막)를 유지한다.
-    assert side.base_rank == 11
+    assert side.filter_status == FILTER_STATUS_EXCLUDED
+    assert side.filter_reason == reason
+    assert side.selection_reason is None
+    assert side.batch_no is None and side.batch_rank is None
+    assert side.base_rank == 2
 
 
 def test_base_rank_is_independent_of_filter_or_portfolio_result() -> None:
@@ -144,9 +154,17 @@ def test_matched_portfolio_count_ignores_names_not_found() -> None:
 # ── inaccessible (task-08 완료 조건: 7번째 케이스) ─────────────────────────
 
 
-def test_is_inaccessible_when_every_field_failed_with_repo_unreachable() -> None:
-    detail = RepoDetail(errors=[GITHUB_ERROR_REPO_UNREACHABLE, GITHUB_ERROR_REPO_UNREACHABLE])
+def test_is_inaccessible_with_confirmed_repository_unavailability() -> None:
+    detail = RepoDetail(repository_inaccessible=True, errors=[GITHUB_ERROR_REPO_UNREACHABLE])
     assert is_inaccessible(detail) is True
+
+
+def test_transient_failures_without_data_do_not_exclude_candidate() -> None:
+    selections = select_candidates([_repo("retryable")], min_size_kb=MIN_SIZE_KB)
+    detail = RepoDetail(errors=[GITHUB_ERROR_REPO_UNREACHABLE])
+
+    assert is_inaccessible(detail) is False
+    assert reclassify_inaccessible(selections, {"user/retryable": detail}) == selections
 
 
 def test_is_not_inaccessible_when_only_rate_limited() -> None:
@@ -175,15 +193,20 @@ def test_is_not_inaccessible_when_some_fields_succeeded() -> None:
 def test_reclassify_downgrades_eligible_candidate_that_became_inaccessible() -> None:
     repo = _repo("gone")
     selections = select_candidates([repo], min_size_kb=MIN_SIZE_KB)
-    details = {"user/gone": RepoDetail(errors=[GITHUB_ERROR_REPO_UNREACHABLE])}
+    details = {
+        "user/gone": RepoDetail(
+            repository_inaccessible=True, errors=[GITHUB_ERROR_REPO_UNREACHABLE]
+        )
+    }
 
     updated = reclassify_inaccessible(selections, details)
 
     assert len(updated) == 1
     assert updated[0].filter_status == FILTER_STATUS_EXCLUDED
     assert updated[0].filter_reason == FILTER_INACCESSIBLE
-    assert updated[0].selection_reason is None
-    # base_rank 는 원래 순위를 유지한다.
+    # 제외 상태와 별개로 어떤 배치에서 수집을 시도했는지는 보존한다.
+    assert updated[0].selection_reason == SELECTION_BASE_RANK_TOP
+    assert (updated[0].batch_no, updated[0].batch_rank) == (1, 1)
     assert updated[0].base_rank == selections[0].base_rank
 
 
