@@ -280,3 +280,261 @@ async def _read(sessions, run_id):
             (await session.scalars(select(Repository).order_by(Repository.github_repo_id))).all()
         )
         return candidates, analyses, repos
+
+
+async def test_detail_and_l1_persist_then_cache_requires_exact_sha_and_prompt(session_factory):
+    run_id, repo_ids = await _seed(session_factory)
+    current_sha = SHA
+    model_calls = 0
+    checked_out = 0
+
+    def checkout(*args):
+        nonlocal checked_out
+        checked_out += 1
+
+    def checkin(*args):
+        nonlocal checked_out
+        checked_out -= 1
+
+    engine = session_factory.kw["bind"]
+    event.listen(engine.sync_engine, "checkout", checkout)
+    event.listen(engine.sync_engine, "checkin", checkin)
+
+    async def handler(request):
+        nonlocal model_calls
+        # 외부 I/O 중에는 앞선 DB 조회 transaction이 남아 있지 않아야 한다.
+        assert checked_out == 0
+        if request.url.host == "api.github.com":
+            return _github_reply(request, sha=current_sha)
+        model_calls += 1
+        return _model_reply(repo_ids, current_sha)
+
+    await _run(session_factory, run_id, handler)
+    await _run(session_factory, run_id, handler)
+    candidates, analyses, repos = await _read(session_factory, run_id)
+    assert model_calls == 1
+    assert len(analyses) == 1
+    assert analyses[0].tech_stack == ["Python"] and analyses[0].model == "actual-model"
+    assert (
+        analyses[0].summary is None
+        and analyses[0].result["project_role_summary"] == "service project"
+    )
+    assert repos[0].languages == {"Python": 100} and repos[0].head_sha == SHA
+    assert repos[0].readme_text == "Python service README" and repos[0].user_commit_count == 1
+    assert candidates[0].ranking_signals["existing"] == "kept"
+    assert candidates[0].ranking_signals["analysis"] == {
+        "analysis_id": str(analyses[0].id),
+        "head_sha": SHA,
+        "prompt_version": "repo_shallow_v1",
+        "status": "succeeded",
+        "error_code": None,
+    }
+    current_sha = "b" * 40
+    await _run(session_factory, run_id, handler)
+    async with session_factory.begin() as session:
+        await session.execute(update(PromptVersion).values(is_active=False))
+        session.add(
+            PromptVersion(
+                task_name="repo_shallow",
+                version="repo_shallow_v2",
+                model="configured-model",
+                template="fixture prompt 2",
+                is_active=True,
+            )
+        )
+    await _run(session_factory, run_id, handler)
+    candidates, analyses, _ = await _read(session_factory, run_id)
+    assert model_calls == 3 and len(analyses) == 3
+    assert candidates[0].ranking_signals["analysis"]["prompt_version"] == "repo_shallow_v2"
+
+
+async def test_failed_cache_is_retried_without_rewriting_the_earlier_run_failure(session_factory):
+    run_id, repo_ids = await _seed(session_factory)
+
+    def fail(request):
+        if request.url.host == "api.github.com":
+            return _github_reply(request)
+        return httpx.Response(
+            400, json={"error": {"message": "fixture rejection", "type": "invalid_request_error"}}
+        )
+
+    await _run(session_factory, run_id, fail)
+    old_candidates, old_analyses, _ = await _read(session_factory, run_id)
+    old_snapshot = old_candidates[0].ranking_signals["analysis"].copy()
+    assert old_snapshot["status"] == "failed" and old_snapshot["error_code"] == "llm_failed"
+    next_run = await _another_run(session_factory, run_id, repo_ids[0])
+    await _run(
+        session_factory,
+        next_run,
+        lambda request: (
+            _github_reply(request)
+            if request.url.host == "api.github.com"
+            else _model_reply(repo_ids)
+        ),
+    )
+    candidates, analyses, _ = await _read(session_factory, run_id)
+    next_candidates, _, _ = await _read(session_factory, next_run)
+    assert len(analyses) == 1 and analyses[0].id == old_analyses[0].id
+    assert analyses[0].status == "succeeded"
+    assert candidates[0].ranking_signals["analysis"] == old_snapshot
+    assert next_candidates[0].ranking_signals["analysis"]["status"] == "succeeded"
+    results = importlib.import_module("app.features.analysis.analysis_results")
+    assert results.resolve_bound_analysis(candidates[0], {analyses[0].id: analyses[0]}) is None
+
+
+@pytest.mark.parametrize("truncated", [False, True])
+async def test_partial_collection_keeps_fields_and_cannot_be_selected_as_success(
+    session_factory, truncated
+):
+    run_id, repo_ids = await _seed(session_factory)
+
+    def handler(request):
+        return (
+            _github_reply(request, missing_readme=not truncated)
+            if request.url.host == "api.github.com"
+            else _model_reply(repo_ids)
+        )
+
+    await _run(session_factory, run_id, handler, readme_max_chars=5 if truncated else 20000)
+    candidates, analyses, repos = await _read(session_factory, run_id)
+    assert analyses[0].status == "partial" and analyses[0].tech_stack == ["Python"]
+    assert analyses[0].error_code == (None if truncated else "no_readme")
+    assert candidates[0].ranking_signals["analysis"]["status"] == "partial"
+    assert repos[0].is_accessible is True and repos[0].languages == {"Python": 100}
+    assert repos[0].readme_truncated is truncated
+
+
+async def test_inaccessible_repository_is_excluded_without_fabricated_l1(session_factory):
+    run_id, _ = await _seed(session_factory)
+
+    def handler(request):
+        assert request.url.host == "api.github.com"
+        return _github_reply(request, inaccessible=True)
+
+    await _run(session_factory, run_id, handler)
+    candidates, analyses, repos = await _read(session_factory, run_id)
+    assert analyses == [] and repos[0].is_accessible is False
+    assert (
+        candidates[0].filter_status == "excluded" and candidates[0].filter_reason == "inaccessible"
+    )
+    assert candidates[0].ranking_signals["analysis"] == {
+        "analysis_id": None,
+        "head_sha": None,
+        "prompt_version": None,
+        "status": "failed",
+        "error_code": "repo_unreachable",
+    }
+
+
+async def test_token_failure_revokes_account_and_blocks_subsequent_collection(session_factory):
+    run_id, _ = await _seed(session_factory, count=2)
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return _github_reply(request, unauthorized=True)
+
+    await _run(session_factory, run_id, handler)
+    await _run(session_factory, run_id, handler)
+    candidates, analyses, _ = await _read(session_factory, run_id)
+    async with session_factory() as session:
+        account = (await session.scalars(select(GithubAccount))).one()
+    assert account.token_status == "revoked" and len(requests) == 1
+    assert analyses == []
+    assert all(
+        candidate.ranking_signals["analysis"]["error_code"] == "token_invalid"
+        for candidate in candidates
+    )
+
+
+async def test_late_failure_cannot_overwrite_concurrent_success_or_its_binding(session_factory):
+    run_id, repo_ids = await _seed(session_factory)
+    waiting = asyncio.Event()
+    release_failure = asyncio.Event()
+
+    async def delayed_failure(request):
+        if request.url.host == "api.github.com":
+            return _github_reply(request)
+        waiting.set()
+        await asyncio.wait_for(release_failure.wait(), timeout=10)
+        return httpx.Response(
+            400, json={"error": {"message": "fixture rejection", "type": "invalid_request_error"}}
+        )
+
+    task = asyncio.create_task(_run(session_factory, run_id, delayed_failure))
+    try:
+        await asyncio.wait_for(waiting.wait(), timeout=10)
+        await _run(
+            session_factory,
+            run_id,
+            lambda request: (
+                _github_reply(request)
+                if request.url.host == "api.github.com"
+                else _model_reply(repo_ids)
+            ),
+        )
+    finally:
+        release_failure.set()
+        await task
+    candidates, analyses, _ = await _read(session_factory, run_id)
+    assert len(analyses) == 1 and analyses[0].status == "succeeded"
+    assert analyses[0].tech_stack == ["Python"] and analyses[0].raw_output is not None
+    assert candidates[0].ranking_signals["analysis"]["status"] == "succeeded"
+
+
+async def test_changed_snapshot_invalidates_all_run_recommendations_but_cache_noop_does_not(
+    session_factory,
+):
+    run_id, repo_ids = await _seed(session_factory, count=2)
+
+    def handler(request):
+        return (
+            _github_reply(request)
+            if request.url.host == "api.github.com"
+            else _model_reply(repo_ids)
+        )
+
+    await _run(session_factory, run_id, handler)
+    async with session_factory.begin() as session:
+        session.add_all(
+            [
+                RepoMatchScore(
+                    analysis_job_id=run_id,
+                    repository_id=repo_id,
+                    candidate_source="rule_filter",
+                    score=None,
+                    is_recommended=True,
+                    recommend_reason="Python",
+                )
+                for repo_id in repo_ids
+            ]
+        )
+    await _run(session_factory, run_id, handler)
+    async with session_factory() as session:
+        assert len((await session.scalars(select(RepoMatchScore))).all()) == 2
+
+    def changed(request):
+        if request.url.host == "api.github.com":
+            return _github_reply(request, sha="b" * 40 if "/repo0/" in request.url.path else SHA)
+        return _model_reply(repo_ids[:1], "b" * 40)
+
+    await _run(session_factory, run_id, changed)
+    async with session_factory() as session:
+        assert list((await session.scalars(select(RepoMatchScore))).all()) == []
+
+
+async def test_missing_active_prompt_does_not_call_llm_or_create_default_analysis(session_factory):
+    from app.llm_tasks.prompt_loader import PromptNotFoundError
+
+    run_id, _ = await _seed(session_factory)
+    async with session_factory.begin() as session:
+        await session.execute(update(PromptVersion).values(is_active=False))
+
+    def handler(request):
+        assert request.url.host == "api.github.com"
+        return _github_reply(request)
+
+    with pytest.raises(PromptNotFoundError):
+        await _run(session_factory, run_id, handler)
+    _, analyses, _ = await _read(session_factory, run_id)
+    assert analyses == []
