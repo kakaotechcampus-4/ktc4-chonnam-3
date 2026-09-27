@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 
 from app.integrations.github.base import (
     FILTER_INACCESSIBLE,
+    FILTER_PRIVATE,
     RepoDetail,
     RepoSummary,
     filter_reason,
@@ -46,6 +47,9 @@ def select_candidates(
     base_rank는 기존 pushed_at 순위이며, task-10의 종합 점수 계산은 포함하지 않는다.
     반환 목록은 첫 배치 밖의 후보와 제외 후보까지 base_rank 순서로 모두 유지한다.
     상세 수집 호출부는 eligible이면서 batch_no == 1인 후보만 골라야 한다.
+
+    포트폴리오 언급 레포는 fork/archived/no_language/too_small 을 우회한다 — 사용자가
+    명시한 대표작이기 때문이다. private 만은 예외 없이 제외한다(0001 결정).
     """
     if not 0 <= limit <= 10:
         raise ValueError("first batch limit must be between 0 and 10")
@@ -55,6 +59,10 @@ def select_candidates(
     selections: list[CandidateSelection] = []
     for base_rank, repo in enumerate(ranked, start=1):
         reason = filter_reason(repo, min_size_kb=min_size_kb)
+        is_portfolio = repo.full_name in portfolio_full_names
+        if reason is not None and reason != FILTER_PRIVATE and is_portfolio:
+            # 포트폴리오 언급은 private 을 제외한 나머지 제외 사유를 우회한다.
+            reason = None
         selections.append(
             CandidateSelection(
                 repo=repo,
@@ -65,7 +73,6 @@ def select_candidates(
             )
         )
 
-    # 포트폴리오 언급도 private·fork 등의 제외 조건을 우회하지 않는다.
     eligible_names = [
         s.repo.full_name for s in selections if s.filter_status == FILTER_STATUS_ELIGIBLE
     ]

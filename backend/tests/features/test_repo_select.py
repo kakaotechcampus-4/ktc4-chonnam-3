@@ -83,19 +83,11 @@ def test_candidates_outside_first_batch_remain_eligible() -> None:
     assert all(s.batch_rank is None and s.selection_reason is None for s in selections[5:])
 
 
-@pytest.mark.parametrize("reason", ["private", "fork", "archived", "no_language", "too_small"])
-def test_portfolio_repo_cannot_bypass_rule_filter(reason: str) -> None:
+def test_portfolio_repo_cannot_bypass_private(reason: str = "private") -> None:
+    """private 만은 포트폴리오 언급이어도 예외 없이 제외한다(0001 결정)."""
     repos = [
         _repo("ok"),
-        _repo(
-            "side_project",
-            pushed_days_ago=99,
-            is_private=reason == "private",
-            is_fork=reason == "fork",
-            is_archived=reason == "archived",
-            primary_language=None if reason == "no_language" else "Python",
-            size_kb=10 if reason == "too_small" else 100,
-        ),
+        _repo("side_project", pushed_days_ago=99, is_private=True),
     ]
 
     selections = select_candidates(
@@ -111,6 +103,38 @@ def test_portfolio_repo_cannot_bypass_rule_filter(reason: str) -> None:
     assert side.selection_reason is None
     assert side.batch_no is None and side.batch_rank is None
     assert side.base_rank == 2
+
+
+@pytest.mark.parametrize("reason", ["fork", "archived", "no_language", "too_small"])
+def test_portfolio_repo_bypasses_non_private_rule_filter(reason: str) -> None:
+    """포트폴리오 언급은 private 이외의 제외 사유를 우회한다.
+
+    사용자가 명시한 대표작이기 때문이다(0001 결정).
+    """
+    repos = [
+        _repo("ok"),
+        _repo(
+            "side_project",
+            pushed_days_ago=99,
+            is_fork=reason == "fork",
+            is_archived=reason == "archived",
+            primary_language=None if reason == "no_language" else "Python",
+            size_kb=10 if reason == "too_small" else 100,
+        ),
+    ]
+
+    selections = select_candidates(
+        repos,
+        portfolio_full_names={"user/side_project"},
+        min_size_kb=MIN_SIZE_KB,
+        limit=10,
+    )
+
+    side = next(s for s in selections if s.repo.name == "side_project")
+    assert side.filter_status == FILTER_STATUS_ELIGIBLE
+    assert side.filter_reason is None
+    assert side.selection_reason == "portfolio_mentioned"
+    assert side.batch_no == 1
 
 
 def test_base_rank_is_independent_of_filter_or_portfolio_result() -> None:
