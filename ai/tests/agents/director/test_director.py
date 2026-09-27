@@ -115,6 +115,69 @@ def test_first_hr_question_returns_checked_data_and_preserves_attempts(context, 
     assert request.schema_version == "2"
 
 
+@pytest.mark.parametrize(
+    "category,source_field",
+    [
+        ("required", "requirements"),
+        ("preferred", "preferred_points"),
+        ("responsibility", "main_tasks"),
+    ],
+)
+def test_jd_category_survives_context_decode_and_director_payload(
+    context, contract, category, source_field
+):
+    requirement = {
+        "id": "jd-1",
+        "text": "Python API 개발",
+        "category": category,
+        "source_field": source_field,
+        "tech_tags": ["Python"],
+    }
+    raw_context = json.loads(json.dumps(asdict(context)))
+    raw_context["jd_requirements"] = [requirement]
+    context = c.decode(c.Context, raw_context)
+    contract = replace(contract, basis_refs=(c.BasisRef("jd_requirement", "jd-1"),))
+    provider = Provider(model_output(candidate(contract, jd_requirement_ids=("jd-1",))))
+
+    result = generate(context, contract, provider)
+
+    assert result.succeeded
+    assert result.data.data.jd_requirement_ids == ("jd-1",)
+    # 실제 Director가 만든 요청을 JSON으로 변환해 모델 호출 경계의 필드명·값을 확인한다.
+    payload = json.loads(json.dumps(provider.requests[0].payload))
+    assert payload["context"]["jd_requirements"] == [requirement]
+    assert payload["reference_texts"] == [
+        {"kind": "jd_requirement", "id": "jd-1", "text": "Python API 개발"}
+    ]
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("category", "unknown"),
+        ("requirement_type", "required"),
+        ("requirement_type", "preferred"),
+        ("requirement_type", "unknown"),
+    ],
+)
+def test_context_rejects_unknown_or_legacy_jd_classification(context, field, value):
+    raw_context = json.loads(json.dumps(asdict(context)))
+    raw_context["jd_requirements"] = [
+        {
+            "id": "jd-1",
+            "text": "Python API 개발",
+            field: value,
+            "source_field": "main_tasks",
+            "tech_tags": ["Python"],
+        }
+    ]
+
+    with pytest.raises(c.ContractError) as failure:
+        c.decode(c.Context, raw_context)
+    assert failure.value.stage == "schema"
+    assert failure.value.field == "category"
+
+
 def test_model_contract_echo_is_schema_failure_before_review(context, contract):
     raw = model_output(candidate(contract))
     raw["question_contract"] = asdict(contract)
