@@ -142,3 +142,13 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
 - 공통 계약 스크립트는 부분 형식 검사다. 전체 API·TypeScript 대응·실서비스 호환성 검증을 대신하지 않는다.
 - 기존 설계와 `testing.md`의 과거 기록을 이번 통합에서 일괄 재작성하지 않는다.
   이후 구현 현황과 실행 결과는 이 파일을 갱신한다.
+
+## 2026-09-27 — 공고 도메인 category 판정
+
+- 결정: [ADR 0021](decisions/0021-domain-category-signal.md).
+- 구현: `backend/app/llm_tasks/domain_signal.py`의 `detect_domain_signal(PostingContent)`.
+  공고 본문 4개 필드의 키워드로 7종 중 하나를 판정하고, 근거를 `DomainSignalMatch`로 반환한다.
+- 검증: `backend`에서 `uv run --locked python -m pytest tests/llm_tasks/test_domain_signal.py`
+  7 passed, 변경 파일 대상 `ruff check`·`ruff format --check`·`mypy` 통과.
+- 남은 작업: 분석 파이프라인에서 호출해 `postings.domain_category`에 기록하는 연결은 미구현이다.
+  실제 공고로 판정 품질을 측정하지 않았다.
