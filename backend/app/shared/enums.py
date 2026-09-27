@@ -24,6 +24,12 @@ class Reason(StrEnum):
     ACCOUNT_SUSPENDED = "account_suspended"
     ACCOUNT_WITHDRAWN = "account_withdrawn"
 
+    # OAuth도 같은 레지스트리를 사용해 인증 통합 시 기존 도메인 reason을 보존한다.
+    INVALID_STATE = "invalid_state"
+    INVALID_CODE = "invalid_code"
+    PROVIDER_UNAVAILABLE = "provider_unavailable"
+    GITHUB_ALREADY_LINKED = "github_already_linked"
+
     # 문서
     UNSUPPORTED_DOCUMENT_TYPE = "unsupported_document_type"
     DOCUMENT_TOO_LARGE = "document_too_large"
