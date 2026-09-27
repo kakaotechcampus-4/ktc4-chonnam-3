@@ -10,6 +10,7 @@ spec/backend/features/analysis-run.md / task-08
 
 import base64
 from collections.abc import Callable
+from unittest import mock
 
 import httpx
 import pytest
@@ -254,6 +255,35 @@ async def test_partial_detail_keeps_what_it_got() -> None:
     assert detail.readme_text is None
     assert detail.errors == [GITHUB_ERROR_RATE_LIMITED, GITHUB_ERROR_RATE_LIMITED]
     assert detail.is_partial is True
+
+
+async def test_partial_detail_carries_retry_after_seconds() -> None:
+    """rate limit 이면 x-ratelimit-reset 에서 남은 초를 계산해 detail 에 싣는다."""
+    reset_epoch = 1_900_000_000
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/languages"):
+            return httpx.Response(
+                403,
+                headers={"x-ratelimit-remaining": "0", "x-ratelimit-reset": str(reset_epoch)},
+            )
+        return httpx.Response(200, json={})
+
+    async with _client(handler) as client:
+        with mock.patch("app.integrations.github.client.time.time", return_value=reset_epoch - 42):
+            detail = await GithubClient("tok", client=client).fetch_repo_detail(SAMPLE_REPO)
+
+    assert detail.rate_limit_retry_after_seconds == 42
+
+
+async def test_retry_after_seconds_is_none_without_header() -> None:
+    async with _client(
+        lambda request: httpx.Response(403, headers={"x-ratelimit-remaining": "0"})
+    ) as client:
+        with pytest.raises(GithubApiError) as caught:
+            await GithubClient("tok", client=client).fetch_languages("octocat/devon-api")
+
+    assert caught.value.retry_after_seconds is None
 
 
 async def test_token_invalid_propagates_from_detail() -> None:

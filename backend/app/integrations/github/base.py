@@ -33,10 +33,21 @@ class GithubApiError(Exception):
       이후 요청은 GitHub 호출 전에 차단한다. token_status 컬럼을 넣은 이유가 이 지점이다.
     """
 
-    def __init__(self, error_code: str, *, status_code: int | None = None) -> None:
-        """입력: error_code, HTTP 상태코드(있으면). 출력: 없음."""
+    def __init__(
+        self,
+        error_code: str,
+        *,
+        status_code: int | None = None,
+        retry_after_seconds: int | None = None,
+    ) -> None:
+        """입력: error_code, HTTP 상태코드(있으면), rate limit 해제까지 남은 초(있으면).
+
+        retry_after_seconds 는 error_code == GITHUB_ERROR_RATE_LIMITED 일 때만 의미가 있다.
+        호출부가 `gh:rl:{githubUserId}` Redis 키의 TTL 로 쓴다.
+        """
         self.error_code = error_code
         self.status_code = status_code
+        self.retry_after_seconds = retry_after_seconds
         super().__init__(error_code)
 
 
@@ -75,6 +86,9 @@ class RepoDetail:
     commit_count: int | None = None
     user_commit_count: int | None = None
     errors: list[str] = field(default_factory=list)
+    # rate_limited 가 하나라도 나면 그때의 남은 초. 여러 번 나도 가장 처음 값을 쓴다 —
+    # 어차피 같은 rate limit window 안이라 reset 시각은 같다.
+    rate_limit_retry_after_seconds: int | None = None
 
     @property
     def is_partial(self) -> bool:

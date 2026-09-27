@@ -14,6 +14,7 @@ ETag 값 자체는 여기서 보관하지 않는다. 조건부 요청(If-None-Ma
 
 import base64
 import binascii
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -110,7 +111,11 @@ class GithubClient:
         if status in (httpx.codes.FORBIDDEN, httpx.codes.TOO_MANY_REQUESTS):
             # 남은 호출이 0이면 rate limit, 아니면 권한 문제다.
             if response.headers.get("x-ratelimit-remaining") == "0":
-                raise GithubApiError(GITHUB_ERROR_RATE_LIMITED, status_code=status)
+                raise GithubApiError(
+                    GITHUB_ERROR_RATE_LIMITED,
+                    status_code=status,
+                    retry_after_seconds=_retry_after_seconds(response),
+                )
             raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE, status_code=status)
         raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE, status_code=status)
 
@@ -226,36 +231,43 @@ class GithubClient:
         head_sha: str | None = None
         commit_count: int | None = None
         user_commit_count: int | None = None
+        retry_after: int | None = None
+
+        def _record(error: GithubApiError) -> None:
+            nonlocal retry_after
+            errors.append(error.error_code)
+            if error.retry_after_seconds is not None and retry_after is None:
+                retry_after = error.retry_after_seconds
 
         try:
             languages = await self.fetch_languages(repo.full_name)
         except GithubApiError as error:
-            errors.append(error.error_code)
+            _record(error)
 
         try:
             readme_text, readme_truncated = await self.fetch_readme(
                 repo.full_name, max_chars=readme_max_chars
             )
         except GithubApiError as error:
-            errors.append(error.error_code)
+            _record(error)
 
         branch = repo.default_branch
         if branch:
             try:
                 head_sha = await self.fetch_head_sha(repo.full_name, branch)
             except GithubApiError as error:
-                errors.append(error.error_code)
+                _record(error)
 
         try:
             commit_count = await self.count_commits(repo.full_name)
         except GithubApiError as error:
-            errors.append(error.error_code)
+            _record(error)
 
         if login:
             try:
                 user_commit_count = await self.count_commits(repo.full_name, author=login)
             except GithubApiError as error:
-                errors.append(error.error_code)
+                _record(error)
 
         return RepoDetail(
             languages=languages,
@@ -265,7 +277,23 @@ class GithubClient:
             commit_count=commit_count,
             user_commit_count=user_commit_count,
             errors=errors,
+            rate_limit_retry_after_seconds=retry_after,
         )
+
+
+def _retry_after_seconds(response: httpx.Response) -> int | None:
+    """`x-ratelimit-reset`(epoch 초) 에서 남은 초를 계산한다. 없으면 None.
+
+    최소 1초를 보장한다 — 0 이하 TTL 로 Redis SET 을 호출하지 않기 위함이다.
+    """
+    reset_at = response.headers.get("x-ratelimit-reset")
+    if reset_at is None:
+        return None
+    try:
+        remaining = int(reset_at) - int(time.time())
+    except ValueError:
+        return None
+    return max(remaining, 1)
 
 
 def _decode_readme(payload: Any) -> str | None:
