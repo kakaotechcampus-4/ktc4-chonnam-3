@@ -2,7 +2,7 @@
 
 서비스 요구사항의 원본은 [`spec/ai/`](../spec/ai/), AI 소스의 원본은 [`src/devon_ai/`](src/devon_ai/)다. [승인된 패키지 설계](../spec/ai/designs/2026-09-12-ai-package-structure.md)에 따라 기존 backend API와 ARQ worker가 로컬 `devon-ai` 패키지를 import한다. 별도 AI 서버는 없다.
 
-task-01~03의 패키지 기반, 내부 계약·순수 검증, 주입 호출 계약과 BE의 OpenAI 호출·설정·프롬프트 로딩을 구현했다. 사용법과 남은 연결은 [기반 구현 인계](../spec/ai/designs/2026-09-23-ai-foundation.md)를 따른다. [Director 첫 구현](../spec/ai/designs/2026-09-23-director-question-path.md)은 준비된 목적의 질문 생성·독립 검토·검증까지다. 목적 자동 선정·도구 실행·레포 분석·리포트 생성, DB/worker/API 통합과 실제 모델 품질 검증은 후속 범위다.
+현재 구현 범위, 코드 위치, 실행한 검증 결과와 남은 작업은 [AI 구현·검증 기록](../spec/ai/implementation.md)에서 관리한다. 초기 설계는 [AI 기반 설계](../spec/ai/designs/2026-09-23-ai-foundation.md)와 [Director 질문 경로 설계](../spec/ai/designs/2026-09-23-director-question-path.md)에 보존한다.
 
 ## 프로젝트 구조
 
