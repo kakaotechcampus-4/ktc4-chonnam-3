@@ -98,3 +98,28 @@ async def test_domain_question_frames_seed_is_idempotent(seed_sessions) -> None:
 
         assert count_before == len(DOMAIN_QUESTION_FRAMES)
         assert count_after == count_before
+
+
+async def test_domain_question_frames_seed_updates_changed_text(seed_sessions) -> None:
+    """task-03 완료 조건: "domain frame 은 팀 검수 후 데이터만 바꿔도 반영된다"."""
+    async with seed_sessions() as session:
+        await seed_domain_question_frames(session)
+        await session.commit()
+
+        changed = list(DOMAIN_QUESTION_FRAMES)
+        changed[0] = replace(changed[0], frame_text="검수 후 수정된 문구")
+        await seed_domain_question_frames(session, changed)
+        await session.commit()
+
+        frame_text = await session.scalar(
+            text(
+                "SELECT frame_text FROM domain_question_frames "
+                "WHERE domain_category = :domain AND axis = :axis"
+            ),
+            {"domain": changed[0].domain_category, "axis": changed[0].axis},
+        )
+        count = await session.scalar(text("SELECT count(*) FROM domain_question_frames"))
+
+        assert frame_text == "검수 후 수정된 문구"
+        # 값만 바뀐 것이지 행이 추가되거나 지워지지 않는다(같은 PK 에 upsert).
+        assert count == len(DOMAIN_QUESTION_FRAMES)
