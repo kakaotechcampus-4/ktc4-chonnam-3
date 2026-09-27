@@ -1,4 +1,95 @@
 """DOCX 텍스트 추출 (자소서 / 포트폴리오).
 
 docs/layer-rules.md 1절 / task-09
+
+포트폴리오는 표로 프로젝트를 정리하는 경우가 흔해 표 안의 글자도 함께 읽는다.
 """
+
+import io
+from zipfile import BadZipFile
+
+import docx
+from docx.opc.constants import RELATIONSHIP_TYPE
+from docx.opc.exceptions import PackageNotFoundError
+from docx.oxml.document import CT_Document
+from docx.oxml.ns import qn
+from docx.table import Table
+
+# python-docx의 기존 전이 의존성. 예외 타입 한 개에 별도 stub 패키지를 추가하지 않는다.
+from lxml.etree import XMLSyntaxError  # type: ignore[import-untyped]
+
+from app.integrations.extract.base import (
+    EXTRACT_ERROR_CORRUPTED,
+    EXTRACT_ERROR_EMPTY,
+    ExtractionResult,
+    failed,
+    truncate,
+)
+from app.shared.enums import DocumentExtractStatus
+
+
+def _table_lines(table: Table) -> list[str]:
+    """표 한 개를 줄 목록으로 편다. 입력: Table. 출력: 빈 줄을 뺀 줄 목록."""
+    lines: list[str] = []
+    for row in table.rows:
+        cells = [cell.text.strip() for cell in row.cells]
+        joined = " | ".join(cell for cell in cells if cell)
+        if joined:
+            lines.append(joined)
+    return lines
+
+
+def extract_docx_text(data: bytes, *, max_chars: int = 0) -> ExtractionResult:
+    """DOCX 바이트에서 텍스트를 뽑는다.
+
+    입력: 파일 바이트, max_chars(0 이면 자르지 않는다).
+    출력: ExtractionResult.
+
+    - 열 수 없으면 corrupted_file
+    - 문단과 표에 글자가 하나도 없으면 empty_document
+    - 길이 상한으로 잘렸으면 partial
+    """
+    try:
+        document = docx.Document(io.BytesIO(data))
+    # BadZipFile 은 OSError 계열이 아니다 — docx 는 zip 이라 깨진 파일이 여기로 온다.
+    # XMLSyntaxError 는 SyntaxError 계열이라 위 예외들과 공통 조상이 없다 — zip은 멀쩡한데
+    # 내부 document.xml 이 깨진 경우(예: 손상된 저장) 여기로 온다.
+    except (PackageNotFoundError, BadZipFile, KeyError, ValueError, OSError, XMLSyntaxError):
+        return failed(EXTRACT_ERROR_CORRUPTED)
+
+    # XML 자체가 올바르게 파싱되어도 DOCX의 document/body 구조가 없으면 손상 파일이다.
+    if not isinstance(document.element, CT_Document) or document.element.body is None:
+        return failed(EXTRACT_ERROR_CORRUPTED)
+
+    lines: list[str] = [
+        paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()
+    ]
+    table_count = 0
+    for table in document.tables:
+        table_count += 1
+        lines.extend(_table_lines(table))
+
+    if not lines:
+        return failed(EXTRACT_ERROR_EMPTY)
+
+    text, is_truncated = truncate("\n".join(lines).strip(), max_chars)
+    hyperlinks: list[str] = []
+    # 삭제된 링크의 관계 정보가 남을 수 있으므로 본문에서 참조하는 대상만 보존한다.
+    for hyperlink in document.element.xpath(".//w:hyperlink[@r:id]"):
+        relationship_id = hyperlink.get(qn("r:id"))
+        if relationship_id is None:
+            continue
+        relationship = document.part.rels.get(relationship_id)
+        if (
+            relationship is not None
+            and relationship.reltype == RELATIONSHIP_TYPE.HYPERLINK
+            and relationship.is_external
+        ):
+            hyperlinks.append(relationship.target_ref)
+    return ExtractionResult(
+        text=text,
+        status=DocumentExtractStatus.PARTIAL if is_truncated else DocumentExtractStatus.SUCCEEDED,
+        is_truncated=is_truncated,
+        details={"paragraphCount": len(document.paragraphs), "tableCount": table_count},
+        hyperlinks=tuple(hyperlinks),
+    )
