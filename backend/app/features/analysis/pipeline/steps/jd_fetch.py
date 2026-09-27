@@ -1,8 +1,7 @@
-"""step 4 · 공고 페이지 수집. resolver 로 어댑터 선택 → raw_text / source_image_urls /
-content_form 저장.
-★ 재사용 규칙: fetched_at 7일 이내 AND parse_status='success' 면 행을 재사용하고 LLM 0회.
-  재조회 내용이 같으면 기존 ID를 재사용하고 바뀌면 새 공고·요구사항 ID로 저장한다.
-  이전 요구사항과 run·면접 참조를 삭제하지 않는다. 재사용·저장 연결은 구현 대기다.
+"""step 4 · task-11 분석 worker가 연결할 Wanted 공고 수집 단계.
 
-확정본 §3 job_postings / task-09
+task-09의 posting_service.get_or_fetch_posting()이 URL 검증, 7일 성공 자료 재사용,
+외부 수집과 새 공고·요구사항의 원자 저장을 제공한다. 실패는 기존 수집/추출 예외로 전달된다.
+원문 그룹은 job_postings.raw_payload에 저장하며 존재하지 않는 raw_text 컬럼에 쓰지 않는다.
+worker의 step 상태·run FK 확정·실패 알림은 task-11에서 연결한다.
 """
