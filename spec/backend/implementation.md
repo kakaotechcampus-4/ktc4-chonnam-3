@@ -52,3 +52,58 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 새 D
   기여도 근거 공급·종합 ranking·후속 page 저장은 task-10에서 연결한다.
 - [#68](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/68)의 run partial/failed,
   Redis 제한 기록·SSE 연결은 별도 작업이다. README의 중요한 섹션 중심 축약 정책도 후속 범위다.
+
+## 2026-09-28 — PR #57 공통 기반·GitHub 수집 통합과 리뷰 반영
+
+통합 기준: develop `7e54047`, [#45](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/45)
+`a327f64`, [#57](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/57) `5ba0d3c`.
+
+### 변경 범위
+
+- `shared/enums.py`의 Reason 한 곳에 OAuth 4개를 추가하고 develop의 상태·메시지 매핑,
+  분석·면접·LLM 설정과 DB 제약을 보존했다. 오류 필드 안내·405 Allow·500 request ID와
+  #57의 비밀값 제외·세션 쿠키·WebSocket 거부 처리를 함께 유지했다.
+- #45의 dataclass·상세 수집·후보 선택과 #57의 공개 목록 검증·중복 제거·페이지 URL 제한을
+  통합했다. 초기 저장은 `asdict()`를 사용한다. secondary 403과 헤더 없는 429 모두
+  제한으로 분류하고 대기 시간을 전달한다.
+- 이전 토큰의 401 처리 중 새 토큰이 저장되면 기존 작업 실패 확정 뒤 최신 유효 토큰을
+  재확인해 후속 수집을 예약한다. 활성 작업 제약으로 중복을 막고 Redis에는 작업 ID만 넣는다.
+- FE의 세션 종료 차단과 전체 페이지 로그인 전제를 한국어로 명시했다. 비 API 오류는
+  원문 대신 고정 분류만 기록하며 정상 취소는 제외한다. 같은 탭의 로그아웃→재로그인을 검증했다.
+- Vite의 프록시 연결 실패는 고정 문구로 기록하고 Caddy 런타임 로그의 URI에서는
+  OAuth `code`·`state`를 제거하며 Referer도 제외한다. 실제 전달할 쿼리·쿠키·리다이렉트는 유지한다.
+- `error-reasons.md`, 배포 문서, FE API 문서는 최신 공통 구조와 공개 콜백 경로에 맞췄다.
+  develop의 면접 준비 재시도·WS 계약을 보존했다.
+
+### 실행 결과
+
+Windows·Python 3.12·uv locked 환경에서 전용 PostgreSQL DB와 Redis를 사용했다.
+GitHub HTTP는 대체했으며 기존 사용자 서버·DB는 사용하지 않았다.
+
+| 검증 | 결과 |
+| --- | --- |
+| `backend`: 전체 pytest | 501 passed, skip 0 |
+| `backend`: Ruff check·format, mypy app | 통과 |
+| `ai`: 전체 pytest | 167 passed |
+| `frontend`: lint·build·화면 테스트 | 통과, 34 passed |
+| 실제 API·DB·Redis·브라우저 통합 | 1 passed; 재연동·로그아웃 후 같은 탭 OAuth 재로그인 포함 |
+| `frontend`: `npm run test:proxy` | 4 passed; 실제 Vite의 정상 전달·502 로그·일반 오류 기록 보존 |
+| Caddy 설정·프록시 검사 | validate 통과; 공개/내부 콜백의 정상 전달과 502 로그의 code·state 제거 확인 |
+| #64 `85c6a5d`의 면접 모듈·테스트를 별도 복사본에 적용 | 실제 PostgreSQL에서 32 passed; #57에 면접 구현은 추가하지 않음 |
+| 전용 DB migration downgrade→upgrade·Alembic check | 통과, 모델과 차이 없음 |
+| 공통 계약 검사 | schema 2개·부분 OpenAPI·정상/오류 fixture 7개 통과 |
+
+DTO 저장 실패와 재연동 경합은 수정 전 실패를 재현한 뒤 통과했다. 재연동 시점 세 가지,
+실제 ARQ의 후속 작업 완료, 불완전한 목록 수집 시 기존 데이터 보존까지 확인했다.
+공통 계약 검사는 전체 API 호환성 검증이 아니며, 이번 검증은 실계정 OAuth나 운영 배포 검증이 아니다.
+
+### 후속 연결
+
+- #45를 먼저 병합한 뒤 최신 develop에서 #57의 상태와 검사를 다시 확인한다.
+- #64의 `current_user → User`, `get_db`, `app.state.redis: ArqRedis` 인터페이스는 유지한다.
+  #64 router 연결과 하위 DB fixture 공용화는 해당 PR에서 진행하며, 다른 테스트의 격리 방식을
+  확인하지 않고 fixture를 삭제하지 않는다.
+- 프로세스 강제 종료 후 남은 running 작업의 운영 복구, #68 분석 run 연결,
+  실계정 OAuth·운영 HTTPS 배포 검증은 이번 완료 범위에 포함하지 않는다.
+- develop의 면접 준비 재시도는 직접 `api`를 호출한다. 401 뒤 상태 재조회까지 네트워크 오류로
+  실패하면 전역 인증 처리를 거치지 않는 경로는 면접 연결 작업에서 보완한다.
