@@ -39,6 +39,11 @@ test('public callback proxy carries state and the real session survives reload, 
     expect(new URL(start.headers().location).origin).toBe('https://github.com');
     await page.goto(start.headers().location);
   };
+  // 잘못된 콜백도 JSON 페이지에 머물지 않고 안내 화면에서 새 로그인을 시작할 수 있다.
+  await page.goto('/auth/github/callback?code=invalid&state=invalid');
+  await expect(page).toHaveURL('http://localhost:5173/login?error=invalid_state');
+  await expect(page.getByRole('alert')).toContainText('다시 로그인');
+  expect((await context.cookies()).some((cookie) => cookie.name === 'devon_session')).toBe(false);
   await expect(page.getByRole('link', { name: 'GitHub로 계속하기' })).toHaveAttribute(
     'href',
     '/api/auth/github/login',
@@ -66,6 +71,21 @@ test('public callback proxy carries state and the real session survives reload, 
   await expect(
     page.getByRole('heading', { name: '안녕하세요, Browser Octocat 님!' }),
   ).toBeVisible();
+  // 유효한 재연동 state의 코드 오류는 기존 세션을 유지하고 재연동 버튼을 제공한다.
+  const linkStart = await context.request.get('/api/auth/github/link', { maxRedirects: 0 });
+  expect(linkStart.status()).toBe(302);
+  const linkState = new URL(linkStart.headers().location).searchParams.get('state')!;
+  await page.goto(`/auth/github/callback?state=${encodeURIComponent(linkState)}`);
+  await expect(page).toHaveURL('http://localhost:5173/login?error=invalid_code&flow=link');
+  await expect(page.getByRole('alert')).toContainText('다시 시도');
+  await expect(page.getByRole('link', { name: 'GitHub 재연동하기' })).toHaveAttribute(
+    'href',
+    '/api/auth/github/link',
+  );
+  expect((await context.cookies()).find((cookie) => cookie.name === 'devon_session')?.value).toBe(
+    session.value,
+  );
+  expect((await context.request.get('/api/me')).status()).toBe(200);
   await startOAuth('/api/auth/github/link');
   await expect(page).toHaveURL('http://localhost:5173/home');
   expect((await context.cookies()).find((cookie) => cookie.name === 'devon_session')?.value).toBe(
@@ -74,10 +94,8 @@ test('public callback proxy carries state and the real session survives reload, 
   expect(callbackUrls).toHaveLength(2);
 
   const replay = await context.request.get(callbackUrls[0], { maxRedirects: 0 });
-  expect(replay.status()).toBe(400);
-  expect((await replay.json()).error.reason).toBe('invalid_state');
-  const invalid = await context.request.get('/auth/github/callback?code=invalid&state=invalid');
-  expect(invalid.status()).toBe(400);
+  expect(replay.status()).toBe(302);
+  expect(replay.headers().location).toBe('/login?error=invalid_state');
 
   await page.goto('/mypage');
   await expect(page.getByRole('heading', { name: 'Browser Octocat 님의 정보' })).toBeVisible();

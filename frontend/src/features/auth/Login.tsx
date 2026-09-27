@@ -4,6 +4,12 @@ import { BASE } from '@/shared/api';
 
 const ERROR_MESSAGES: Record<string, string> = {
   denied: 'GitHub 로그인이 취소됐어요. 다시 시도해주세요.',
+  invalid_state: '로그인 요청이 만료되었거나 올바르지 않아요. 다시 로그인해주세요.',
+  invalid_code: 'GitHub 인증을 완료하지 못했어요. 다시 시도해주세요.',
+  provider_unavailable: 'GitHub에 연결하지 못했어요. 잠시 후 다시 시도해주세요.',
+  provider_configuration: 'GitHub 로그인 설정이 서비스와 맞지 않아요. 관리자에게 문의해주세요.',
+  github_already_linked:
+    '현재 GitHub 계정이 연결된 계정과 달라요. 기존에 연결한 GitHub 계정으로 다시 시도해주세요.',
   account_suspended: '이용이 정지된 계정이에요.',
   account_withdrawn: '탈퇴한 계정으로는 다시 가입할 수 없어요.',
 };
@@ -21,7 +27,19 @@ function GithubMark() {
 
 export default function Login() {
   const [searchParams] = useSearchParams();
-  const errorMessage = ERROR_MESSAGES[searchParams.get('error') ?? ''];
+  const error = searchParams.get('error') ?? '';
+  // URL의 임의 값이나 상속된 속성을 오류 문구로 사용하지 않는다.
+  const errorMessage = Object.hasOwn(ERROR_MESSAGES, error) ? ERROR_MESSAGES[error] : undefined;
+  // 쿼리값을 이동 주소로 사용하지 않고 허용된 오류에만 고정 재연동 경로를 쓴다.
+  const isLinkRetry =
+    searchParams.get('flow') === 'link' &&
+    [
+      'denied',
+      'invalid_code',
+      'provider_unavailable',
+      'provider_configuration',
+      'github_already_linked',
+    ].includes(error);
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
@@ -32,23 +50,29 @@ export default function Login() {
       <main className="flex flex-1 flex-col items-center justify-center px-7">
         <div className="flex w-[480px] max-w-full flex-col items-center gap-5 text-center">
           <p className="text-2xl font-bold">DEVON</p>
-          <p className="text-base text-muted">회원가입 없이 GitHub 계정으로 바로 시작하세요</p>
+          <p className="text-base text-muted">
+            {isLinkRetry
+              ? '기존에 연결한 GitHub 계정으로 다시 연동해주세요.'
+              : '회원가입 없이 GitHub 계정으로 바로 시작하세요'}
+          </p>
 
           {errorMessage && (
             <p
               role="alert"
               className="w-full rounded-md border border-error-soft bg-error-soft px-4 py-3 text-sm text-error"
             >
-              {errorMessage}
+              {isLinkRetry && error === 'denied'
+                ? 'GitHub 재연동이 취소됐어요. 다시 시도해주세요.'
+                : errorMessage}
             </p>
           )}
 
           <a
-            href={`${BASE}/auth/github/login`}
+            href={`${BASE}/auth/github/${isLinkRetry ? 'link' : 'login'}`}
             className="flex h-12 w-full items-center justify-center gap-2.5 rounded-md bg-ink text-base font-bold text-white"
           >
             <GithubMark />
-            GitHub로 계속하기
+            {isLinkRetry ? 'GitHub 재연동하기' : 'GitHub로 계속하기'}
           </a>
         </div>
       </main>
