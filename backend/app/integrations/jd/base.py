@@ -40,13 +40,13 @@ class PostingContent:
     industry: str | None = None
 
     requirements: list[str] = field(default_factory=list)
-    """필수 요건 — API category와 DB requirement_type 모두 required"""
+    """필수 요건 — API·DB `category` 모두 required"""
 
     preferred_points: list[str] = field(default_factory=list)
-    """우대 사항 — API category와 DB requirement_type 모두 preferred"""
+    """우대 사항 — API·DB `category` 모두 preferred"""
 
     main_tasks: list[str] = field(default_factory=list)
-    """주요 업무 — API category는 responsibility, DB requirement_type은 unknown"""
+    """주요 업무 — API·DB `category` 모두 responsibility"""
 
     skill_tags: list[str] = field(default_factory=list)
     """어댑터가 이미 정규화해 준 기술 태그. `jd_requirements.tech_tags` 원천이라
