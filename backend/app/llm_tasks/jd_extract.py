@@ -1,8 +1,10 @@
-"""공고 → jd_requirements 초안. API category와 DB requirement_type을 구분한다.
-원티드는 requirements / preferred_points / main_tasks 가 이미 나뉘어 오고 skill_tags 가
+"""공고 → jd_requirements 초안. API `category`와 DB `category`는 같은 값이다(팀 결정
+2026-09-21, PR #41 코멘트 — `openapi.yaml`의 `JdCategory`를 원본으로 채택, `unknown` 버킷
+폐기). 원티드는 requirements / preferred_points / main_tasks 가 이미 나뉘어 오고 skill_tags 가
 tech_tags 원천이므로 LLM 추측 불필요. 상한 20개
 
-확정본 §3 jd_requirements / task-09
+확정본 §3 jd_requirements / task-09. `app.db.models.posting.JD_CATEGORIES`와 값 집합이
+같아야 한다 — 여기서 값을 바꾸면 그쪽 CHECK 제약도 같이 확인할 것.
 
 1차는 원티드 구조화 필드를 규칙으로 변환하며 LLM을 호출하지 않는다.
 요구사항 필드가 없는 입력은 jd_extraction_failed로 실패한다.
@@ -18,7 +20,7 @@ from app.integrations.jd.base import PostingContent
 MAX_REQUIREMENTS = 20
 JdCategory = Literal["required", "preferred", "responsibility"]
 
-# API 표시 순서이자 원문 출처. DB에는 category 대신 requirement_type을 사용한다.
+# API 표시 순서이자 원문 출처이며, DB `jd_requirements.category` 컬럼에도 그대로 저장한다.
 _CATEGORY_SOURCES: dict[JdCategory, str] = {
     "required": "requirements",
     "preferred": "preferred_points",
@@ -30,30 +32,21 @@ _CATEGORY_SOURCES: dict[JdCategory, str] = {
 class JdRequirementDraft:
     """요구사항 초안. DB 세션과 API 직렬화는 호출부가 담당한다.
 
-    저장 시 ``requirement_type``과 ``source_field``를 읽어 분류와 출처를 보존한다.
-    두 값은 계산 속성이므로 ``dataclasses.asdict()`` 결과에는 포함되지 않는다.
-    ``category``는 API 표시용이므로 DB requirement_type에 그대로 넣지 않는다.
+    ``category``를 API 응답과 DB `jd_requirements.category` 컬럼에 그대로 쓴다 — 별도
+    변환이 없다. 저장 시 ``source_field``도 함께 읽어 원문 출처를 보존한다. 이 값은
+    계산 속성이므로 ``dataclasses.asdict()`` 결과에는 포함되지 않는다.
     """
 
     category: JdCategory
-    """API 표시 분류. 주요 업무는 responsibility로 표시한다."""
+    """API 표시 분류이자 DB 저장 분류. 주요 업무는 responsibility로 표시·저장한다."""
 
     text: str
     display_order: int
     tech_tags: list[str]
 
     @property
-    def requirement_type(self) -> str:
-        """DB/AI 분류. 주요 업무만으로 필수·우대 여부를 추측하지 않는다."""
-        return {
-            "required": "required",
-            "preferred": "preferred",
-            "responsibility": "unknown",
-        }[self.category]
-
-    @property
     def source_field(self) -> str:
-        """Wanted 원문 필드. unknown만으로 주요 업무를 역추론하지 않는다."""
+        """Wanted 원문 필드. `responsibility`만으로 주요 업무를 역추론하지 않는다."""
         return _CATEGORY_SOURCES[self.category]
 
 

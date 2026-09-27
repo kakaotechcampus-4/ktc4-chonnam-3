@@ -659,7 +659,8 @@ class PersonaCount(_Contract):
 class JDRequirement(_Contract):
     id: str
     text: str
-    requirement_type: Literal["required", "preferred", "unknown"]
+    # API·DB와 같은 분류를 전달한다. 주요 업무를 과거의 unknown 값으로 변환하지 않는다.
+    category: Literal["required", "preferred", "responsibility"]
     source_field: str
     tech_tags: tuple[str, ...]
 
