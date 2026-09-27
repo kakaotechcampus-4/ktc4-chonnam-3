@@ -92,7 +92,12 @@ class RepoDetail:
 
     @property
     def is_partial(self) -> bool:
-        return bool(self.errors)
+        """errors 가 있거나 README 를 잘랐으면 partial 이다.
+
+        task-08 명세는 긴 README 축약도 partial 로 요구한다 — errors 목록에는 안 남지만
+        완전한 수집은 아니다.
+        """
+        return bool(self.errors) or self.readme_truncated
 
 
 def _as_int(value: object, default: int = 0) -> int:

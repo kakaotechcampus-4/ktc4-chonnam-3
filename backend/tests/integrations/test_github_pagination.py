@@ -89,6 +89,15 @@ def test_total_is_zero_for_empty_repository() -> None:
     assert total_from_per_page_one(None, 0) == 0
 
 
+def test_total_is_undetermined_when_next_exists_without_last() -> None:
+    """rel='last' 없이 rel='next' 만 있으면 이번 응답만으로 전체 개수를 확정할 수 없다.
+
+    GitHub 일반 페이지네이션 문서상 가능하다고 안내된 케이스다(실제 commits API 관찰은
+    아님) — 틀린 개수를 사실처럼 반환하지 않고 None 을 돌려준다.
+    """
+    assert total_from_per_page_one('<https://x?page=2>; rel="next"', 1) is None
+
+
 # ── L0-a 파싱 ──────────────────────────────────────────
 
 

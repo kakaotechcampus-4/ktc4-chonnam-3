@@ -17,6 +17,7 @@ import binascii
 import time
 from collections.abc import AsyncIterator
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -89,10 +90,14 @@ class GithubClient:
         url = path if path.startswith("http") else f"{self._api_base}{path}"
         try:
             if self._client is not None:
-                response = await self._client.get(url, params=params, headers=self._headers(etag))
+                response = await self._client.get(
+                    url, params=params, headers=self._headers(etag), follow_redirects=True
+                )
             else:
                 async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-                    response = await client.get(url, params=params, headers=self._headers(etag))
+                    response = await client.get(
+                        url, params=params, headers=self._headers(etag), follow_redirects=True
+                    )
         except httpx.HTTPError as error:
             raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE) from error
 
@@ -109,8 +114,7 @@ class GithubClient:
             # 호출부가 token_status='revoked' 로 바꾸고 이후 호출을 막는다.
             raise GithubApiError(GITHUB_ERROR_TOKEN_INVALID, status_code=status)
         if status in (httpx.codes.FORBIDDEN, httpx.codes.TOO_MANY_REQUESTS):
-            # 남은 호출이 0이면 rate limit, 아니면 권한 문제다.
-            if response.headers.get("x-ratelimit-remaining") == "0":
+            if _is_rate_limited(response):
                 raise GithubApiError(
                     GITHUB_ERROR_RATE_LIMITED,
                     status_code=status,
@@ -183,16 +187,21 @@ class GithubClient:
         return text, False
 
     async def fetch_head_sha(self, full_name: str, branch: str) -> str | None:
-        """기본 브랜치의 head commit SHA. 입력: owner/repo, 브랜치. 출력: SHA 또는 None."""
-        payload = (await self.request(f"/repos/{full_name}/commits/{branch}")).json()
+        """기본 브랜치의 head commit SHA. 입력: owner/repo, 브랜치. 출력: SHA 또는 None.
+
+        branch 를 URL 인코딩한다 — `release#v1` 처럼 `#`/`/` 가 든 이름을 그대로 넣으면
+        fragment 로 잘리거나 다른 경로로 해석돼 엉뚱한 브랜치의 SHA 를 반환할 수 있다.
+        """
+        encoded_branch = quote(branch, safe="")
+        payload = (await self.request(f"/repos/{full_name}/commits/{encoded_branch}")).json()
         if isinstance(payload, dict):
             sha = payload.get("sha")
             if isinstance(sha, str) and sha:
                 return sha
         return None
 
-    async def count_commits(self, full_name: str, *, author: str | None = None) -> int:
-        """커밋 수. 입력: owner/repo, author(있으면 그 사람 커밋만). 출력: 개수.
+    async def count_commits(self, full_name: str, *, author: str | None = None) -> int | None:
+        """커밋 수. 입력: owner/repo, author(있으면 그 사람 커밋만). 출력: 개수, 확정 못 하면 None.
 
         per_page=1 로 한 건만 받고 Link rel='last' 의 page 번호를 읽는다.
         전체 커밋을 받지 않기 위한 방법이다.
@@ -221,8 +230,10 @@ class GithubClient:
     ) -> RepoDetail:
         """L0-b 를 모아 온다. 입력: RepoSummary, 사용자 login, README 상한. 출력: RepoDetail.
 
-        항목 하나가 실패해도 나머지는 살리고 errors 에 error_code 를 남긴다.
-        rate limit 이 걸려도 그때까지 받은 것은 버리지 않는다.
+        항목 하나가 실패해도(no_readme 등) 나머지는 계속 시도하고 errors 에 error_code 를
+        남긴다. 다만 rate_limited 나 token_invalid 는 레포 하나만의 문제가 아니라 이후
+        호출도 전부 실패할 게 뻔하므로, 그 시점에서 남은 필드 호출을 중단하고 그때까지
+        모은 데이터와 실패 정보를 그대로 돌려준다.
         """
         errors: list[str] = []
         languages: dict[str, int] = {}
@@ -232,38 +243,44 @@ class GithubClient:
         commit_count: int | None = None
         user_commit_count: int | None = None
         retry_after: int | None = None
+        stopped = False
 
         def _record(error: GithubApiError) -> None:
-            nonlocal retry_after
+            nonlocal retry_after, stopped
             errors.append(error.error_code)
             if error.retry_after_seconds is not None and retry_after is None:
                 retry_after = error.retry_after_seconds
+            if error.error_code in (GITHUB_ERROR_RATE_LIMITED, GITHUB_ERROR_TOKEN_INVALID):
+                stopped = True
 
-        try:
-            languages = await self.fetch_languages(repo.full_name)
-        except GithubApiError as error:
-            _record(error)
+        if not stopped:
+            try:
+                languages = await self.fetch_languages(repo.full_name)
+            except GithubApiError as error:
+                _record(error)
 
-        try:
-            readme_text, readme_truncated = await self.fetch_readme(
-                repo.full_name, max_chars=readme_max_chars
-            )
-        except GithubApiError as error:
-            _record(error)
+        if not stopped:
+            try:
+                readme_text, readme_truncated = await self.fetch_readme(
+                    repo.full_name, max_chars=readme_max_chars
+                )
+            except GithubApiError as error:
+                _record(error)
 
         branch = repo.default_branch
-        if branch:
+        if not stopped and branch:
             try:
                 head_sha = await self.fetch_head_sha(repo.full_name, branch)
             except GithubApiError as error:
                 _record(error)
 
-        try:
-            commit_count = await self.count_commits(repo.full_name)
-        except GithubApiError as error:
-            _record(error)
+        if not stopped:
+            try:
+                commit_count = await self.count_commits(repo.full_name)
+            except GithubApiError as error:
+                _record(error)
 
-        if login:
+        if not stopped and login:
             try:
                 user_commit_count = await self.count_commits(repo.full_name, author=login)
             except GithubApiError as error:
@@ -281,11 +298,40 @@ class GithubClient:
         )
 
 
-def _retry_after_seconds(response: httpx.Response) -> int | None:
-    """`x-ratelimit-reset`(epoch 초) 에서 남은 초를 계산한다. 없으면 None.
+def _is_rate_limited(response: httpx.Response) -> bool:
+    """403/429 가 primary 든 secondary 든 rate limit 인지 판정한다.
 
+    입력: Response. 출력: rate limit 여부.
+
+    GitHub 는 secondary rate limit 이면 `x-ratelimit-remaining` 이 0 이 아니어도 403/429 를
+    준다 — 대신 `Retry-After` 헤더나 본문 메시지("secondary rate limit")로 알려준다. 셋 중
+    하나라도 맞으면 rate limit 이고, 셋 다 아니면 권한 문제(repo_unreachable)다.
+    """
+    if response.headers.get("x-ratelimit-remaining") == "0":
+        return True
+    if "retry-after" in response.headers:
+        return True
+    try:
+        message = str(response.json().get("message", ""))
+    except (ValueError, AttributeError):
+        return False
+    return "secondary rate limit" in message.lower()
+
+
+def _retry_after_seconds(response: httpx.Response) -> int | None:
+    """rate limit 이 풀릴 때까지 남은 초. 없으면 None.
+
+    `Retry-After`(초 단위, secondary rate limit)를 `x-ratelimit-reset`(epoch 초, primary)
+    보다 먼저 본다 — GitHub 가 secondary rate limit 에는 reset epoch 를 안 줄 수 있다.
     최소 1초를 보장한다 — 0 이하 TTL 로 Redis SET 을 호출하지 않기 위함이다.
     """
+    retry_after = response.headers.get("retry-after")
+    if retry_after is not None:
+        try:
+            return max(int(retry_after), 1)
+        except ValueError:
+            pass
+
     reset_at = response.headers.get("x-ratelimit-reset")
     if reset_at is None:
         return None

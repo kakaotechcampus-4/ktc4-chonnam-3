@@ -161,6 +161,18 @@ async def test_readme_is_truncated_at_limit() -> None:
     assert len(text) == 5
 
 
+async def test_truncated_readme_marks_detail_as_partial() -> None:
+    """README 축약은 errors 에 안 남지만 완전한 수집이 아니라 is_partial=True 여야 한다."""
+    async with _client(full_handler) as client:
+        detail = await GithubClient("tok", client=client).fetch_repo_detail(
+            SAMPLE_REPO, readme_max_chars=5
+        )
+
+    assert detail.readme_truncated is True
+    assert detail.errors == []
+    assert detail.is_partial is True
+
+
 async def test_commit_count_uses_link_header_not_full_list() -> None:
     """per_page=1 로 한 건만 받고 rel='last' 를 읽는다."""
     seen: list[str] = []
@@ -205,6 +217,20 @@ async def test_empty_repository_commit_count_is_zero() -> None:
         ),
         (httpx.Response(404), GITHUB_ERROR_REPO_UNREACHABLE),
         (httpx.Response(500), GITHUB_ERROR_REPO_UNREACHABLE),
+        (
+            # secondary rate limit: remaining 은 남아 있어도 Retry-After 로 알려준다.
+            httpx.Response(403, headers={"x-ratelimit-remaining": "4990", "retry-after": "60"}),
+            GITHUB_ERROR_RATE_LIMITED,
+        ),
+        (
+            # secondary rate limit: Retry-After 도 없이 본문 메시지로만 알려주는 경우.
+            httpx.Response(
+                403,
+                headers={"x-ratelimit-remaining": "4990"},
+                json={"message": "You have exceeded a secondary rate limit"},
+            ),
+            GITHUB_ERROR_RATE_LIMITED,
+        ),
     ],
 )
 async def test_status_is_mapped_to_error_code(response: httpx.Response, expected: str) -> None:
@@ -234,16 +260,20 @@ async def test_missing_readme_is_no_readme() -> None:
     assert caught.value.error_code == GITHUB_ERROR_NO_README
 
 
-async def test_partial_detail_keeps_what_it_got() -> None:
-    """rate limit 이 걸려도 그때까지 받은 것은 버리지 않는다."""
+async def test_partial_detail_keeps_what_it_got_before_rate_limit() -> None:
+    """rate limit 이 걸리기 전까지 받은 것은 버리지 않는다.
+
+    ★ languages(성공) 다음 readme 에서 rate limit 을 맞으면, 그 뒤 head_sha/commit_count 는
+    아예 호출하지 않는다(수정된 동작) — 어차피 다 실패할 걸 알면서 GitHub 을 더 때리지 않는다.
+    """
+    seen_paths: list[str] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
+        seen_paths.append(path)
         if path.endswith("/languages"):
             return httpx.Response(200, json={"Python": 10})
         if path.endswith("/readme"):
-            return httpx.Response(403, headers={"x-ratelimit-remaining": "0"})
-        if "/commits/main" in path:
             return httpx.Response(403, headers={"x-ratelimit-remaining": "0"})
         return httpx.Response(200, json=[{}], headers={"link": '<https://x?page=5>; rel="last"'})
 
@@ -251,10 +281,30 @@ async def test_partial_detail_keeps_what_it_got() -> None:
         detail = await GithubClient("tok", client=client).fetch_repo_detail(SAMPLE_REPO)
 
     assert detail.languages == {"Python": 10}
-    assert detail.commit_count == 5
     assert detail.readme_text is None
-    assert detail.errors == [GITHUB_ERROR_RATE_LIMITED, GITHUB_ERROR_RATE_LIMITED]
+    assert detail.head_sha is None
+    assert detail.commit_count is None
+    assert detail.errors == [GITHUB_ERROR_RATE_LIMITED]
     assert detail.is_partial is True
+    # commits 엔드포인트는 한 번도 호출되지 않아야 한다(중단 확인).
+    assert not any("/commits" in path for path in seen_paths)
+
+
+async def test_token_invalid_also_stops_subsequent_field_calls() -> None:
+    """401 도 rate limit 과 마찬가지로 레포 하나의 문제가 아니라 즉시 중단해야 한다."""
+    call_count = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        call_count["n"] += 1
+        return httpx.Response(401)
+
+    async with _client(handler) as client:
+        detail = await GithubClient("tok", client=client).fetch_repo_detail(
+            SAMPLE_REPO, login="octocat"
+        )
+
+    assert detail.errors == [GITHUB_ERROR_TOKEN_INVALID]
+    assert call_count["n"] == 1
 
 
 async def test_partial_detail_carries_retry_after_seconds() -> None:
@@ -284,6 +334,76 @@ async def test_retry_after_seconds_is_none_without_header() -> None:
             await GithubClient("tok", client=client).fetch_languages("octocat/devon-api")
 
     assert caught.value.retry_after_seconds is None
+
+
+async def test_retry_after_header_wins_over_ratelimit_reset() -> None:
+    """secondary rate limit 은 reset epoch 를 안 줄 수 있어 Retry-After 를 먼저 본다."""
+    async with _client(
+        lambda request: httpx.Response(
+            403, headers={"retry-after": "90", "x-ratelimit-reset": "9999999999"}
+        )
+    ) as client:
+        with pytest.raises(GithubApiError) as caught:
+            await GithubClient("tok", client=client).fetch_languages("octocat/devon-api")
+
+    assert caught.value.retry_after_seconds == 90
+
+
+async def test_follows_redirect_and_parses_final_response() -> None:
+    """리디렉션 안내 본문을 데이터로 파싱하지 않고 최종 응답을 따라가 파싱한다."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/repos/octocat/renamed-repo/languages":
+            return httpx.Response(
+                301, headers={"location": "https://api.github.com/repositories/999/languages"}
+            )
+        if request.url.path == "/repositories/999/languages":
+            return httpx.Response(200, json={"Python": 42})
+        return httpx.Response(404)
+
+    async with _client(handler) as client:
+        languages = await GithubClient("tok", client=client).fetch_languages("octocat/renamed-repo")
+
+    assert languages == {"Python": 42}
+
+
+async def test_branch_name_is_url_encoded() -> None:
+    """`#`/`/` 가 든 브랜치 이름이 fragment 로 잘리거나 다른 경로로 해석되지 않아야 한다.
+
+    httpx.URL.path 는 표시할 때 percent-encoding 을 다시 풀어 보여준다 — 실제로 어떤
+    bytes 가 나갔는지는 raw_path 로 확인해야 한다.
+    """
+    seen_raw_paths: list[bytes] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_raw_paths.append(request.url.raw_path)
+        return httpx.Response(200, json={"sha": "b" * 40})
+
+    async with _client(handler) as client:
+        sha = await GithubClient("tok", client=client).fetch_head_sha(
+            "octocat/devon-api", "release#v1"
+        )
+
+    assert sha == "b" * 40
+    assert seen_raw_paths == [b"/repos/octocat/devon-api/commits/release%23v1"]
+
+
+async def test_branch_name_with_special_characters_resolves_correct_branch() -> None:
+    """인코딩 없이 나가면 `release#v1` 요청이 `release` 브랜치로 오인돼 다른 SHA 를 받는다."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.raw_path == b"/repos/octocat/devon-api/commits/release":
+            return httpx.Response(200, json={"sha": "a" * 40})
+        if request.url.raw_path == b"/repos/octocat/devon-api/commits/release%23v1":
+            return httpx.Response(200, json={"sha": "b" * 40})
+        return httpx.Response(404)
+
+    async with _client(handler) as client:
+        sha = await GithubClient("tok", client=client).fetch_head_sha(
+            "octocat/devon-api", "release#v1"
+        )
+
+    assert sha == "b" * 40
 
 
 async def test_token_invalid_propagates_from_detail() -> None:

@@ -46,16 +46,23 @@ def last_page(header: str | None) -> int | None:
     return page_of(last) if last is not None else None
 
 
-def total_from_per_page_one(header: str | None, returned_items: int) -> int:
+def total_from_per_page_one(header: str | None, returned_items: int) -> int | None:
     """`per_page=1` 요청의 전체 개수를 구한다.
 
     입력: Link 헤더, 이번 응답이 돌려준 항목 수.
-    출력: 전체 개수.
+    출력: 전체 개수, 확정할 수 없으면 None.
 
     rel='last' 가 있으면 그 page 번호가 곧 전체 개수다 (한 page 에 1건씩이므로).
-    없으면 페이지가 1장뿐이라는 뜻이라 받은 항목 수가 전체다 — 0건이면 0이다.
+    rel='last' 도 rel='next' 도 없으면 페이지가 1장뿐이라는 뜻이라 받은 항목 수가 전체다
+    (0건이면 0). rel='next' 만 있고 rel='last' 가 없으면(GitHub 일반 페이지네이션 문서상
+    마지막 page 를 계산 못 할 때 가능하다고 안내 — 실제 commits API 에서 관찰된 적은 없다)
+    이 응답만으로 전체 개수를 확정할 수 없다 — 틀린 개수를 사실처럼 반환하지 않고 None 을
+    돌려준다. 호출부(count_commits)는 이를 그대로 None 으로 전달한다.
     """
-    page = last_page(header)
-    if page is not None:
-        return page
+    links = parse_link_header(header)
+    last = links.get("last")
+    if last is not None:
+        return page_of(last)
+    if "next" in links:
+        return None
     return returned_items
