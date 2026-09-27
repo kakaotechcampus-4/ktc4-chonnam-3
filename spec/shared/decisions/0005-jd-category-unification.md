@@ -39,3 +39,5 @@ PR #41에서 DB `jd_requirements.category`를 `required`/`preferred`/`responsibi
 ## 대체 관계
 
 `spec/shared/contracts/migration.md` "PR #15 JD 분류 정합화"의 기존 결정("API `JdCategory`와 DB·AI `requirement_type`은 서로 다른 의미이므로 각각 유지")과 `spec/ai/features/repository-analysis.md`의 "`responsibility`를 새 enum 값으로 만들지 않는다"를 대체한다.
+
+[AI 0006](../../ai/decisions/0006-task-llm-usage-policy.md#wanted-분류)의 Wanted 분류 중 `required/preferred/unknown` enum만 `required/preferred/responsibility`로 대체한다. 구조화 필드의 규칙 변환과 LLM 비호출, `skill_tags` 기반 `tech_tags`, 원문에 없는 요구사항·기술 태그와 수집·입력 실패를 LLM 추측으로 보충하지 않는 원칙은 유지한다.

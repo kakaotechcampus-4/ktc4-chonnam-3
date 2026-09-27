@@ -39,7 +39,7 @@ W4~W7 핵심, W8~W9 후속, W12~W13 검증·배포라는 일정은 배경 계획
 | AI-01 | L1 batch | 순서 변경·중복/누락 ID를 감지하고 유효 repo 결과를 보존 |
 | AI-02 | L2 | primary repo, 고정 ref, notable areas 1~5와 실제 위치 일치 |
 | AI-03 | 분석 캐시 | repo/level/SHA/prompt version 일치 때만 재사용 |
-| AI-04 | Wanted | structured field 원문 연결, required/preferred/unknown, 미지원·실패 구분 |
+| AI-04 | Wanted | structured field 원문 연결, required/preferred/responsibility, 미지원·실패 구분 |
 | AI-05 | 추천 | 공고/L1 기술 직접 일치·기존 run 후보 순서·전체 최대 5개, 실제 문장 근거로만 JD 연결, 기술 정보/일치 없으면 정상 미추천·직접 선택 유지, matchScore는 필드를 포함해 null |
 | AI-06 | Context | 다른 사용자·미선택·잘못된 ref·제외 자료 차단 |
 | AI-07 | 첫 질문 | hr_manager, 유효한 준비 결과, 질문/Contract/Persona 일치 |
