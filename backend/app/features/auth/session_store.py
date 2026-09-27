@@ -7,7 +7,8 @@ from uuid import UUID
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
-from app.core.errors import AppError, Reason
+from app.core.errors import AppError
+from app.shared.enums import Reason
 
 _SESSION_ID = re.compile(r"[A-Za-z0-9_-]{43}")
 

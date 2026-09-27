@@ -9,11 +9,12 @@ from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from app.core.config import Settings
 from app.core.deps import current_user, get_db
-from app.core.errors import AppError, Reason
+from app.core.errors import AppError
 from app.core.security import clear_session_cookie, require_same_origin, set_session_cookie
 from app.db.models.user import User
 from app.features.auth.oauth import STATE_TTL_SECONDS, Purpose
 from app.features.auth.service import finish_oauth
+from app.shared.enums import Reason
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 Database = Annotated[AsyncSession, Depends(get_db)]

@@ -4,6 +4,7 @@ import importlib
 from datetime import UTC, datetime
 
 import pytest
+from pydantic import ValidationError
 
 from app.db.models.analysis import AnalysisJob
 from app.db.models.github import Repository, UserProfileSummary
@@ -13,23 +14,22 @@ from app.db.models.report import InterviewReport
 from app.db.models.user import GithubAccount, User
 
 
-def test_identity_serializer_never_exposes_account_or_provider_secrets():
+def test_identity_serializer_rejects_account_or_provider_secrets():
     module = importlib.import_module("app.features.me.schemas")
     assert hasattr(module, "MeResponse"), "Identity response must be implemented"
-    response = module.MeResponse.model_validate(
-        {
-            "name": "User",
-            "avatar_url": None,
-            "github_linked": True,
-            "access_token_encrypted": b"secret",
-            "github_user_id": 123,
-        }
-    )
+    public = {"name": "User", "avatar_url": None, "github_linked": True}
+    response = module.MeResponse.model_validate(public)
     assert response.model_dump(by_alias=True) == {
         "name": "User",
         "avatarUrl": None,
         "githubLinked": True,
     }
+    # 공통 CamelModel은 미정의 필드를 거부한다. 비밀값을 전달한 실수도 숨기지 않는다.
+    with pytest.raises(ValidationError) as caught:
+        module.MeResponse.model_validate(
+            {**public, "access_token_encrypted": b"secret", "github_user_id": 123}
+        )
+    assert {error["type"] for error in caught.value.errors()} == {"extra_forbidden"}
 
 
 @pytest.fixture
@@ -127,10 +127,17 @@ async def test_profile_and_history_are_completed_only_and_user_scoped(client, me
     foreign = InterviewSession(
         user_id=other.id,
         analysis_job_id=jobs[1].id,
+        job_posting_id=posting.id,
         status="completed",
         completed_at=datetime.now(UTC),
     )
-    abandoned = InterviewSession(user_id=member.id, analysis_job_id=jobs[0].id, status="abandoned")
+    # 완료 여부·소유권과 무관하게 모든 면접에는 공고가 있어야 한다.
+    abandoned = InterviewSession(
+        user_id=member.id,
+        analysis_job_id=jobs[0].id,
+        job_posting_id=posting.id,
+        status="abandoned",
+    )
     db.add_all([mine, foreign, abandoned])
     await db.flush()
     db.add_all(

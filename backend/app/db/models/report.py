@@ -47,9 +47,7 @@ class InterviewReport(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     """면접 1건당 리포트 1개. lazy generation 이라 면접 종료 직후에는 없다."""
 
     __tablename__ = "interview_reports"
-    __table_args__ = (
-        CheckConstraint("total_score >= 0 AND total_score <= 100", name="interview_reports_total"),
-    )
+    __table_args__ = (CheckConstraint("total_score >= 0 AND total_score <= 100", name="total"),)
 
     interview_session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -80,8 +78,8 @@ class ReportScore(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
     __tablename__ = "report_scores"
     __table_args__ = (
         UniqueConstraint("report_id", "score_key", name="uq_report_scores_report_key"),
-        CheckConstraint(check_in("score_key", SCORE_KEYS), name="report_scores_key"),
-        CheckConstraint("score >= 0 AND score <= 100", name="report_scores_range"),
+        CheckConstraint(check_in("score_key", SCORE_KEYS), name="key"),
+        CheckConstraint("score >= 0 AND score <= 100", name="range"),
     )
 
     report_id: Mapped[uuid.UUID] = mapped_column(
@@ -103,10 +101,10 @@ class ReportDisagreement(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
     __table_args__ = (
         # persona 당 1회. 재제출은 already_submitted 로 막는다.
         UniqueConstraint("report_id", "persona", name="uq_report_disagreements_report_persona"),
-        CheckConstraint(check_in("persona", PERSONAS), name="report_disagreements_persona"),
+        CheckConstraint(check_in("persona", PERSONAS), name="persona"),
         CheckConstraint(
             check_in("reason_type", DISAGREEMENT_REASON_TYPES),
-            name="report_disagreements_reason_type",
+            name="reason_type",
         ),
     )
 

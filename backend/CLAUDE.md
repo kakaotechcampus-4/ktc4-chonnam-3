@@ -26,7 +26,7 @@
 - DB enum은 PostgreSQL ENUM이 아니라 `VARCHAR + CHECK`.
 - Redis는 로그인 세션, ARQ broker, lock, SSE mirror, 면접 context snapshot에 쓴다. 업무 기록의 영구 원본은 Postgres이며 로그인 세션 유실은 재로그인으로 처리한다.
 - LLM 모델·공급자는 [모델 선택 결정](../spec/ai/decisions/0011-sprint1-model-selection.md)과 BE 아키텍처의 현행 기준을 따른다. 코드에 모델명을 하드코딩하지 말고 설정/seed에서 읽어 실제 사용값을 DB에 저장한다.
-- LLM timeout/provider 오류와 구조화 JSON parse/schema 실패는 공통 호출 계층에서 자동 1회 재시도 후 실패 처리한다. semantic 실패는 재호출하지 않는다. 깨진 JSON을 downstream에 넘기지 않는다.
+- LLM timeout·재시도 가능한 provider 오류와 구조화 JSON parse/schema 실패는 공통 호출 계층에서 최대 1회 재시도한다. 영구 HTTP 요청 오류·quota 소진·semantic 실패는 재호출하지 않는다. 총 2회 상한과 유한 대기 등은 `spec/ai/contracts.md`의 Model Gateway 계약을 따른다. 깨진 JSON을 downstream에 넘기지 않는다.
 - `document_claims`는 Sprint 1에 테이블만 만들고 row 생성/claim 추출은 하지 않는다.
 - `evidence_conflicts`는 Sprint 1에 만들며 `answer_vs_code` 용도로만 사용한다. `claim_id` FK는 Sprint 2.
 - `report_persona_feedbacks`, `topic_taxonomy`, `interview_personas`, `probe_patterns`, `feedback_signals`, `eval_cases`, `eval_runs`, `auth_sessions`는 Sprint 1 DB에서 제외한다.

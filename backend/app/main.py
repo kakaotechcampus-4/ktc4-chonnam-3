@@ -10,7 +10,10 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import Settings, get_settings
 from app.core.crypto import TokenCipher
-from app.core.exception_handlers import register_exception_handlers
+from app.core.exception_handlers import (
+    register_exception_handlers,
+    register_unhandled_exception_middleware,
+)
 from app.core.logging import RequestIdMiddleware, configure_logging
 from app.core.security import SessionCookieMiddleware
 from app.features.auth.oauth import GitHubOAuth, OAuthStateStore
@@ -55,6 +58,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.state.settings = settings
     register_exception_handlers(application)
+    # 예상 밖 오류도 바깥쪽 쿠키·request ID 처리를 거쳐 응답해야 한다.
+    register_unhandled_exception_middleware(application)
     application.add_middleware(SessionCookieMiddleware, settings=settings)
     application.add_middleware(RequestIdMiddleware)
     application.include_router(auth_router, prefix=settings.api_prefix)

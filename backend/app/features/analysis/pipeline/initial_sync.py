@@ -1,6 +1,7 @@
 """Persist and enqueue public metadata synchronization after OAuth commits."""
 
 import asyncio
+from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import cast
 from uuid import UUID, uuid4
@@ -13,12 +14,13 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import TokenCipher
-from app.core.errors import AppError, Reason
+from app.core.errors import AppError
 from app.db.models.analysis import AnalysisJob
 from app.db.models.github import Repository
 from app.db.models.user import GithubAccount, User
 from app.integrations.github.base import GithubApiError
 from app.integrations.github.client import GithubClient
+from app.shared.enums import Reason
 
 
 async def enqueue_initial_sync(db: AsyncSession, redis: ArqRedis, user_id: UUID) -> UUID | None:
@@ -159,7 +161,7 @@ async def run_initial_sync(
             .values(is_accessible=False)
         )
         for repo in repositories:
-            values = repo.model_dump()
+            values = asdict(repo)
             values.update(user_id=user_id, is_accessible=True, synced_at=synced_at)
             await db.execute(
                 insert(Repository)

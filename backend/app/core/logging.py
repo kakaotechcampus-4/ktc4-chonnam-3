@@ -12,6 +12,8 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import LogLevel
 
+REQUEST_ID_HEADER = "X-Request-ID"
+
 _SECRET_KEYS = {
     "access_token",
     "refresh_token",
@@ -96,14 +98,14 @@ class RequestIdMiddleware:
             await self.app(scope, receive, send)
             return
         try:
-            request_id = str(UUID(Headers(scope=scope).get("x-request-id", "")))
+            request_id = str(UUID(Headers(scope=scope).get(REQUEST_ID_HEADER, "")))
         except ValueError:
             request_id = str(uuid4())
         tokens = structlog.contextvars.bind_contextvars(request_id=request_id)
 
         async def send_with_id(message: Message) -> None:
             if message["type"] == "http.response.start":
-                MutableHeaders(scope=message)["X-Request-ID"] = request_id
+                MutableHeaders(scope=message)[REQUEST_ID_HEADER] = request_id
             await send(message)
 
         try:

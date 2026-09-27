@@ -38,13 +38,11 @@ class JobPosting(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "job_postings"
     __table_args__ = (
         UniqueConstraint("normalized_url", name="uq_job_postings_normalized_url"),
-        CheckConstraint(check_in("source", POSTING_SOURCES), name="job_postings_source"),
-        CheckConstraint(
-            check_in("parse_status", POSTING_PARSE_STATUSES), name="job_postings_parse_status"
-        ),
+        CheckConstraint(check_in("source", POSTING_SOURCES), name="source"),
+        CheckConstraint(check_in("parse_status", POSTING_PARSE_STATUSES), name="parse_status"),
         CheckConstraint(
             check_in("domain_category", DOMAIN_CATEGORIES) + " OR domain_category IS NULL",
-            name="job_postings_domain_category",
+            name="domain_category",
         ),
     )
 
@@ -76,7 +74,7 @@ class JdRequirement(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         UniqueConstraint(
             "job_posting_id", "display_order", name="uq_jd_requirements_posting_order"
         ),
-        CheckConstraint(check_in("category", JD_CATEGORIES), name="jd_requirements_category"),
+        CheckConstraint(check_in("category", JD_CATEGORIES), name="category"),
         Index("ix_jd_requirements_job_posting_id", "job_posting_id"),
     )
 

@@ -52,8 +52,8 @@ class AnalysisJob(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     __tablename__ = "analysis_jobs"
     __table_args__ = (
-        CheckConstraint(check_in("job_type", JOB_TYPES), name="analysis_jobs_job_type"),
-        CheckConstraint(check_in("status", JOB_STATUSES), name="analysis_jobs_status"),
+        CheckConstraint(check_in("job_type", JOB_TYPES), name="job_type"),
+        CheckConstraint(check_in("status", JOB_STATUSES), name="status"),
         # 사용자·job_type 당 살아 있는 job 1개. 락 키에 job_type 이 들어가는 이유와 같다 —
         # M1 initial_sync 와 M2 analysis_run 이 겹쳐도 정상 흐름을 막지 않는다.
         Index(
@@ -108,17 +108,15 @@ class AnalysisRepoCandidate(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
         UniqueConstraint("analysis_job_id", "repository_id", name="uq_candidates_job_repo"),
         UniqueConstraint("analysis_job_id", "base_rank", name="uq_candidates_job_base_rank"),
         Index("ix_candidates_job_batch", "analysis_job_id", "batch_no", "batch_rank"),
-        CheckConstraint(
-            check_in("filter_status", CANDIDATE_FILTER_STATUSES), name="candidates_filter_status"
-        ),
+        CheckConstraint(check_in("filter_status", CANDIDATE_FILTER_STATUSES), name="filter_status"),
         CheckConstraint(
             check_in("filter_reason", CANDIDATE_FILTER_REASONS) + " OR filter_reason IS NULL",
-            name="candidates_filter_reason",
+            name="filter_reason",
         ),
         CheckConstraint(
             check_in("selection_reason", CANDIDATE_SELECTION_REASONS)
             + " OR selection_reason IS NULL",
-            name="candidates_selection_reason",
+            name="selection_reason",
         ),
     )
 
@@ -146,7 +144,7 @@ class AnalysisRepoCandidatePage(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
     __tablename__ = "analysis_repo_candidate_pages"
     __table_args__ = (
         UniqueConstraint("analysis_job_id", "page_no", name="uq_candidate_pages_job_page"),
-        CheckConstraint(check_in("status", CANDIDATE_PAGE_STATUSES), name="candidate_pages_status"),
+        CheckConstraint(check_in("status", CANDIDATE_PAGE_STATUSES), name="status"),
     )
 
     analysis_job_id: Mapped[uuid.UUID] = mapped_column(
@@ -165,10 +163,8 @@ class RepoMatchScore(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "repo_match_scores"
     __table_args__ = (
         UniqueConstraint("analysis_job_id", "repository_id", name="uq_match_scores_job_repo"),
-        CheckConstraint(
-            check_in("candidate_source", CANDIDATE_SOURCES), name="match_scores_candidate_source"
-        ),
-        CheckConstraint("score >= 0 AND score <= 100", name="match_scores_score_range"),
+        CheckConstraint(check_in("candidate_source", CANDIDATE_SOURCES), name="candidate_source"),
+        CheckConstraint("score >= 0 AND score <= 100", name="score_range"),
     )
 
     analysis_job_id: Mapped[uuid.UUID] = mapped_column(

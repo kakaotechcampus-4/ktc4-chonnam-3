@@ -39,7 +39,7 @@ class Evidence(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
 
     __tablename__ = "evidences"
     __table_args__ = (
-        CheckConstraint(check_in("source_type", EVIDENCE_SOURCE_TYPES), name="evidences_source"),
+        CheckConstraint(check_in("source_type", EVIDENCE_SOURCE_TYPES), name="source"),
         Index("ix_evidences_session_id", "interview_session_id"),
     )
 
@@ -50,7 +50,7 @@ class Evidence(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
         UUID(as_uuid=True), ForeignKey("repositories.id", ondelete="SET NULL"), nullable=True
     )
     source_type: Mapped[str] = mapped_column(String(20), nullable=False)
-    # commit SHA 또는 branch. 이게 없으면 나중에 같은 내용을 다시 꺼낼 수 없다.
+    # commit SHA. 이게 없으면 나중에 같은 내용을 다시 꺼낼 수 없다.
     git_ref: Mapped[str] = mapped_column(String(40), nullable=False)
     path: Mapped[str | None] = mapped_column(Text, nullable=True)
     snippet: Mapped[str] = mapped_column(Text, nullable=False)
@@ -68,9 +68,7 @@ class TurnEvidence(Base, CreatedAtMixin):
     """
 
     __tablename__ = "turn_evidences"
-    __table_args__ = (
-        CheckConstraint(check_in("usage", EVIDENCE_USAGES), name="turn_evidences_usage"),
-    )
+    __table_args__ = (CheckConstraint(check_in("usage", EVIDENCE_USAGES), name="usage"),)
 
     turn_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -90,8 +88,8 @@ class EvidenceConflict(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
 
     __tablename__ = "evidence_conflicts"
     __table_args__ = (
-        CheckConstraint(check_in("source", CONFLICT_SOURCES), name="evidence_conflicts_source"),
-        CheckConstraint(check_in("verdict", CONFLICT_VERDICTS), name="evidence_conflicts_verdict"),
+        CheckConstraint(check_in("source", CONFLICT_SOURCES), name="source"),
+        CheckConstraint(check_in("verdict", CONFLICT_VERDICTS), name="verdict"),
         Index("ix_evidence_conflicts_turn_id", "turn_id"),
     )
 

@@ -15,8 +15,9 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
 from app.core.config import Settings
-from app.core.errors import AppError, Reason
+from app.core.errors import AppError
 from app.core.logging import get_logger
+from app.shared.enums import Reason
 
 Purpose = Literal["login", "link"]
 _STATE = re.compile(r"[A-Za-z0-9_-]{43}")

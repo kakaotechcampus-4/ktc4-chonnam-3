@@ -2,7 +2,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import AppError, Reason
+from app.core.errors import AppError
 from app.db.models.user import User
 from app.features.me import queries
 from app.features.me.schemas import (
@@ -17,6 +17,7 @@ from app.features.me.schemas import (
     MeResponse,
     RecentInterview,
 )
+from app.shared.enums import Reason
 
 
 async def get_me(db: AsyncSession, user: User) -> MeResponse:

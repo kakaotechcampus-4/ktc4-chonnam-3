@@ -5,7 +5,8 @@ from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import Settings
-from app.core.errors import AppError, Reason
+from app.core.errors import AppError
+from app.shared.enums import Reason
 
 
 def require_active_user(status: str) -> None:

@@ -48,7 +48,7 @@ class Event(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
 
     __tablename__ = "events"
     __table_args__ = (
-        CheckConstraint(check_in("event_name", EVENT_NAMES), name="events_event_name"),
+        CheckConstraint(check_in("event_name", EVENT_NAMES), name="event_name"),
         Index("ix_events_event_name_created_at", "event_name", "created_at"),
         Index("ix_events_user_id_created_at", "user_id", "created_at"),
     )

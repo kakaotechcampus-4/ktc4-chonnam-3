@@ -1,8 +1,8 @@
 # Error Reason 레지스트리
 
-상태: Sprint 1 FIX. 실제 HTTP 오류 레지스트리는 `app/core/errors.py`의 `Reason`과 `ERRORS`다. 값을 추가할 때 공통 계약, 소비 코드와 테스트를 함께 검토한다. 아래 전체 도메인 표에는 향후 기능의 계약값도 포함되어 있다.
+상태: Sprint 1 FIX. API reason의 단일 정의는 `app/shared/enums.py`의 `Reason`이다. `app/core/errors.py`는 `STATUS_BY_REASON`·`MESSAGE_BY_REASON`과 `AppError`를 제공한다. 값을 추가할 때 공통 계약, 소비 코드와 테스트를 함께 검토한다.
 
-현재 코드에 등록된 reason은 `unauthenticated`, `github_token_invalid`, `account_suspended`, `account_withdrawn`, `invalid_state`, `invalid_code`, `provider_unavailable`, `github_already_linked`, `not_found`, `invalid_request`, `internal_error`다. 나머지 도메인 reason을 런타임에서 이미 제공한다고 해석하지 않는다.
+OAuth와 분석·면접 등 모든 기능은 같은 레지스트리를 사용한다. 아래 표의 reason은 코드에 등록되어 있으며, 각 API의 구현 여부와는 구분한다. 브라우저 callback 표시 코드는 아래 별도 절을 따른다.
 
 ## Error Envelope
 
@@ -47,6 +47,8 @@
 | 면접 생성 | `session_limit_exceeded` | 409 |
 | 면접 준비 | `prep_failed` | 409 |
 | 면접 준비 | `repo_unreachable` | 409 |
+| 면접 준비 재시도 | `prep_in_progress` | 409 |
+| 면접 준비 재시도 | `session_expired` | 410 |
 | 면접 조회 | `not_found` | 404 |
 | 재시도 | `original_not_completed` | 409 |
 | 재시도 | `repository_unavailable` | 409 |

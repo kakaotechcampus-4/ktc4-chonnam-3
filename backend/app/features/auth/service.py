@@ -7,11 +7,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import TokenCipher
-from app.core.errors import AppError, Reason
+from app.core.errors import AppError
 from app.core.security import require_active_user
 from app.db.models.user import GithubAccount, User
 from app.features.auth import queries
 from app.features.auth.oauth import GitHubOAuth, GitHubProfile, OAuthToken, Purpose
+from app.shared.enums import Reason
 
 
 async def upsert_github_user(

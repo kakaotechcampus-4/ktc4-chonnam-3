@@ -48,10 +48,8 @@ class InterviewSession(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 
     __tablename__ = "interview_sessions"
     __table_args__ = (
-        CheckConstraint(check_in("status", INTERVIEW_STATUSES), name="interview_sessions_status"),
-        CheckConstraint(
-            check_in("answer_mode", ANSWER_MODES), name="interview_sessions_answer_mode"
-        ),
+        CheckConstraint(check_in("status", INTERVIEW_STATUSES), name="status"),
+        CheckConstraint(check_in("answer_mode", ANSWER_MODES), name="answer_mode"),
         # 같은 run 에 활성 면접 1개만 (session_limit_exceeded).
         Index(
             "uq_interview_sessions_active_per_run",
@@ -69,8 +67,10 @@ class InterviewSession(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     analysis_job_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("analysis_jobs.id", ondelete="CASCADE"), nullable=False
     )
-    job_posting_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("job_postings.id", ondelete="SET NULL"), nullable=True
+    # 공고 필수 (features/interview/service.py). 참조 중인 공고는 지울 수 없어야 하므로
+    # ondelete 를 SET NULL 로 두지 않는다.
+    job_posting_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("job_postings.id"), nullable=False
     )
     # retry 로 만든 세션이면 원본을 가리킨다. 원본의 run·공고·repo 조합을 복사한다.
     retry_of_interview_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -130,8 +130,8 @@ class InterviewTurn(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __tablename__ = "interview_turns"
     __table_args__ = (
         UniqueConstraint("interview_session_id", "turn_no", name="uq_interview_turns_session_turn"),
-        CheckConstraint(check_in("persona", PERSONAS), name="interview_turns_persona"),
-        CheckConstraint(check_in("status", TURN_STATUSES), name="interview_turns_status"),
+        CheckConstraint(check_in("persona", PERSONAS), name="persona"),
+        CheckConstraint(check_in("status", TURN_STATUSES), name="status"),
     )
 
     interview_session_id: Mapped[uuid.UUID] = mapped_column(

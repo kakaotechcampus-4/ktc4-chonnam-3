@@ -6,11 +6,12 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import HTTPConnection
 
-from app.core.errors import AppError, Reason
+from app.core.errors import AppError
 from app.core.security import require_active_user, require_same_origin
 from app.db.models.user import User
 from app.db.session import get_db as get_db
 from app.features.auth.session_store import SessionStore
+from app.shared.enums import Reason
 
 
 async def current_user(
