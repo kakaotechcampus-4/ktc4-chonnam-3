@@ -10,3 +10,37 @@
 
 확정본 §3 / task-04
 """
+
+import uuid
+from datetime import datetime
+
+from app.shared.enums import CandidateSource, RepoStatus
+from app.shared.schema import CamelResponse
+
+
+class LanguageRatio(CamelResponse):
+    name: str
+    ratio: float
+
+
+class RepositoryCard(CamelResponse):
+    """Task 10의 공통 카드. 필수 nullable 필드는 응답에서 생략하지 않는다."""
+
+    id: uuid.UUID
+    name: str
+    full_name: str
+    description: str | None
+    languages: list[LanguageRatio]
+    topics: list[str]
+    stars: int
+    forks: int
+    commit_count: int | None
+    user_commit_count: int | None
+    pushed_at: datetime | None
+    status: RepoStatus
+    error_code: str | None
+    recommended: bool
+    candidate_source: CandidateSource
+    recommend_reason: str | None
+    match_score: float | None
+    matched_requirement_ids: list[uuid.UUID]
