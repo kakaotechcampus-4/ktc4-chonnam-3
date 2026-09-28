@@ -8,7 +8,7 @@
 
 PR 기준은 `develop`이며 이력 정리 기준은 `7e54047`이다. 기존 #57의 최종 구현 `0bd0ccd`는
 [`backup/pr57-before-cleanup-20260928`](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/tree/backup/pr57-before-cleanup-20260928)에 보존한다.
-정리한 게시본은 #57의 신규 변경만 포함하며 **선행 구현과 후속 보완이 필요한 Draft**다.
+정리한 게시본은 #57의 신규 변경만 포함하며 **선행 구현과 후속 보완이 필요한 상태**다.
 `develop`에 이미 병합된 DB 모델·초기 migration은 다시 변경하지 않는다.
 
 | 구분 | 게시·보존 범위 |
@@ -44,7 +44,40 @@ FE 리뷰 반영, 공통 오류 처리·세션·초기 수집 회귀 테스트�
 병합 전에는 최신 `develop`·#45·위 보완을 결합해 BE 정적 검사·전체 테스트와 FE 인증 통합을
 다시 실행해야 한다. 선행 코드 결합 환경의 성공을 게시본 단독 성공으로 보고하지 않는다.
 
-## 현재 게시본의 실행 결과
+## Origin 리뷰 반영과 검증 (2026-09-29)
+
+[`require_same_origin`](../../backend/app/core/security.py)은 상태 변경 HTTP 요청에서도
+Origin 누락을 거부한다. 기존 클라이언트 편의를 위한 예외로 유지하지 않는다.
+세션 인증의 `GET`·`HEAD`·`OPTIONS` 외 메서드, 로그아웃, WS 연결은 설정한 frontend
+Origin과 일치해야 하며 빈 값·`null`·다른 Origin과 `Referer`만 있는 요청도 거부한다.
+일반 GET·SSE와 OAuth callback, 기존 Redis 세션·14일 sliding 정책은 유지한다.
+CLI·프록시의 헤더 전달 방법은 [로컬 안내](../../backend/docs/local-oauth.md),
+[배포 안내](../../backend/docs/deploy.md)에 기록한다.
+
+기존 테스트 클라이언트는 기본 Origin을 보내므로 테스트에서 헤더를 직접 제거했다.
+`test_session_origin.py`는 거부 시 세션 보존·TTL 미연장·쿠키 미변경·핸들러 미실행과
+정상 Origin의 상태 변경을 검증한다. `test_auth.py`에는 Origin 없는 GET/SSE와 WS 거부를 보완했다.
+
+| 대상 | 이번 실행 결과 |
+| --- | --- |
+| 게시본 단독 | 신규 Origin 회귀 26개 통과. 수정 전 누락 요청 6개가 200/204로 통과하는 실패를 재현 |
+| 게시본 단독 | Ruff check·format 통과(189파일). mypy 2오류·전체 pytest 수집 오류 1개는 기존 선행 GitHub 구현 부재로 유지 |
+| 게시본 + #45 `e3cc0c7` + 보존 보완 | BE 전체 527개 통과·skip 0. Ruff·format(196파일)·mypy(116파일) 통과 |
+| 게시본 | 공통 계약의 2스키마·부분 OpenAPI·fixture 7개 및 diff 검사 통과 |
+| 선행·보완 결합 브라우저 | 기존 인증 통합 1개 실패. 정상 Origin 로그아웃은 204지만, 먼저 시작한 조회 응답이 늦게 도착해 쿠키 삭제 확인에서 실패 |
+| 별도 로컬 진단 | 위 조회·로그아웃 순서를 재현한 1개 통과. 늦은 응답이 쿠키를 남겨도 Redis 키는 삭제 상태이며 같은 쿠키의 `/api/me`는 401 |
+| 실제 GitHub 계정·운영 HTTPS 배포 | 이번 수정에서 미실행 |
+
+격리 PostgreSQL·Redis로 실행하고 GitHub HTTP를 대체했다. 결합본은 별도 worktree에서만
+선행·보완 코드를 추가했으며 게시본에 복사하지 않았다. 최초 결합 실행은 다른 worktree의
+가상환경으로 AI 패키지 경로 검사 1개가 실패했다. 결합본 전용 가상환경을 구성한 뒤 전체를
+다시 실행한 결과가 위 527개다. 게시본 단독의 전체 통과를 뜻하지 않는다.
+
+브라우저 경합은 Origin 검사를 바꾸기 전과 동일한 정상 요청·응답 경로에서 발생한다.
+후속으로 진행 중 조회 요청의 취소와 sliding 쿠키 응답 순서를 보완·재검증해야 한다.
+이번 Origin 수정에 FE 동작·세션 발급 방식 변경을 섞거나 브라우저 assertion을 완화하지 않았다.
+
+## 이력 정리 시 실행 결과 (2026-09-28)
 
 아래 결과는 기존 통합본의 수치를 재사용하지 않고 각 대상에서 새로 확인한다.
 GitHub HTTP는 대체하고 DB 기능은 격리 PostgreSQL, 세션·큐 기능은 전용 Redis를 사용한다.

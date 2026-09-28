@@ -56,6 +56,12 @@ Set-Cookie: devon_session=...; HttpOnly; Secure; SameSite=Lax; Path=/
 `FRONTEND_ORIGIN`은 OAuth callback의 origin과 상태 변경 요청·WS handshake의 Origin 검사에
 사용하며 CORS allowlist가 아니다. 로컬과 운영 모두 같은 origin의 프록시를 사용한다.
 
+세션 인증을 사용하는 HTTP 요청 중 `GET`·`HEAD`·`OPTIONS`를 제외한 메서드와
+`POST /api/auth/logout`, WS handshake는 `Origin` 헤더가 필수이며 값이 `FRONTEND_ORIGIN`과
+정확히 일치해야 한다. 누락·빈 값·`null`·다른 origin은 `403 unauthenticated`로 거부한다.
+`Referer`로 대체하지 않으며 `GET`·`HEAD`·`OPTIONS`는 기존대로 이 검사에서 제외한다.
+CLI로 해당 요청을 보낼 때도 `Origin`을 명시해야 한다.
+
 세션은 Redis `auth:sess:{sid}`의 사용자 ID와 기본 14일 TTL로 관리한다. 인증된 REST·SSE·WS
 handshake에서 같은 쿠키의 Max-Age와 Redis TTL을 연장한다. Redis 세션이 유실되면 재로그인하며
 PostgreSQL에서 복원하지 않는다. 로그아웃은 현재 세션·쿠키만 삭제하고 GitHub 암호화 토큰은 유지한다.
@@ -85,6 +91,7 @@ GET /api/interviews/{없는id}
 별도 브라우저 포트나 호스트를 노출하지 않는다.
 
 OAuth callback의 `code`·`state` 쿼리와 인증 쿠키(`devon_session`)를 보존한다.
+브라우저의 `Origin`도 제거하거나 내부 API 주소로 바꾸지 않고 전달한다.
 인증 응답을 캐시하거나 민감한 쿼리·쿠키·헤더를 로그에 남기지 않는다.
 
 ### ③ SSE — 압축을 끈다

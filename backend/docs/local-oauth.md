@@ -85,6 +85,10 @@ npm run dev
 
 `devon_session`은 HttpOnly·Path `/`·SameSite Lax이며 로컬 HTTP에서는 Secure=false, 운영 HTTPS에서는 Secure=true다. 인증된 REST·SSE 연결·WS handshake에서 Redis TTL과 응답 쿠키를 14일로 연장한다. 만료·유실은 `401 unauthenticated`, Redis 장애는 `500 internal_error`다. `/auth/refresh`는 제공하지 않는다.
 
+세션 인증을 쓰는 HTTP 요청 중 `GET`·`HEAD`·`OPTIONS`를 제외한 메서드와 `POST /api/auth/logout`, WS handshake에는 `FRONTEND_ORIGIN`과 정확히 일치하는 `Origin`이 필요하다. 누락·빈 값·`null`·다른 origin은 `403 unauthenticated`로 거부하며 `Referer`로 대체하지 않는다. `GET`·`HEAD`·`OPTIONS`의 동작은 그대로다.
+
+브라우저는 같은 origin의 상태 변경 요청과 WS 연결에 `Origin`을 보내며 Vite는 이를 보존한다. CLI·API 클라이언트는 쿠키와 별도로 이 헤더를 명시해야 한다. 위 로컬 설정에서는 curl에 `-H "Origin: http://localhost:5173"`을 추가한다. API에 직접 접속하더라도 `Origin`을 내부 주소인 `http://localhost:8000`으로 바꾸지 않는다.
+
 worker가 없으면 초기 수집이 진행되지 않아 홈이 `syncing`에 머무른다. 수집은 public 저장소의 목록 메타데이터만 저장한다. 정상 실패는 DB job에 기록하고 다음 로그인·재연동에서 다시 요청할 수 있다. SQL의 `queued` job이 Redis에서 유실되면 다음 로그인·재연동에서 재enqueue한다. 실행할 수 없는 ARQ 완료 기록만 남은 `queued` job은 실패로 정리하고 다음 요청에서 새로 시도한다. 재연동과 겹친 이전 토큰의 401은 DB의 새 토큰을 확인해 한 번 다시 요청하며 새 토큰을 이전 실패로 폐기하지 않는다.
 
 프로세스가 강제로 종료된 `running` job은 자동 재실행하지 않는다. 운영자가 실제 worker 종료를 확인하고 해당 job을 실패로 정리한 뒤 재시도해야 한다. SQL의 업무 기록과 Redis 로그인 세션은 복구 정책이 다르며 유실된 로그인 세션은 다시 로그인한다.
