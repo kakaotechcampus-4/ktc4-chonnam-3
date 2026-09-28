@@ -331,7 +331,10 @@ async def test_session_slide_reaches_json_redirect_and_sse(client, app, redis, g
     sid = response.cookies["devon_session"]
     for path in ("/api/me", "/auth-test-redirect", "/auth-test-stream"):
         await redis.expire(f"auth:sess:{sid}", 30)
-        response = await client.get(path)
+        # 일반 조회와 SSE는 Origin이 없는 정상 브라우저 요청도 허용한다.
+        request = client.build_request("GET", path)
+        request.headers.pop("origin", None)
+        response = await client.send(request)
         assert response.status_code in (200, 307)
         assert response.cookies["devon_session"] == sid
         assert "Max-Age=1209600" in response.headers["set-cookie"]
@@ -384,12 +387,14 @@ async def test_websocket_uses_same_session_dependency_and_sliding_cookie(app, cl
             "raw_path": b"/auth-test-websocket",
             "query_string": b"",
             "root_path": "",
-            "headers": [(b"cookie", cookie.encode()), (b"origin", origin.encode())],
+            "headers": [(b"cookie", cookie.encode())],
             "client": ("127.0.0.1", 1234),
             "server": ("test", 80),
             "subprotocols": [],
             "extensions": {"websocket.http.response": {}},
         }
+        if origin is not None:
+            scope["headers"].append((b"origin", origin.encode()))
 
         async def receive():
             return {"type": "websocket.connect"}
@@ -408,6 +413,8 @@ async def test_websocket_uses_same_session_dependency_and_sliding_cookie(app, cl
     )
     for cookie, origin in [
         ("", app.state.settings.frontend_origin),
+        (f"devon_session={sid}", None),
+        (f"devon_session={sid}", "null"),
         (f"devon_session={sid}", "https://untrusted.example"),
     ]:
         messages = await connect(cookie, origin)

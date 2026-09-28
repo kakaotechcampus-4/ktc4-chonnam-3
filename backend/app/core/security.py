@@ -27,9 +27,8 @@ def require_same_origin(connection: HTTPConnection) -> None:
         return
     origin = connection.headers.get("origin")
     expected = connection.app.state.settings.frontend_origin.rstrip("/")
-    if (origin is not None and origin != expected) or (
-        connection.scope["type"] == "websocket" and origin is None
-    ):
+    # 상태 변경과 WS 연결은 출처가 확인돼야 하므로 누락·null도 거부한다.
+    if origin != expected:
         raise AppError(Reason.UNAUTHENTICATED, status_code=403)
 
 
