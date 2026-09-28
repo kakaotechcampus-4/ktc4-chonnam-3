@@ -263,3 +263,166 @@ async def test_inaccessible_failures_keep_assigned_counts_and_terminal_run(
         assert payload["failedRepositories"] == [
             {"repositoryId": str(repositories[0].id), "errorCode": "repo_unreachable"}
         ]
+
+
+async def test_wanted_failure_stops_later_steps_and_preserves_collected_details(
+    client, db, app, repositories
+):
+    run_id = await _start(client)
+    handler, requests = _http_handler(posting_failed=True)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        await _drain(app, http)
+    response = await client.get(f"/api/analysis-runs/{run_id}")
+    payload = response.json()
+    assert response.status_code == 200 and payload["status"] == "failed"
+    assert payload["failureReason"] == "jd_fetch_failed"
+    steps = {step["key"]: step["status"] for step in payload["steps"]}
+    assert steps["repo_detail"] == "completed" and steps["jd_fetch"] == "failed"
+    assert all(steps[key] == "skipped" for key in ("jd_extract", "repo_analyze", "match_score"))
+    assert not any(request.url.host == "api.openai.com" for request in requests)
+    assert await db.scalar(select(func.count()).select_from(RepoAnalysis)) == 0
+    await db.refresh(repositories[0])
+    assert repositories[0].readme_text == "Python service README"
+
+
+async def test_partial_l1_is_analyzed_but_not_recommended(client, db, app, repositories):
+    run_id = await _start(client)
+    handler, _ = _http_handler(missing_readme=("repo0",))
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        await _drain(app, http)
+    run = await db.get(AnalysisJob, UUID(run_id))
+    assert run.status == "partial"
+    result = await client.get(f"/api/analysis-runs/{run_id}/result")
+    assert result.status_code == 200, result.text
+    payload = result.json()
+    assert payload["analyzedCount"] == 5 and payload["failedCount"] == 0
+    assert payload["failedRepositories"] == []
+    partial = next(
+        card for card in payload["repositories"] if card["id"] == str(repositories[0].id)
+    )
+    assert partial["status"] == "partial" and partial["errorCode"] == "no_readme"
+    assert partial["recommended"] is False
+
+
+async def test_duplicate_queued_deliveries_only_analyze_once(client, db, app, repositories):
+    run_id = await _start(client)
+    await app.state.redis.enqueue_job("analysis_run", run_id, _job_id=f"concurrent:{run_id}")
+    handler, requests = _http_handler()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        assert (await _drain(app, http)).jobs_complete == 2
+    assert sum(request.url.host == "api.openai.com" for request in requests) == 1
+    assert await db.scalar(select(func.count()).select_from(RepoAnalysis)) == 5
+    assert (await client.get(f"/api/analysis-runs/{run_id}/result")).status_code == 200
+
+
+async def test_initial_sync_keeps_run_queued_until_later_delivery(client, db, app, repositories):
+    sync = await db.scalar(select(AnalysisJob).where(AnalysisJob.job_type == "initial_sync"))
+    sync.status = "running"
+    await db.commit()
+    run_id = await _start(client)
+    handler, requests = _http_handler()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        await _drain(app, http)
+        run = await db.get(AnalysisJob, UUID(run_id))
+        assert run.status == "queued" and run.started_at is None and requests == []
+        sync.status = "succeeded"
+        await db.commit()
+        assert await enqueue_analysis(app.state.redis, UUID(run_id))
+        await _drain(app, http)
+    await db.refresh(run)
+    assert run.status == "succeeded"
+
+
+async def test_publish_failure_does_not_rollback_completed_analysis(
+    client, app, repositories, monkeypatch
+):
+    run_id = await _start(client)
+    pipeline = app.state.redis.pipeline
+
+    def unavailable_publish(*args, **kwargs):
+        pipe = pipeline(*args, **kwargs)
+        pipe.publish = MagicMock(side_effect=ConnectionError("notification unavailable"))
+        return pipe
+
+    monkeypatch.setattr(app.state.redis, "pipeline", unavailable_publish)
+    handler, _ = _http_handler()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        await _drain(app, http)
+    assert (await client.get(f"/api/analysis-runs/{run_id}")).json()["status"] == "completed"
+    result = await client.get(f"/api/analysis-runs/{run_id}/result")
+    assert result.status_code == 200 and result.json()["analyzedCount"] == 5
+
+
+async def test_failed_later_page_keeps_first_result_and_does_not_enqueue_again(
+    client, app, repositories
+):
+    run_id = await _start(client)
+    handler, _ = _http_handler()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        await _drain(app, http)
+    assert (await client.get(f"/api/analysis-runs/{run_id}/candidates?page=2")).status_code == 202
+    handler, _ = _http_handler(inaccessible=("all",))
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        await _drain(app, http)
+    response = await client.get(f"/api/analysis-runs/{run_id}/candidates?page=2")
+    assert (
+        response.status_code == 409
+        and response.json()["error"]["reason"] == "candidate_page_failed"
+    )
+    assert (await client.get(f"/api/analysis-runs/{run_id}")).json()["status"] == "completed"
+    result = await client.get(f"/api/analysis-runs/{run_id}/result")
+    assert result.status_code == 200, result.text
+    payload = result.json()
+    assert payload["analyzedCount"] == 5 and payload["failedCount"] == 2
+    assert len(payload["repositories"]) == 5
+    assert {item["repositoryId"] for item in payload["failedRepositories"]} == {
+        str(repo.id) for repo in repositories[5:]
+    }
+    assert await app.state.redis.zcard("arq:queue") == 0
+
+
+async def test_no_eligible_repositories_preserves_exclusion_rows(client, db, app, repositories):
+    for repository in repositories:
+        repository.primary_language = None
+    await db.commit()
+    run_id = await _start(client)
+    handler, requests = _http_handler()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        await _drain(app, http)
+    response = await client.get(f"/api/analysis-runs/{run_id}")
+    assert response.status_code == 200 and response.json()["status"] == "failed"
+    assert response.json()["failureReason"] == "no_public_repo"
+    assert requests == []
+    candidates = list(
+        await db.scalars(
+            select(AnalysisRepoCandidate).where(
+                AnalysisRepoCandidate.analysis_job_id == UUID(run_id)
+            )
+        )
+    )
+    assert len(candidates) == len(repositories)
+    assert all(candidate.filter_status == "excluded" for candidate in candidates)
+    assert all(candidate.filter_reason == "no_language" for candidate in candidates)
+
+
+async def test_failed_initial_sync_does_not_report_empty_cache_as_no_public_repo(
+    client, db, app, member
+):
+    db.add(
+        AnalysisJob(
+            user_id=member.id,
+            job_type="initial_sync",
+            status="failed",
+            error_code="rate_limited",
+            completed_at=datetime.now(UTC),
+        )
+    )
+    await db.commit()
+    run_id = await _start(client)
+    handler, requests = _http_handler()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        await _drain(app, http)
+    response = await client.get(f"/api/analysis-runs/{run_id}")
+    assert response.status_code == 200 and response.json()["status"] == "failed"
+    assert response.json()["failureReason"] == "rate_limited"
+    assert requests == []
