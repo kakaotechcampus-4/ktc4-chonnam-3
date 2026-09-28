@@ -122,6 +122,8 @@ class SessionRepository(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
     # 값 집합은 task-17 에서 확정하므로 아직 CHECK 를 걸지 않는다.
     selection_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
     display_order: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 선택 당시 코드 ref. 과거 자료의 SHA를 현재 저장소 HEAD로 추측해 채우지 않는다.
+    snapshot_head_sha: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class InterviewTurn(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -142,6 +144,8 @@ class InterviewTurn(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="asked")
 
     question_text: Mapped[str] = mapped_column(Text, nullable=False)
+    # 전달 전에 확정한 다섯 필드 계약. 기존 질문의 평가 기준은 소급 생성하지 않는다.
+    question_contract: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     answer_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # 꼬리질문 깊이. parent_turn_no 는 어느 턴을 파고든 질문인지.
