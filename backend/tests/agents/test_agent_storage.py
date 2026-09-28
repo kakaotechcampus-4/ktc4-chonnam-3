@@ -294,3 +294,97 @@ async def test_pending_generation_blocks_duplicates_and_cancellation_releases_cl
     ) as http:
         retried = await invoke(agent_sessions, agent_seed, http)
     assert retried.turn_id is not None
+
+
+@pytest.mark.parametrize("interruption", ["cancel", "error"])
+async def test_completed_provider_attempt_survives_reviewer_interruption(
+    agent_sessions, agent_seed, interruption
+):
+    entered = asyncio.Event()
+
+    async def review(request, question):
+        entered.set()
+        if interruption == "error":
+            raise RuntimeError("reviewer stopped")
+        await asyncio.Event().wait()
+
+    call_id = uuid4()
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: response(output()))
+    ) as http:
+        running = asyncio.create_task(
+            invoke(agent_sessions, agent_seed, http, call_id=call_id, reviewer=review)
+        )
+        await asyncio.wait_for(entered.wait(), timeout=5)
+        if interruption == "cancel":
+            running.cancel()
+        expected = asyncio.CancelledError if interruption == "cancel" else RuntimeError
+        with pytest.raises(expected):
+            await running
+    async with agent_sessions() as db:
+        record = await db.get(LLMCallRecord, call_id)
+        assert record.discard_reason == (
+            "canceled" if interruption == "cancel" else "execution_error"
+        )
+        assert len(record.attempts) == 1
+        assert record.attempts[0]["raw_output"] == output()
+        assert record.attempts[0]["input_tokens"] == 11
+        assert record.turn_id is None and record.failure is None
+
+
+async def test_cancellation_during_final_storage_releases_claim_and_preserves_attempt(
+    agent_sessions, agent_seed
+):
+    reviewed = asyncio.Event()
+    release_review = asyncio.Event()
+    storing = asyncio.Event()
+    engine = agent_sessions.kw["bind"]
+
+    async def review(request, question):
+        reviewed.set()
+        await release_review.wait()
+        return c.QuestionReview(question.text, prepared_contract())
+
+    def before_execute(conn, cursor, statement, parameters, context, executemany):
+        if (
+            release_review.is_set()
+            and "interview_sessions" in statement
+            and "FOR UPDATE" in statement
+        ):
+            storing.set()
+
+    call_id = uuid4()
+    event.listen(engine.sync_engine, "before_cursor_execute", before_execute)
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda _: response(output()))
+        ) as http:
+            running = asyncio.create_task(
+                invoke(agent_sessions, agent_seed, http, call_id=call_id, reviewer=review)
+            )
+            try:
+                await asyncio.wait_for(reviewed.wait(), timeout=5)
+                # 다른 트랜잭션이 저장 잠금을 잡은 뒤, 모델 성공 결과의 저장 중 취소한다.
+                async with agent_sessions.begin() as blocker:
+                    await blocker.execute(select(InterviewSession).with_for_update())
+                    release_review.set()
+                    await asyncio.wait_for(storing.wait(), timeout=5)
+                    running.cancel()
+                    with pytest.raises(asyncio.CancelledError):
+                        await asyncio.wait_for(running, timeout=5)
+            finally:
+                if not running.done():
+                    running.cancel()
+                    with pytest.raises(asyncio.CancelledError):
+                        await running
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", before_execute)
+    async with agent_sessions() as db:
+        record = await db.get(LLMCallRecord, call_id)
+        assert record.discard_reason == "canceled"
+        assert len(record.attempts) == 1 and record.failure is None
+        assert await db.scalar(select(func.count()).select_from(InterviewTurn)) == 0
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: response(output()))
+    ) as http:
+        assert (await invoke(agent_sessions, agent_seed, http)).turn_id is not None
