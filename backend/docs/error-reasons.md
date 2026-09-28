@@ -92,6 +92,11 @@ GitHub가 만료·refresh 필드를 가진 유효한 토큰을 발급하면 `502
 
 `analysis_jobs.error_code`:
 
+- `internal_error` (예상하지 못한 오류·실행 취소)
+- `run_expired` (실행 시작 전 만료)
+- `repo_unreachable`, `no_readme`, `input_too_large` (배치의 저장소 실패·부분 분석 원인)
+- `not_a_job_posting` (공고 검증 실패)
+
 - `no_public_repo`
 - `rate_limited`
 - `token_invalid`

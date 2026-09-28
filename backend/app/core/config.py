@@ -129,10 +129,10 @@ class Settings(BaseSettings):
     llm_max_retries: LLMInteger = Field(default=1, ge=1, le=1)
 
     # ── 정책 · 분석 ──
-    analysis_run_ttl_seconds: int = 7200
+    analysis_run_ttl_seconds: int = Field(default=7200, gt=0)
     max_upload_bytes_cover_letter: int = 10485760
     max_upload_bytes_portfolio: int = 20971520
-    repo_candidate_limit: int = 10
+    repo_candidate_limit: int = Field(default=10, gt=0)
     repo_min_size_kb: int = 50
     jd_reuse_ttl_days: int = 7
     jd_requirement_limit: int = 20
