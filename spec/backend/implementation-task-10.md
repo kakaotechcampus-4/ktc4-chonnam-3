@@ -111,3 +111,45 @@ Task 10만 확인하려면 `uv run pytest tests/features/analysis -q`를 사용�
 운영 프롬프트 품질, 실제 LLM 응답 품질, Task 9의 실제 입력 경로와 Task 11/FE 전체 화면 흐름은
 이번 검증 범위 밖이다. 사용자 수동 선택 보존은 기존 FE 상태 로직과 서버의 selected 미수정 경계를
 대조했으며, 브라우저에서의 전체 흐름을 새로 검증한 것은 아니다.
+
+## 2026-09-30 — 수집·L1 분리와 추천 저장 일관성 보완
+
+기존 PR #80을 유지하고 최신 develop `fbd46eb` 위로 재배치했다. 원본은
+`backup/task10-before-followup-20260930`(`cbaa773`)에 보존했다. #45·#57은 이제 develop에 있다.
+
+- `collect_candidate_batch()`는 L0-b 상세 수집·토큰 폐기 결과를 commit하고
+  `CollectedCandidateBatch`를 반환한다. 이 값에 토큰을 보관하지 않는다.
+- `analyze_collected_batch()`는 수집 자료만 사용해 프롬프트·캐시·L1을 처리하며 GitHub를 다시
+  호출하지 않는다. 기존 `analyze_candidate_batch()` 호출은 wrapper로 유지한다.
+- Task 11은 최초 run과 후속 페이지 모두 `refresh_recommendations=True`로 L1·후보 snapshot·전체
+  페이지 추천을 같은 transaction에서 확정한다. 최초 run은 고정 7단계의 별도 `match_score`에서
+  추천을 다시 확인·재계산한다.
+- `autoflush=False`에서도 snapshot을 명시적으로 flush한 뒤 추천을 재조회한다. 누락 시 snapshot이
+  사라져 NOT_READY/KeyError가 되는 2건을 재현한 뒤 해결했다. 실패 시 함께 rollback하며 완료 페이지의
+  추천은 보존한다. 동시 카드 조회는 run 잠금으로 완성된 상태만 읽는다.
+- 새 PostgreSQL 검증 7건과 기존 75건, 총 82건이 통과했다. 공개 계약·schema·migration·의존성·FE 변경은 없다.
+
+검증 기준은 `origin/develop fbd46eb`이며, 선행 구현을 로컬 검증 환경에만 결합했다.
+전용 PostgreSQL 15·Redis와 HTTP mock을 사용했다. 실제 GitHub·Wanted·유료 LLM·브라우저·운영 배포는 미실행이다.
+Task 11 보존 통합본에는 미게시 Task 8 GitHub 보완과 Task 12 SSE 보완도 포함되어 있으므로,
+해당 전체 결과를 게시본의 단독 성공으로 해석하지 않는다.
+
+최소 결합본의 GitHub 관련 20건 실패는 수정 없는 develop `fbd46eb`에서 동일한 20건을 실행해
+모두 재현했다. 관련 테스트 2개 파일·GitHub 구현 2개 파일의 내용도 양쪽 최소 결합본과 일치한다.
+Task 8 후속 범위이며 이번 변경에 가져오지 않았다. Task 12 SSE 후속도 이번 게시 범위 밖이다.
+
+| 환경 | 실행 | 결과 |
+| --- | --- | --- |
+| 게시본 | `uv sync --locked --group dev` | 통과; 선행 패키지·잠금 파일 복사 없음 |
+| 게시본 | `python -m ruff check .`, `python -m ruff format --check .` | 통과; 형식 209파일 |
+| 게시본 | `python -m mypy app` | 실패: #75 L1 호출 함수 부재, 1파일 2오류 |
+| 게시본 | `python -m pytest -q` | 실패: #75 L1 함수 부재로 수집 오류 2건 |
+| 최소 결합본: 게시본 + #75 `0778a60`(#73 포함)의 L1 코드·테스트 | `python -m pytest -q` | 20 failed, 598 passed in 349.11s (0:05:49) |
+| 같은 최소 결합본 | Ruff·format·mypy | 통과; 형식 210파일·타입 121파일 |
+| Task 11 보존 통합본 + 이번 Task 9·10 변경 | `python -m pytest -q` | 816 passed in 576.90s (0:09:36) |
+| 같은 통합본 | Ruff·format·mypy | 통과; 형식 253파일·타입 141파일 |
+| 게시본 | 공통 계약 검사 | 2스키마·부분 OpenAPI·fixture 7개 통과 |
+
+최소 결합본의 GitHub `base.py`·`client.py`는 develop 그대로이며 Task 8 미게시 보완을 쓰지 않는다.
+#75(#73 포함) 미병합 의존성 때문에 Draft로 표시한다. Task 11 #81은 이번 분리 함수와 원자 저장
+옵션을 이미 호출하고 있다. Task 8·12 후속과 선행 병합 뒤 최종 통합 검증은 별도로 필요하다.
