@@ -19,12 +19,14 @@ def elapsed(start: datetime | None, end: datetime) -> int | None:
     return max(0, int((end - start).total_seconds() * 1000)) if start else None
 
 
-async def notify(ctx: dict[str, Any], run_id: UUID, payload: dict[str, object]) -> None:
+async def notify(
+    ctx: dict[str, Any], run_id: UUID, payload: dict[str, object], states: dict[str, str]
+) -> None:
     try:
         async with ctx["redis"].pipeline(transaction=True) as pipe:
-            if payload["type"] == "step":
-                pipe.hset(f"run:{run_id}:steps", str(payload["step"]), str(payload["status"]))
-                pipe.expire(f"run:{run_id}:steps", ctx["settings"].analysis_run_ttl_seconds)
+            # 문서 미첨부와 중도 실패의 skipped 상태도 종료 알림 전에 함께 반영한다.
+            pipe.hset(f"run:{run_id}:steps", mapping=states)
+            pipe.expire(f"run:{run_id}:steps", ctx["settings"].analysis_run_ttl_seconds)
             pipe.publish(f"run:{run_id}:events", json.dumps(payload))
             await pipe.execute()
     except Exception:
@@ -40,7 +42,8 @@ async def set_step(ctx: dict[str, Any], run_id: UUID, key: str, status: str) -> 
         run.steps = [
             {**step, "status": status} if step["key"] == key else step for step in run.steps
         ]
-    await notify(ctx, run_id, {"type": "step", "step": key, "status": status})
+        states = {str(item["key"]): str(item["status"]) for item in run.steps}
+    await notify(ctx, run_id, {"type": "step", "step": key, "status": status}, states)
 
 
 @asynccontextmanager
@@ -99,10 +102,12 @@ async def finish_run(ctx: dict[str, Any], run_id: UUID, status: str, error: str 
         )
         if page is not None and page.status in {"pending", "running"}:
             complete_page(page, error if status == "failed" else None)
+        states = {str(item["key"]): str(item["status"]) for item in run.steps}
     await notify(
         ctx,
         run_id,
         {"type": "completed"}
         if status == "succeeded"
         else {"type": "failed", "reason": error or "internal_error"},
+        states,
     )
