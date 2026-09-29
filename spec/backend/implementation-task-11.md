@@ -1,10 +1,10 @@
 # Task 11 구현·게시 기록
 
-기준일: 2026-09-28. 목표와 완료 기준은 [Task 11](../../backend/docs/task-11-analysis-api.md), 실행 정책은 [BE ADR 0004](decisions/0004-task11-run-execution.md), 결과 계약은 [공통 ADR 0006](../shared/decisions/0006-task11-analysis-result-contract.md)를 따른다.
+최종 확인: 2026-09-30. 목표와 완료 기준은 [Task 11](../../backend/docs/task-11-analysis-api.md), 실행 정책은 [BE ADR 0004](decisions/0004-task11-run-execution.md), 결과 계약은 [공통 ADR 0006](../shared/decisions/0006-task11-analysis-result-contract.md)를 따른다. 최초 게시 검증과 아래 #68·#70 보완 검증을 구분한다.
 
 ## 게시 상태와 범위
 
-`develop`의 `e53d28b3f82032a3ae3be206a95cb66f19caf9b4`에서 `feature/be-task11-draft`를 만들고 Task 11 신규 변경만 분리했다. 원본 `feature/be-analysis-api`의 통합 작업과 별도 백업은 로컬에 보존한다. 이 Draft는 선행 구현과 필수 후속 보완이 없어 단독 실행하거나 병합할 수 없다.
+최초에는 `develop`의 `e53d28b3f82032a3ae3be206a95cb66f19caf9b4`에서 `feature/be-task11-draft`에 신규 변경만 분리했다. 2026-09-30에는 PR #81을 유지하면서 인증 #57이 병합된 `fbd46eb12a56f43dc306365a2e9f3846b924680a`로 rebase했다. 원본 통합 작업·정리 전 커밋은 별도 백업에 보존한다. 미병합 선행 구현과 아래 후속 보완이 필요하므로 단독 실행·병합 완료 상태는 아니다.
 
 | 게시 영역 | 코드와 동작 |
 | --- | --- |
@@ -19,7 +19,7 @@
 
 인증·GitHub 수집·문서 추출·공고 저장·후보 점수·L1·SSE 기반 구현, 기존 테스트와 의존성 파일은 게시하지 않는다. 이미 develop에 있는 `config.py`, `errors.py`, `main.py`에는 Task 11에 필요한 최소 변경만 포함한다. 초기 설계 문서의 Redis NX 락·워커 예시는 보존하며 현행 선택과 대체 관계는 ADR 0004에서 관리한다.
 
-## 선행 구현과 반드시 분리해서 적용할 보완
+## 최초 게시의 선행 구현과 후속 보완 (2026-09-28)
 
 로컬 통합 검증에 사용한 소스는 아래와 같다. PR 상태는 확인 시점의 스냅샷이며 이후 변경 시 재검증해야 한다.
 
@@ -92,3 +92,32 @@ BE·AI 전체 테스트는 이번 FE 제외에서 재실행하지 않았다. 위
 6. 실제 기능 연결 및 본문의 실패·후속 항목을 해소한 다음 Draft를 해제한다. FE 문서·타입·mock 변경은 이 PR에서 제외했으며, 해당 계약 반영과 Task 13 이후 화면 연결은 별도 FE 후속 작업이다.
 
 협업 검토: #57/#79와 공통 config·main, #80과 카드 계약, #71과 SSE 계약을 맞춰야 한다. #64의 오류·Redis 문서 작업과도 오류 코드 영역이 겹치므로 병합 때 확인한다. 면접 코드, 다른 PR의 이력, 운영진 보호 파일은 변경하지 않는다.
+
+## #68·#70 보완과 재검증 (2026-09-30)
+
+관련 이슈는 [#68](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/68)과 [#70](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/70)이다. 이슈 자동 종료 문구를 사용하지 않는다. 아래 통합 검증 통과와 게시본의 선행 미반영 상태는 별개다.
+
+- `pipeline/run_state.py`: 단계 변경·종료 transaction 안에서 전체 단계 상태를 복사하고, commit 성공 후 Redis `HSET(mapping)` → `EXPIRE` → `PUBLISH`를 실행한다. 문서 미첨부의 skipped와 중단된 단계의 failed/skipped도 기록한다. commit 실패 시 알림을 보내지 않으며 Redis execute 실패는 DB 결과를 되돌리지 않는다. 이벤트 payload와 외부 API 계약은 유지한다.
+- `test_analysis_rate_limit.py`: 429/403 × 부분 성공/전체 실패 4개. 실제 수집 호출 중단, 미호출 후보 snapshot 보존, `gh:rl:501` TTL, partial/failed·결과 집계, Redis 발행 및 재접속 SSE를 확인한다. 제한된 저장소는 접근 불가로 간주하지 않으므로 실패 카드를 보존하고 추천에서 제외한다.
+- `test_analysis_notifications.py`: 8개. 문서 skip·실패·성공·partial의 전체 mirror, Redis 실행 직전 별도 PostgreSQL session에서 commit 가시성, HSET/EXPIRE/PUBLISH 순서, commit 실패와 Redis execute 장애를 확인한다. 수정 전 4 실패/3 통과로 누락을 재현했고, 수정 후 추가 시나리오까지 8개 통과했다.
+- `test_analysis_live_stream.py`: 정상/실패 × 알림 정상/유실 4개. 실제 인증·SSE 라우터·ASGI 프레임·ARQ를 함께 실행하고 종료 프레임 전송 시점에 상태/결과 API와 별도 DB session을 조회한다. 정상 경우 running 단계 수신, 유실 경우 최종 7단계 복원도 확인한다.
+- #57은 현재 develop에 병합됐다. 새 migration과 초기 수집의 충돌 조건을 맞추는 `initial_sync.py` 한 줄과 주석은 이제 기존 파일에 대한 신규 변경으로 포함한다. main은 develop의 인증 수명 관리를 보존하고 분석 라우터 등록 2줄만 추가하며 README·Compose 워커 명령을 유지했다. FE·추가 migration·의존성 변경은 없다.
+
+검증 환경은 기존 `e53d28b` 로컬 통합본에 위 표의 고정 선행 소스·보존 보완, 최신 develop의 Origin 검증과 해당 테스트, 이번 변경을 결합했다. #75 최신 `0778a60`은 기존 고정 소스 대비 문서만 변경됐다. 최신 develop 전체를 결합해 모든 미병합 PR 간 호환성이 검증됐다는 의미는 아니다. GitHub/Wanted/LLM HTTP는 mock하고 PostgreSQL 15·Redis 7·ARQ·SSE 경로는 실제 실행했다.
+
+| 대상 | 실행 | 이번 결과 |
+| --- | --- | --- |
+| 선행·보완 결합 BE | `ruff check .`, `ruff format --check .`, `mypy app` | 통과: 형식 250개·타입 141개 파일 |
+| 선행·보완 결합 BE | `pytest -q` | **802 passed, skip 없음**, migration 왕복과 최신 Origin 회귀 포함 |
+| 위 전체 테스트 내 이번 회귀 | 게시할 신규 16개 + SSE 선행 후속 2개 | **18개 통과**. 후속 2개는 게시 diff에 포함하지 않음 |
+| 게시본 BE | `uv sync --locked --group dev`, Ruff check·format | 통과: develop 의존성 유지, 형식 216개 파일 |
+| 게시본 BE | `mypy app` | **실패: 5개 파일 15개 오류**, 후보/공고/SSE 선행 정의 부재 |
+| 게시본 BE | `pytest -q` | **실패: 수집 오류 8개**, 후보 카드·SSE·선행 테스트 helper 부재. 테스트 통과가 아님 |
+| 게시본 루트 | `python .claude/scripts/check_contracts.py` | 통과: schema 2개·부분 OpenAPI·positive/negative fixture 7개. 전체 런타임 호환 검사는 아님 |
+| AI 전체·FE·외부 계정/LLM·브라우저/Docker | 이번 BE 상태 보완에서 새 실행 | **미실행**. BE 연결 테스트의 mock 검증으로 대체 완료 처리하지 않음 |
+
+알림 유실 시험에서 실제 5초 polling으로 워커 종료 후 약 4.6~4.8초에 성공·실패 상태를 복구했다. 같은 시험의 mock 워커는 약 0.2~0.7초에 종료됐으므로 5초를 유지하되 실서비스의 단계별 LLM 지연·동시 SSE 수·DB 부하에 대한 최적값으로 확정하지 않는다. 운영 조건에서 복구 지연과 조회량을 측정해 조정한다.
+
+게시본에 없는 `posting_service.py`, `repo_analyze.py`, `events.py` 보완은 계속 선행 영역 후속으로 남긴다. SSE의 유실 단계 복원·늦은 running 역행 방지와 전용 회귀 2개는 별도 로컬 `pr71-sse-followup.patch`에 보존했다. 선행 소스·GitHub 보안 보완까지 최종 대상 브랜치에 반영한 뒤 재검증해야 #68·#70의 전체 연결과 PR 병합 조건을 완료로 판단할 수 있다.
+
+이번 원본·로그·구성 기록은 `.claude/scratch/task11-issues-68-70-20260930/`, 통합 환경은 `.claude/scratch/task11-publish-verify/`에 보존한다. 재작성 전 PR head `3a61798`은 `backup/task11-before-issues-6870-20260930`으로 백업했다. 커밋별 300줄 이하와 원격 HEAD를 확인한 뒤 명시적 lease로 같은 PR #81을 갱신한다.
