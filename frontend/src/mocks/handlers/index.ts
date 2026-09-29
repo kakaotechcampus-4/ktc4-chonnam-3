@@ -7,6 +7,8 @@ import { documentHandlers } from './documents';
 import { interviewHandlers } from './interview';
 import { userHandlers } from './user';
 import { interviewWsHandlers } from '../ws/interview';
+import { hasMockSession } from '../session';
+import { BASE } from '@/shared/api';
 
 /** `timeout` 규칙에서 `delayMs`를 생략했을 때 기다리는 시간. */
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -43,11 +45,19 @@ const faultHandler = http.all(path('/*'), async ({ request }) => {
   );
 });
 
+const sessionHandler = http.all(path('/*'), ({ request }) => {
+  // 만료된 세션의 로그아웃도 204를 반환해야 하므로 도메인 핸들러까지 통과시킨다.
+  if (new URL(request.url).pathname === `${BASE}/auth/logout` || hasMockSession()) {
+    return undefined;
+  }
+  return errorResponse(401, 'unauthenticated', '로그인이 필요합니다.');
+});
+
 /**
  * 핸들러가 없는 API 요청을 잡는 마지막 그물.
  *
- * 이게 없으면 요청이 vite dev server로 흘러가고, SPA fallback이 index.html을 200으로 돌려준다.
- * 화면 쪽은 JSON 대신 HTML을 받아 "왜 데이터가 안 오지"로 시간을 버린다.
+ * 이게 없으면 미구현 mock 요청이 개발 프록시를 통해 실제 서버로 넘어간다.
+ * mock 누락을 서버 오류와 혼동하지 않도록 여기서 명시적인 오류로 반환한다.
  * 실제 서버는 501을 쓰지 않으므로 이 응답은 mock 누락이라는 뜻으로만 읽으면 된다.
  */
 const missingHandler = http.all(path('/*'), ({ request }) => {
@@ -64,6 +74,7 @@ const missingHandler = http.all(path('/*'), ({ request }) => {
 export const handlers = [
   ...interviewWsHandlers,
   faultHandler,
+  sessionHandler,
   ...userHandlers,
   ...documentHandlers,
   ...analysisHandlers,

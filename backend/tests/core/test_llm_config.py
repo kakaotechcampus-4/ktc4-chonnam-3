@@ -218,7 +218,22 @@ def test_app_import_lifespan_and_health_work_without_llm_credentials(tmp_path, w
         (tmp_path / ".env").write_text(
             (backend_root / ".env.example").read_text(encoding="utf-8"), encoding="utf-8"
         )
-    environment = {**os.environ, "PYTHONPATH": str(backend_root)}
+    # 인증 앱의 필수 설정은 준비하되, LLM 키·호출 상한 없이도 기동되는지 검증한다.
+    environment = {
+        **os.environ,
+        "PYTHONPATH": str(backend_root),
+        "APP_ENV": "local",
+        "FRONTEND_ORIGIN": "http://localhost:5173",
+        "GITHUB_REDIRECT_URI": "http://localhost:5173/auth/github/callback",
+        "GITHUB_CLIENT_ID": "test-client",
+        "GITHUB_CLIENT_SECRET": "test-secret",
+        "TOKEN_ENCRYPTION_KEY": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "OPENAI_API_KEY": "",
+        "LLM_TIMEOUT_SECONDS": "",
+        "LLM_MAX_OUTPUT_TOKENS": "",
+        "LLM_MAX_INPUT_BYTES": "",
+        "LLM_MAX_RESPONSE_BYTES": "",
+    }
     completed = subprocess.run(
         [
             sys.executable,

@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 
 import Login from '@/features/auth/Login';
+import RequireAuth from '@/features/auth/RequireAuth';
 import Home from '@/features/home/Home';
 import MyPage from '@/features/mypage/MyPage';
 import JobInput from '@/features/analysis/JobInput';
@@ -15,15 +16,17 @@ export default function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/home" element={<Home />} />
-      <Route path="/mypage" element={<MyPage />} />
-      <Route path="/interview/new" element={<JobInput />} />
-      <Route path="/interview/analyzing/:runId" element={<Analyzing />} />
-      <Route path="/interview/failed/:runId" element={<AnalysisFailed />} />
-      <Route path="/interview/repos/:runId" element={<RepoSelect />} />
-      <Route path="/interview/:id/prepare" element={<InterviewPrepare />} />
-      <Route path="/interview/:id/session" element={<InterviewScreen />} />
-      <Route path="/interview/:id/report" element={<Report />} />
+      <Route element={<RequireAuth />}>
+        <Route path="/home" element={<Home />} />
+        <Route path="/mypage" element={<MyPage />} />
+        <Route path="/interview/new" element={<JobInput />} />
+        <Route path="/interview/analyzing/:runId" element={<Analyzing />} />
+        <Route path="/interview/failed/:runId" element={<AnalysisFailed />} />
+        <Route path="/interview/repos/:runId" element={<RepoSelect />} />
+        <Route path="/interview/:id/prepare" element={<InterviewPrepare />} />
+        <Route path="/interview/:id/session" element={<InterviewScreen />} />
+        <Route path="/interview/:id/report" element={<Report />} />
+      </Route>
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>
   );
