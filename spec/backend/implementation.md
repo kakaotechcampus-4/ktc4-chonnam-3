@@ -141,3 +141,46 @@ Redis를 사용했으며 GitHub·Wanted HTTP는 mock했다. LLM·운영 DB·실�
 - #77 JD 추출 규칙과 #74 도메인 분류 연결은 별도 후속이며 현재 공고의 `domain_category`는 `None`이다.
 - 선행 PR 병합 뒤 `.env.example`·설정·앱 구성과 공용 구현 기록을 함께 보존하며 통합해야 한다.
   `implementation.md`의 다른 PR 기록을 이 파일로 덮어쓰지 않고 Task 9 항목을 합친 뒤 다시 검증한다.
+
+## 2026-09-30 — Task 11 단계 경계를 위한 Task 9 후속 보완
+
+기존 PR #79를 유지하고 최신 develop 위로 재배치했다. 인증·GitHub 수집은 이미 develop에 있으며,
+문서 router 등록과 #45의 기존 구현 기록을 함께 보존했다. 재작성 전 원본은
+`backup/task09-before-followup-20260930`(`3d55a34`)에 보존했다.
+
+- `fetch_posting()`은 7일 캐시 확인 또는 HTTP 원문 수집만 수행한다.
+- `complete_posting()`에서 요구사항을 추출·저장하며, 기존 `get_or_fetch_posting()`은 두 함수를
+  순서대로 호출한다. Task 11 #81의 `jd_fetch`/`jd_extract` 호출과 일치한다.
+- URL 잠금 아래 재검사, 불변 공고·요구사항 ID, 실패 기록, 캐시 TTL은 유지한다.
+  HTTP 중에는 DB transaction을 유지하지 않는다. API·schema·migration의 추가 변경은 없다.
+- 신규 PostgreSQL 테스트 7건은 변경 전 API 부재로 실패했고 변경 후 통과했다.
+  Wanted·JD·문서 Preview 연관 검증은 115건 통과했다.
+
+검증 기준은 `origin/develop fbd46eb`이며, 선행 구현을 로컬 검증 환경에만 결합했다.
+전용 PostgreSQL 15·Redis와 HTTP mock을 사용했다. 실제 GitHub·Wanted·유료 LLM·브라우저·운영 배포는 미실행이다.
+Task 11 보존 통합본에는 미게시 Task 8 GitHub 보완과 Task 12 SSE 보완도 포함되어 있으므로,
+해당 전체 결과를 게시본의 단독 성공으로 해석하지 않는다.
+
+최소 결합본의 GitHub 관련 20건 실패는 수정 없는 develop `fbd46eb`에서 동일한 20건을 실행해
+모두 재현했다. 관련 테스트 2개 파일·GitHub 구현 2개 파일의 내용도 양쪽 최소 결합본과 일치한다.
+Task 8 후속 범위이며 이번 변경에 가져오지 않았다. Task 12 SSE 후속도 이번 게시 범위 밖이다.
+
+| 환경 | 실행 | 결과 |
+| --- | --- | --- |
+| 게시본 | `uv sync --locked --group dev` | 통과; 선행 패키지·잠금 파일 복사 없음 |
+| 게시본 | `python -m ruff check .`, `python -m ruff format --check .` | 통과; 형식 211파일 |
+| 게시본 | `python -m mypy app` | 실패: #44 추출 인터페이스 부재, 2파일 6오류 |
+| 게시본 | `python -m pytest -q` | 실패: #44 추출 모듈 부재로 수집 오류 5건 |
+| 최소 결합본: 게시본 + #44 `a0c1ba7`의 추출 코드·테스트 | `python -m pytest -q` | 20 failed, 624 passed in 451.70s (0:07:31) |
+| 같은 최소 결합본 | Ruff·format·mypy | 통과; 형식 215파일·타입 126파일 |
+| Task 11 보존 통합본 + 이번 Task 9·10 변경 | `python -m pytest -q` | 816 passed in 576.90s (0:09:36) |
+| 같은 통합본 | Ruff·format·mypy | 통과; 형식 253파일·타입 141파일 |
+| 게시본 | 공통 계약 검사 | 2스키마·부분 OpenAPI·fixture 7개 통과 |
+
+최소 결합본은 #44의 parser 의존성이 설치된 검증 전용 Python 환경을 사용했다.
+최초 최소 검증은 Task 11 revision이 남은 테스트 DB를 잘못 사용해 setup 오류가 발생했으며,
+구성별 새 전용 DB로 분리한 뒤 위 결과를 다시 얻었다. 앱·운영 DB는 사용하지 않았다.
+
+#44 미병합 의존성 때문에 Draft로 표시한다. 숨은 링크·손상 문서 보완, #77 JD 규칙·#74 도메인 분류,
+Task 8·12 후속 및 선행 병합 뒤 최종 통합 재검증은 별도로 남는다. 이번 후속은 BE 코드·검증·기록만
+수정했으며 기존 PR에 있던 FE 설명 문서 외에 FE 변경을 추가하지 않았다.
