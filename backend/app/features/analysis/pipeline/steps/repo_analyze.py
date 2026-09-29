@@ -1,6 +1,6 @@
 """Task 10의 batch L0-b/L1 연결. run/API/queue 상태 확정은 Task 11이 맡는다."""
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from uuid import UUID
 
 import httpx
@@ -10,8 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import LLMSettings
 from app.features.analysis import repo_analysis_queries as queries
 from app.features.analysis.candidates import repository_summary
+from app.features.analysis.matching import refresh_matches
 from app.features.analysis.pipeline.steps.repo_detail import RateLimitRecorder, collect_repo_details
-from app.integrations.github.base import RepoDetail
+from app.integrations.github.base import RepoDetail, RepoSummary
 from app.integrations.github.client import DEFAULT_README_MAX_CHARS, GithubClient
 from app.llm_tasks.prompt_loader import load_active_prompt
 from app.llm_tasks.repo_shallow import analyze_repositories, to_repo_analysis_rows
@@ -55,7 +56,20 @@ def _escaped_record(value: str) -> str:
     )
 
 
-async def analyze_candidate_batch(
+@dataclass
+class CollectedCandidateBatch:
+    """L0-b 수집 상태를 L1 단계로 전달하며 토큰은 보관하지 않는다."""
+
+    run_id: UUID
+    repositories: dict[UUID, RepoSummary]
+    positions: dict[UUID, int]
+    details: dict[str, RepoDetail]
+    inputs: list[c.ShallowRepoInput]
+    snapshots: dict[UUID, dict[str, object]]
+    inaccessible: set[UUID]
+
+
+async def collect_candidate_batch(
     session_factory: async_sessionmaker[AsyncSession],
     run_id: UUID,
     batch_no: int,
@@ -63,12 +77,10 @@ async def analyze_candidate_batch(
     github_client: GithubClient,
     github_token_encrypted: bytes,
     login: str | None,
-    settings: LLMSettings,
-    http_client: httpx.AsyncClient,
     readme_max_chars: int = DEFAULT_README_MAX_CHARS,
     on_rate_limited: RateLimitRecorder | None = None,
-) -> list[dict[str, object]]:
-    """외부 호출 중 DB transaction을 잡지 않고 run별 결과 참조를 남긴다.
+) -> CollectedCandidateBatch:
+    """외부 호출 중 DB transaction을 잡지 않고 상세 수집까지만 완료한다.
 
     github_token_encrypted는 github_client 생성 때 읽은 동일 암호문이다. 복호화는 호출자가
     맡으며, 늦은 401로 새 토큰을 폐기하지 않도록 이 값으로만 조건부 갱신한다.
@@ -82,7 +94,7 @@ async def analyze_candidate_batch(
             if candidate.batch_rank is not None
         }
     if not repositories:
-        return []
+        return CollectedCandidateBatch(run_id, {}, {}, {}, [], {}, set())
     if token_invalid:
         details = {
             repo.full_name: RepoDetail(errors=["token_invalid"]) for repo in repositories.values()
@@ -153,7 +165,30 @@ async def analyze_candidate_batch(
             )
         if any("token_invalid" in detail.errors for detail in details.values()):
             await queries.revoke_token(session, user_id, github_token_encrypted)
+    return CollectedCandidateBatch(
+        run_id, repositories, positions, details, inputs, snapshots, inaccessible
+    )
 
+
+async def analyze_collected_batch(
+    session_factory: async_sessionmaker[AsyncSession],
+    collected: CollectedCandidateBatch,
+    *,
+    settings: LLMSettings,
+    http_client: httpx.AsyncClient,
+    refresh_recommendations: bool = False,
+) -> list[dict[str, object]]:
+    """이미 수집한 자료로 L1을 실행하며 GitHub를 다시 호출하지 않는다."""
+    if not collected.repositories:
+        return []
+    run_id = collected.run_id
+    repositories, positions, details = (
+        collected.repositories,
+        collected.positions,
+        collected.details,
+    )
+    inputs = collected.inputs
+    snapshots = dict(collected.snapshots)
     # 프롬프트 설정 실패가 이미 확인한 토큰 폐기·L0-b 수집 기록을 되돌리지 않게 한다.
     async with session_factory() as session, session.begin():
         prompt = await load_active_prompt(session, "repo_shallow") if inputs else None
@@ -213,4 +248,39 @@ async def analyze_candidate_batch(
                 str(values["status"]),
                 str(values["error_code"]) if values["error_code"] is not None else None,
             )
-        return await queries.bind_snapshots(session, run_id, snapshots, inaccessible)
+        bound = await queries.bind_snapshots(session, run_id, snapshots, collected.inaccessible)
+        if refresh_recommendations:
+            # 새 snapshot과 추천을 함께 확정해 이미 완료된 page가 잠시 not_ready가 되지 않게 한다.
+            # autoflush=False에서도 populate_existing 조회가 새 snapshot을 지우지 않게 한다.
+            await session.flush()
+            await refresh_matches(session, run_id)
+        return bound
+
+
+async def analyze_candidate_batch(
+    session_factory: async_sessionmaker[AsyncSession],
+    run_id: UUID,
+    batch_no: int,
+    *,
+    github_client: GithubClient,
+    github_token_encrypted: bytes,
+    login: str | None,
+    settings: LLMSettings,
+    http_client: httpx.AsyncClient,
+    readme_max_chars: int = DEFAULT_README_MAX_CHARS,
+    on_rate_limited: RateLimitRecorder | None = None,
+) -> list[dict[str, object]]:
+    """기존 호출자의 L0-b/L1 통합 동작을 유지한다."""
+    collected = await collect_candidate_batch(
+        session_factory,
+        run_id,
+        batch_no,
+        github_client=github_client,
+        github_token_encrypted=github_token_encrypted,
+        login=login,
+        readme_max_chars=readme_max_chars,
+        on_rate_limited=on_rate_limited,
+    )
+    return await analyze_collected_batch(
+        session_factory, collected, settings=settings, http_client=http_client
+    )
