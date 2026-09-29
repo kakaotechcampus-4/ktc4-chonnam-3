@@ -1,6 +1,6 @@
 """Wanted 수집 결과를 재사용하거나 새 자료로 저장한다. run·큐 실행은 task-11 책임이다."""
 
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -72,19 +72,45 @@ async def _same_requirements(
     ]
 
 
-async def get_or_fetch_posting(
+@dataclass(frozen=True)
+class PreparedPosting:
+    """jd_fetch가 확보한 캐시 또는 원문을 jd_extract에 넘긴다."""
+
+    posting_url: str
+    normalized_url: str
+    checked_at: datetime
+    reuse_ttl_days: int
+    cached: JobPosting | None = None
+    content: PostingContent | None = None
+
+
+async def _save_posting_failure(
+    session_factory: async_sessionmaker[AsyncSession],
+    prepared: PreparedPosting,
+    error_code: str,
+) -> None:
+    async with session_factory.begin() as db:
+        await lock_posting_url(db, prepared.normalized_url)
+        db.add(
+            _posting(
+                prepared.posting_url,
+                prepared.normalized_url,
+                prepared.content,
+                prepared.checked_at,
+                error_code=error_code,
+            )
+        )
+
+
+async def fetch_posting(
     session_factory: async_sessionmaker[AsyncSession],
     posting_url: str,
     *,
     client: httpx.AsyncClient | None = None,
     now: datetime | None = None,
     reuse_ttl_days: int = 7,
-) -> JobPosting:
-    """7일 이내 성공본은 그대로 반환하고, 변경 자료는 이전 참조를 유지하며 새 ID로 저장한다.
-
-    반환 객체는 session에서 분리된 scalar 자료다. 요구사항은 posting_queries로 읽는다.
-    HTTP 동안 DB session/transaction을 유지하지 않으며 외부 수집 실패만 실패 자료로 기록한다.
-    """
+) -> PreparedPosting:
+    """캐시를 확인하거나 원문만 수집한다. HTTP 중 DB transaction은 유지하지 않는다."""
     normalized_url = normalize_posting_url(posting_url)
     checked_at = now or datetime.now(UTC)
     ttl = timedelta(days=reuse_ttl_days)
@@ -92,28 +118,42 @@ async def get_or_fetch_posting(
         current = await get_current_successful_posting(db, normalized_url)
         if current is not None and _fresh(current, checked_at, ttl):
             db.expunge(current)
-            return current
+            return PreparedPosting(
+                posting_url, normalized_url, checked_at, reuse_ttl_days, cached=current
+            )
 
-    content = None
     try:
         content = await WantedAdapter(client=client).fetch(normalized_url)
-        drafts = build_requirement_drafts(content)
-    except (PostingFetchError, JdExtractionError) as error:
+    except PostingFetchError as error:
         # 성공 자료를 failed로 덮어쓰지 않는다. 예기치 않은 코드/DB 오류는 여기서 숨기지 않는다.
-        async with session_factory.begin() as db:
-            await lock_posting_url(db, normalized_url)
-            db.add(
-                _posting(
-                    posting_url,
-                    normalized_url,
-                    content,
-                    now or datetime.now(UTC),
-                    error_code=error.code,
-                )
-            )
+        await _save_posting_failure(
+            session_factory,
+            PreparedPosting(posting_url, normalized_url, now or datetime.now(UTC), reuse_ttl_days),
+            error.code,
+        )
         raise
+    return PreparedPosting(
+        posting_url, normalized_url, now or datetime.now(UTC), reuse_ttl_days, content=content
+    )
 
-    checked_at = now or datetime.now(UTC)
+
+async def complete_posting(
+    session_factory: async_sessionmaker[AsyncSession], prepared: PreparedPosting
+) -> JobPosting:
+    """수집 원문을 추출·저장한다. 기존 ID 참조와 URL 잠금·재사용 정책을 유지한다."""
+    if prepared.cached is not None:
+        return prepared.cached
+    content = prepared.content
+    if content is None:
+        raise ValueError("공고 원문 또는 캐시가 필요합니다.")
+    try:
+        drafts = build_requirement_drafts(content)
+    except JdExtractionError as error:
+        await _save_posting_failure(session_factory, prepared, error.code)
+        raise
+    normalized_url = prepared.normalized_url
+    checked_at = prepared.checked_at
+    ttl = timedelta(days=prepared.reuse_ttl_days)
     snapshot = asdict(content)
     async with session_factory.begin() as db:
         await lock_posting_url(db, normalized_url)
@@ -131,7 +171,7 @@ async def get_or_fetch_posting(
             current.fetched_at = checked_at
             result = current
         else:
-            result = _posting(posting_url, normalized_url, content, checked_at)
+            result = _posting(prepared.posting_url, normalized_url, content, checked_at)
             db.add(result)
             await db.flush()
             db.add_all(JdRequirement(job_posting_id=result.id, **asdict(draft)) for draft in drafts)
@@ -140,3 +180,18 @@ async def get_or_fetch_posting(
         # expire_on_commit=True인 호출자도 반환된 자료를 안전하게 읽을 수 있게 한다.
         db.expunge(result)
     return result
+
+
+async def get_or_fetch_posting(
+    session_factory: async_sessionmaker[AsyncSession],
+    posting_url: str,
+    *,
+    client: httpx.AsyncClient | None = None,
+    now: datetime | None = None,
+    reuse_ttl_days: int = 7,
+) -> JobPosting:
+    """기존 호출자를 위해 수집과 추출을 순서대로 실행한다."""
+    prepared = await fetch_posting(
+        session_factory, posting_url, client=client, now=now, reuse_ttl_days=reuse_ttl_days
+    )
+    return await complete_posting(session_factory, prepared)
