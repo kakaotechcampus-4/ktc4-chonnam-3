@@ -48,8 +48,9 @@ def extract_pdf_text(data: bytes, *, max_chars: int = 0) -> ExtractionResult:
     for page in reader.pages:
         try:
             page_text = page.extract_text() or ""
-        except (PyPdfError, ValueError, KeyError):
+        except (PyPdfError, ValueError, KeyError, TypeError):
             # page 하나가 깨져도 나머지는 살린다.
+            # 리소스 값이 잘못된 타입이면(예: /Font 1) pypdf 가 TypeError 를 낸다.
             continue
         if page_text.strip():
             chunks.append(page_text)

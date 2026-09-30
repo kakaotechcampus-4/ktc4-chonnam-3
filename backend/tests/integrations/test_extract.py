@@ -52,6 +52,40 @@ def build_pdf(text: str) -> bytes:
     return bytes(out)
 
 
+def build_two_page_pdf(first_text: str, *, break_second_font: bool) -> bytes:
+    """텍스트 2페이지 PDF. break_second_font 면 2페이지 /Font 리소스를 숫자로 손상시킨다."""
+
+    def stream(text: str) -> bytes:
+        content = f"BT /F1 12 Tf 20 100 Td ({text}) Tj ET".encode("latin-1")
+        return b"<</Length " + str(len(content)).encode() + b">>stream\n" + content + b"\nendstream"
+
+    second_font = b"1" if break_second_font else b"<</F1 7 0 R>>"
+    objects = [
+        b"<</Type/Catalog/Pages 2 0 R>>",
+        b"<</Type/Pages/Kids[3 0 R 4 0 R]/Count 2>>",
+        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 200]/Contents 5 0 R"
+        b"/Resources<</Font<</F1 7 0 R>>>>>>",
+        b"<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 200]/Contents 6 0 R"
+        b"/Resources<</Font " + second_font + b">>>>",
+        stream(first_text),
+        stream("second page"),
+        b"<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets: list[int] = []
+    for index, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{index} 0 obj".encode() + body + b"endobj\n"
+    xref_offset = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n".encode() + b"0000000000 65535 f \n"
+    for offset in offsets:
+        out += f"{offset:010d} 00000 n \n".encode()
+    out += (
+        f"trailer<</Size {len(objects) + 1}/Root 1 0 R>>\nstartxref\n{xref_offset}\n%%EOF".encode()
+    )
+    return bytes(out)
+
+
 def build_blank_pdf(pages: int = 1) -> bytes:
     """텍스트 레이어가 없는 PDF. 스캔 이미지 PDF 와 같은 상태다."""
     from pypdf import PdfWriter
@@ -133,6 +167,26 @@ def test_pdf_partial_when_truncated() -> None:
     assert result.status is DocumentExtractStatus.PARTIAL
     assert result.is_truncated is True
     assert result.text == "Hello"
+
+
+def test_pdf_broken_page_type_error_keeps_other_pages() -> None:
+    """2페이지의 /Font 가 숫자라 extract_text 가 TypeError 를 내도 1페이지는 살린다."""
+    data = build_two_page_pdf("github.com/alice/repo", break_second_font=True)
+
+    result = extract_pdf_text(data)
+
+    assert result.status is DocumentExtractStatus.PARTIAL
+    assert "github.com/alice/repo" in result.text
+    assert result.details == {"pageCount": 2, "extractedPages": 1}
+
+
+def test_pdf_two_pages_both_readable_is_succeeded() -> None:
+    data = build_two_page_pdf("first page", break_second_font=False)
+
+    result = extract_pdf_text(data)
+
+    assert result.status is DocumentExtractStatus.SUCCEEDED
+    assert result.details == {"pageCount": 2, "extractedPages": 2}
 
 
 def test_pdf_without_text_layer_fails() -> None:
