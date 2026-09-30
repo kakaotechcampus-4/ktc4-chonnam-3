@@ -22,6 +22,10 @@ from app.integrations.extract.base import (
 )
 from app.shared.enums import DocumentExtractStatus
 
+# 열린 뒤 문단·표를 읽다가 손상된 XML 값을 만났을 때 나오는 예외들.
+# gridSpan="bad" 는 ValueError, w:body 가 없으면 AttributeError 다.
+_READ_ERRORS = (ValueError, KeyError, AttributeError, TypeError, IndexError, XMLSyntaxError)
+
 
 def _table_lines(table: Table) -> list[str]:
     """표 한 개를 줄 목록으로 편다. 입력: Table. 출력: 빈 줄을 뺀 줄 목록."""
@@ -42,6 +46,7 @@ def extract_docx_text(data: bytes, *, max_chars: int = 0) -> ExtractionResult:
 
     - 열 수 없으면 corrupted_file
     - 문단과 표에 글자가 하나도 없으면 empty_document
+    - 열린 뒤 일부 표가 깨졌으면 읽은 만큼 partial, 읽은 것이 없으면 corrupted_file
     - 길이 상한으로 잘렸으면 partial
     """
     try:
@@ -52,21 +57,36 @@ def extract_docx_text(data: bytes, *, max_chars: int = 0) -> ExtractionResult:
     except (PackageNotFoundError, BadZipFile, KeyError, ValueError, OSError, XMLSyntaxError):
         return failed(EXTRACT_ERROR_CORRUPTED)
 
-    lines: list[str] = [
-        paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()
-    ]
+    # 파일을 연 뒤에도 손상된 구조(잘못된 gridSpan, w:body 없음 등)는 순회 중에 터진다.
+    # 예외 대신 결과 객체로 돌려준다 — 읽은 내용이 있으면 partial, 없으면 corrupted_file.
+    lines: list[str] = []
     table_count = 0
-    for table in document.tables:
+    broken = False
+    try:
+        paragraphs = document.paragraphs
+        lines = [paragraph.text.strip() for paragraph in paragraphs if paragraph.text.strip()]
+        tables = document.tables
+    except _READ_ERRORS:
+        return failed(EXTRACT_ERROR_CORRUPTED)
+    for table in tables:
         table_count += 1
-        lines.extend(_table_lines(table))
+        try:
+            lines.extend(_table_lines(table))
+        except _READ_ERRORS:
+            # 표 하나가 깨져도 나머지는 살린다.
+            broken = True
 
     if not lines:
-        return failed(EXTRACT_ERROR_EMPTY)
+        return failed(EXTRACT_ERROR_CORRUPTED if broken else EXTRACT_ERROR_EMPTY)
 
     text, is_truncated = truncate("\n".join(lines).strip(), max_chars)
     return ExtractionResult(
         text=text,
-        status=DocumentExtractStatus.PARTIAL if is_truncated else DocumentExtractStatus.SUCCEEDED,
+        status=(
+            DocumentExtractStatus.PARTIAL
+            if is_truncated or broken
+            else DocumentExtractStatus.SUCCEEDED
+        ),
         is_truncated=is_truncated,
-        details={"paragraphCount": len(document.paragraphs), "tableCount": table_count},
+        details={"paragraphCount": len(paragraphs), "tableCount": table_count},
     )

@@ -205,6 +205,59 @@ def test_docx_corrupted_inner_xml_fails() -> None:
     assert result.error_code == EXTRACT_ERROR_CORRUPTED
 
 
+def _rewrite_document_xml(data: bytes, transform) -> bytes:
+    """docx 의 word/document.xml 만 바꿔 다시 묶는다."""
+    zin = zipfile.ZipFile(io.BytesIO(data))
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zout:
+        for item in zin.infolist():
+            content = zin.read(item.filename)
+            if item.filename == "word/document.xml":
+                content = transform(content)
+            zout.writestr(item, content)
+    return buffer.getvalue()
+
+
+def test_docx_corrupted_table_keeps_paragraphs_as_partial() -> None:
+    """열기는 성공하지만 표 속성이 깨진 경우 — 읽은 문단은 살린다 (ValueError)."""
+    data = build_docx(["본문 문단"], table=[["a", "b"]])
+    broken = _rewrite_document_xml(
+        data, lambda xml: xml.replace(b"</w:tcPr>", b'<w:gridSpan w:val="bad"/></w:tcPr>')
+    )
+
+    result = extract_docx_text(broken)
+
+    assert result.status is DocumentExtractStatus.PARTIAL
+    assert "본문 문단" in result.text
+
+
+def test_docx_corrupted_table_without_other_text_fails() -> None:
+    """읽을 수 있는 것이 하나도 없으면 corrupted_file 이다."""
+    data = build_docx([], table=[["a", "b"]])
+    broken = _rewrite_document_xml(
+        data, lambda xml: xml.replace(b"</w:tcPr>", b'<w:gridSpan w:val="bad"/></w:tcPr>')
+    )
+
+    result = extract_docx_text(broken)
+
+    assert result.status is DocumentExtractStatus.FAILED
+    assert result.error_code == EXTRACT_ERROR_CORRUPTED
+
+
+def test_docx_without_body_fails_as_corrupted() -> None:
+    """XML 은 정상인데 w:body 가 없다 (AttributeError)."""
+    empty_document = (
+        b'<?xml version="1.0" encoding="UTF-8"?>'
+        b'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>'
+    )
+    broken = _rewrite_document_xml(build_docx(["hello"]), lambda _xml: empty_document)
+
+    result = extract_docx_text(broken)
+
+    assert result.status is DocumentExtractStatus.FAILED
+    assert result.error_code == EXTRACT_ERROR_CORRUPTED
+
+
 # ── TXT / MD ───────────────────────────────────────────
 
 
