@@ -76,6 +76,35 @@ def test_other_host_with_github_in_path_is_not_treated_as_github() -> None:
     assert extract_github_full_names("https://example.com/github.com/alice/repo") == []
 
 
+# 다른 사이트 URL 의 query·fragment 안에 github.com/... 가 끼어 있는 경우.
+OTHER_HOST_EMBEDDED = [
+    "https://gitlab.com/alice/other?mirror=github.com/alice/repo",
+    "https://example.com/#github.com/alice/repo",
+    "https://github.com.evil.example/alice/repo",
+    "https://evil-github.com/alice/repo",
+]
+
+
+@pytest.mark.parametrize("url", OTHER_HOST_EMBEDDED)
+def test_github_inside_other_host_url_is_rejected(url: str) -> None:
+    assert normalize_github_url(url) is None
+    assert extract_github_full_names(url) == []
+
+
+def test_real_github_url_next_to_other_host_url_is_still_found() -> None:
+    text = (
+        "https://gitlab.com/alice/other?mirror=github.com/alice/repo 와 https://github.com/Bob/real"
+    )
+
+    assert extract_github_full_names(text) == ["Bob/real"]
+
+
+def test_github_url_attached_to_korean_text_is_found() -> None:
+    assert extract_github_full_names("깃허브:github.com/Alice/devon-api입니다") == [
+        "Alice/devon-api"
+    ]
+
+
 def test_extract_keeps_order_and_deduplicates() -> None:
     text = """
     주요 프로젝트: https://github.com/Alice/devon-api
