@@ -23,7 +23,7 @@ export default function Home() {
   return (
     <div className="flex min-h-screen flex-col bg-paper text-ink">
       {/* /me/home 실패(토큰 무효 등) 중에는 캐시된 /me로 배지를 띄우지 않는다. */}
-      <Header active="home" githubLinked={home?.githubLinked ?? false} name={home?.name} />
+      <Header githubLinked={home?.githubLinked ?? false} name={home?.name} />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-10">
         <h1 className="text-lg font-bold">

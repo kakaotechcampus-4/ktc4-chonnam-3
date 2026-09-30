@@ -27,7 +27,7 @@ export default function AnalysisFailed() {
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
-      <Header active="interview" />
+      <Header />
 
       <main className="flex flex-1 flex-col items-center px-7 pb-7 pt-6">
         <div className="flex w-[380px] max-w-full flex-col gap-4 py-14">

@@ -1,13 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 
-type ActivePage = 'home' | 'mypage' | 'interview';
-
 type HeaderProps = {
-  active: ActivePage;
   githubLinked?: boolean;
   name?: string;
   avatarUrl?: string;
@@ -18,7 +15,16 @@ type HeaderProps = {
   statusSlot?: React.ReactNode;
 };
 
-export default function Header({ active, statusSlot, ...props }: HeaderProps) {
+// 탭 활성 상태는 현재 경로에서 파생한다(spec/frontend/features/home.md). 탭은 경로 접두어와 1:1이다.
+function activeTab(pathname: string) {
+  if (pathname.startsWith('/interview')) return 'interview';
+  if (pathname.startsWith('/mypage')) return 'mypage';
+  if (pathname.startsWith('/home')) return 'home';
+  return null;
+}
+
+export default function Header({ statusSlot, ...props }: HeaderProps) {
+  const active = activeTab(useLocation().pathname);
   // 넘긴 값이 우선이고, 없으면 RequireAuth가 캐시한 /me로 채운다. false는 그대로 둔다.
   const { data: me } = useQuery({ queryKey: queryKeys.me, queryFn: api.getMe });
   const githubLinked = props.githubLinked ?? me?.githubLinked;

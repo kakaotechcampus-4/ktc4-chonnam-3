@@ -593,7 +593,6 @@ function Shell({
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
       <Header
-        active="interview"
         name={me?.name}
         avatarUrl={me?.avatarUrl ?? undefined}
         statusSlot={

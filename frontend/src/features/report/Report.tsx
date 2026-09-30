@@ -39,7 +39,7 @@ export default function Report() {
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
-      <Header active="interview" />
+      <Header />
 
       <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-7 px-7 py-6">
         {reportQuery.isLoading && <p className="text-sm text-muted">불러오는 중...</p>}
