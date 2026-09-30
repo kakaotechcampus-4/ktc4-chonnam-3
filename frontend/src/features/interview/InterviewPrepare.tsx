@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BASE, api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
+import Footer from '@/shared/components/Footer';
 import { isApiError } from '@/types/api';
 import type {
   AnswerMode,
@@ -590,11 +591,7 @@ function Shell({ me, children }: { me?: MeResponse; children: React.ReactNode })
       <main className="flex flex-1 flex-col items-center px-7 pb-7 pt-6">
         <div className="flex w-[440px] max-w-full flex-col gap-4 py-10">{children}</div>
       </main>
-      <footer className="flex items-center border-t border-line-soft px-5 py-2.5 text-[10.5px] text-muted">
-        <span>© 2026 DEVON</span>
-        <span className="flex-1" />
-        <span>이용약관 · 개인정보처리방침</span>
-      </footer>
+      <Footer />
     </div>
   );
 }

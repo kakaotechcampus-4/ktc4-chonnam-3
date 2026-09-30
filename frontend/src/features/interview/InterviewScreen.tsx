@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { BASE, api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
+import Footer from '@/shared/components/Footer';
 import { PERSONA_IMAGES, PERSONA_LABELS, PERSONA_ORDER } from '@/shared/persona';
 import { useInterviewSocket } from '@/features/interview/useInterviewSocket';
 import { QUESTION_TEXT_KEY, readQuestionText } from '@/features/interview/questionText';
@@ -604,11 +605,7 @@ function Shell({
       <main className="flex flex-1 flex-col items-center justify-center px-7 py-6">
         <div className="flex w-full max-w-3xl flex-col gap-5">{children}</div>
       </main>
-      <footer className="flex items-center border-t border-line-soft px-5 py-2.5 text-[10.5px] text-muted">
-        <span>© 2026 DEVON</span>
-        <span className="flex-1" />
-        <span>면접 중에는 페이지를 벗어나지 마세요</span>
-      </footer>
+      <Footer note="면접 중에는 페이지를 벗어나지 마세요" />
     </div>
   );
 }
