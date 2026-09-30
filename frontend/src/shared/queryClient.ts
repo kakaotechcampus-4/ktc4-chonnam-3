@@ -1,5 +1,6 @@
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 
+import { queryKeys } from '@/shared/queryKeys';
 import { isApiError } from '@/types/api';
 
 // OAuth 로그인은 전체 페이지 이동으로 새 문서를 로드할 때 이 상태를 초기화한다.
@@ -15,6 +16,14 @@ export async function clearSessionQueries() {
   // 늦게 도착한 응답이 이전 사용자의 캐시를 되살리지 않도록 진행 중인 조회부터 취소한다.
   await queryClient.cancelQueries();
   queryClient.clear();
+}
+
+// 토큰 무효는 /me의 githubLinked를 false로 바꾼다. staleTime을 기다리지 않고 헤더 배지를 갱신한다.
+// ['me'] 접두사라 /me/profile도 함께 갱신된다.
+export function refreshMeIfTokenInvalid(reason: string | null | undefined) {
+  if (reason === 'github_token_invalid') {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.me });
+  }
 }
 
 function handleAuthError(error: unknown) {
@@ -66,6 +75,19 @@ export const queryClient = new QueryClient({
     },
     mutations: { retry: false },
   },
-  queryCache: new QueryCache({ onError: handleAuthError }),
-  mutationCache: new MutationCache({ onError: handleAuthError }),
+  queryCache: new QueryCache({
+    onError: (error, query) => {
+      handleAuthError(error);
+      // ['me'] 계열 조회의 실패로 자신을 다시 무효화하면 재조회가 끝없이 반복된다.
+      if (isApiError(error) && query.queryKey[0] !== queryKeys.me[0]) {
+        refreshMeIfTokenInvalid(error.error.reason);
+      }
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (error) => {
+      handleAuthError(error);
+      if (isApiError(error)) refreshMeIfTokenInvalid(error.error.reason);
+    },
+  }),
 });

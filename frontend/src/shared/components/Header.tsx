@@ -1,4 +1,8 @@
+import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+
+import { api } from '@/shared/api';
+import { queryKeys } from '@/shared/queryKeys';
 
 type ActivePage = 'home' | 'mypage' | 'interview';
 
@@ -14,7 +18,13 @@ type HeaderProps = {
   statusSlot?: React.ReactNode;
 };
 
-export default function Header({ active, githubLinked, name, avatarUrl, statusSlot }: HeaderProps) {
+export default function Header({ active, statusSlot, ...props }: HeaderProps) {
+  // 넘긴 값이 우선이고, 없으면 RequireAuth가 캐시한 /me로 채운다. false는 그대로 둔다.
+  const { data: me } = useQuery({ queryKey: queryKeys.me, queryFn: api.getMe });
+  const githubLinked = props.githubLinked ?? me?.githubLinked;
+  const name = props.name ?? me?.name;
+  const avatarUrl = props.avatarUrl ?? me?.avatarUrl ?? undefined;
+
   return (
     <header className="flex items-center justify-between border-b border-line-soft bg-surface px-6 py-3">
       <div className="flex items-center gap-8">
