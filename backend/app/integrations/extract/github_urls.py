@@ -31,7 +31,9 @@ _OWNER = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})")
 # repo 는 영숫자와 . _ - 를 허용한다. 뒤에 붙은 한글 조사 같은 글자는 버린다.
 _REPO = re.compile(r"[A-Za-z0-9._-]+")
 
-# github.com/<여기>/... 가 레포 소유자가 아닌 예약 경로들.
+# github.com/<여기>/... 가 레포 소유자가 아닌 예약 경로들. 서비스 전용 경로는 첫 segment 로만
+# 구분한다 (settings/profile, orgs/acme/repositories). repo 이름 자리는 제한하지 않는다 —
+# sindresorhus/Settings 처럼 예약어와 같은 이름의 정상 저장소가 있다.
 # 이 목록에 걸리면 owner/repo 로 취급하지 않는다.
 _RESERVED_OWNERS = frozenset(
     {
@@ -57,9 +59,6 @@ _RESERVED_OWNERS = frozenset(
     }
 )
 
-# 레포 이름 자리에 올 수 없는 값. github.com/orgs/foo 같은 경로를 한 번 더 막는다.
-_RESERVED_REPOS = frozenset({"settings", "followers", "following", "repositories"})
-
 
 def _clean_repo(repo: str) -> str | None:
     """repo 조각에서 꼬리 문장부호와 .git 을 떼어낸다.
@@ -74,8 +73,6 @@ def _clean_repo(repo: str) -> str | None:
         cleaned = cleaned[: -len(".git")]
     cleaned = cleaned.rstrip(".,;:!?")
     if not cleaned or cleaned in {".", ".."}:
-        return None
-    if cleaned.lower() in _RESERVED_REPOS:
         return None
     return cleaned
 

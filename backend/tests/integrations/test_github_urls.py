@@ -70,6 +70,39 @@ def test_reserved_path_is_not_treated_as_owner() -> None:
     assert normalize_github_url("https://github.com/settings/profile") is None
 
 
+@pytest.mark.parametrize(
+    "repo",
+    ["Settings", "settings", "followers", "following", "repositories"],
+)
+def test_repo_named_like_reserved_word_is_kept(repo: str) -> None:
+    """repo 이름은 예약어로 막지 않는다. 예: https://github.com/sindresorhus/Settings."""
+    assert normalize_github_url(f"https://github.com/sindresorhus/{repo}") == f"sindresorhus/{repo}"
+    assert extract_github_full_names(f"https://github.com/sindresorhus/{repo}") == [
+        f"sindresorhus/{repo}"
+    ]
+
+
+def test_repo_named_settings_subpath_is_folded_to_repo_root() -> None:
+    url = "https://github.com/sindresorhus/Settings/blob/main/README.md"
+
+    assert normalize_github_url(url) == "sindresorhus/Settings"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://github.com/settings/profile",
+        "https://github.com/settings/repositories",
+        "https://github.com/orgs/acme/repositories",
+        "https://github.com/orgs/acme/settings",
+        "https://github.com/users/alice/followers",
+    ],
+)
+def test_service_paths_are_distinguished_by_path_structure(url: str) -> None:
+    assert normalize_github_url(url) is None
+    assert extract_github_full_names(url) == []
+
+
 def test_other_host_with_github_in_path_is_not_treated_as_github() -> None:
     """진짜 호스트가 다른 URL의 하위 경로에 우연히 github.com/owner/repo 가 있는 경우."""
     assert normalize_github_url("https://example.com/github.com/alice/repo") is None
