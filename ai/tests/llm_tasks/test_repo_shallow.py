@@ -153,6 +153,27 @@ def test_schema_failed_item_is_retried_alone_and_merged() -> None:
     assert [attempt.attempt for attempt in result.attempts] == [1, 2]
 
 
+def test_all_items_schema_failed_are_retried_even_without_any_success() -> None:
+    # 성공 항목 유무는 재요청 조건이 아니다. 식별된 schema 실패만 있으면 한 번 재요청한다.
+    provider = Provider(
+        {"repositories": [_output("repo-1", purpose=3), _output("repo-2", purpose=3)]},
+        {"repositories": [_output("repo-1"), _output("repo-2")]},
+    )
+    result = _analyze(provider, _input("repo-1"), _input("repo-2"))
+
+    assert len(provider.requests) == 2
+    assert sorted(
+        item["repository_id"] for item in provider.requests[1].payload["repositories"]
+    ) == [
+        "repo-1",
+        "repo-2",
+    ]
+    assert provider.requests[1].max_attempts == 1
+    assert sorted(_ids(result.data.data.succeeded)) == ["repo-1", "repo-2"]
+    assert result.data.data.failed == ()
+    assert [attempt.attempt for attempt in result.attempts] == [1, 2]
+
+
 def test_semantic_failed_item_is_not_retried() -> None:
     provider = Provider({"repositories": [_output("repo-1"), _output("repo-2", head_sha="b" * 40)]})
     result = _analyze(provider, _input("repo-1"), _input("repo-2"))
