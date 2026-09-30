@@ -227,3 +227,66 @@ async def test_repository_missing_from_output_keeps_the_first_call_record() -> N
 
     assert len(sent) == 2
     assert (rows[2]["status"], rows[2]["attempt"], rows[2]["raw_output"]) == ("failed", 1, first)
+
+
+DEEP = "[" * 10_000 + "0" + "]" * 10_000
+
+
+async def test_deeply_nested_whole_parse_failure_still_returns_rows() -> None:
+    # Gateway가 parse 실패로 거절한 원문을 행 변환에서 다시 해석하지 않는다.
+    result, sent = await _run([DEEP, DEEP], _input(REPO_1), _input(REPO_2))
+    rows = repo_shallow.to_repo_analysis_rows(result, (_input(REPO_1), _input(REPO_2)), PROMPT)
+
+    assert len(sent) == 2
+    assert [(row["status"], row["error_code"], row["attempt"]) for row in rows] == [
+        ("failed", "llm_parse_failed", 2),
+        ("failed", "llm_parse_failed", 2),
+    ]
+
+
+async def test_deeply_nested_retry_keeps_first_success_rows() -> None:
+    first = _batch(_item(REPO_1), _item(REPO_2, purpose=3))
+    result, sent = await _run([first, DEEP], _input(REPO_1), _input(REPO_2))
+    rows = repo_shallow.to_repo_analysis_rows(result, (_input(REPO_1), _input(REPO_2)), PROMPT)
+
+    assert len(sent) == 2
+    # 재요청이 통째로 실패하면 repo-2 결과는 첫 호출의 schema 실패 그대로다.
+    assert [(row["status"], row["attempt"], row["raw_output"]) for row in rows] == [
+        ("succeeded", 1, first),
+        ("failed", 1, first),
+    ]
+
+
+async def test_retry_omitting_the_repository_records_the_retry_attempt() -> None:
+    first = _batch(_item(REPO_1), _item(REPO_2, purpose=""))
+    retry = _batch()
+    result, _ = await _run([first, retry], _input(REPO_1), _input(REPO_2))
+    rows = repo_shallow.to_repo_analysis_rows(result, (_input(REPO_1), _input(REPO_2)), PROMPT)
+
+    assert (rows[1]["status"], rows[1]["attempt"], rows[1]["raw_output"]) == ("failed", 2, retry)
+
+
+async def test_timeout_after_whole_schema_failure_records_the_timeout_attempt() -> None:
+    timeout = httpx.ReadTimeout("timed out")
+    # 최상위에 repositories 외 키가 있으면 호출 전체가 schema 실패다. 원문에는 repo-1 ID가 있다.
+    whole_schema = json.dumps({"repositories": [_item(REPO_1)], "extra": 1})
+    result, _ = await _run([whole_schema, timeout], _input(REPO_1))
+    (row,) = repo_shallow.to_repo_analysis_rows(result, (_input(REPO_1),), PROMPT)
+
+    assert (row["error_code"], row["attempt"], row["raw_output"]) == ("llm_timeout", 2, None)
+
+
+async def test_unrequested_repository_in_retry_keeps_its_first_record() -> None:
+    # repo-3 은 첫 호출에서 semantic 실패해 재요청 대상이 아니다. 재응답에 끼어도 첫 호출 기록이다.
+    first = _batch(_item(REPO_1), _item(REPO_2, purpose=3), _item(REPO_3, head_sha="b" * 40))
+    retry = _batch(_item(REPO_2), _item(REPO_3))
+    inputs = (_input(REPO_1), _input(REPO_2), _input(REPO_3))
+    result, _ = await _run([first, retry], *inputs)
+    rows = repo_shallow.to_repo_analysis_rows(result, inputs, PROMPT)
+
+    assert [(row["status"], row["attempt"]) for row in rows] == [
+        ("succeeded", 1),
+        ("succeeded", 2),
+        ("failed", 1),
+    ]
+    assert rows[2]["raw_output"] == first

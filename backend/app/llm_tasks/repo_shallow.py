@@ -5,9 +5,9 @@
 service(pipeline repo_analyze)가 소유한다. 이 모듈은 DB session을 받지 않는다.
 """
 
-import json
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from functools import partial
 from typing import cast
 
@@ -18,10 +18,19 @@ from devon_ai.llm_tasks.repo_shallow import analyze_shallow_batch
 from app.core.config import LLMSettings
 from app.integrations.llm.client import CallBudget, call_model
 
-type ShallowResult = c.ModelResult[c.ContractChecked[c.ShallowBatchResult]]
+type ShallowChecked = c.ContractChecked[c.ShallowBatchResult]
+type ShallowResult = c.ModelResult[ShallowChecked]
 
 # docs/error-reasons.md 의 repo_analyses.error_code 중 LLM 단계 값
 _LLM_ERROR_CODES = frozenset({"llm_timeout", "llm_parse_failed", "llm_failed"})
+
+
+@dataclass(frozen=True)
+class ShallowRun:
+    """최종 결과와 호출별 (요청 저장소 ID, 결과). 행의 호출 기록 출처를 원문 재해석 없이 정한다."""
+
+    result: ShallowResult
+    calls: tuple[tuple[frozenset[str], ShallowResult], ...]
 
 
 async def analyze_repositories(
@@ -30,7 +39,7 @@ async def analyze_repositories(
     prompt: c.PromptSpec,
     settings: LLMSettings,
     http_client: httpx.AsyncClient,
-) -> ShallowResult:
+) -> ShallowRun:
     """한 논리 작업에 CallBudget 하나를 묶어 부분 재요청까지 총 2회 호출로 제한한다.
 
     prompt는 호출 전에 service가 load_active_prompt로 읽고 조회 transaction을 끝낸 뒤 넘긴다.
@@ -41,13 +50,24 @@ async def analyze_repositories(
         http_client=http_client,
         budget=CallBudget(),
     )
-    return await analyze_shallow_batch(
-        inputs, prompt=prompt, limits=settings.call_limits(), model_call=model_call
+    calls: list[tuple[frozenset[str], ShallowResult]] = []
+
+    async def recorded(
+        request: c.ModelRequest, validator: Callable[[object], ShallowChecked]
+    ) -> ShallowResult:
+        requested = cast(list[dict[str, str]], request.payload["repositories"])
+        out = await model_call(request, validator)
+        calls.append((frozenset(item["repository_id"] for item in requested), out))
+        return out
+
+    result = await analyze_shallow_batch(
+        inputs, prompt=prompt, limits=settings.call_limits(), model_call=recorded
     )
+    return ShallowRun(result, tuple(calls))
 
 
 def to_repo_analysis_rows(
-    result: ShallowResult, inputs: Sequence[c.ShallowRepoInput], prompt: c.PromptSpec
+    run: ShallowRun, inputs: Sequence[c.ShallowRepoInput], prompt: c.PromptSpec
 ) -> list[dict[str, object]]:
     """입력 저장소마다 repo_analyses 행 값을 만든다. 실패 행에 요약·기술 기본값을 채우지 않는다.
 
@@ -55,6 +75,7 @@ def to_repo_analysis_rows(
     """
     # ponytail: 배치 호출 기록이라 저장소별 token·latency를 나눌 수 없어 그 저장소 결과를 만든
     # 시도의 배치 값을 넣는다(batch_position으로 구분). 저장소별 비용이 필요하면 별도 집계로 옮긴다.
+    result = run.result
     base: dict[str, object] = {
         "analysis_level": "l1",
         "prompt_version": prompt.version,
@@ -83,25 +104,12 @@ def to_repo_analysis_rows(
                     "llm_parse_failed" if failure.stage == "parse" else "llm_failed",
                 )
 
-    # 원문에 한 번도 나오지 않은 저장소는 재요청 대상이 아니므로 첫 호출이 결정했다.
-    # 첫 호출은 성공 시도로 끝나며, 호출 전체가 실패했다면 마지막 시도가 끝이다.
-    first_call_end = (
-        next((a for a in result.attempts if a.error_stage is None), None)
-        if result.data is not None
-        else None
-    ) or (result.attempts[-1] if result.attempts else None)
-
     rows: list[dict[str, object]] = []
     for position, item in enumerate(inputs):
         found = analyses.get(item.repository_id)
-        source = (
-            _producing_attempt(result.attempts, found[1])
-            if found is not None
-            else _failing_attempt(result.attempts, item.repository_id, first_call_end)
-        )
         row = {
             **base,
-            **_call_record(source, prompt),
+            **_call_record(_deciding_attempt(run, item.repository_id), prompt),
             "repository_id": uuid.UUID(item.repository_id),
             "head_sha": item.head_sha,
             "batch_position": position,
@@ -129,6 +137,20 @@ def to_repo_analysis_rows(
     return rows
 
 
+def _deciding_attempt(run: ShallowRun, repository_id: str) -> c.AttemptMetadata | None:
+    """이 저장소 결과를 정한 시도. 호출 전체 실패면 마지막 실패 시도다.
+
+    그 외에는 이 저장소를 요청했고 검증 결과를 돌려준 마지막 호출의 성공 시도다. 재요청이 통째로
+    실패하면 첫 결과가 유지되므로 첫 호출의 성공 시도가 된다.
+    """
+    if run.result.data is None:
+        return run.result.attempts[-1] if run.result.attempts else None
+    for requested, call in reversed(run.calls):
+        if call.data is not None and repository_id in requested:
+            return call.attempts[-1]
+    return None
+
+
 def _call_record(attempt: c.AttemptMetadata | None, prompt: c.PromptSpec) -> dict[str, object]:
     """행에 남길 호출 기록. 호출이 없었으면 설정 모델과 시도 0을 남긴다."""
     if attempt is None:
@@ -150,38 +172,4 @@ def _call_record(attempt: c.AttemptMetadata | None, prompt: c.PromptSpec) -> dic
     }
 
 
-def _batch_items(attempt: c.AttemptMetadata) -> list[object]:
-    """시도 원문의 repositories 목록. JSON이 아니거나 모양이 다르면 빈 목록이다."""
-    if attempt.raw_output is None:
-        return []
-    try:
-        items = json.loads(attempt.raw_output)["repositories"]
-    except (ValueError, TypeError, KeyError):
-        return []
-    return items if isinstance(items, list) else []
-
-
-def _producing_attempt(
-    attempts: Sequence[c.AttemptMetadata], stored: dict[str, object]
-) -> c.AttemptMetadata | None:
-    """검증된 결과와 같은 항목을 처음 출력한 성공 시도를 찾는다. 재요청 응답과 섞이지 않게 한다."""
-    for attempt in attempts:
-        if attempt.error_stage is None and stored in _batch_items(attempt):
-            return attempt
-    return attempts[-1] if attempts else None
-
-
-def _failing_attempt(
-    attempts: Sequence[c.AttemptMetadata],
-    repository_id: str,
-    fallback: c.AttemptMetadata | None,
-) -> c.AttemptMetadata | None:
-    """이 저장소를 마지막으로 다룬 시도를 찾는다. 원문에 없으면 fallback(첫 호출의 끝)이다."""
-    for attempt in reversed(attempts):
-        items = _batch_items(attempt)
-        if any(isinstance(i, dict) and i.get("repository_id") == repository_id for i in items):
-            return attempt
-    return fallback
-
-
-__all__ = ["analyze_repositories", "to_repo_analysis_rows"]
+__all__ = ["ShallowRun", "analyze_repositories", "to_repo_analysis_rows"]
