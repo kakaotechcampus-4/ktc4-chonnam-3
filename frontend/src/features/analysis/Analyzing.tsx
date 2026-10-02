@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
@@ -50,7 +50,15 @@ export default function Analyzing() {
 
   const [sseSteps, setSseSteps] = useState<Partial<StepMap>>({});
   const [sseStatus, setSseStatus] = useState<RunStatus | null>(null);
-  const sseOpenedRef = useRef(false);
+
+  // 같은 화면에서 runId만 A → B로 바뀌면 컴포넌트가 재사용돼 A의 SSE 상태가 남는다.
+  // effect에서 비우면 한 번은 A의 completed로 렌더돼 B가 잘못 이동하므로 렌더 중에 비운다.
+  const [prevRunId, setPrevRunId] = useState(runId);
+  if (runId !== prevRunId) {
+    setPrevRunId(runId);
+    setSseSteps({});
+    setSseStatus(null);
+  }
 
   // REST 스냅샷을 기다렸다가 SSE를 열면, "스냅샷을 읽은 시점"과 "SSE가 실제로
   // 연결된 시점" 사이에 일어난 전환을 영영 놓칠 수 있다. runId를 알자마자(REST
@@ -67,8 +75,7 @@ export default function Analyzing() {
   });
 
   useEffect(() => {
-    if (!runId || sseOpenedRef.current) return;
-    sseOpenedRef.current = true;
+    if (!runId) return;
 
     const source = new EventSource(api.analysisRunEventsUrl(runId), { withCredentials: true });
 
