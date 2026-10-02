@@ -12,6 +12,10 @@
 
 팀 내부 결정만 기록한다. 계약·용어 영향이 있으면 spec/shared/decisions로 승격하고 이곳에는 링크를 둔다.
 
+## BE 구현 결정
+
+- [0004 Task 11 분석 실행과 복구](0004-task11-run-execution.md): 사용자 승인 범위의 Accepted 설계 선택. fingerprint 제약, DB claim과 큐 중복 방어, 7단계·후보 page·SSE의 저장 경계 및 실행 전 작업 복구. 선행 구현과 별도 후속 보완이 필요한 Draft의 상태·검증 결과는 [Task 11 구현 기록](../implementation-task-11.md)에서 관리한다.
+
 ## 관련 공통 결정
 
 - [0002 로컬 정책 기준 채택](../../shared/decisions/0002-local-policy-baseline.md): 2026-09-22 사용자 결정. 포트폴리오 20MB와 공고 재사용 7일은 유지하며 면접 배분은 후속 0004로 대체한다. 실제 BE 연결·검증은 구현 작업으로 남긴다.

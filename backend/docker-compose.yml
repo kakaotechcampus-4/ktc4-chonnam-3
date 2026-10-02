@@ -48,7 +48,7 @@ services:
     build:
       context: ..
       dockerfile: backend/Dockerfile
-    command: ["arq", "app.workers.arq_app.WorkerSettings"]
+    command: ["arq", "app.workers.analysis_app.WorkerSettings"]
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://devon:devon@db:5432/devon

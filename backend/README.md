@@ -42,7 +42,7 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000 --no-access-log
 ```
 
-별도 터미널에서 `uv run arq app.workers.arq_app.WorkerSettings`를 실행한다. `frontend/.env.local`에는 `VITE_USE_MSW=false`를 설정하고 `frontend/`에서 `npm ci`, `npm run dev`를 실행한다. 브라우저는 `http://localhost:5173`으로 접속한다. OAuth App에 등록할 콜백은 로그인·재연동 공통 `http://localhost:5173/auth/github/callback` 하나다. Vite가 내부 `/api/auth/github/callback`으로 전달하며 코드 교환의 `redirect_uri`도 공개 주소를 유지한다.
+별도 터미널에서 `uv run arq app.workers.analysis_app.WorkerSettings`를 실행한다. `frontend/.env.local`에는 `VITE_USE_MSW=false`를 설정하고 `frontend/`에서 `npm ci`, `npm run dev`를 실행한다. 브라우저는 `http://localhost:5173`으로 접속한다. OAuth App에 등록할 콜백은 로그인·재연동 공통 `http://localhost:5173/auth/github/callback` 하나다. Vite가 내부 `/api/auth/github/callback`으로 전달하며 코드 교환의 `redirect_uri`도 공개 주소를 유지한다.
 
 로그인·재연동 요청 scope는 `read:user`뿐이다. OAuth App의 **Expire user access tokens는 OFF**로 유지하고 `offline_access`를 요청하지 않는다. DEVON 세션은 Redis에 14일 sliding으로 저장하고 GitHub 장기 토큰은 별도로 AES-GCM 암호화해 PostgreSQL에 저장한다.
 
@@ -55,7 +55,7 @@ uv run uvicorn app.main:app --reload --port 8000 --no-access-log
 | `uv run alembic upgrade head`                         | 마이그레이션      |
 | `uv run python -m scripts.seed_all`                   | 도메인 지식 시드 경계 — 로그인 실행에 불필요 |
 | `uv run uvicorn app.main:app --reload --port 8000 --no-access-log` | API — OAuth query 로그 제외 |
-| `uv run arq app.workers.arq_app.WorkerSettings`       | 워커              |
+| `uv run arq app.workers.analysis_app.WorkerSettings`       | 워커              |
 | `uv run ruff check . && uv run ruff format --check .` | 린트              |
 | `uv run mypy app`                                     | 타입 체크         |
 | `uv run pytest`                                       | 테스트 — 격리 `TEST_DATABASE_URL`·`TEST_REDIS_URL` 필요 |
