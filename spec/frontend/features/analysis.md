@@ -46,7 +46,7 @@ Sprint 1에서 preview는 포트폴리오 전용이다. 자소서는 `/documents
 
 파일명·크기·추출 내용 등의 기존 DB 저장 설계는 [BE 문서 Preview 명세](../../backend/features/documents.md)를 유지하며, 이를 추가 응답 필드로 노출하지 않는다.
 
-요청에는 선택 필드 `postingUrl`(공고 URL)도 있다 — JD 키워드 기반 축약에 쓰인다. 공고 URL을 먼저 입력받은 뒤 파일을 업로드하면 이 값을 함께 보내는 편이 축약 품질에 유리하다. 파일이 공고 URL보다 먼저 선택되면 이 필드 없이 호출해도 된다(선택 필드).
+공통 OpenAPI의 요청은 `file`만 받는다. Preview의 축약 기준은 추출된 본문의 GitHub URL 주변과 프로젝트 섹션이며, 공고를 별도로 수집하지 않는다. [BE 저장 경계](../../backend/decisions/0002-task09-persistence.md)를 따른다. 이 계약 설명 정리는 위의 화면 수정 보류를 해제하거나 BE·FE 전체 연결 완료를 뜻하지 않는다.
 
 `extractStatus === 'failed'`는 hard blocker가 아니다 — "문서 없이 계속 진행" 선택 시 `documentId`를 `analysis-runs` 요청에서 뺀다.
 
@@ -136,8 +136,8 @@ Sprint 1에서 preview는 포트폴리오 전용이다. 자소서는 `/documents
 
 | 코드 | reason | 처리 |
 | --- | --- | --- |
-| 413 | `file_too_large` | 업로더 에러 |
-| 415 | `unsupported_media_type` | 업로더 에러 |
+| 413 | `document_too_large` | 업로더 에러 |
+| 415 | `unsupported_document_type` | 업로더 에러 |
 
 [공통 0003](../../shared/decisions/0003-sprint1-session-auth.md)에 따라 `401 unauthenticated`는 캐시를 비우고 로그인으로 이동한다. 인증 갱신 후 자동 재전송하지 않으므로 401 재시도용 `FormData` 복제는 추가하지 않는다.
 

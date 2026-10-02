@@ -33,11 +33,12 @@ JD_CATEGORIES = ("required", "preferred", "responsibility")
 
 
 class JobPosting(Base, UUIDPrimaryKeyMixin, TimestampMixin):
-    """Wanted 공고. normalized URL 기준으로 행을 재사용한다 (fetched_at TTL 24시간)."""
+    """Wanted 공고 자료. 7일 재사용하며 내용 변경은 새 ID로 보존한다."""
 
     __tablename__ = "job_postings"
     __table_args__ = (
-        UniqueConstraint("normalized_url", name="uq_job_postings_normalized_url"),
+        # 같은 URL의 이전 내용도 run·면접에서 계속 참조하므로 URL은 유일하지 않다.
+        Index("ix_job_postings_url_created_at", "normalized_url", "created_at"),
         CheckConstraint(check_in("source", POSTING_SOURCES), name="source"),
         CheckConstraint(check_in("parse_status", POSTING_PARSE_STATUSES), name="parse_status"),
         CheckConstraint(
@@ -62,7 +63,7 @@ class JobPosting(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     raw_payload: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     parse_status: Mapped[str] = mapped_column(String(20), nullable=False)
     parse_error_code: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # 재사용 판정 기준 시각. 24시간 이내 성공본이면 다시 가져오지 않는다.
+    # 마지막 성공 확인 시각. 캐시 조회만으로 늘리지 않으며 7일 이내면 재사용한다.
     fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
