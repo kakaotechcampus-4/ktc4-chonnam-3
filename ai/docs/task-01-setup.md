@@ -14,7 +14,7 @@ AI 담당자가 `ai/`에서 DB·Redis·모델 연결 없이 설치, lint, type c
 - Python 요구 버전은 3.12 이상으로 유지하고 `uv.lock`으로 AI 개발 환경을 고정한다.
 - 배포명 `devon-ai`, import 이름 `devon_ai`, `src/` layout을 유지한다.
 - `src/devon_ai/`와 `py.typed`만 runtime wheel에 포함하고 `tests/`, `evals/`, 검수 정답은 제외한다.
-- `src/devon_ai/` 모듈은 현재 책임을 설명하는 docstring 스켈레톤으로 유지한다. 승인된 계약과 기능이 생기기 전에는 빈 성공 함수, 임시 DTO·Protocol, callable facade, provider 호출을 추가하지 않는다.
+- `src/devon_ai/contracts.py`에는 task-02~03의 채택된 계약·검증을 둔다. 아직 구현하지 않은 기능 모듈은 책임을 설명하는 docstring으로 유지하며 빈 성공 함수·임시 facade를 추가하지 않는다.
 - AI와 BE의 `.venv`·`uv.lock`은 독립적으로 관리한다. BE는 `../ai`를 editable dependency로 설치하며 AI dependency나 metadata가 바뀌면 양쪽 lock의 영향을 확인한다.
 - 설치 누락을 `sys.path` 수정이나 `PYTHONPATH`로 가리지 않는다.
 - 실제 검증 명령과 결과 기록은 [테스트 안내](testing.md)를 따른다.

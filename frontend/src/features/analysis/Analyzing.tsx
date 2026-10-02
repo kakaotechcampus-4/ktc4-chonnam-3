@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
@@ -20,28 +20,62 @@ const INITIAL_STEPS: StepMap = {
   match_score: 'pending',
 };
 
+// SSE와 REST 폴링 스냅샷을 그대로 나중 값 우선으로 덮어쓰면, SSE가 조용히 끊긴
+// 뒤(onerror 없이) 서버가 더 진행돼도 폴링이 가져온 새 값이 낡은 SSE 값에 밀려
+// 화면이 이전 단계에 고착된다. 단계는 되돌아가지 않으므로 키별로 "더 진행된
+// 쪽"을 남기는 방식으로 병합해 SSE 유실을 폴링이 실제로 따라잡을 수 있게 한다.
+const STATUS_RANK: Record<StepStatus, number> = {
+  pending: 0,
+  running: 1,
+  completed: 2,
+  failed: 2,
+  skipped: 2,
+};
+
+function mergeSteps(...snapshots: Partial<StepMap>[]): StepMap {
+  const merged = { ...INITIAL_STEPS };
+  for (const snapshot of snapshots) {
+    for (const [key, status] of Object.entries(snapshot) as [StepKey, StepStatus][]) {
+      if (STATUS_RANK[status] >= STATUS_RANK[merged[key]]) {
+        merged[key] = status;
+      }
+    }
+  }
+  return merged;
+}
+
 export default function Analyzing() {
   const { runId = '' } = useParams<{ runId: string }>();
   const navigate = useNavigate();
 
   const [sseSteps, setSseSteps] = useState<Partial<StepMap>>({});
   const [sseStatus, setSseStatus] = useState<RunStatus | null>(null);
-  const [ssePending, setSsePending] = useState(true);
-  const sseOpenedRef = useRef(false);
 
+  // 같은 화면에서 runId만 A → B로 바뀌면 컴포넌트가 재사용돼 A의 SSE 상태가 남는다.
+  // effect에서 비우면 한 번은 A의 completed로 렌더돼 B가 잘못 이동하므로 렌더 중에 비운다.
+  const [prevRunId, setPrevRunId] = useState(runId);
+  if (runId !== prevRunId) {
+    setPrevRunId(runId);
+    setSseSteps({});
+    setSseStatus(null);
+  }
+
+  // REST 스냅샷을 기다렸다가 SSE를 열면, "스냅샷을 읽은 시점"과 "SSE가 실제로
+  // 연결된 시점" 사이에 일어난 전환을 영영 놓칠 수 있다. runId를 알자마자(REST
+  // 응답을 기다리지 않고) 바로 구독해서 그 틈 자체를 없앤다.
   const runQuery = useQuery({
     queryKey: queryKeys.analysisRun(runId),
     queryFn: () => api.getAnalysisRun(runId),
     enabled: !!runId,
-    refetchInterval: (query) => (!ssePending && query.state.data?.status === 'running' ? 3000 : false),
+    // SSE 연결 핸드셰이크 구간처럼 순서를 바꿔도 못 막는 틈을 위한 안전장치로,
+    // SSE가 정상 동작 중이어도 계속 폴링해서 놓친 이벤트가 있으면 따라잡는다.
+    // 병합이 진행도 기준(mergeSteps)이라 폴링 스냅샷이 SSE에 덮일 일이 없으므로
+    // 분석 전체 소요 시간(수 분) 대비 3초는 과했던 간격을 10초로 늘린다.
+    refetchInterval: (query) => (query.state.data?.status === 'running' ? 10000 : false),
   });
 
-  // SSE는 구독 시점 이후의 델타만 전달하므로, 이미 끝난 뒤 재진입하거나 이벤트를
-  // 놓치면 pending에서 멈출 수 있다. 스냅샷(runQuery)이 running일 때만 구독한다.
   useEffect(() => {
-    if (!runId || sseOpenedRef.current) return;
-    if (!runQuery.data || runQuery.data.status !== 'running') return;
-    sseOpenedRef.current = true;
+    if (!runId) return;
 
     const source = new EventSource(api.analysisRunEventsUrl(runId), { withCredentials: true });
 
@@ -64,17 +98,15 @@ export default function Analyzing() {
 
     source.onerror = () => {
       source.close();
-      setSsePending(false);
     };
 
     return () => source.close();
-  }, [runId, runQuery.data]);
+  }, [runId]);
 
-  const steps: StepMap = {
-    ...INITIAL_STEPS,
-    ...Object.fromEntries((runQuery.data?.steps ?? []).map((s) => [s.key, s.status])),
-    ...sseSteps,
-  };
+  const steps: StepMap = mergeSteps(
+    Object.fromEntries((runQuery.data?.steps ?? []).map((s) => [s.key, s.status])),
+    sseSteps,
+  );
   const runStatus: RunStatus = sseStatus ?? runQuery.data?.status ?? 'running';
   const hasFailedStep = Object.values(steps).some((status) => status === 'failed');
 

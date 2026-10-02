@@ -1,52 +1,54 @@
-"""FastAPI 인스턴스, 라우터 등록, 예외 핸들러, lifespan.
-
-docs/layer-rules.md 1절 / task-01
-"""
+"""FastAPI composition; one set of settings owns database, Redis and HTTP resources."""
 
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
-from fastapi import APIRouter, FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import httpx
+from arq.connections import ArqRedis
+from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import Settings, get_settings
-from app.core.logging import RequestIdMiddleware, configure_logging, get_logger
-
-logger = get_logger(__name__)
-
-health_router = APIRouter(tags=["ops"])
-
-
-@health_router.get("/health")
-async def health() -> dict[str, str]:
-    """헬스체크. 입력 없음. 출력: {"status": "ok"}.
-
-    DB·Redis 에 접속하지 않는다 — 의존 서비스 상태는 각자의 체크로 본다.
-    """
-    return {"status": "ok"}
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """앱 수명 주기. 기동 시 로깅을 설정하고 종료를 로그로 남긴다.
-
-    입력: FastAPI 인스턴스. 출력: 없음 (async context manager).
-    """
-    settings = get_settings()
-    configure_logging(settings.log_level, json_logs=settings.is_prod)
-    logger.info("app_started", env=settings.app_env, api_prefix=settings.api_prefix)
-    yield
-    logger.info("app_stopped")
+from app.core.crypto import TokenCipher
+from app.core.exception_handlers import (
+    register_exception_handlers,
+    register_unhandled_exception_middleware,
+)
+from app.core.logging import RequestIdMiddleware, configure_logging
+from app.core.security import SessionCookieMiddleware
+from app.features.auth.oauth import GitHubOAuth, OAuthStateStore
+from app.features.auth.router import router as auth_router
+from app.features.auth.session_store import SessionStore
+from app.features.me.router import router as me_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    """FastAPI 앱을 만든다.
-
-    입력: settings(테스트에서 주입 가능, 기본은 get_settings()).
-    출력: 미들웨어와 라우터가 붙은 FastAPI 인스턴스.
-    """
     settings = settings or get_settings()
-    app = FastAPI(
+
+    @asynccontextmanager
+    async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        settings.validate_auth()
+        configure_logging(settings.log_level, json_logs=settings.is_prod)
+        async with AsyncExitStack() as stack:
+            engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+            stack.push_async_callback(engine.dispose)
+            redis = ArqRedis.from_url(settings.redis_url)
+            stack.push_async_callback(redis.aclose)
+            http = await stack.enter_async_context(
+                httpx.AsyncClient(timeout=10.0, follow_redirects=False)
+            )
+            application.state.session_factory = async_sessionmaker(
+                engine, expire_on_commit=False, autoflush=False
+            )
+            application.state.redis = redis
+            application.state.http_client = http
+            application.state.cipher = TokenCipher(settings.token_encryption_key.get_secret_value())
+            application.state.oauth = GitHubOAuth(settings, http)
+            application.state.sessions = SessionStore(redis, settings.session_ttl_seconds)
+            application.state.oauth_states = OAuthStateStore(redis)
+            yield
+
+    application = FastAPI(
         title="DEVON API",
         version="0.1.0",
         lifespan=lifespan,
@@ -54,19 +56,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
         openapi_url=None if settings.is_prod else "/openapi.json",
     )
+    application.state.settings = settings
+    register_exception_handlers(application)
+    # 예상 밖 오류도 바깥쪽 쿠키·request ID 처리를 거쳐 응답해야 한다.
+    register_unhandled_exception_middleware(application)
+    application.add_middleware(SessionCookieMiddleware, settings=settings)
+    application.add_middleware(RequestIdMiddleware)
+    application.include_router(auth_router, prefix=settings.api_prefix)
+    application.include_router(me_router, prefix=settings.api_prefix)
 
-    # 추가 순서의 역순으로 감싸진다 — CORS 가 가장 바깥이라 에러 응답에도 헤더가 붙는다.
-    app.add_middleware(RequestIdMiddleware)
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=settings.cors_origins,
-        allow_credentials=True,  # HttpOnly accessToken 쿠키를 싣는다
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    @application.get(f"{settings.api_prefix}/health", tags=["ops"])
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
 
-    app.include_router(health_router, prefix=settings.api_prefix)
-    return app
+    return application
 
 
 app = create_app()

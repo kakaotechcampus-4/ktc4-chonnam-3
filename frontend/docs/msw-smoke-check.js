@@ -92,8 +92,6 @@
     (await call('GET', '/me/home?scenario=no_repository')).data.analysisStatus,
   );
   check('GET /me/interviews', 200, (await call('GET', '/me/interviews?page=1&size=20')).status);
-  check('POST /auth/refresh', 204, (await call('POST', '/auth/refresh')).status);
-  check('POST /auth/logout', 204, (await call('POST', '/auth/logout')).status);
 
   // 문서 preview ------------------------------------------------------------
   const pdf = new FormData();
@@ -355,10 +353,6 @@
       `${expired.status}/${expired.data?.error?.reason}`,
     );
 
-    msw.scenario('refresh-failed');
-    check('refresh-failed — /auth/refresh', 401, (await call('POST', '/auth/refresh')).status);
-    check('  └ 다른 경로는 정상', 200, (await call('GET', '/me')).status);
-
     msw.scenario('github-token-invalid');
     const gh = await call('GET', '/me/home');
     check(
@@ -591,6 +585,12 @@
   );
 
   if (msw) msw.clear();
+
+  // Logout comes last: subsequent protected requests must be rejected.
+  check('POST /auth/logout', 204, (await call('POST', '/auth/logout')).status);
+  check('로그아웃 후 GET /me', 401, (await call('GET', '/me')).status);
+  check('중복 POST /auth/logout', 204, (await call('POST', '/auth/logout')).status);
+  if (msw) msw.session('authenticated');
 
   console.table(rows);
   const failed = rows.filter((r) => r.결과 === 'FAIL');

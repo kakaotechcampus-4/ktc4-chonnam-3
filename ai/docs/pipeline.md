@@ -2,7 +2,7 @@
 
 이 문서는 재사용 가능한 구현 체크리스트의 연결 지도다. 서비스 pipeline 원본은 [AI 아키텍처의 확정 흐름](../../spec/ai/architecture.md)과 [BE pipeline](../../backend/docs/pipeline.md)이며, 이 작업 번호로 외부 분석 단계·worker 순서·계약을 변경하지 않는다.
 
-현재 상태는 설치 가능한 패키지 골격이다. `task-01`의 구조 검사와 별개로 `task-02`부터 `task-13`의 기능·통합·평가 구현은 완료되지 않았다. [레이어 규칙](layer-rules.md)과 [검증 안내](testing.md)를 공통으로 적용한다.
+task-01~03의 패키지·계약·공통 호출 기반을 구현했다. [구현 인계](../../spec/ai/designs/2026-09-23-ai-foundation.md)에 현재 callable과 검증 범위를 기록했다. [task-10 첫 구현](../../spec/ai/designs/2026-09-23-director-question-path.md)은 준비된 목적의 질문 생성·독립 검토 경로다. task-04~13의 나머지 기능·통합·평가와 실제 provider 검증은 후속 작업이다. 프롬프트 조회·seed는 로컬 PostgreSQL에서 검증했다. [레이어 규칙](layer-rules.md)과 [검증 안내](testing.md)를 공통으로 적용한다.
 
 ## 작업을 선택하는 순서
 
@@ -82,7 +82,7 @@ AI 기능과 관련되더라도 다음 작업을 `devon_ai`로 옮기거나 중�
 | --- | --- | --- |
 | AI-L01 | 선택한 모델을 설정/seed에서 주입하고 실제 사용값·version 기록. 서비스 인증·SDK/client·호출 경로 연결, 계정 접근·구조화 출력·도구 호출 적합성 검증. 다른 모델·공급자가 필요하면 그때 실제 차이 확인 | task-03·13 |
 | AI-L02 | 기존 Context·Question·Evidence·ToolResult·분석/판단 계약 안에서 타입·null·참조·직렬화 연결. 공고 내용 비교·동시 수집 제약 확인. 실패 원문·조회 중단의 영구 저장 위치는 기존 책임 안에서 확인하고 AI-L18의 자료 정책 적용 | task-02·13 |
-| AI-L03 | JD source_field·requirement_type과 규칙 변환 version 기록, L1 프로젝트 요약의 기존 분석 저장 매핑 확인. prompt version을 변환 version으로 바꾸거나 프로젝트 요약을 개인 역할·description으로 쓰지 않음 | task-04·13, BE JD |
+| AI-L03 | JD source_field·category와 규칙 변환 version 기록, L1 프로젝트 요약의 기존 분석 저장 매핑 확인. prompt version을 변환 version으로 바꾸거나 프로젝트 요약을 개인 역할·description으로 쓰지 않음 | task-04·13, BE JD |
 | AI-L06 | 기존 L2 준비 조건·한계 비공개 유지. 실제 지원 언어·parser·읽기 기능과 실패 repo/path/area의 Context 연결을 fixture로 확인. 아직 읽지 못하는 범위를 지원한다고 선언하지 않음 | task-05·06·08 |
 | AI-L07 | 0017~0018의 직접 기술 비교·기존 run 후보 순서·최대 5개·실제 근거·null 점수를 저장/카드에 연결. 태그 겹침을 전체 요구사항 충족으로 바꾸지 않음 | BE task-10, task-13 |
 | AI-L09 | 기존 재작성/재계획/유효 후보 없음, 미저장 답변 재제출·저장 답변 보완·오류 안내·명시적 나가기를 반환/전송에 연결. 새 수동 이어가기·자동 LLM 반복 없음 | task-09·10·13 |

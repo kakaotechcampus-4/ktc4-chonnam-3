@@ -11,7 +11,7 @@ GitHub OAuth 단일 로그인. 아이디/비밀번호 가입은 없다.
 | 화면 | 코드 | 구성 |
 | --- | --- | --- |
 | 로그인 | — | 서비스 소개 + `GitHub으로 로그인` 버튼 1개 |
-| 로그인 실패 | — | 로그인 화면에 `?error=denied` 배너 |
+| 로그인·재연동 실패 | — | 로그인 화면에 허용된 `?error=<표시 코드>`의 고정 안내; 검증된 재연동 실패는 `flow=link` |
 | GitHub 재연동 안내 | — | 독립 화면 아님. 홈·분석 실패 화면에 배너로 노출 |
 
 로그인 화면에 입력 폼은 없다. 버튼 하나뿐이다.
@@ -23,14 +23,16 @@ GitHub OAuth 단일 로그인. 아이디/비밀번호 가입은 없다.
   └─ [GitHub으로 로그인] → window.location = '/auth/github/login'
        └─ GitHub 동의 화면
             ├─ 동의    → 서버 /auth/github/callback → 302 /home
-            └─ 거부    → 302 /login?error=denied
+            └─ 실패    → 302 /login?error=<표시 코드> (동의 거부는 denied)
 
 (전역) 401 unauthenticated → queryClient.clear() → /login (refresh 재시도 없음)
 
 (마이페이지) [로그아웃] → 확인 모달 → POST /auth/logout → /login
 
 (GitHub 토큰 무효) 배너 [재연동] → window.location = '/auth/github/link'
-       └─ GitHub 동의 → 서버 /auth/github/link/callback → 302 /home
+       └─ GitHub 동의 → 서버 /auth/github/callback → 302 /home
+            └─ 검증된 재연동 실패 → /login?error=<표시 코드>&flow=link
+                 └─ [GitHub 재연동] → /api/auth/github/link
 ```
 
 ## API 연동
@@ -38,12 +40,12 @@ GitHub OAuth 단일 로그인. 아이디/비밀번호 가입은 없다.
 | # | 엔드포인트 | 호출 위치 | 방식 |
 | --- | --- | --- | --- |
 | 1 | `GET /auth/github/login` | 로그인 화면 버튼 | `window.location` — `shared/api.ts` 제외 |
-| 2 | `GET /auth/github/callback` | 없음 | 서버가 302. 프론트 무관 |
+| 2 | `GET /auth/github/callback` | 없음 | 로그인·재연동 공통 서버 302; 실패 안내는 로그인 화면 |
 | 3 | `POST /auth/refresh` | Sprint 2 예약 | Sprint 1에서는 호출하지 않음 |
 | 4 | `POST /auth/logout` | 마이페이지 로그아웃 | `fetch` |
 | 5 | `GET /me` | 인증 가드 | `fetch` · `['me']` |
 | 7 | `GET /auth/github/link` | 재연동 배너 | `window.location` — `shared/api.ts` 제외 |
-| 8 | `GET /auth/github/link/callback` | 없음 | 서버가 302. 복귀 후 `me`·`home` 무효화 |
+| 8 | `GET /auth/github/link/callback` | 없음 | 재연동 호환 경로; 현재 callback은 #2 공유. 성공 복귀 후 `me`·`home` 무효화 |
 
 ### 인증 저장 방식
 
@@ -71,17 +73,24 @@ GitHub OAuth 단일 로그인. 아이디/비밀번호 가입은 없다.
 
 ### 에러 reason 분기
 
+다음 HTTP 상태는 일반 API 오류에 적용한다. 브라우저 callback은 아래 표시 코드 규약을 따른다.
+
 | reason | 코드 | 처리 |
 | --- | --- | --- |
 | `unauthenticated` | 401 | 캐시 clear → `/login`, refresh 재시도 없음 |
 | `account_suspended` | 403 | 정지 안내 |
 | `account_withdrawn` | 403 | 재가입 불가 안내 |
 | `github_token_invalid` | 403 | 재연동 배너 |
-| `invalid_state` / `invalid_code` | 400 | 로그인 재시도 안내 |
-| `provider_unavailable` | 502 | GitHub 장애 안내 |
-| `github_already_linked` | 409 | 이미 연동됨 안내 |
 
 `/auth/github/link`는 브라우저 이동이므로 서버가 세션 만료·유실 시 `/login`으로 302한다.
+
+### callback 실패 안내
+
+공통 callback과 재연동 호환 callback은 알려진 실패에 `302 /login?error=<표시 코드>`를 반환한다. 허용 코드는 `denied`, `invalid_state`, `invalid_code`, `provider_unavailable`, `provider_configuration`, `github_already_linked`, `account_suspended`, `account_withdrawn`이다. 로그인 화면은 코드별 고정 안내를 표시한다. 등록되지 않은 값은 무시하며 오류 배너 없이 기본 GitHub 로그인 버튼을 표시한다. query나 공급자 원문을 그대로 렌더링하지 않는다. `provider_configuration`은 지원하지 않는 GitHub expiry·refresh 토큰 설정 안내이며 API reason은 `provider_unavailable`을 유지한다.
+
+재연동 state 검증 후 현재 활성 사용자가 시작 사용자와 일치한 경우에만 재시도 가능한 `denied`·`invalid_code`·`provider_unavailable`·`provider_configuration`·`github_already_linked`에 `flow=link`를 붙인다. 이 조합의 버튼은 고정된 `/api/auth/github/link`, 그 외에는 `/api/auth/github/login`으로 이동한다. `flow`는 인증 근거가 아니며 임의의 재시도 URL을 받지 않는다. state 무효·사용자 불일치·정지·탈퇴는 일반 로그인 안내로 돌아간다. 재연동 세션 만료·유실은 `/login`으로 이동하며 새 세션을 만들지 않는다.
+
+Redis·세션·DB·enqueue 등 내부 실패는 기존 `500 internal_error` JSON envelope로 남는다. state 일회 소비·PKCE, state 쿠키 정리, `no-store`·`no-referrer`도 유지한다. 세부 브라우저 계약은 [FE API 명세 #2·#8](../../../frontend/docs/api-spec.md#2-get-authgithubcallback)을 따른다.
 
 ## 상태 요구사항
 
@@ -90,7 +99,7 @@ GitHub OAuth 단일 로그인. 아이디/비밀번호 가입은 없다.
 | 상태 | 용도 |
 | --- | --- |
 | 로그아웃 확인 모달 열림 여부 | 마이페이지 |
-| `?error=denied` 배너 표시 여부 | 로그인 화면 쿼리 파싱 |
+| callback 실패 안내·재시도 목적 | 허용된 `error`와 `flow=link` 조합으로 고정 안내·버튼 결정 |
 
 구현 방식은 `frontend/docs/task-07-auth.md` 참고.
 
@@ -98,6 +107,9 @@ GitHub OAuth 단일 로그인. 아이디/비밀번호 가입은 없다.
 
 - GitHub 로그인 성공 → `/home` 이동
 - GitHub 동의 거부 → `/login?error=denied` 배너 노출
+- 알려진 callback 오류 → 안전한 고정 안내; 등록되지 않은 `error` 값은 무시하고 오류 배너 없이 `/api/auth/github/login` 버튼 표시
+- 검증된 재연동 실패 → `flow=link`와 `/api/auth/github/link` 재시도; state 무효·사용자 불일치·정지·탈퇴에는 일반 로그인 버튼
+- 재연동 세션 유실 → 새 로그인 세션 없이 `/login`; callback 내부 장애 → 기존 `500` JSON
 - 유효한 로그인 세션 사용 시 Redis TTL과 HTTP 쿠키 만료를 함께 14일로 연장, FE의 refresh 호출 없음
 - 쿠키 없음·세션 만료/유실 → 조회·변경 요청 모두 캐시 clear 후 `/login`
 - Redis 장애 → 기존 서버 오류 처리, 세션 만료로 오인해 로그인 이동하지 않음

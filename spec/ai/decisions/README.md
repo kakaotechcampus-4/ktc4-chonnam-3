@@ -14,6 +14,8 @@
 
 ## 현재 결정
 
+문서 작성과 현황 확인에는 [0020 AI 구현·검증 기록의 단일화](0020-implementation-record-policy.md)를 적용한다. 현재 구현·실행 결과의 원본은 [구현 기록](../implementation.md)이다.
+
 각 결정의 승인 범위는 후속 결정까지 함께 적용한다. 0010·0014~0019에서 채택한 정책을 이전 기록의 보류 문구만으로 다시 미정 처리하지 않는다. 남은 상세 구현·저장 연결·실측·검수는 아래 구현 인계에서 관리한다.
 
 - [공통 0003 Sprint 1 세션 인증 유지](../../shared/decisions/0003-sprint1-session-auth.md): Accepted, 2026-09-22. 0010의 `accessToken` 인증 부분을 Redis·`devon_session`으로 대체한다. 면접 `sessionId`와 로그인 세션 ID는 별개이며 JWT·갱신은 Sprint 2로 이관한다.

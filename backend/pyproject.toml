@@ -21,8 +21,11 @@ dependencies = [
     "httpx",
     "structlog",
     "python-multipart",
-    "anthropic",
+    # 문서 텍스트 추출 (task-09). pdf 는 텍스트 레이어만 읽는다 - OCR 은 범위 밖.
+    "pypdf",
+    "python-docx",
     "devon-ai",
+    "cryptography>=50.0.1",
 ]
 
 [tool.uv.sources]
@@ -34,6 +37,11 @@ dev = [
     "mypy",
     "pytest",
     "pytest-asyncio",
+    # tests/contract/ 가 openapi.yaml 을 직접 읽는다.
+    # uvicorn[standard] 로 딸려 오지만 전이 의존에 기대지 않는다.
+    "pyyaml",
+    "types-pyyaml",
+    "lxml-stubs>=0.5.1",
 ]
 
 [tool.mypy]

@@ -68,14 +68,14 @@ VITE_USE_MSW=false
 ```
 
 안 보이면 devtools → Application → Service Workers에서 `mockServiceWorker.js`가 activated인지 본다.
-등록에 실패해도 앱은 뜨고 콘솔에 실패 사유가 찍힌다. 이때 `/api` 요청은 dev server로 넘어가 `index.html`을 받는다.
+등록에 실패해도 앱은 뜨고 콘솔에 실패 사유가 찍힌다. 이때 `/api` 요청은 개발 프록시를 통해 실제 백엔드로 전달된다.
 
 ### 전체 흐름 한 번에
 
 [`docs/msw-smoke-check.js`](msw-smoke-check.js) 전체를 devtools 콘솔에 붙여넣는다.
 일부 등록 핸들러를 순서대로 호출하고 PASS/FAIL 표를 출력한다. 응답 키·일부 값과 상태 전이를 코드에 적힌 기대값으로 비교하며 OpenAPI를 직접 읽어 전체 스키마를 검증하지 않는다. 총 검사 수와 성공 여부는 실행 결과로 확인한다. 설계 문서의 과거 통과 횟수를 현재 실행 결과로 사용하지 않는다.
 
-현재 스크립트에는 Sprint 2로 이관된 `/auth/refresh` 검사와 당시 mock 전제가 남아 있다. [task-07-auth](task-07-auth.md)의 정리 대상이며, 전체 PASS도 Redis 세션의 생성·만료·로그아웃이나 WS·실서버 동작을 검증했다는 뜻은 아니다.
+스크립트 마지막에는 로그아웃·보호 요청 401·중복 로그아웃을 확인한 뒤 mock 세션을 복원한다. 전체 PASS도 Redis 세션의 생성·만료·로그아웃이나 WS·실서버 동작을 검증했다는 뜻은 아니다.
 
 mock 상태가 메모리에 남으므로 페이지당 한 번만 유효하다. 다시 돌리려면 새로고침한다.
 
@@ -101,13 +101,14 @@ msw.scenario('auth-expired'); // 전 요청 401
 msw.fault({ path: '/me', status: 500, times: 1 }); // 1회만
 msw.faults(); // 켜져 있는 규칙
 msw.clear(); // 전부 해제
+msw.session('expired'); // 보호 HTTP 요청 401, 로그아웃은 계속 204
+msw.session('authenticated'); // 화면 개발용 로그인 상태 복원 후 새로고침
 ```
 
 | 프리셋                 | 상황                            |
 | ---------------------- | ------------------------------- |
 | `auth-expired`         | 모든 요청 401 `unauthenticated` |
-| `refresh-failed`       | `/auth/refresh` 만 401          |
-| `github-token-invalid` | 403 `token_invalid`             |
+| `github-token-invalid` | 403 `github_token_invalid`      |
 | `run-expired`          | `/analysis-runs/*` 410          |
 | `report-unavailable`   | 리포트 409                      |
 | `session-limit`        | 면접 생성 409                   |
