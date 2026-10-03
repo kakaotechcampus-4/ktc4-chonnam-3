@@ -172,18 +172,24 @@ class GithubClient:
     async def list_repositories(self, *, per_page: int = DEFAULT_PER_PAGE) -> list[RepoSummary]:
         """인증 사용자의 public repo 를 모두 가져온다.
 
-        입력: page 크기. 출력: RepoSummary 목록.
+        입력: page 크기. 출력: repo ID 기준으로 중복을 제거한 RepoSummary 목록.
         private 은 애초에 요청하지 않는다 — Sprint 1 은 public 만 다룬다.
         중간 page 가 실패하면 예외를 던진다. 일부만 모은 목록은 돌려주지 않는다 —
         호출부가 빈·부분 목록을 "저장소가 없다"로 오인해 기존 저장소를 접근 불가로 바꾸지 않게 한다.
         """
-        return [repo async for repo in self.iter_repositories(per_page=per_page)]
+        unique: dict[int, RepoSummary] = {}
+        async for repo in self.iter_repositories(per_page=per_page):
+            # sort=pushed 로 읽는 동안 저장소가 갱신되면 같은 repo 가 두 page 에 올 수 있다.
+            # 먼저 나온 위치를 유지하고 값은 더 늦게 받은 쪽(최신)을 쓴다.
+            unique[repo.github_repo_id] = repo
+        return list(unique.values())
 
     async def iter_repositories(
         self, *, per_page: int = DEFAULT_PER_PAGE
     ) -> AsyncIterator[RepoSummary]:
         """public repo 를 page 단위로 흘려보낸다. 입력: page 크기. 출력: RepoSummary 스트림.
 
+        같은 repo 가 반복될 수 있다(중복 제거는 list_repositories 가 한다).
         응답이 계약과 다르면 GithubApiError(invalid_response)를 던진다.
         """
         list_path = "/user/repos"

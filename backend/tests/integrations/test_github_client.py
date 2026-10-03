@@ -396,6 +396,27 @@ async def test_cross_host_redirect_does_not_forward_token() -> None:
     assert auth_by_host == {"api.github.com": "Bearer secret-token", "other.example": None}
 
 
+async def test_list_deduplicates_repo_moved_between_pages_keeping_order_and_latest() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.params.get("page") == "2":
+            repos = [
+                _repo(1, description="newer"),
+                _repo(3),
+            ]
+            return httpx.Response(200, json=repos)
+        return httpx.Response(
+            200,
+            json=[_repo(1, description="older"), _repo(2)],
+            headers={"link": '<https://api.github.com/user/repos?page=2>; rel="next"'},
+        )
+
+    async with _client(handler) as client:
+        repos = await GithubClient("tok", client=client).list_repositories()
+
+    assert [repo.github_repo_id for repo in repos] == [1, 2, 3]
+    assert repos[0].description == "newer"
+
+
 async def test_list_fails_instead_of_returning_partial_result_when_later_page_is_invalid() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.params.get("page") == "2":
