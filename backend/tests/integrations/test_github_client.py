@@ -453,6 +453,15 @@ async def test_list_rejects_next_page_that_does_not_advance() -> None:
     assert len(requests) == 1
 
 
+async def test_rate_limited_429_without_headers_is_rate_limited() -> None:
+    async with _client(lambda request: httpx.Response(429)) as client:
+        with pytest.raises(GithubApiError) as caught:
+            await GithubClient("tok", client=client).fetch_languages("octocat/devon-api")
+
+    assert caught.value.error_code == GITHUB_ERROR_RATE_LIMITED
+    assert caught.value.retry_after_seconds == 60
+
+
 async def test_branch_name_is_url_encoded() -> None:
     """`#`/`/` 가 든 브랜치 이름이 fragment 로 잘리거나 다른 경로로 해석되지 않아야 한다.
 

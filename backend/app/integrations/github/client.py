@@ -158,7 +158,8 @@ class GithubClient:
             # 호출부가 token_status='revoked' 로 바꾸고 이후 호출을 막는다.
             raise GithubApiError(GITHUB_ERROR_TOKEN_INVALID, status_code=status)
         if status in (httpx.codes.FORBIDDEN, httpx.codes.TOO_MANY_REQUESTS):
-            if _is_rate_limited(response):
+            # 429 는 헤더가 없어도 rate limit 이다. 403 은 권한 문제와 섞여 헤더·본문으로 가른다.
+            if status == httpx.codes.TOO_MANY_REQUESTS or _is_rate_limited(response):
                 raise GithubApiError(
                     GITHUB_ERROR_RATE_LIMITED,
                     status_code=status,
