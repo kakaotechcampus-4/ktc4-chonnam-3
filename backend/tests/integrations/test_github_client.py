@@ -32,6 +32,7 @@ REPO_PAGE_1 = [
         "id": 1,
         "name": "devon-api",
         "full_name": "octocat/devon-api",
+        "private": False,
         "language": "Python",
         "size": 300,
         "default_branch": "main",
@@ -42,6 +43,7 @@ REPO_PAGE_2 = [
         "id": 2,
         "name": "devon-web",
         "full_name": "octocat/devon-web",
+        "private": False,
         "language": "TypeScript",
         "size": 80,
         "default_branch": "main",
@@ -392,6 +394,23 @@ async def test_cross_host_redirect_does_not_forward_token() -> None:
         await GithubClient("secret-token", client=client).fetch_languages("octocat/devon-api")
 
     assert auth_by_host == {"api.github.com": "Bearer secret-token", "other.example": None}
+
+
+async def test_list_fails_instead_of_returning_partial_result_when_later_page_is_invalid() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.params.get("page") == "2":
+            return httpx.Response(200, json={"message": "unexpected"})
+        return httpx.Response(
+            200,
+            json=[_repo(1)],
+            headers={"link": '<https://api.github.com/user/repos?page=2>; rel="next"'},
+        )
+
+    async with _client(handler) as client:
+        with pytest.raises(GithubApiError) as caught:
+            await GithubClient("tok", client=client).list_repositories()
+
+    assert caught.value.error_code == GITHUB_ERROR_REPO_UNREACHABLE
 
 
 async def test_list_rejects_next_page_that_does_not_advance() -> None:

@@ -174,6 +174,8 @@ class GithubClient:
 
         입력: page 크기. 출력: RepoSummary 목록.
         private 은 애초에 요청하지 않는다 — Sprint 1 은 public 만 다룬다.
+        중간 page 가 실패하면 예외를 던진다. 일부만 모은 목록은 돌려주지 않는다 —
+        호출부가 빈·부분 목록을 "저장소가 없다"로 오인해 기존 저장소를 접근 불가로 바꾸지 않게 한다.
         """
         return [repo async for repo in self.iter_repositories(per_page=per_page)]
 
@@ -197,16 +199,10 @@ class GithubClient:
             # redirect 는 따라가지 않는다. 목록 API 는 redirect 할 이유가 없고, 따라가면
             # 응답이 준 주소로 토큰 달린 요청이 이어진다.
             response = await self.request(path, params=params, follow_redirects=False)
-            if response.status_code != httpx.codes.OK:  # redirect 등 목록이 아닌 응답
-                raise GithubApiError(
-                    GITHUB_ERROR_REPO_UNREACHABLE, status_code=response.status_code
-                )
-            payload = response.json()
-            if not isinstance(payload, list):
-                return
-            for item in payload:
-                if isinstance(item, dict):
-                    yield repo_summary_from_api(item)
+            for item in _repository_items(response):
+                if item["private"]:
+                    continue
+                yield repo_summary_from_api(item)
             # 다음 page URL 에 쿼리가 이미 들어 있어 params 를 다시 붙이지 않는다.
             next_url = parse_link_header(response.headers.get("link")).get("next")
             if next_url is None:
@@ -365,6 +361,42 @@ class GithubClient:
             rate_limit_retry_after_seconds=retry_after,
             repository_inaccessible=repository_inaccessible,
         )
+
+
+def _repository_items(response: httpx.Response) -> list[dict[str, Any]]:
+    """목록 응답 한 page 를 검증해 repo JSON 목록으로 돌려준다.
+
+    입력: Response. 출력: repo dict 목록. 계약과 다르면 GithubApiError(repo_unreachable).
+    HTTP 200 이어도 본문이 list 가 아니거나, 항목이 dict 가 아니거나, 저장에 꼭 필요한
+    필드(id·name·full_name·private)가 없거나 타입이 틀리면 실패다. 정상적으로 저장소가 없는
+    경우(`[]`)와 구분하려고 조용히 건너뛰지 않는다.
+    """
+    if response.status_code != httpx.codes.OK:  # 3xx 등 목록이 아닌 응답
+        raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE, status_code=response.status_code)
+    try:
+        payload = response.json()
+    except ValueError:
+        raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE) from None
+    if not isinstance(payload, list) or not all(_is_valid_repo_item(item) for item in payload):
+        raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE)
+    return payload
+
+
+def _is_valid_repo_item(item: Any) -> bool:
+    """목록 항목 하나가 저장 가능한 repo JSON 인지 확인한다. 입력: 항목. 출력: 유효 여부."""
+    if not isinstance(item, dict):
+        return False
+    repo_id = item.get("id")
+    return (
+        isinstance(repo_id, int)
+        and not isinstance(repo_id, bool)
+        and repo_id > 0
+        and isinstance(item.get("name"), str)
+        and bool(item["name"])
+        and isinstance(item.get("full_name"), str)
+        and bool(item["full_name"])
+        and isinstance(item.get("private"), bool)
+    )
 
 
 def _is_rate_limited(response: httpx.Response) -> bool:
