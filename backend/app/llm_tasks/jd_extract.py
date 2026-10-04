@@ -29,7 +29,9 @@ _CATEGORY_SOURCES: dict[JdCategory, str] = {
 }
 
 # 원티드 본문의 줄머리 목록 기호("• ", "∘ ", "- " 등). 내용이 아니라 서식이므로 떼어낸다.
-_LEADING_BULLET = re.compile(r"^[•∘◦▪■●○\-*]+\s*")
+# `*`·`-`는 내용일 수도 있어(`*nix`, `*.yaml`, `-40°C`)
+# 뒤에 공백이 오거나 기호만 있는 줄일 때만 뗀다.
+_LEADING_BULLET = re.compile(r"^(?:[•∘◦▪■●○]+|[-*]+(?=\s|$))\s*")
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,8 +81,12 @@ def build_requirement_drafts(posting: PostingContent) -> list[JdRequirementDraft
     각 문장에서 해당 기술을 직접 요구한다는 뜻은 아니다.
 
     줄머리 목록 기호는 떼어낸다. 합계가 `MAX_REQUIREMENTS`를 넘으면 필수 요건을 먼저 담고,
-    남은 자리는 우대와 주요 업무가 한 줄씩 번갈아 나눈다 — 우대가 길다는 이유로 주요 업무가
+    남은 자리는 우대부터 주요 업무와 한 줄씩 번갈아 나눈다 — 우대가 길다는 이유로 주요 업무가
     통째로 잘리지 않게 한다. 남는 항목의 표시 순서는 카테고리별 원문 순서 그대로다.
+
+    카테고리별 최소 개수는 보장하지 않는다(명세에 없음). 그래서 남은 자리가 1개면 우대만
+    들어가고(19·1·1 → 19·1·0), 필수가 `MAX_REQUIREMENTS` 이상이면 필수 앞 20개만 남고
+    우대·업무는 0개다.
     """
     if not posting.is_structured:
         # 구조화된 요구사항 필드가 하나도 없으면 결정적으로 실패한다.

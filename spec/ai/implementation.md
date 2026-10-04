@@ -153,3 +153,12 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
 - 범위 밖: 회사가 자격요건 칸에 우대 문장("~이면 좋아요")을 넣은 경우의 재분류는 `jd_extract_v1`의
   "Wanted 필드를 추측으로 변경 금지"(`spec/ai/contracts.md`)에 따라 하지 않는다. "[함께 할 업무예요]" 같은
   섹션 제목 줄도 내용 판단이 필요해 거르지 않았다.
+
+## 2026-10-05 — #77 리뷰 반영 (내용 속 `*`·`-` 보존, 상한 경계)
+
+- 리뷰(동한님): 기호 뒤 `\s*` 때문에 `*nix`·`*.yaml`·`-40°C`의 `*`·`-`까지 지워져 원문 의미가 바뀜.
+  `•`·`∘` 같은 전용 기호는 그대로 떼고, `*`·`-`는 뒤에 공백이 오거나 기호만 있는 줄일 때만 떼도록 고쳤다.
+- 상한 정책은 유지하고 경계를 명시했다: 카테고리별 최소 개수 보장 없음. (필수 19, 우대 1, 업무 1) → (19, 1, 0),
+  필수 20개 이상이면 필수 앞 20개만 남는다. docstring과 `test_cap_boundaries`에 기록.
+- 검증: `backend`에서 `python -m pytest tests/llm_tasks/test_jd_extract.py tests/integrations` 155 passed,
+  변경 파일 대상 `ruff check`·`ruff format --check`·`mypy` 통과.
