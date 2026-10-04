@@ -1,4 +1,7 @@
+import pytest
+
 from app.integrations.jd.base import PostingContent
+from app.integrations.jd.wanted import WantedAdapter
 from app.llm_tasks.domain_signal import detect_domain_signal
 
 
@@ -96,3 +99,64 @@ def test_matched_text_preserves_the_original_source_sentence():
     assert result.category == "medical"
     assert result.matches[0].matched_text == "의료 데이터를 다루는 서비스 개발 경험"
     assert result.matches[0].source_field == "requirements"
+
+
+@pytest.mark.parametrize(
+    "posting",
+    [
+        {"main_tasks": ["기술적 제약을 고려한 API 설계 및 개발"]},
+        {"requirements": ["데이터베이스 제약 조건과 트랜잭션에 대한 이해"]},
+        {"main_tasks": ["슬라이더와 캐러셀 UI 컴포넌트 개발"]},
+    ],
+)
+def test_general_tech_terms_are_not_domain_signals(posting):
+    """일반적인 "제약"(제한)과 "슬라이더" 속 "라이더"는 의료·모빌리티 근거가 아니다."""
+    result = detect_domain_signal(_posting(**posting))
+
+    assert result.category == "etc"
+    assert result.matches == ()
+
+
+@pytest.mark.parametrize(
+    ("text", "category", "keyword"),
+    [
+        ("제약사 영업 지원 시스템 개발", "medical", "제약사"),
+        ("의약품 유통 데이터 파이프라인 개발", "medical", "의약품"),
+        ("라이더 앱 개발", "mobility", "라이더"),
+        ("배달 라이더 정산 시스템 개발", "mobility", "라이더"),
+    ],
+)
+def test_real_pharma_and_rider_services_are_still_detected(text, category, keyword):
+    result = detect_domain_signal(_posting(main_tasks=[text]))
+
+    assert result.category == category
+    assert keyword in {m.keyword for m in result.matches}
+
+
+@pytest.mark.parametrize("text", ["mmorpg 서버 개발", "E스포츠 대회 플랫폼 개발"])
+def test_english_keywords_ignore_case_but_keep_original_text(text):
+    result = detect_domain_signal(_posting(main_tasks=[text]))
+
+    assert result.category == "game"
+    assert result.matches[0].matched_text == text
+
+
+def test_same_wanted_content_gives_same_result_regardless_of_input_shape():
+    """원티드가 같은 내용을 문자열로 주든, 여러 줄 문자열 하나를 담은 목록으로 주든 결과가 같다."""
+    lines = ["금융 서비스 개발 경험", "금융 서비스 운영 경험", "금융 규제 이해"]
+    text = "\n".join(lines)
+
+    def detect(requirements):
+        payload = {
+            "job": {"detail": {"position": "커머스 백엔드 개발자", "requirements": requirements}}
+        }
+        return detect_domain_signal(
+            WantedAdapter()._parse("https://www.wanted.co.kr/wd/1", payload)
+        )
+
+    as_string, as_list = detect(text), detect([text])
+
+    assert as_string == as_list
+    # requirements 금융 3건(2×3=6) > position 커머스(4)
+    assert as_string.category == "finance"
+    assert [m.matched_text for m in as_string.matches] == lines

@@ -16,7 +16,7 @@ category 7종(`finance`·`game`·`travel`·`shopping`·`medical`·`mobility`·`e
 1. **규칙 기반 판정**: LLM을 호출하지 않는다. 공고의 `position`·`main_tasks`·`requirements`·`preferred_points` 원문에서 category 키워드를 찾는다. 결제·예약·재고·물류·운송처럼 여러 도메인에 공통으로 나오는 기능 단어는 키워드로 쓰지 않는다.
 2. **필드 가중치 합산, 단독 1위만 채택**: 근거 필드 가중치(`position` 4, `main_tasks` 3, `requirements` 2, `preferred_points` 1)를 category별로 합산해 1위가 단독이면 채택한다. 1위가 동점이면 `etc`, 신호가 없어도 `etc`다.
 3. **회사 단위 값은 쓰지 않음**: `company_name`과 원티드 `company.industry_name`(`PostingContent.industry`)은 판정에 쓰지 않는다.
-4. **NULL과 `etc` 구분**: `postings.domain_category`의 NULL은 "아직 판정하지 않음"에만 쓴다. 판정을 실행하면 항상 7종 중 하나를 기록한다. `etc`는 신호가 없거나 충돌했다는 뜻이다.
+4. **NULL과 `etc` 구분**: `postings.domain_category`의 NULL은 "아직 판정하지 않음"에만 쓴다. 판정을 실행하면 항상 7종 중 하나를 기록한다. `etc`는 신호가 없거나 1위가 동점이었다는 뜻이다.
 5. **근거는 저장하지 않음**: 판정 근거(원문 필드·문장·키워드)는 함수 결과로만 돌려주고 DB에 저장하지 않는다. 근거를 저장하라는 명세가 없고, 저장하려면 BE 스키마를 바꿔야 한다.
 
 ## 이유

@@ -50,7 +50,7 @@
 
 - [0019 Sprint 1 개인 역할 요약의 기존 계획 복원](0019-sprint1-profile-role-summary-restoration.md): Accepted, 2026-09-22. 0006·0016의 개인 역할 요약 보류·LLM 비호출을 철회하고 기존 저장 항목·API·화면·갱신 흐름으로 LLM 역할 요약을 제공한다. 통계 집계와 근거 없는 기여 추정 금지는 유지한다. 실제 생성·호출·저장은 구현 대기다.
 
-- [0021 공고 도메인 category 판정 방식](0021-domain-category-signal.md): Accepted, 2026-09-27. 공고 본문 키워드로 판정하고, 단일 신호만 채택하며 충돌·무신호는 `etc`로 둔다. `company_name`·`industry_name`은 쓰지 않고, NULL은 미판정에만 쓰며 근거는 저장하지 않는다. 파이프라인 호출 연결은 후속이다.
+- [0021 공고 도메인 category 판정 방식](0021-domain-category-signal.md): Accepted, 2026-09-27. 공고 본문 키워드를 필드 가중치(4/3/2/1)로 합산해 단독 1위만 채택하고, 1위 동점·신호 없음은 `etc`로 둔다. `company_name`·`industry_name`은 쓰지 않고, NULL은 미판정에만 쓰며 근거는 저장하지 않는다. 파이프라인 호출 연결은 후속이다.
 
 ## 결정 상태와 후속 작업
 
