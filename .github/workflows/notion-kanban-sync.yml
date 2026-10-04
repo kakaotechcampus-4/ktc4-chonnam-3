@@ -53,9 +53,11 @@ jobs:
               if (p.type === 'rich_text') return { rich_text: [{ text: { content: String(v) } }] };
               if (p.type === 'number') return { number: v };
               if (['select', 'status', 'multi_select'].includes(p.type)) {
+                // "진행 중/Open"처럼 슬래시로 묶인 옵션은 어느 쪽 이름이 맞아도 매칭
                 const opt = p[p.type].options.find((o) =>
-                  o.name.toLowerCase() === String(v).toLowerCase() ||
+                  o.name.toLowerCase().split('/').map((s) => s.trim()).includes(String(v).toLowerCase()) ||
                   (typeof v === 'number' && Number(o.name.replace(/\D/g, '')) === v));
+                if (!opt) core.warning(`'${name}'에 '${v}' 옵션 없음. 있는 옵션: ${p[p.type].options.map((o) => o.name).join(', ')}`);
                 const name = opt?.name ?? (typeof v === 'number' ? `${v}주차` : String(v));
                 return p.type === 'multi_select' ? { multi_select: [{ name }] } : { [p.type]: { name } };
               }
