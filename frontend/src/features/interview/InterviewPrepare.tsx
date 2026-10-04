@@ -7,13 +7,14 @@ import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
 import { isApiError } from '@/types/api';
 import type {
-  AnswerMode,
   InterviewLastError,
   MeResponse,
   PrepareStepKey,
   PrepareStepStatus,
   WsServerMessage,
 } from '@/types/api';
+
+import { playTestTone, useMicCheck, type MicStatus } from './useMicCheck';
 
 /** 실행 순서는 spec/frontend/features/interview.md의 4단계를 따른다. */
 const PREPARE_STEPS: { key: PrepareStepKey; label: string }[] = [
@@ -81,11 +82,18 @@ const RETRY_REJECTED_MESSAGE: Record<string, string> = {
   session_expired: '면접 세션이 만료됐어요 · 레포를 다시 선택해주세요',
 };
 
-const AUDIO_DEVICES = [
-  { label: '스피커', hint: '기본 스피커', action: '테스트 재생' },
-  // 감지 상태 표시만 두고 테스트 버튼은 없다. 실제 감지는 Sprint 2.
-  { label: '마이크', hint: '기본 마이크', badge: '✓ 정상 감지됨' },
-];
+/** 마이크 상태별 배지와, 문제가 있을 때 배지 아래에 붙는 안내. */
+const MIC_BADGE: Record<MicStatus, { text: string; ok: boolean; help?: string }> = {
+  checking: { text: '확인 중', ok: true },
+  ok: { text: '✓ 정상 감지됨', ok: true },
+  denied: {
+    text: '권한 거부됨',
+    ok: false,
+    help: '주소창의 사이트 설정에서 마이크 권한을 허용해주세요',
+  },
+  missing: { text: '마이크 없음', ok: false, help: '마이크를 연결한 뒤 새로고침해주세요' },
+  error: { text: '확인 실패', ok: false, help: '이 브라우저에서는 마이크를 확인할 수 없어요' },
+};
 
 /** 5b-v2에서 질문을 텍스트로도 볼지. 준비 화면에서 켜 두고 면접 화면이 읽는다. */
 export const QUESTION_TEXT_KEY = 'devon.showQuestionText';
@@ -103,12 +111,6 @@ function readQuestionText() {
  * ponytail: 고정 2초. 서버가 오래 죽어 있는 상황이 문제가 되면 지수 백오프로 올린다.
  */
 const RECONNECT_DELAY_MS = 2000;
-
-/** 파형은 Sprint 1에서 고정 패턴이다. 입력 레벨 연동은 Sprint 2. */
-const IDLE_LEVELS = [
-  0.35, 0.6, 0.45, 0.8, 0.5, 0.9, 0.4, 0.7, 0.55, 0.85, 0.45, 0.75, 0.5, 0.65, 0.4, 0.8, 0.55, 0.6,
-  0.35, 0.7,
-];
 
 export default function InterviewPrepare() {
   const { id = '' } = useParams<{ id: string }>();
@@ -156,12 +158,11 @@ export default function InterviewPrepare() {
    */
   const reconnectSeqRef = useRef(0);
 
+  const mic = useMicCheck();
+  const micBadge = MIC_BADGE[mic.status];
+
   const status = interview?.status;
   const sessionId = interview?.sessionId;
-  // Sprint 1은 항상 'text'라 음성 UI가 뜨지 않는다. Sprint 2에서 'voice'가 추가되면
-  // 이 값만으로 마이크·스피커 점검이 살아난다. spec/frontend/features/interview.md:103
-  // 스냅샷 도착 전에는 'text'로 본다. 안 그러면 로딩 중 한 프레임 동안 음성 UI가 스친다.
-  const answerMode: AnswerMode = interview?.answerMode ?? 'text';
 
   // status 별 도달 화면. 준비 화면에 머무는 건 preparing / preparing_failed 뿐이다.
   useEffect(() => {
@@ -445,46 +446,96 @@ export default function InterviewPrepare() {
       )}
 
       {/*
-        마이크 · 스피커 점검. Sprint 2(음성) 범위라 Sprint 1 화면에는 뜨지 않는다.
-        (spec/frontend/features/interview.md:17) 실제 장치 접근·재생·녹음도 Sprint 2다.
+        마이크 · 스피커 점검. Sprint 2부터 음성 면접만 남으므로 answerMode와 무관하게 늘 띄운다.
+        점검 결과는 면접 시작을 막지 않는다 (spec/frontend/features/interview.md).
       */}
-      {answerMode !== 'text' && (
-        <div className="border-t border-line-soft pt-5">
-          <h2 className="text-[13px] font-bold">마이크 · 스피커 점검</h2>
+      <div className="flex flex-col gap-3 border-t border-line-soft pt-5">
+        <h2 className="text-[13px] font-bold">마이크 · 스피커 점검</h2>
 
-          {AUDIO_DEVICES.map(({ label, hint, action, badge }) => (
-            <div key={label} className="mt-4 flex items-center gap-3">
-              <div className="flex-1">
-                <p className="text-[13px] font-bold">{label}</p>
-                <p className="text-[11px] text-muted">{hint}</p>
-              </div>
-              {badge ? (
-                <span className="rounded-full bg-accent-soft px-3 py-1.5 text-[12px] font-bold text-accent">
-                  {badge}
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="h-9 rounded-lg border border-line px-4 text-[12px] font-bold text-muted"
-                >
-                  {action}
-                </button>
-              )}
-            </div>
-          ))}
-
-          <div className="mt-4 flex h-12 items-center justify-center gap-1 rounded-card border border-line-soft">
-            {IDLE_LEVELS.map((level, index) => (
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <p className="text-[13px] font-bold">마이크</p>
+            {micBadge.help && <p className="text-[11px] text-muted">{micBadge.help}</p>}
+          </div>
+          <span
+            className={
+              micBadge.ok
+                ? 'rounded-full bg-accent-soft px-3 py-1.5 text-[12px] font-bold text-accent'
+                : 'rounded-full bg-error-soft px-3 py-1.5 text-[12px] font-bold text-error'
+            }
+          >
+            {micBadge.text}
+          </span>
+        </div>
+        {mic.mics.length > 0 && (
+          <DeviceSelect
+            label="마이크"
+            icon={MIC_ICON}
+            devices={mic.mics}
+            value={mic.micId}
+            onChange={mic.setMicId}
+          />
+        )}
+        <div className="flex items-center gap-2">
+          <div className="flex h-11 flex-1 items-center justify-center gap-1 rounded-card border border-line-soft">
+            {mic.levels.map((level, index) => (
               <span
                 key={index}
                 className="w-[3px] rounded-full bg-accent"
-                style={{ height: `${Math.round(level * 28)}px` }}
+                style={{ height: `${Math.max(3, Math.round(level * 28))}px` }}
               />
             ))}
           </div>
+          <button
+            type="button"
+            disabled={mic.phase === 'playing' || (mic.phase === 'idle' && mic.status !== 'ok')}
+            onClick={() =>
+              mic.phase === 'recording' ? mic.finishRecording() : void mic.startTest()
+            }
+            className={
+              // 녹음 중은 빨강으로 구분한다. 재생 중·권한 없음은 비활성 회색.
+              mic.phase === 'recording'
+                ? 'h-11 shrink-0 rounded-lg bg-error-soft px-4 text-[12px] font-bold text-error'
+                : 'h-11 shrink-0 rounded-lg bg-accent-soft px-4 text-[12px] font-bold text-accent disabled:bg-line-soft disabled:text-muted'
+            }
+          >
+            {mic.phase === 'recording'
+              ? `녹음 끝내기 (${mic.secondsLeft})`
+              : mic.phase === 'playing'
+                ? '재생 중'
+                : '마이크 테스트'}
+          </button>
         </div>
-      )}
+        {mic.phase !== 'idle' && (
+          <p className="text-[11px] text-muted">
+            {mic.phase === 'recording'
+              ? '말해보세요 · 녹음이 끝나면 바로 들려드려요'
+              : '녹음한 목소리를 재생하고 있어요'}
+          </p>
+        )}
+
+        <p className="mt-2 text-[13px] font-bold">스피커</p>
+        <div className="flex items-center gap-2">
+          {mic.canPickSpeaker ? (
+            <DeviceSelect
+              label="스피커"
+              icon={SPEAKER_ICON}
+              devices={mic.speakers}
+              value={mic.speakerId}
+              onChange={mic.setSpeakerId}
+            />
+          ) : (
+            <p className="flex-1 text-[11px] text-muted">기본 스피커</p>
+          )}
+          <button
+            type="button"
+            onClick={() => void playTestTone(mic.speakerId)}
+            className="h-11 shrink-0 rounded-lg bg-accent-soft px-4 text-[12px] font-bold text-accent"
+          >
+            테스트 재생
+          </button>
+        </div>
+      </div>
 
       {/* 준비 중·실패 어느 쪽이든 항상 보인다. 값은 5b-v2가 읽는다. */}
       <label className="flex items-center gap-3">
@@ -575,6 +626,52 @@ export default function InterviewPrepare() {
         </>
       )}
     </Shell>
+  );
+}
+
+const MIC_ICON = (
+  <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z" />
+);
+const SPEAKER_ICON = (
+  <path d="M3 9v6h4l5 5V4L7 9H3Zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.47 4.47 0 0 0 2.5-4Z" />
+);
+
+/** 장치 드롭다운. 권한이 있어야 label이 채워지므로 비어 있으면 순번으로 보여준다. */
+function DeviceSelect({
+  label,
+  icon,
+  devices,
+  value,
+  onChange,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  devices: MediaDeviceInfo[];
+  value: string;
+  onChange: (deviceId: string) => void;
+}) {
+  return (
+    <div className="relative flex-1">
+      <svg
+        viewBox="0 0 24 24"
+        aria-hidden
+        className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 fill-muted"
+      >
+        {icon}
+      </svg>
+      <select
+        aria-label={`${label} 선택`}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-11 w-full truncate rounded-lg border border-line bg-surface pl-9 pr-3 text-[13px]"
+      >
+        {devices.map((device, index) => (
+          <option key={device.deviceId} value={device.deviceId}>
+            {device.label || `${label} ${index + 1}`}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
