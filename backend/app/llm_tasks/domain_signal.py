@@ -59,9 +59,13 @@ _CATEGORY_KEYWORDS: dict[DomainCategory, tuple[str, ...]] = {
     "mobility": ("모빌리티", "배차", "택시", "차량 호출", "라이더"),
 }
 
-# 다른 단어의 일부로 흔히 나오는 키워드는 바로 앞 글자가 한글이면 매칭하지 않는다
-# ("슬라이더"·"글라이더" ≠ "라이더"). 붙여 쓴 "배달라이더"는 놓치지만 오탐보다 낫다.
-_STANDALONE_KEYWORDS: frozenset[str] = frozenset({"라이더"})
+# 다른 단어의 일부로 흔히 나오는 키워드는 단순 포함 대신 이 패턴으로 찾는다.
+# - "라이더": 앞 글자가 한글이면 제외("슬라이더"·"프리라이더"). 붙여 쓴 "배달라이더"는 놓친다.
+# - "제약사": 뒤에 "항"이 오면 제외("모델 제약사항", 실제 원티드 공고 386281).
+_KEYWORD_PATTERNS: dict[str, re.Pattern[str]] = {
+    "라이더": re.compile(r"(?<![가-힣])라이더"),
+    "제약사": re.compile(r"제약사(?!항)"),
+}
 
 # 직무 자체를 설명하는 필드일수록 도메인 신호가 강하다. 우대사항은 "있으면 좋은 경험"이라
 # 필수 요건보다 낮게 둔다 — 우대를 필수처럼 다루지 않는다는 W5 완료 기준과 같은 방향이다.
@@ -142,10 +146,10 @@ def _match_text_fields(posting: PostingContent) -> dict[DomainCategory, list[Dom
 
 def _contains(text: str, keyword: str) -> bool:
     """영문 키워드("MMORPG"·"e스포츠")는 대소문자를 가리지 않는다. 근거로는 원문을 그대로 남긴다."""
-    text, keyword = text.casefold(), keyword.casefold()
-    if keyword in _STANDALONE_KEYWORDS:
-        return re.search(rf"(?<![가-힣]){re.escape(keyword)}", text) is not None
-    return keyword in text
+    pattern = _KEYWORD_PATTERNS.get(keyword)
+    if pattern is not None:
+        return pattern.search(text) is not None
+    return keyword.casefold() in text.casefold()
 
 
 def _iter_text_fields(posting: PostingContent) -> list[tuple[str, str]]:

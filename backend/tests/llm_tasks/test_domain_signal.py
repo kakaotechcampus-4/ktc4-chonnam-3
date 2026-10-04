@@ -107,6 +107,10 @@ def test_matched_text_preserves_the_original_source_sentence():
         {"main_tasks": ["기술적 제약을 고려한 API 설계 및 개발"]},
         {"requirements": ["데이터베이스 제약 조건과 트랜잭션에 대한 이해"]},
         {"main_tasks": ["슬라이더와 캐러셀 UI 컴포넌트 개발"]},
+        # 실제 원티드 공고 문장 (2026-10-05 개발 공고 600건 확인)
+        {"requirements": ["다양한 직무와 모델 제약사항, QA 항목을 커뮤니케이션할 수 있으신 분"]},
+        {"main_tasks": ["보상함수와 제약 정의를 주도합니다"]},
+        {"requirements": ["사내정치, 프리라이더는 생존할 수 없습니다."]},
     ],
 )
 def test_general_tech_terms_are_not_domain_signals(posting):
@@ -124,6 +128,8 @@ def test_general_tech_terms_are_not_domain_signals(posting):
         ("의약품 유통 데이터 파이프라인 개발", "medical", "의약품"),
         ("라이더 앱 개발", "mobility", "라이더"),
         ("배달 라이더 정산 시스템 개발", "mobility", "라이더"),
+        # 실제 원티드 공고 문장
+        ("전 세계 제약사·바이오텍의 BD 조직을 지원하는 플랫폼 개발", "medical", "제약사"),
     ],
 )
 def test_real_pharma_and_rider_services_are_still_detected(text, category, keyword):
