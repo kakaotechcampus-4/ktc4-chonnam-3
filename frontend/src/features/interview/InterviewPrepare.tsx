@@ -91,7 +91,12 @@ const MIC_BADGE: Record<MicStatus, { text: string; ok: boolean; help?: string }>
     ok: false,
     help: '주소창의 사이트 설정에서 마이크 권한을 허용해주세요',
   },
-  missing: { text: '마이크 없음', ok: false, help: '마이크를 연결한 뒤 새로고침해주세요' },
+  missing: { text: '마이크 없음', ok: false, help: '마이크를 연결한 뒤 다시 확인해주세요' },
+  busy: {
+    text: '마이크 사용 중',
+    ok: false,
+    help: '다른 앱이 마이크를 쓰고 있어요 · 종료 후 다시 확인해주세요',
+  },
   error: { text: '확인 실패', ok: false, help: '이 브라우저에서는 마이크를 확인할 수 없어요' },
 };
 
@@ -457,6 +462,16 @@ export default function InterviewPrepare() {
             <p className="text-[13px] font-bold">마이크</p>
             {micBadge.help && <p className="text-[11px] text-muted">{micBadge.help}</p>}
           </div>
+          {/* 비보안 주소 등 'error'는 다시 확인해도 같아서 버튼을 두지 않는다. */}
+          {(mic.status === 'denied' || mic.status === 'missing' || mic.status === 'busy') && (
+            <button
+              type="button"
+              onClick={mic.recheck}
+              className="h-8 shrink-0 rounded-lg bg-accent-soft px-3 text-[12px] font-bold text-accent"
+            >
+              다시 확인
+            </button>
+          )}
           <span
             className={
               micBadge.ok

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export type MicStatus = 'checking' | 'ok' | 'denied' | 'missing' | 'error';
+export type MicStatus = 'checking' | 'ok' | 'denied' | 'missing' | 'busy' | 'error';
 export type MicTestPhase = 'idle' | 'recording' | 'playing';
 
 /** 레벨 미터 막대 수. 가장 최근 값이 오른쪽 끝에 붙는다. */
@@ -21,6 +21,8 @@ function statusFromError(error: unknown): MicStatus {
   const name = error instanceof DOMException ? error.name : '';
   if (name === 'NotAllowedError' || name === 'SecurityError') return 'denied';
   if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'missing';
+  // 장치는 있지만 다른 앱(Zoom 등)이 잡고 있어 열 수 없다.
+  if (name === 'NotReadableError') return 'busy';
   return 'error';
 }
 
@@ -79,6 +81,8 @@ export function useMicCheck() {
   const [levels, setLevels] = useState<number[]>(SILENT);
   const [phase, setPhase] = useState<MicTestPhase>('idle');
   const [secondsLeft, setSecondsLeft] = useState(0);
+  /** 올리면 권한·장치 확인을 처음부터 다시 한다. 다시 확인 버튼과 권한 변경 알림이 쓴다. */
+  const [probeKey, setProbeKey] = useState(0);
 
   const sessionRef = useRef<TestSession | null>(null);
   const speakerIdRef = useRef('');
@@ -121,6 +125,23 @@ export function useMicCheck() {
       });
     };
 
+    /*
+      사이트 설정에서 권한을 바꾸면 새로고침 없이 다시 확인한다.
+      'microphone' 조회를 지원하지 않는 브라우저는 조용히 넘어간다 — 다시 확인 버튼이 남는다.
+    */
+    let permission: PermissionStatus | null = null;
+    navigator.permissions
+      ?.query({ name: 'microphone' as PermissionName })
+      .then((status) => {
+        if (disposed) return;
+        permission = status;
+        status.onchange = () => {
+          setStatus('checking');
+          setProbeKey((key) => key + 1);
+        };
+      })
+      .catch(() => {});
+
     navigator.mediaDevices
       .getUserMedia({ audio: true })
       .then(async (probe) => {
@@ -128,7 +149,7 @@ export function useMicCheck() {
         if (disposed) return;
         setStatus('ok');
         await refresh();
-        // 목록을 읽는 사이 화면을 떠났으면 정리가 이미 지나갔다. 리스너를 남기지 않는다.
+        // 목록을 읽는 사이 다시 확인이 시작됐으면 정리가 이미 지나갔다. 리스너를 남기지 않는다.
         if (disposed) return;
         navigator.mediaDevices.addEventListener('devicechange', refresh);
       })
@@ -139,9 +160,16 @@ export function useMicCheck() {
     return () => {
       disposed = true;
       navigator.mediaDevices.removeEventListener('devicechange', refresh);
+      if (permission) permission.onchange = null;
       stopTest();
     };
-  }, [stopTest]);
+  }, [stopTest, probeKey]);
+
+  /** 팝업을 그냥 닫았거나 다른 앱을 끈 뒤 다시 확인한다. 차단 상태면 그대로 거부된다. */
+  const recheck = () => {
+    setStatus('checking');
+    setProbeKey((key) => key + 1);
+  };
 
   /** 녹음을 끝내고 재생한다. 자동 종료와 버튼 종료가 같은 길로 온다. */
   const finishRecording = () => {
@@ -234,6 +262,7 @@ export function useMicCheck() {
     secondsLeft,
     startTest,
     finishRecording,
+    recheck,
     stopTest,
   };
 }
