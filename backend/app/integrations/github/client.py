@@ -17,7 +17,7 @@ import binascii
 import time
 from collections.abc import AsyncIterator
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlsplit
 
 import httpx
 
@@ -81,28 +81,72 @@ class GithubClient:
         *,
         params: dict[str, str | int] | None = None,
         etag: str | None = None,
+        follow_redirects: bool = True,
     ) -> httpx.Response:
         """GitHub 을 한 번 호출한다.
 
-        입력: 경로(또는 전체 URL), 쿼리, ETag. 출력: Response.
+        입력: 경로(또는 전체 URL), 쿼리, ETag, redirect 추적 여부. 출력: Response.
         실패는 GithubApiError 로 던진다. 304 는 성공으로 돌려준다 — 호출부가 캐시를 쓴다.
         """
         url = path if path.startswith("http") else f"{self._api_base}{path}"
+        if not self._is_api_origin(url):
+            # 토큰을 API 밖 호스트로 보내지 않는다. 호출 전에 막으므로 요청이 나가지 않는다.
+            raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE)
         try:
             if self._client is not None:
                 response = await self._client.get(
-                    url, params=params, headers=self._headers(etag), follow_redirects=True
+                    url,
+                    params=params,
+                    headers=self._headers(etag),
+                    follow_redirects=follow_redirects,
                 )
             else:
                 async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
                     response = await client.get(
-                        url, params=params, headers=self._headers(etag), follow_redirects=True
+                        url,
+                        params=params,
+                        headers=self._headers(etag),
+                        follow_redirects=follow_redirects,
                     )
         except httpx.HTTPError as error:
             raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE) from error
 
         self._raise_for_status(response)
         return response
+
+    def _is_api_origin(self, url: str) -> bool:
+        """URL 이 설정한 API base 와 같은 origin(scheme·host·port)인지 확인한다.
+
+        입력: URL. 출력: 같은 origin 이면 True. 기본 포트(https 443)는 생략해도 같게 본다.
+        userinfo(`https://user@host`)가 붙은 주소는 host 를 속일 수 있어 거부한다.
+        """
+        target, base = urlsplit(url), urlsplit(self._api_base)
+        try:
+            return (
+                target.scheme == base.scheme == "https"
+                and target.hostname == base.hostname
+                and (target.port or 443) == (base.port or 443)
+                and target.username is None
+                and target.password is None
+            )
+        except ValueError:  # 포트가 숫자가 아닌 URL
+            return False
+
+    def _next_page(self, url: str, expected_path: str, current_page: int) -> int | None:
+        """Link rel="next" 주소가 따라가도 되는 다음 page 면 그 번호를, 아니면 None 을 돌려준다.
+
+        입력: next URL, 이번 목록의 경로, 지금 읽은 page 번호. 출력: 다음 page 번호 또는 None.
+        GitHub 문서는 Link 헤더의 주소를 그대로 쓰라고 안내하지만 응답 헤더는 외부 입력이다.
+        API origin·같은 목록 경로이고 page 가 앞으로 증가할 때만 신뢰한다. page 가 없거나
+        줄어들면 같은 page 를 반복하는 순환이라 끝나지 않는다.
+        """
+        if not self._is_api_origin(url) or urlsplit(url).path != expected_path:
+            return None
+        values = parse_qs(urlsplit(url).query).get("page")
+        if not values or not values[0].isdecimal():
+            return None
+        page = int(values[0])
+        return page if page > current_page else None
 
     @staticmethod
     def _raise_for_status(response: httpx.Response) -> None:
@@ -114,7 +158,8 @@ class GithubClient:
             # 호출부가 token_status='revoked' 로 바꾸고 이후 호출을 막는다.
             raise GithubApiError(GITHUB_ERROR_TOKEN_INVALID, status_code=status)
         if status in (httpx.codes.FORBIDDEN, httpx.codes.TOO_MANY_REQUESTS):
-            if _is_rate_limited(response):
+            # 429 는 헤더가 없어도 rate limit 이다. 403 은 권한 문제와 섞여 헤더·본문으로 가른다.
+            if status == httpx.codes.TOO_MANY_REQUESTS or _is_rate_limited(response):
                 raise GithubApiError(
                     GITHUB_ERROR_RATE_LIMITED,
                     status_code=status,
@@ -128,33 +173,51 @@ class GithubClient:
     async def list_repositories(self, *, per_page: int = DEFAULT_PER_PAGE) -> list[RepoSummary]:
         """인증 사용자의 public repo 를 모두 가져온다.
 
-        입력: page 크기. 출력: RepoSummary 목록.
+        입력: page 크기. 출력: repo ID 기준으로 중복을 제거한 RepoSummary 목록.
         private 은 애초에 요청하지 않는다 — Sprint 1 은 public 만 다룬다.
+        중간 page 가 실패하면 예외를 던진다. 일부만 모은 목록은 돌려주지 않는다 —
+        호출부가 빈·부분 목록을 "저장소가 없다"로 오인해 기존 저장소를 접근 불가로 바꾸지 않게 한다.
         """
-        return [repo async for repo in self.iter_repositories(per_page=per_page)]
+        unique: dict[int, RepoSummary] = {}
+        async for repo in self.iter_repositories(per_page=per_page):
+            # sort=pushed 로 읽는 동안 저장소가 갱신되면 같은 repo 가 두 page 에 올 수 있다.
+            # 먼저 나온 위치를 유지하고 값은 더 늦게 받은 쪽(최신)을 쓴다.
+            unique[repo.github_repo_id] = repo
+        return list(unique.values())
 
     async def iter_repositories(
         self, *, per_page: int = DEFAULT_PER_PAGE
     ) -> AsyncIterator[RepoSummary]:
-        """public repo 를 page 단위로 흘려보낸다. 입력: page 크기. 출력: RepoSummary 스트림."""
-        path: str | None = "/user/repos"
+        """public repo 를 page 단위로 흘려보낸다. 입력: page 크기. 출력: RepoSummary 스트림.
+
+        같은 repo 가 반복될 수 있다(중복 제거는 list_repositories 가 한다).
+        응답이 계약과 다르면 GithubApiError(invalid_response)를 던진다.
+        """
+        list_path = "/user/repos"
+        path: str | None = list_path
         params: dict[str, str | int] | None = {
             "visibility": "public",
             "affiliation": "owner",
             "per_page": per_page,
             "sort": "pushed",
         }
+        page = 1
         while path is not None:
-            response = await self.request(path, params=params)
-            payload = response.json()
-            if not isinstance(payload, list):
-                return
-            for item in payload:
-                if isinstance(item, dict):
-                    yield repo_summary_from_api(item)
+            # redirect 는 따라가지 않는다. 목록 API 는 redirect 할 이유가 없고, 따라가면
+            # 응답이 준 주소로 토큰 달린 요청이 이어진다.
+            response = await self.request(path, params=params, follow_redirects=False)
+            for item in _repository_items(response):
+                if item["private"]:
+                    continue
+                yield repo_summary_from_api(item)
             # 다음 page URL 에 쿼리가 이미 들어 있어 params 를 다시 붙이지 않는다.
-            path = parse_link_header(response.headers.get("link")).get("next")
-            params = None
+            next_url = parse_link_header(response.headers.get("link")).get("next")
+            if next_url is None:
+                return
+            next_page = self._next_page(next_url, list_path, page)
+            if next_page is None:
+                raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE)
+            path, params, page = next_url, None, next_page
 
     # ── L0-b ────────────────────────────────────────────
 
@@ -305,6 +368,42 @@ class GithubClient:
             rate_limit_retry_after_seconds=retry_after,
             repository_inaccessible=repository_inaccessible,
         )
+
+
+def _repository_items(response: httpx.Response) -> list[dict[str, Any]]:
+    """목록 응답 한 page 를 검증해 repo JSON 목록으로 돌려준다.
+
+    입력: Response. 출력: repo dict 목록. 계약과 다르면 GithubApiError(repo_unreachable).
+    HTTP 200 이어도 본문이 list 가 아니거나, 항목이 dict 가 아니거나, 저장에 꼭 필요한
+    필드(id·name·full_name·private)가 없거나 타입이 틀리면 실패다. 정상적으로 저장소가 없는
+    경우(`[]`)와 구분하려고 조용히 건너뛰지 않는다.
+    """
+    if response.status_code != httpx.codes.OK:  # 3xx 등 목록이 아닌 응답
+        raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE, status_code=response.status_code)
+    try:
+        payload = response.json()
+    except ValueError:
+        raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE) from None
+    if not isinstance(payload, list) or not all(_is_valid_repo_item(item) for item in payload):
+        raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE)
+    return payload
+
+
+def _is_valid_repo_item(item: Any) -> bool:
+    """목록 항목 하나가 저장 가능한 repo JSON 인지 확인한다. 입력: 항목. 출력: 유효 여부."""
+    if not isinstance(item, dict):
+        return False
+    repo_id = item.get("id")
+    return (
+        isinstance(repo_id, int)
+        and not isinstance(repo_id, bool)
+        and repo_id > 0
+        and isinstance(item.get("name"), str)
+        and bool(item["name"])
+        and isinstance(item.get("full_name"), str)
+        and bool(item["full_name"])
+        and isinstance(item.get("private"), bool)
+    )
 
 
 def _is_rate_limited(response: httpx.Response) -> bool:

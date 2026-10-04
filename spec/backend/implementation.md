@@ -52,3 +52,32 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 새 D
   기여도 근거 공급·종합 ranking·후속 page 저장은 task-10에서 연결한다.
 - [#68](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/68)의 run partial/failed,
   Redis 제한 기록·SSE 연결은 별도 작업이다. README의 중요한 섹션 중심 축약 정책도 후속 범위다.
+
+## 2026-10-04 — release PR #85 멘토 리뷰 반영 (GitHub 목록 수집)
+
+관련 PR: [release #85](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/85). 브랜치 `refactor/week7-be`.
+
+### 변경 범위
+
+- `integrations/github/client.py`: Link `rel="next"`는 API origin(https·host·port, userinfo 없음)과
+  `/user/repos` 경로이고 page가 증가할 때만 따라간다. 아니면 요청 전에 `repo_unreachable`로 실패한다.
+  목록 요청은 redirect를 따르지 않고, `request()`는 API origin이 아닌 URL에 토큰을 보내지 않는다.
+- 목록 응답이 list가 아니거나 항목 필수 필드가 틀리면 빈 목록 대신 실패한다. 오류 계층은
+  [error-reasons.md](../../backend/docs/error-reasons.md#github-수집-오류의-계층)에 정리했다.
+- `list_repositories()`는 repo ID 기준으로 중복을 제거한다(위치 유지, 값은 나중 응답). 이에 따라
+  `public_repo_count`도 실제 저장 개수와 같다. 429는 헤더가 없어도 `rate_limited`로 분류한다.
+- 목록 항목의 `private` 필드를 필수로 보게 되어 `test_github_client.py` 응답 fixture에 추가했다.
+
+### 실행 결과
+
+| 작업 디렉터리 | 검증 | 결과 |
+| --- | --- | --- |
+| `backend` | `pytest -k "not postgres"` (TEST_DATABASE_URL 미설정) | 497 passed, 97 skipped. 수정 전에는 기존 계약 테스트 18개 실패 |
+| `backend` | `ruff check`, `ruff format`, `mypy app` | 통과 |
+| `backend` | PostgreSQL 연결 테스트 | 미실행 |
+
+### 남은 작업
+
+- `queued` 작업의 큐 등록 복구(reaper)는 `backend/docs/pipeline.md` 2절 설계이며 아직 구현되지 않았다.
+  DB 커밋 뒤 enqueue 전에 프로세스가 종료되고 재로그인도 없으면 reaper 구현 전까지 복구되지 않는다.
+
