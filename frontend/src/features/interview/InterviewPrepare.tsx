@@ -452,7 +452,7 @@ export default function InterviewPrepare() {
 
       {/*
         마이크 · 스피커 점검. Sprint 2부터 음성 면접만 남으므로 answerMode와 무관하게 늘 띄운다.
-        점검 결과는 면접 시작을 막지 않는다 (spec/frontend/features/interview.md).
+        마이크가 정상이 아니면 면접 시작을 막는다 (spec/frontend/features/interview.md).
       */}
       <div className="flex flex-col gap-3 border-t border-line-soft pt-5">
         <h2 className="text-[13px] font-bold">마이크 · 스피커 점검</h2>
@@ -630,9 +630,18 @@ export default function InterviewPrepare() {
               면접을 열지 못했어요 · 잠시 후 다시 눌러주세요
             </p>
           )}
+          {/*
+            음성 면접은 마이크 없이 답변할 수 없다. 타이머가 돌기 전에 여기서 막는다.
+            확인 중에는 문구를 띄우지 않는다 — 진입 직후 한순간 경고가 스친다.
+          */}
+          {mic.status !== 'ok' && mic.status !== 'checking' && (
+            <p className="text-[11px] font-bold text-error">
+              마이크를 확인해야 면접을 시작할 수 있어요
+            </p>
+          )}
           <button
             type="button"
-            disabled={!ready || starting}
+            disabled={!ready || starting || mic.status !== 'ok'}
             onClick={() => void handleStart()}
             className="h-12 rounded-lg bg-accent text-sm font-bold text-surface disabled:bg-line-soft disabled:text-muted"
           >

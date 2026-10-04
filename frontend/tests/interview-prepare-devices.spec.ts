@@ -7,7 +7,7 @@ import { expect, test, type Page } from '@playwright/test';
 // 권한 상태 API는 window.__perm.onchange()로 변경 알림을 흉내 낸다.
 type MicResult = 'ok' | 'NotAllowedError' | 'NotFoundError' | 'NotReadableError';
 
-async function openPrepare(page: Page, mic: MicResult) {
+async function stubMic(page: Page, mic: MicResult) {
   await page.addInitScript((initial) => {
     const w = window as unknown as { __micResult: string; __perm: { onchange: (() => void) | null } };
     w.__micResult = initial;
@@ -31,7 +31,12 @@ async function openPrepare(page: Page, mic: MicResult) {
       mics.push(dst.stream);
       return dst.stream;
     };
+  }, mic);
+}
 
+async function openPrepare(page: Page, mic: MicResult) {
+  await stubMic(page, mic);
+  await page.addInitScript(() => {
     // 준비 WS는 이 테스트 관심사가 아니다. 열리기만 하고 아무 메시지도 보내지 않는다.
     (window as unknown as { WebSocket: unknown }).WebSocket = class {
       static OPEN = 1;
@@ -64,7 +69,7 @@ async function openPrepare(page: Page, mic: MicResult) {
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       );
     };
-  }, mic);
+  });
 
   await page.goto('/interview/iv-1/prepare');
   await expect(page.getByRole('heading', { name: '마이크 · 스피커 점검' })).toBeVisible();
@@ -159,4 +164,50 @@ test('사이트 설정에서 권한을 바꾸면 새로고침 없이 다시 확�
     w.__perm.onchange();
   });
   await expect(page.getByText('✓ 정상 감지됨')).toBeVisible();
+});
+
+/**
+ * MSW로 면접을 새로 만들어 준비가 끝날 때까지(prepareCompleted) 기다린다.
+ * runId·레포 id는 mock seed 값이다(src/mocks/db/config.ts, fixtures/analysis.ts).
+ */
+async function openReadyInterview(page: Page, mic: MicResult) {
+  await stubMic(page, mic);
+  await page.goto('/home');
+  // mock 워커가 페이지를 잡기 전에 보낸 요청은 dev 서버로 새어 나간다.
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+  const { interviewId } = await page.evaluate(async () => {
+    const res = await fetch('/api/interviews', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        runId: '5c7b9e10-0000-4000-8000-00000000aaaa',
+        repositoryIds: ['9f1c0a6e-0001-4f00-8a01-000000000001'],
+      }),
+    });
+    return (await res.json()) as { interviewId: string };
+  });
+  // mock DB는 페이지 메모리에 있다. page.goto로 새로 불러오면 방금 만든 면접이 사라진다.
+  await page.evaluate((url) => {
+    window.history.pushState({}, '', url);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  }, `/interview/${interviewId}/prepare`);
+  await expect(page.getByText('첫 질문 구성 완료')).toBeVisible({ timeout: 10_000 });
+}
+
+test('마이크가 정상이면 준비가 끝난 뒤 면접을 시작할 수 있다', async ({ page }) => {
+  await openReadyInterview(page, 'ok');
+  await expect(page.getByRole('button', { name: '면접 시작하기' })).toBeEnabled();
+  await expect(page.getByText(/마이크를 확인해야 면접을 시작할 수 있어요/)).toHaveCount(0);
+});
+
+test('마이크를 쓸 수 없으면 준비가 끝나도 면접 시작을 막고, 해결하면 풀린다', async ({ page }) => {
+  await openReadyInterview(page, 'NotAllowedError');
+  await expect(page.getByRole('button', { name: '면접 시작하기' })).toBeDisabled();
+  await expect(page.getByText(/마이크를 확인해야 면접을 시작할 수 있어요/)).toBeVisible();
+
+  await page.evaluate(() => {
+    (window as unknown as { __micResult: string }).__micResult = 'ok';
+  });
+  await page.getByRole('button', { name: '다시 확인' }).click();
+  await expect(page.getByRole('button', { name: '면접 시작하기' })).toBeEnabled();
 });
