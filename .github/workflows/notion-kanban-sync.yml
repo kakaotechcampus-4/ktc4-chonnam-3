@@ -7,6 +7,8 @@ on:
     types: [opened, reopened, closed]
   issues:
     types: [opened, reopened, closed]
+  # 수동 실행: 지금 열려 있는 PR 전부를 카드로 만들거나 갱신 (워크플로 도입 전 PR 백필용)
+  workflow_dispatch:
 
 concurrency: notion-${{ github.event.pull_request.number || github.event.issue.number }}
 
@@ -36,10 +38,6 @@ jobs:
               return json;
             };
 
-            const item = context.payload.pull_request ?? context.payload.issue;
-            const kind = context.payload.pull_request ? 'PR' : 'Issue';
-            const prefix = `${kind} #${item.number} `;
-
             // 주차: 월~일 기준, 2026-09-28(월)~10-04(일) KST가 8주차
             const kstNow = Date.now() + 9 * 3600e3;
             const week = 8 + Math.floor((kstNow - Date.UTC(2026, 8, 28)) / (7 * 864e5));
@@ -57,9 +55,9 @@ jobs:
                 const opt = p[p.type].options.find((o) =>
                   o.name.toLowerCase().split('/').map((s) => s.trim()).includes(String(v).toLowerCase()) ||
                   (typeof v === 'number' && Number(o.name.replace(/\D/g, '')) === v));
-                if (!opt) core.warning(`'${name}'에 '${v}' 옵션 없음. 있는 옵션: ${p[p.type].options.map((o) => o.name).join(', ')}`);
-                const name = opt?.name ?? (typeof v === 'number' ? `${v}주차` : String(v));
-                return p.type === 'multi_select' ? { multi_select: [{ name }] } : { [p.type]: { name } };
+                if (!opt && p.type === 'status') core.warning(`'${name}'에 '${v}' 옵션 없음. 있는 옵션: ${p[p.type].options.map((o) => o.name).join(', ')}`);
+                const optName = opt?.name ?? (typeof v === 'number' ? `${v}주차` : String(v));
+                return p.type === 'multi_select' ? { multi_select: [{ name: optName }] } : { [p.type]: { name: optName } };
               }
               core.warning(`'${name}' 속성 타입(${p.type})은 지원 안 해서 건너뜀`);
             };
@@ -72,25 +70,35 @@ jobs:
               geonyeong325: '이건영',
               gdh0730: '구동한',
             };
-            const author = item.user.login;
-            // open / merged(머지됨) / closed(머지 없이 닫힘, 이슈는 닫히면 전부 closed)
-            const state = item.state === 'open' ? 'open' : item.merged_at ? 'merged' : 'closed';
+            const sync = async (item, kind) => {
+              const prefix = `${kind} #${item.number} `;
+              const author = item.user.login;
+              // open / merged(머지됨) / closed(머지 없이 닫힘, 이슈는 닫히면 전부 closed)
+              const state = item.state === 'open' ? 'open' : item.merged_at ? 'merged' : 'closed';
 
-            const properties = {
-              [titleName]: { title: [{ text: { content: prefix + item.title, link: { url: item.html_url } } }] },
-              담당자: val('담당자', MEMBERS[author] ?? author),
-              상태: val('상태', state),
-              주차: val('주차', week),
+              const properties = {
+                [titleName]: { title: [{ text: { content: prefix + item.title, link: { url: item.html_url } } }] },
+                담당자: val('담당자', MEMBERS[author] ?? author),
+                상태: val('상태', state),
+                주차: val('주차', week),
+              };
+              for (const k of Object.keys(properties)) if (!properties[k]) delete properties[k];
+
+              const { results } = await notion(`databases/${DB}/query`, {
+                filter: { property: titleName, title: { starts_with: prefix } },
+              });
+              if (results[0]) {
+                await notion(`pages/${results[0].id}`, { properties }, 'PATCH');
+                core.info(`갱신: ${prefix}`);
+              } else {
+                await notion('pages', { parent: { database_id: DB }, properties });
+                core.info(`생성: ${prefix}`);
+              }
             };
-            for (const k of Object.keys(properties)) if (!properties[k]) delete properties[k];
 
-            const { results } = await notion(`databases/${DB}/query`, {
-              filter: { property: titleName, title: { starts_with: prefix } },
-            });
-            if (results[0]) {
-              await notion(`pages/${results[0].id}`, { properties }, 'PATCH');
-              core.info(`갱신: ${prefix}`);
+            if (context.eventName === 'workflow_dispatch') {
+              const prs = await github.paginate(github.rest.pulls.list, { ...context.repo, state: 'open' });
+              for (const pr of prs) await sync(pr, 'PR');
             } else {
-              await notion('pages', { parent: { database_id: DB }, properties });
-              core.info(`생성: ${prefix}`);
+              await sync(context.payload.pull_request ?? context.payload.issue, context.payload.pull_request ? 'PR' : 'Issue');
             }
