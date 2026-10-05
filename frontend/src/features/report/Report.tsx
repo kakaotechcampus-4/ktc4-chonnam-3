@@ -10,6 +10,18 @@ import type { AgentFeedback, ReportResponse } from '@/types/api';
 
 const DEFAULT_RETRY_AFTER_SECONDS = 3;
 
+// POST /interviews/{id}/retry 실패 안내 (spec/frontend/features/report.md)
+const RETRY_ERROR: Record<string, string> = {
+  original_not_completed: '끝난 면접만 다시 시작할 수 있어요.',
+  repository_unavailable: '선택했던 레포를 더 이상 쓸 수 없어요. 공고 입력부터 다시 시작해주세요.',
+  session_limit_exceeded: '이미 진행 중인 면접이 있어요.',
+  run_expired: '분석 결과가 만료됐어요. 공고 입력부터 다시 시작해주세요.',
+};
+// 같은 레포 조합으로는 다시 만들 수 없어 공고 입력으로 보내야 하는 reason.
+const RESTART_REASONS = new Set(['run_expired', 'repository_unavailable']);
+
+const OUTLINE_BUTTON = 'rounded-md border border-line px-4 py-2 text-sm';
+
 export default function Report() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -43,6 +55,7 @@ export default function Report() {
   // 네트워크 오류·AbortError는 ApiError 모양이 아니라 `.error`가 없다. 렌더 중 읽으면 흰 화면이 된다.
   const errorReason = isApiError(reportQuery.error) ? reportQuery.error.error.reason : null;
   const reportUnavailable = errorReason === 'report_unavailable';
+  const retryReason = isApiError(retryMutation.error) ? retryMutation.error.error.reason : null;
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
@@ -51,11 +64,27 @@ export default function Report() {
       <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-7 px-7 py-6">
         {reportQuery.isLoading && <p className="text-sm text-muted">불러오는 중...</p>}
         {generating && <p className="text-sm text-muted">리포트를 만들고 있어요...</p>}
-        {reportQuery.isError && !reportUnavailable && (
-          <p className="text-sm text-error">리포트를 불러오지 못했어요.</p>
-        )}
-        {reportUnavailable && (
-          <p className="text-sm text-muted">진행된 면접이 없어서 리포트를 만들 수 없어요.</p>
+        {reportQuery.isError && (
+          <div className="flex flex-col items-start gap-3">
+            {/* report_unavailable은 진행 턴 0개·생성 실패 등 원인이 여럿이라 원인을 단정하지 않는다. */}
+            <p role="alert" className={`text-sm ${reportUnavailable ? 'text-muted' : 'text-error'}`}>
+              {reportUnavailable ? '이 면접은 리포트를 만들 수 없어요.' : '리포트를 불러오지 못했어요.'}
+            </p>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => navigate('/home')} className={OUTLINE_BUTTON}>
+                홈으로 가기
+              </button>
+              {!reportUnavailable && (
+                <button
+                  type="button"
+                  onClick={() => void reportQuery.refetch()}
+                  className={OUTLINE_BUTTON}
+                >
+                  다시 불러오기
+                </button>
+              )}
+            </div>
+          </div>
         )}
 
         {report && (
@@ -166,6 +195,23 @@ export default function Report() {
                 {retryMutation.isPending ? '준비 중...' : '새 모의면접 시작하기'}
               </button>
             </div>
+            {retryMutation.isError && (
+              <div className="flex items-center justify-end gap-3">
+                <p role="alert" className="text-xs text-error">
+                  {(retryReason && RETRY_ERROR[retryReason]) ??
+                    '새 면접을 준비하지 못했어요. 잠시 후 다시 시도해주세요.'}
+                </p>
+                {retryReason && RESTART_REASONS.has(retryReason) && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/interview/new')}
+                    className={OUTLINE_BUTTON}
+                  >
+                    공고 입력부터 다시
+                  </button>
+                )}
+              </div>
+            )}
           </>
         )}
       </main>
