@@ -215,3 +215,148 @@ async def test_same_budget_is_shared_across_director_calls(inputs):
     assert exhausted.failure.stage == "budget" and exhausted.attempts == ()
     assert len(sent) == 2
     assert attempts == [*first.attempts, *second.attempts]
+
+
+@pytest.mark.parametrize("missing", ["budget", "review"])
+async def test_budget_and_reviewer_must_be_supplied_explicitly(inputs, missing):
+    del inputs[missing]
+    with pytest.raises(TypeError, match=missing):
+        await agent.generate_question(**inputs)
+
+
+@pytest.mark.parametrize("phase", ["provider", "review"])
+async def test_cancellation_propagates_without_retry(inputs, phase):
+    entered, finished = asyncio.Event(), asyncio.Event()
+    sent, attempts = [], []
+
+    async def stall():
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            finished.set()
+
+    async def handle(request):
+        sent.append(request)
+        if phase == "provider":
+            await stall()
+        return response(question_text())
+
+    async def review(request, question):
+        await stall()
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        task = asyncio.create_task(
+            agent.generate_question(
+                **{**inputs, "review": review},
+                http_client=http,
+                attempt_sink=attempts,
+            )
+        )
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=2)
+        finally:
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        assert not http.is_closed
+    assert finished.is_set() and len(sent) == 1
+    if phase == "review":
+        assert len(attempts) == 1 and attempts[0].raw_output == question_text()
+        assert attempts[0].error_stage is None
+    else:
+        assert attempts == []
+
+
+async def test_reviewer_exception_keeps_completed_provider_attempt_in_sink(inputs):
+    sent, attempts = [], []
+
+    async def review(request, question):
+        raise RuntimeError("reviewer bug")
+
+    async with httpx.AsyncClient(transport=provider([question_text()], sent)) as http:
+        with pytest.raises(RuntimeError, match="reviewer bug"):
+            await agent.generate_question(
+                **{**inputs, "review": review},
+                http_client=http,
+                attempt_sink=attempts,
+            )
+    assert len(sent) == len(attempts) == 1
+    assert attempts[0].raw_output == question_text()
+    assert attempts[0].input_tokens == 100 and attempts[0].error_stage is None
+
+
+async def test_cancellation_during_retry_keeps_the_completed_parse_failure(inputs):
+    retry_started, retry_finished = asyncio.Event(), asyncio.Event()
+    sent, attempts = [], []
+
+    async def handle(request):
+        sent.append(request)
+        if len(sent) == 1:
+            return response("not-json")
+        retry_started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            retry_finished.set()
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        task = asyncio.create_task(
+            agent.generate_question(**inputs, http_client=http, attempt_sink=attempts)
+        )
+        try:
+            await asyncio.wait_for(retry_started.wait(), timeout=2)
+        finally:
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+    assert len(sent) == 2 and retry_finished.is_set()
+    assert len(attempts) == 1 and attempts[0].attempt == 1
+    assert attempts[0].raw_output == "not-json" and attempts[0].error_stage == "parse"
+
+
+async def test_reference_texts_and_checked_analysis_reach_ai_request(inputs):
+    source = c.BasisRef("job_posting", "posting-1")
+    contract = replace(inputs["question_contract"], basis_refs=(source,))
+    question = c.Question("hr_manager", "역할은 무엇인가요?", "role", contract, (), ())
+    checked_question = c.validate_question(
+        question,
+        review=c.QuestionReview(question.text, contract),
+        allowed_personas=("hr_manager",),
+        evidence_refs=frozenset(),
+        basis_refs=frozenset({source}),
+        jd_requirement_ids=frozenset(),
+    )
+    analysis = c.validate_analysis(
+        c.AnswerAnalysis(
+            "evaluated",
+            "sufficient",
+            (c.CoveredPoint("role", ("캐시 구현",)),),
+            (),
+            c.TechnicalAssessment("역할 설명", (), (), ("품질 미평가",)),
+            c.ContributionScope("unknown", ()),
+            (),
+            False,
+            (),
+            ("기여 미확인",),
+        ),
+        question=checked_question,
+        answer_text="캐시 구현",
+        evidence_refs=frozenset(),
+        allowed_locations=frozenset(),
+    )
+    inputs.update(
+        context=replace(inputs["context"], turn_no=2),
+        question_contract=contract,
+        answer_analysis=analysis,
+        reference_texts={source: "공고 원문"},
+    )
+    sent = []
+    async with httpx.AsyncClient(transport=provider([question_text()], sent)) as http:
+        result = await agent.generate_question(**inputs, http_client=http)
+    assert result.succeeded
+    payload = json.loads(json.loads(sent[0].content)["input"][0]["content"][0]["text"])
+    assert payload["reference_texts"] == [
+        {"kind": "job_posting", "id": "posting-1", "text": "공고 원문"}
+    ]
+    assert payload["answer_analysis"] == c.to_data(analysis)
