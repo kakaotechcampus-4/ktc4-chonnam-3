@@ -98,7 +98,17 @@ uv run --locked pytest
 
 BE smoke test는 editable 설치와 실제 `devon_ai` package 경로를 확인한다. service/facade 호출, 모델 결과, DB 저장, API·worker 기동은 기능 구현 후 별도 통합 테스트가 필요하다.
 
-기존 `.claude/scripts/lint_changed.py`는 AI 전용 lint를 건너뛴다. 자동 hook 통과를 AI 검사 완료로 간주하지 말고 위 Ruff·mypy·pytest 명령을 직접 실행한다. 보호 규칙이나 hook을 우회·해제하지 않는다.
+### 변경 파일 자동 lint
+
+`.claude/scripts/lint_changed.py`는 Claude의 `Edit`·`Write`로 변경한 `ai/` 아래 Python 파일을
+`ai/` 작업 디렉터리에서 `uv --offline run --no-sync ruff check -- <파일>`로 검사한다.
+hook을 실행하는 환경에서 `python3`와 `uv`를 찾을 수 있어야 하며, `ai/.venv`에 개발 의존성인
+Ruff가 설치되어 있어야 한다. 준비가 안 됐거나 검사 시간이 초과되면 `미실행`으로 안내한다.
+hook이 의존성을 설치하거나 코드를 자동 수정하지 않으며, lint 실패는 문맥 메시지로 알린다.
+
+이 검사는 변경한 파일 하나에만 적용되며, Claude 밖에서 편집한 파일에는 자동 실행되지 않는다.
+따라서 hook 결과만으로 AI 검사 완료로 간주하지 말고 위 Ruff 전체 검사·format·mypy·pytest를
+직접 실행한다. 보호 규칙이나 hook을 우회·해제하지 않는다.
 
 ## Mock-first 흐름
 
