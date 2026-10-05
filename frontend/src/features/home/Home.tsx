@@ -38,7 +38,18 @@ export default function Home() {
           </div>
         )}
         {homeQuery.isError && !githubTokenInvalid && (
-          <p className="mt-4 text-sm text-error">정보를 불러오지 못했어요.</p>
+          <div className="mt-4 flex items-center gap-3">
+            <p role="alert" className="text-sm text-error">
+              정보를 불러오지 못했어요.
+            </p>
+            <button
+              type="button"
+              onClick={() => void homeQuery.refetch()}
+              className="rounded-md border border-line px-4 py-2 text-sm"
+            >
+              다시 시도
+            </button>
+          </div>
         )}
 
         {home && (
