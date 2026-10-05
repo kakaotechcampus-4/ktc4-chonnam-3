@@ -32,7 +32,15 @@ def lint_command(root, file_path):
             return None, None, '미실행: BE uv 또는 .venv 없음. backend 의존성 준비 필요.'
         return [uv, '--offline', 'run', '--no-sync', 'ruff', 'check', '--', str(file)], root / 'backend', None
     if path.startswith('ai/') and file.suffix == '.py':
-        return None, None, '미실행: ai 전용 lint 설정 미확정. 현재 AI 런타임은 backend 아래.'
+        uv = shutil.which('uv')
+        venv = root / 'ai/.venv'
+        if not uv or not venv.is_dir():
+            return None, None, '미실행: AI uv 또는 .venv 없음. ai 의존성 준비 필요.'
+        # 전역 Ruff로 대신 검사하지 않도록 AI 환경의 설치 여부를 먼저 확인한다.
+        ruff = venv / ('Scripts/ruff.exe' if os.name == 'nt' else 'bin/ruff')
+        if not ruff.is_file():
+            return None, None, '미실행: AI 로컬 Ruff 없음. ai 개발 의존성 준비 필요.'
+        return [uv, '--offline', 'run', '--no-sync', 'ruff', 'check', '--', str(file)], root / 'ai', None
     return None, None, None
 
 
@@ -56,7 +64,8 @@ def main():
         if note:
             emit(note)
         if command:
-            result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=35)
+            result = subprocess.run(command, cwd=cwd, capture_output=True, text=True,
+                                    timeout=35, check=False)
             if result.returncode:
                 emit('변경 파일 lint 실패. 완료 처리 전에 확인하세요.\n' +
                      (result.stdout + result.stderr)[-5000:])
