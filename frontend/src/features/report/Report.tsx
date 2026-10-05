@@ -5,7 +5,10 @@ import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
 import { PERSONA_INITIALS, PERSONA_LABELS } from '@/shared/persona';
-import type { AgentFeedback, ApiError, ReportResponse } from '@/types/api';
+import { isApiError } from '@/types/api';
+import type { AgentFeedback, ReportResponse } from '@/types/api';
+
+const DEFAULT_RETRY_AFTER_SECONDS = 3;
 
 export default function Report() {
   const { id = '' } = useParams<{ id: string }>();
@@ -17,9 +20,12 @@ export default function Report() {
     queryFn: () => api.getInterviewReport(id),
     enabled: !!id,
     // 202 { status: 'generating', retryAfter }면 retryAfter(초) 간격으로 재조회한다.
+    // retryAfter는 명세(report.md)상 optional이라 없거나 0이면 3초로 폴링을 이어간다.
     refetchInterval: (query) => {
       const data = query.state.data;
-      return data && 'status' in data && data.status === 'generating' ? data.retryAfter * 1000 : false;
+      return data && 'status' in data && data.status === 'generating'
+        ? (data.retryAfter || DEFAULT_RETRY_AFTER_SECONDS) * 1000
+        : false;
     },
   });
 
@@ -34,7 +40,8 @@ export default function Report() {
   const data = reportQuery.data;
   const generating = !!data && 'status' in data && data.status === 'generating';
   const report = data && !generating ? (data as ReportResponse) : undefined;
-  const errorReason = (reportQuery.error as unknown as ApiError | undefined)?.error.reason;
+  // 네트워크 오류·AbortError는 ApiError 모양이 아니라 `.error`가 없다. 렌더 중 읽으면 흰 화면이 된다.
+  const errorReason = isApiError(reportQuery.error) ? reportQuery.error.error.reason : null;
   const reportUnavailable = errorReason === 'report_unavailable';
 
   return (
