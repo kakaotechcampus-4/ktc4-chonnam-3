@@ -29,15 +29,18 @@ const PORTFOLIO: FileFieldConfig = {
   maxBytes: 20 * MB,
 };
 
+// reason 이름은 BE(backend/app/shared/enums.py)를 따른다.
 const UPLOAD_ERROR: Record<string, string> = {
-  file_too_large: '파일 용량이 너무 커요.',
-  unsupported_media_type: '지원하지 않는 형식이에요.',
+  document_too_large: '파일 용량이 너무 커요.',
+  unsupported_document_type: '지원하지 않는 형식이에요.',
 };
 
 const RUN_ERROR: Record<string, string> = {
-  job_url_required: '공고 URL을 입력해주세요.',
+  posting_url_required: '공고 URL을 입력해주세요.',
   unsupported_site: '지원하지 않는 사이트예요.',
-  url_unreachable: '공고를 불러올 수 없어요.',
+  github_token_invalid: 'GitHub 연동이 만료됐어요. 다시 연동해주세요.',
+  document_extract_failed: '첨부한 포트폴리오를 읽지 못했어요. 다시 올리거나 빼고 진행해주세요.',
+  invalid_request: '첨부한 포트폴리오를 찾지 못했어요. 다시 올려주세요.',
 };
 
 function isHttpUrl(value: string) {
@@ -52,7 +55,8 @@ function validateFile(file: File, config: FileFieldConfig): string | null {
 }
 
 function messageFor(error: unknown, table: Record<string, string>, fallback: string) {
-  if (!isApiError(error)) return fallback;
+  // unknown_error는 프록시 HTML 같은 응답 원문이 message에 담겨 오므로 화면에 쓰지 않는다.
+  if (!isApiError(error) || error.error.reason === 'unknown_error') return fallback;
   return table[error.error.reason] ?? error.error.message;
 }
 
