@@ -33,9 +33,10 @@ export default function Report() {
     enabled: !!id,
     // 202 { status: 'generating', retryAfter }면 retryAfter(초) 간격으로 재조회한다.
     // retryAfter는 명세(report.md)상 optional이라 없거나 0이면 3초로 폴링을 이어간다.
+    // 실패해도 data는 마지막 성공값(generating)으로 남는다. 오류가 있으면 폴링을 멈춘다.
     refetchInterval: (query) => {
       const data = query.state.data;
-      return data && 'status' in data && data.status === 'generating'
+      return !query.state.error && data && 'status' in data && data.status === 'generating'
         ? (data.retryAfter || DEFAULT_RETRY_AFTER_SECONDS) * 1000
         : false;
     },
@@ -56,6 +57,8 @@ export default function Report() {
   const errorReason = isApiError(reportQuery.error) ? reportQuery.error.error.reason : null;
   const reportUnavailable = errorReason === 'report_unavailable';
   const retryReason = isApiError(retryMutation.error) ? retryMutation.error.error.reason : null;
+  // 이미 받은 리포트가 있으면 재조회 실패는 화면에 드러내지 않고 리포트를 유지한다.
+  const showError = reportQuery.isError && !report;
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
@@ -63,8 +66,10 @@ export default function Report() {
 
       <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-7 px-7 py-6">
         {reportQuery.isLoading && <p className="text-sm text-muted">불러오는 중...</p>}
-        {generating && <p className="text-sm text-muted">리포트를 만들고 있어요...</p>}
-        {reportQuery.isError && (
+        {generating && !reportQuery.isError && (
+          <p className="text-sm text-muted">리포트를 만들고 있어요...</p>
+        )}
+        {showError && (
           <div className="flex flex-col items-start gap-3">
             {/* report_unavailable은 진행 턴 0개·생성 실패 등 원인이 여럿이라 원인을 단정하지 않는다. */}
             <p role="alert" className={`text-sm ${reportUnavailable ? 'text-muted' : 'text-error'}`}>

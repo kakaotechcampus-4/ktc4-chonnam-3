@@ -70,3 +70,37 @@ test('202 응답에 retryAfter가 없어도 기본 간격으로 폴링을 이어
     )
     .toBeGreaterThanOrEqual(2);
 });
+
+test('생성 중 폴링이 실패하면 생성 중 문구 대신 오류를 보여주고 폴링을 멈춘다', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const calls = { count: 0 };
+    (window as unknown as { __reportCalls: typeof calls }).__reportCalls = calls;
+    const originalFetch = window.fetch;
+    window.fetch = async (input, options) => {
+      if (!String(input).endsWith('/report')) return originalFetch(input, options);
+      calls.count += 1;
+      return calls.count === 1
+        ? new Response(JSON.stringify({ status: 'generating', retryAfter: 1 }), {
+            status: 202,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        : new Response(JSON.stringify({ error: { reason: 'internal_error', message: 'x' } }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          });
+    };
+  });
+  await page.goto(REPORT_URL);
+  await expect(page.getByRole('alert')).toHaveText('리포트를 불러오지 못했어요.', {
+    timeout: 10_000,
+  });
+  await expect(page.getByText('리포트를 만들고 있어요...')).toHaveCount(0);
+  // 첫 202, 실패 1회, 자동 재시도 1회 뒤에는 더 호출하지 않는다.
+  await page.waitForTimeout(4_000);
+  const count = await page.evaluate(
+    () => (window as unknown as { __reportCalls: { count: number } }).__reportCalls.count,
+  );
+  expect(count).toBe(3);
+});
