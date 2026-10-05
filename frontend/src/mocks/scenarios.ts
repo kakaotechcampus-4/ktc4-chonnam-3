@@ -1,4 +1,5 @@
 import { addFault, clearFaults, listFaults, type FaultRule } from './faults';
+import { setMockSession } from './session';
 
 /**
  * 이름 붙인 실패 시나리오.
@@ -12,7 +13,6 @@ import { addFault, clearFaults, listFaults, type FaultRule } from './faults';
 
 export type ScenarioName =
   | 'auth-expired'
-  | 'refresh-failed'
   | 'github-token-invalid'
   | 'run-expired'
   | 'report-unavailable'
@@ -34,23 +34,6 @@ export const scenarios: Record<ScenarioName, Scenario> = {
   'auth-expired': {
     describe: '모든 요청이 401. 로그인 화면으로 밀려나는지 본다.',
     rules: [{ path: '*', status: 401, reason: 'unauthenticated', message: '로그인이 필요합니다.' }],
-  },
-
-  /**
-   * 인터셉터가 401을 받고 갱신을 시도했을 때 그 갱신마저 실패하는 상황.
-   * 조회 요청은 그대로 두어야 "401 → refresh → 재시도" 경로만 검증된다.
-   */
-  'refresh-failed': {
-    describe: '/auth/refresh 만 401. 토큰 갱신 실패 후 처리를 본다.',
-    rules: [
-      {
-        path: '/auth/refresh',
-        method: 'POST',
-        status: 401,
-        reason: 'unauthenticated',
-        message: '세션이 만료되었습니다.',
-      },
-    ],
   },
 
   /**
@@ -214,6 +197,7 @@ export function applyScenario(name: ScenarioName) {
  */
 export function installMockConsole() {
   const api = {
+    session: setMockSession,
     scenario: (name: ScenarioName) => {
       const applied = applyScenario(name);
       console.info(`[msw] 시나리오 '${name}' 적용 — ${applied.describe}`);

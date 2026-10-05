@@ -22,3 +22,10 @@
 ## 완료 조건
 
 - invalid repository, too many, no selected, session limit, retry 상태 제한을 테스트한다.
+
+## 진행 상태
+
+- `POST /interviews`: `queries.py`·`service.py`·`schemas.py`와 PostgreSQL 테스트 완료. 검사 기준은 `spec/backend/features/interview.md` "생성 검사 해석".
+- `POST /interviews` router·앱 등록: `current_user`·`app.state.redis`를 제공하는 task-06(PR #57) 머지 후 진행.
+- `session_repositories.snapshot_head_sha` 부재, `interview_prep`의 `analysis_jobs` 기록 방식: 스키마 논의 대기. 결정되면 생성 service에 반영한다.
+- `GET /interviews/{id}`, `/prepare/retry`, `/retry`: 미착수.
