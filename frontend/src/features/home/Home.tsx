@@ -12,8 +12,9 @@ export default function Home() {
   const homeQuery = useQuery({
     queryKey: queryKeys.home,
     queryFn: api.getHome,
+    // 실패해도 data는 마지막 성공값(syncing)으로 남는다. 오류가 있으면 폴링을 멈춘다.
     refetchInterval: (query) =>
-      query.state.data?.analysisStatus === 'syncing' ? 3000 : false,
+      !query.state.error && query.state.data?.analysisStatus === 'syncing' ? 3000 : false,
   });
 
   const home = homeQuery.data;
@@ -25,9 +26,8 @@ export default function Home() {
       <Header active="home" githubLinked={home?.githubLinked} name={home?.name} />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-10">
-        <h1 className="text-lg font-bold">
-          {homeQuery.isLoading ? '불러오는 중...' : `안녕하세요, ${home?.name ?? ''} 님!`}
-        </h1>
+        {homeQuery.isLoading && <h1 className="text-lg font-bold">불러오는 중...</h1>}
+        {home && <h1 className="text-lg font-bold">안녕하세요, {home.name} 님!</h1>}
 
         {githubTokenInvalid && (
           <div className="mt-4 flex items-center justify-between rounded-card border border-error-soft bg-error-soft px-4 py-3 text-sm">
