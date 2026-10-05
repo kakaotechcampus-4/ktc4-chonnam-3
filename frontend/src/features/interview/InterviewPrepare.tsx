@@ -158,10 +158,9 @@ export default function InterviewPrepare() {
 
   const status = interview?.status;
   const sessionId = interview?.sessionId;
-  // Sprint 1은 항상 'text'라 음성 UI가 뜨지 않는다. Sprint 2에서 'voice'가 추가되면
-  // 이 값만으로 마이크·스피커 점검이 살아난다. spec/frontend/features/interview.md:103
-  // 스냅샷 도착 전에는 'text'로 본다. 안 그러면 로딩 중 한 프레임 동안 음성 UI가 스친다.
-  const answerMode: AnswerMode = interview?.answerMode ?? 'text';
+  // Sprint 2부터 음성 면접만 남는다(spec/shared/decisions/0007 Proposed).
+  // 스냅샷 도착 전에도 'voice'로 본다. 마이크·스피커 점검 섹션은 처음부터 보인다.
+  const answerMode: AnswerMode = interview?.answerMode ?? 'voice';
 
   // status 별 도달 화면. 준비 화면에 머무는 건 preparing / preparing_failed 뿐이다.
   useEffect(() => {
@@ -445,10 +444,10 @@ export default function InterviewPrepare() {
       )}
 
       {/*
-        마이크 · 스피커 점검. Sprint 2(음성) 범위라 Sprint 1 화면에는 뜨지 않는다.
-        (spec/frontend/features/interview.md:17) 실제 장치 접근·재생·녹음도 Sprint 2다.
+        마이크 · 스피커 점검. 실제 장치 접근·재생은 feature/interview-voice-check에서 붙인다
+        (spec/frontend/features/interview.md).
       */}
-      {answerMode !== 'text' && (
+      {answerMode === 'voice' && (
         <div className="border-t border-line-soft pt-5">
           <h2 className="text-[13px] font-bold">마이크 · 스피커 점검</h2>
 

@@ -19,13 +19,21 @@ type Options = {
   /** false면 연결하지 않는다. 화면별 status 조건을 여기로 넘긴다. */
   enabled: boolean;
   onMessage: (message: WsServerMessage) => void;
+  /** 연결이 끊길 때마다 불린다. 녹음·전사 중 끊김을 실패로 바꾸는 데 쓴다. */
+  onDrop?: () => void;
 };
 
 /**
  * 5a2-v2 준비 화면과 5b-v2 진행 화면이 공유하는 WS 연결.
  * 두 화면은 같은 연결을 쓰지만 메시지 처리는 각자 하므로 여기서는 연결만 책임진다.
  */
-export function useInterviewSocket({ interviewId, sessionId, enabled, onMessage }: Options) {
+export function useInterviewSocket({
+  interviewId,
+  sessionId,
+  enabled,
+  onMessage,
+  onDrop,
+}: Options) {
   const queryClient = useQueryClient();
 
   const [wsStatus, setWsStatus] = useState<WsStatus>('connecting');
@@ -50,6 +58,10 @@ export function useInterviewSocket({ interviewId, sessionId, enabled, onMessage 
   const onMessageRef = useRef(onMessage);
   useEffect(() => {
     onMessageRef.current = onMessage;
+  });
+  const onDropRef = useRef(onDrop);
+  useEffect(() => {
+    onDropRef.current = onDrop;
   });
 
   /**
@@ -98,6 +110,7 @@ export function useInterviewSocket({ interviewId, sessionId, enabled, onMessage 
       if (disposed || sessionClosedRef.current) return;
 
       setDropCount((count) => count + 1);
+      onDropRef.current?.();
 
       setWsStatus('reconnecting');
       // 큐는 비우지 않는다. 사용자가 누른 재시도·제출은 재연결 후 보내야 한다.
@@ -159,6 +172,17 @@ export function useInterviewSocket({ interviewId, sessionId, enabled, onMessage 
     return false;
   }, []);
 
+  /**
+   * 오디오 조각. 끊긴 동안은 대기열에 넣지 않고 버린다 — 녹음 중 끊기면 그 답변은
+   * 실패이고 같은 턴에 다시 답한다(spec/shared/decisions/0007).
+   */
+  const sendBinary = useCallback((data: Blob) => {
+    const socket = socketRef.current;
+    if (sessionClosedRef.current || socket?.readyState !== WebSocket.OPEN) return false;
+    socket.send(data);
+    return true;
+  }, []);
+
   /** 명시적 이탈. 서버가 닫은 것과 같게 취급해 재연결하지 않는다. */
   const close = useCallback(() => {
     sessionClosedRef.current = true;
@@ -167,5 +191,5 @@ export function useInterviewSocket({ interviewId, sessionId, enabled, onMessage 
     socketRef.current?.close();
   }, []);
 
-  return { wsStatus, dropCount, send, close };
+  return { wsStatus, dropCount, send, sendBinary, close };
 }
