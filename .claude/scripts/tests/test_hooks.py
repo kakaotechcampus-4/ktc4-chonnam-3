@@ -1,11 +1,13 @@
 """Test protection boundaries and safe lint dispatch without installing tools."""
 import importlib.util
+import io
 import json
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -46,7 +48,8 @@ class HookTests(unittest.TestCase):
             event = {'tool_name': 'Write', 'cwd': str(self.root), 'tool_input': {'file_path': path}}
             env = dict(os.environ, CLAUDE_PROJECT_DIR=str(self.root))
             result = subprocess.run([sys.executable, str(SCRIPTS/'guard_docs.py')],
-                                    input=json.dumps(event), text=True, capture_output=True, env=env)
+                                    input=json.dumps(event), text=True, capture_output=True,
+                                    env=env, check=False)
             self.assertEqual(result.returncode, expected)
 
     def test_symlink_resolves_to_protected_file(self):
@@ -64,6 +67,7 @@ class HookTests(unittest.TestCase):
         with patch.object(lint.shutil, 'which', return_value=None):
             command, cwd, note = lint.lint_command(self.root, file)
         self.assertIsNone(command)
+        self.assertIsNone(cwd)
         self.assertIn('미실행', note)
 
     def test_fe_path_is_single_argument(self):
@@ -78,6 +82,8 @@ class HookTests(unittest.TestCase):
         self.assertEqual(command[-1], str(file))
         self.assertEqual(command[-2], '--')
         self.assertNotIn('--fix', command)
+        self.assertEqual(cwd, self.root.resolve()/'frontend')
+        self.assertIsNone(note)
 
     def test_backend_no_sync_offline(self):
         file = self.root/'backend/app/example.py'
@@ -88,6 +94,100 @@ class HookTests(unittest.TestCase):
             command, cwd, note = lint.lint_command(self.root, file)
         self.assertIn('--offline', command)
         self.assertIn('--no-sync', command)
+        self.assertEqual(cwd, self.root.resolve()/'backend')
+        self.assertIsNone(note)
+
+    def prepare_ai(self):
+        file = self.root/'ai/src/a space;echo BAD.py'
+        file.parent.mkdir(parents=True)
+        file.write_text('import os\n', encoding='utf-8')
+        ruff = self.root/'ai/.venv'/('Scripts/ruff.exe' if os.name == 'nt' else 'bin/ruff')
+        ruff.parent.mkdir(parents=True)
+        ruff.touch()
+        return file, ruff
+
+    def run_lint_event(self, file, tool='Edit'):
+        event = {'tool_name': tool, 'cwd': str(self.root),
+                 'tool_input': {'file_path': str(file)}}
+        output = io.StringIO()
+        with patch.dict(os.environ, CLAUDE_PROJECT_DIR=str(self.root)), \
+                patch.object(lint.sys, 'stdin', io.StringIO(json.dumps(event))), \
+                redirect_stdout(output):
+            self.assertEqual(lint.main(), 0)
+        return output.getvalue()
+
+    def test_ai_uses_own_environment_and_single_file(self):
+        file, _ = self.prepare_ai()
+        for path in (file, file.relative_to(self.root)):
+            with self.subTest(path=path), \
+                    patch.object(lint.shutil, 'which', return_value='/tools/uv'):
+                command, cwd, note = lint.lint_command(self.root, path)
+            self.assertEqual(command, ['/tools/uv', '--offline', 'run', '--no-sync',
+                                       'ruff', 'check', '--', str(file.resolve())])
+            self.assertEqual(cwd, self.root.resolve()/'ai')
+            self.assertIsNone(note)
+
+    def test_ai_missing_uv_or_environment_is_reported_without_execution(self):
+        file, ruff = self.prepare_ai()
+        for missing in ('uv', 'ruff', 'venv'):
+            if missing == 'ruff':
+                ruff.unlink()
+            elif missing == 'venv':
+                ruff.parent.rmdir()
+                ruff.parent.parent.rmdir()
+            with self.subTest(missing=missing), \
+                    patch.object(lint.shutil, 'which',
+                                 return_value=None if missing == 'uv' else '/tools/uv'), \
+                    patch.object(lint.subprocess, 'run') as run:
+                output = self.run_lint_event(file)
+            self.assertIn('미실행', output)
+            self.assertIn('AI', output)
+            run.assert_not_called()
+
+    def test_ai_lint_failure_is_returned_without_modifying_source(self):
+        file, _ = self.prepare_ai()
+        original = file.read_bytes()
+        for tool in ('Edit', 'Write'):
+            with self.subTest(tool=tool), \
+                    patch.object(lint.shutil, 'which', return_value='/tools/uv'), \
+                    patch.object(lint.subprocess, 'run', return_value=
+                                 subprocess.CompletedProcess([], 1, 'F401 unused import', '')) as run:
+                output = self.run_lint_event(file, tool)
+            context = json.loads(output)['hookSpecificOutput']
+            self.assertEqual(context['hookEventName'], 'PostToolUse')
+            self.assertIn('F401', context['additionalContext'])
+            self.assertIn('lint 실패', context['additionalContext'])
+            self.assertEqual(run.call_args.kwargs['cwd'], self.root.resolve()/'ai')
+            self.assertEqual(run.call_args.kwargs['timeout'], 35)
+            self.assertNotIn('--fix', run.call_args.args[0])
+            self.assertEqual(file.read_bytes(), original)
+
+    def test_ai_lint_success_emits_nothing(self):
+        file, _ = self.prepare_ai()
+        with patch.object(lint.shutil, 'which', return_value='/tools/uv'), \
+                patch.object(lint.subprocess, 'run', return_value=
+                             subprocess.CompletedProcess([], 0, 'All checks passed!', '')) as run:
+            self.assertEqual(self.run_lint_event(file), '')
+        run.assert_called_once()
+
+    def test_ai_lint_timeout_is_reported(self):
+        file, _ = self.prepare_ai()
+        with patch.object(lint.shutil, 'which', return_value='/tools/uv'), \
+                patch.object(lint.subprocess, 'run',
+                             side_effect=subprocess.TimeoutExpired(['/tools/uv'], 35)):
+            output = self.run_lint_event(file)
+        self.assertIn('미실행', output)
+        self.assertIn('35초', output)
+
+    def test_ai_unsupported_or_missing_paths_do_not_run(self):
+        self.prepare_ai()
+        doc = self.root/'ai/readme.md'
+        doc.write_text('documentation')
+        outside = self.root/'../outside.py'
+        for file in (doc, self.root/'ai/deleted.py', outside):
+            with self.subTest(file=file), patch.object(lint.subprocess, 'run') as run:
+                self.run_lint_event(file)
+            run.assert_not_called()
 
 
 if __name__ == '__main__':
