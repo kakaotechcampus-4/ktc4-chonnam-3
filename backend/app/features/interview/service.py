@@ -17,11 +17,12 @@ import uuid
 
 from arq.connections import ArqRedis
 from redis.exceptions import RedisError
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.errors import AppError
+from app.core.logging import get_logger
 from app.db.models import InterviewSession, SessionRepository
 from app.features.interview import queries
 from app.shared.enums import Reason
@@ -29,6 +30,7 @@ from app.shared.enums import Reason
 # rt:{sessionId} TTL (docs/pipeline.md 4.4, docs/redis-keys.md).
 REALTIME_SESSION_TTL_SECONDS = 2 * 60 * 60
 _ACTIVE_PER_RUN_INDEX = "uq_interview_sessions_active_per_run"
+logger = get_logger(__name__)
 
 
 async def create_interview(
@@ -82,17 +84,22 @@ async def create_interview(
     # worker 가 행을 볼 수 있도록 enqueue 전에 commit 한다.
     await db.commit()
 
+    interview_id = interview.id
     session_id = secrets.token_urlsafe(32)
     try:
         await redis.set(
             f"rt:{session_id}",
-            json.dumps({"interviewId": str(interview.id), "userId": str(user_id)}),
+            json.dumps({"interviewId": str(interview_id), "userId": str(user_id)}),
             ex=REALTIME_SESSION_TTL_SECONDS,
         )
-        await redis.enqueue_job("interview_prep", str(interview.id))
+        await redis.enqueue_job("interview_prep", str(interview_id))
     except RedisError:
         # 준비 job 없는 preparing 행이 남으면 같은 run 의 새 면접이 영구히 막히므로 되돌린다.
-        await db.delete(interview)
-        await db.commit()
+        try:
+            await db.delete(interview)
+            await db.commit()
+        except SQLAlchemyError:
+            # ponytail: 되돌리기 실패 행은 id 로그만 남긴다. 자동 정리는 준비 job reaper 에서.
+            logger.error("interview_create_rollback_failed", interview_id=str(interview_id))
         raise AppError(Reason.INTERNAL_ERROR) from None
-    return interview.id, session_id
+    return interview_id, session_id

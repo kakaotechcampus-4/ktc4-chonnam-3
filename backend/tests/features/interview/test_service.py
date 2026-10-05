@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from redis.exceptions import RedisError
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
@@ -134,3 +135,19 @@ async def test_create_redis_failure_rolls_back(db: AsyncSession) -> None:
         await _create(db, run, [repo.id], FakeRedis(fail=True))
     assert exc.value.reason == Reason.INTERNAL_ERROR
     assert await queries.has_active_interview(db, run_id=run.id) is False
+
+
+async def test_create_rollback_failure_still_internal_error(
+    db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """되돌리기 DELETE 까지 실패해도 DB 예외가 아니라 INTERNAL_ERROR 로 끝난다."""
+    run = await make_run(db, await make_user(db))
+    repo = await make_repo(db, run)
+
+    async def _fail(*_: Any) -> None:
+        raise SQLAlchemyError("db down")
+
+    monkeypatch.setattr(db, "delete", _fail)
+    with pytest.raises(AppError) as exc:
+        await _create(db, run, [repo.id], FakeRedis(fail=True))
+    assert exc.value.reason == Reason.INTERNAL_ERROR
