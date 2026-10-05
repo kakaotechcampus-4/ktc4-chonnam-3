@@ -78,7 +78,12 @@ export default function MyPage() {
           </div>
 
           {profileQuery.isLoading && <p className="text-sm text-muted">불러오는 중...</p>}
-          {profileQuery.isError && <p className="text-sm text-error">정보를 불러오지 못했어요.</p>}
+          {profileQuery.isError && (
+            <RetryRow
+              message="정보를 불러오지 못했어요."
+              onRetry={() => void profileQuery.refetch()}
+            />
+          )}
 
           {profile && (
             <div className="flex items-center gap-3">
@@ -131,7 +136,12 @@ export default function MyPage() {
 
           {interviewsQuery.isLoading && <p className="mt-6 text-sm text-muted">불러오는 중...</p>}
           {interviewsQuery.isError && (
-            <p className="mt-6 text-sm text-error">이력을 불러오지 못했어요.</p>
+            <div className="mt-6">
+              <RetryRow
+                message="이력을 불러오지 못했어요."
+                onRetry={() => void interviewsQuery.refetch()}
+              />
+            </div>
           )}
 
           {interviewList && completedInterviews.length === 0 && (
@@ -263,6 +273,23 @@ export default function MyPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function RetryRow({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex items-center gap-3">
+      <p role="alert" className="text-sm text-error">
+        {message}
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="rounded-md border border-line px-4 py-2 text-sm"
+      >
+        다시 시도
+      </button>
     </div>
   );
 }
