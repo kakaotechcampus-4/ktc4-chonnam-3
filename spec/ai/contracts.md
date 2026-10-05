@@ -184,8 +184,9 @@ tool_error만으로 확보 근거를 버리거나 사용자 감점·Director 전
 | `director_v1` | 유효한 다음 질문 또는 bounded Tool 요청 | Persona·9턴·권한·반복·전제 제약 | 기존 LLM 방향 유지 |
 | `report_v1` | 종합·Persona 피드백과 실제 문답 근거 | 미관찰 인정, 원문 불변, 확정한 공개 점수 구조 유지·미검수 세부 채점 기준의 임의 생성 금지 | 기존 LLM 방향 유지 |
 | `profile_summary_v1` | 기존 개인 역할의 자연어 요약; 언어·유형 통계는 별도 확정 집계 | 기존 자료의 역할 근거·사용자 진술과 확인 사실 구분, 통계 변경 금지 | 0019에 따라 역할 요약의 LLM 사용 복원, job·version 목록 유지 |
+| `domain_category_v1` | 공고 1건의 도메인 category 7종 중 하나와 원문 근거 인용 | category enum, `etc`가 아니면 근거 인용이 공고 원문에 포함; 불일치·호출 실패는 `etc` | [0022](decisions/0022-domain-category-llm.md)에 따라 LLM 호출, 공고당 1회 |
 
-위 일곱 version 이름은 기존 FIX 목록이며 삭제하지 않는다. [0006 결정](decisions/0006-task-llm-usage-policy.md)의 Wanted 규칙 변환·프로필 통계 집계 비호출은 유지하되, 개인 역할의 자연어 요약은 [0019](decisions/0019-sprint1-profile-role-summary-restoration.md)에 따라 LLM으로 생성한다. version row만으로 호출 범위를 확대하지 않으며 deterministic 변환 version·출처 기록은 BE와 맞춘다. prompt version을 변환 version으로 재정의하거나 비호출 결과를 모델 실행 결과로 기록하지 않는다. 기존 role_summary·roleSummary 필드와 저장 구조를 유지하며 상세 입력·검증·연결은 구현 작업이다.
+기존 일곱 version 이름은 FIX 목록이며 삭제하지 않는다. `domain_category_v1`은 [0022](decisions/0022-domain-category-llm.md)로 추가했다. [0006 결정](decisions/0006-task-llm-usage-policy.md)의 Wanted 규칙 변환·프로필 통계 집계 비호출은 유지하되, 개인 역할의 자연어 요약은 [0019](decisions/0019-sprint1-profile-role-summary-restoration.md)에 따라 LLM으로 생성한다. version row만으로 호출 범위를 확대하지 않으며 deterministic 변환 version·출처 기록은 BE와 맞춘다. prompt version을 변환 version으로 재정의하거나 비호출 결과를 모델 실행 결과로 기록하지 않는다. 기존 role_summary·roleSummary 필드와 저장 구조를 유지하며 상세 입력·검증·연결은 구현 작업이다.
 
 L1의 생성 요약은 0006에 따라 프로젝트의 기능·역할을 설명하며 README·commit 수로 개인 기여를 추정하지 않는다. `role_summary`는 오래된 task 주석의 필드명으로, 유지·변경과 실제 저장/API 매핑은 BE와 합의한다. 기존 개인 역할 필드를 프로젝트 요약으로 임의 재해석하지 않으며, 근거 없는 개인 기여 값은 빈칸을 추측으로 채우지 않고 미확인으로 다룬다.
 
