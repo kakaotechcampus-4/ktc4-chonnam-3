@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { DragEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { api } from '@/shared/api';
+import { api, BASE } from '@/shared/api';
 import { isApiError } from '@/types/api';
 import type { DocumentPreviewResponse } from '@/types/api';
 
@@ -225,9 +225,7 @@ function Dropzone({
         </div>
       )}
 
-      {slot.dismissed && (
-        <p className="mt-1 text-xs text-muted">이 문서 없이 분석을 진행해요.</p>
-      )}
+      {slot.dismissed && <p className="mt-1 text-xs text-muted">이 문서 없이 분석을 진행해요.</p>}
     </div>
   );
 }
@@ -262,6 +260,8 @@ export default function JobInput() {
     },
   });
 
+  const githubTokenInvalid =
+    isApiError(startRun.error) && startRun.error.error.reason === 'github_token_invalid';
   const uploading = coverLetter.uploading || portfolio.uploading;
   // 추출 실패를 확인하지 않은 문서가 있으면 제출을 막는다.
   const pendingDecision = needsDecision(coverLetter.slot) || needsDecision(portfolio.slot);
@@ -302,7 +302,9 @@ export default function JobInput() {
             className="w-full rounded-card border border-line-soft px-4 py-3 text-sm text-ink outline-none focus:border-accent"
           />
           <p className={`mt-1 text-xs ${urlTouched && !urlValid ? 'text-error' : 'text-muted'}`}>
-            {urlTouched && !urlValid ? 'URL을 입력해보세요' : '채용 공고 페이지 주소를 붙여넣어주세요'}
+            {urlTouched && !urlValid
+              ? 'URL을 입력해보세요'
+              : '채용 공고 페이지 주소를 붙여넣어주세요'}
           </p>
 
           <div className="mt-4">
@@ -332,7 +334,26 @@ export default function JobInput() {
           >
             {startRun.isPending ? '분석을 시작하는 중…' : '분석 시작'}
           </button>
-          {submitError && <p className="mt-2 text-xs text-error">{submitError}</p>}
+          {submitError &&
+            (githubTokenInvalid ? (
+              // 홈의 재연동 배너와 같은 모양. 403이지만 전역 로그인 이동 대상이 아니다.
+              <div
+                role="alert"
+                className="mt-2 flex items-center justify-between rounded-card border border-error-soft bg-error-soft px-4 py-3 text-sm"
+              >
+                <span className="text-error">{submitError}</span>
+                <a
+                  href={`${BASE}/auth/github/link`}
+                  className="font-medium text-error hover:underline"
+                >
+                  GitHub 재연동
+                </a>
+              </div>
+            ) : (
+              <p role="alert" className="mt-2 text-xs text-error">
+                {submitError}
+              </p>
+            ))}
         </div>
       </main>
 
