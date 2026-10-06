@@ -77,7 +77,7 @@ export default function Header({ statusSlot, ...props }: HeaderProps) {
             <img src={avatarUrl} alt={name ?? ''} className="h-8 w-8 rounded-full object-cover" />
           ) : (
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-soft text-xs font-bold text-accent">
-              {name?.charAt(0) ?? ''}
+              {name?.charAt(0) || '?'}
             </span>
           )}
         </Link>
