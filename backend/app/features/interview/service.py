@@ -14,6 +14,7 @@
 import json
 import secrets
 import uuid
+from datetime import UTC, datetime
 
 from arq.connections import ArqRedis
 from redis.exceptions import RedisError
@@ -25,6 +26,11 @@ from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.db.models import InterviewSession, SessionRepository
 from app.features.interview import queries
+from app.features.interview.schemas import (
+    InterviewDetailResponse,
+    InterviewLastError,
+    InterviewTurn,
+)
 from app.shared.enums import Reason
 
 # rt:{sessionId} TTL (docs/pipeline.md 4.4, docs/redis-keys.md).
@@ -85,13 +91,8 @@ async def create_interview(
     await db.commit()
 
     interview_id = interview.id
-    session_id = secrets.token_urlsafe(32)
     try:
-        await redis.set(
-            f"rt:{session_id}",
-            json.dumps({"interviewId": str(interview_id), "userId": str(user_id)}),
-            ex=REALTIME_SESSION_TTL_SECONDS,
-        )
+        session_id = await _issue_session_id(redis, interview_id=interview_id, user_id=user_id)
         await redis.enqueue_job("interview_prep", str(interview_id))
     except RedisError:
         # 준비 job 없는 preparing 행이 남으면 같은 run 의 새 면접이 영구히 막히므로 되돌린다.
@@ -103,3 +104,94 @@ async def create_interview(
             logger.error("interview_create_rollback_failed", interview_id=str(interview_id))
         raise AppError(Reason.INTERNAL_ERROR) from None
     return interview_id, session_id
+
+
+async def get_interview(
+    db: AsyncSession, redis: ArqRedis, *, user_id: uuid.UUID, interview_id: uuid.UUID
+) -> InterviewDetailResponse:
+    """준비·진행 화면이 새로고침 후 복구할 상태. 없거나 남의 면접이면 not_found."""
+    row = await queries.get_owned_interview(db, user_id=user_id, interview_id=interview_id)
+    if row is None:
+        raise AppError(Reason.NOT_FOUND)
+    interview, posting = row
+    try:
+        session_id = await _current_session_id(redis, interview_id=interview.id, user_id=user_id)
+    except RedisError:
+        raise AppError(Reason.INTERNAL_ERROR) from None
+    turns = await queries.list_turns(db, interview_id=interview.id)
+    return InterviewDetailResponse(
+        id=interview.id,
+        session_id=session_id,
+        run_id=interview.analysis_job_id,
+        status=interview.status,
+        answer_mode=interview.answer_mode,
+        position=posting.position or "",
+        company_name=posting.company_name,
+        repository_names=await queries.list_repository_names(db, interview_id=interview.id),
+        current_turn=interview.current_turn,
+        total_turns=interview.total_turns,
+        remaining_seconds=_remaining_seconds(interview),
+        turns=[
+            InterviewTurn(
+                turn=t.turn_no, persona=t.persona, question=t.question_text, answer=t.answer_text
+            )
+            for t in turns
+        ],
+        # openapi: preparing_failed 일 때만 내려준다.
+        last_error=(
+            InterviewLastError.model_validate(interview.last_error)
+            if interview.status == "preparing_failed" and interview.last_error
+            else None
+        ),
+    )
+
+
+def _remaining_seconds(interview: InterviewSession) -> int:
+    """면접 제한 시간 - 경과. 시작 전이면 전체, 끝났으면 끝난 시각 기준."""
+    total = get_settings().interview_duration_seconds
+    if interview.started_at is None:
+        return total
+    end = interview.completed_at or interview.abandoned_at or datetime.now(UTC)
+    return max(0, total - int((end - interview.started_at).total_seconds()))
+
+
+# ★ rt:{sessionId} 와 rt:interview:{interviewId} 는 한 쌍이다. 같이 쓰고, TTL 연장·삭제도
+#   같이 한다 (WS·이탈·종료 처리 포함). 역방향 키는 GET 이 sessionId 를 다시 찾는 데 쓴다.
+def _rt_key(session_id: str) -> str:
+    return f"rt:{session_id}"
+
+
+def _reverse_key(interview_id: uuid.UUID) -> str:
+    return f"rt:interview:{interview_id}"
+
+
+async def _issue_session_id(redis: ArqRedis, *, interview_id: uuid.UUID, user_id: uuid.UUID) -> str:
+    """새 sessionId 로 두 키를 쓴다. 다른 요청이 방금 먼저 썼으면 그 값을 돌려준다 (두 탭 GET)."""
+    session_id = secrets.token_urlsafe(32)
+    await redis.set(
+        _rt_key(session_id),
+        json.dumps({"interviewId": str(interview_id), "userId": str(user_id)}),
+        ex=REALTIME_SESSION_TTL_SECONDS,
+    )
+    reverse = _reverse_key(interview_id)
+    if not await redis.set(reverse, session_id, ex=REALTIME_SESSION_TTL_SECONDS, nx=True):
+        winner = await redis.get(reverse)
+        if winner is not None:
+            await redis.delete(_rt_key(session_id))
+            return str(winner.decode())
+        await redis.set(reverse, session_id, ex=REALTIME_SESSION_TTL_SECONDS)
+    return session_id
+
+
+async def _current_session_id(
+    redis: ArqRedis, *, interview_id: uuid.UUID, user_id: uuid.UUID
+) -> str:
+    """살아 있는 sessionId 를 돌려준다. 만료됐거나 짝이 깨졌으면 새로 발급한다 (pipeline.md 4.4)."""
+    reverse = _reverse_key(interview_id)
+    found = await redis.get(reverse)
+    if found is not None:
+        session_id = str(found.decode())
+        if await redis.exists(_rt_key(session_id)):
+            return session_id
+        await redis.delete(reverse)
+    return await _issue_session_id(redis, interview_id=interview_id, user_id=user_id)

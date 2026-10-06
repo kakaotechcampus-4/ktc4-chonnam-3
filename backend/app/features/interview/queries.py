@@ -15,8 +15,11 @@ from app.db.models import (
     AnalysisJob,
     AnalysisRepoCandidate,
     InterviewSession,
+    InterviewTurn,
+    JobPosting,
     RepoAnalysis,
     Repository,
+    SessionRepository,
 )
 from app.db.models.interview import ACTIVE_INTERVIEW_STATUSES
 
@@ -85,3 +88,38 @@ async def has_active_interview(db: AsyncSession, *, run_id: uuid.UUID) -> bool:
         )
     )
     return bool(found)
+
+
+async def get_owned_interview(
+    db: AsyncSession, *, user_id: uuid.UUID, interview_id: uuid.UUID
+) -> tuple[InterviewSession, JobPosting] | None:
+    """본인 면접과 그 공고. 입력: 사용자 id, interviewId. 출력: 없거나 남의 것이면 None."""
+    row = (
+        await db.execute(
+            select(InterviewSession, JobPosting)
+            .join(JobPosting, JobPosting.id == InterviewSession.job_posting_id)
+            .where(InterviewSession.id == interview_id, InterviewSession.user_id == user_id)
+        )
+    ).first()
+    return None if row is None else (row[0], row[1])
+
+
+async def list_repository_names(db: AsyncSession, *, interview_id: uuid.UUID) -> list[str]:
+    """선택 repo 이름. 출력 순서 = 선택 순서(display_order)."""
+    rows = await db.scalars(
+        select(Repository.name)
+        .join(SessionRepository, SessionRepository.repository_id == Repository.id)
+        .where(SessionRepository.interview_session_id == interview_id)
+        .order_by(SessionRepository.display_order)
+    )
+    return list(rows)
+
+
+async def list_turns(db: AsyncSession, *, interview_id: uuid.UUID) -> list[InterviewTurn]:
+    """면접 턴 목록. 출력 순서 = turn_no."""
+    rows = await db.scalars(
+        select(InterviewTurn)
+        .where(InterviewTurn.interview_session_id == interview_id)
+        .order_by(InterviewTurn.turn_no)
+    )
+    return list(rows)
