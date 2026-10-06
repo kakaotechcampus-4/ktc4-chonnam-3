@@ -13,8 +13,13 @@ export default function Home() {
   const homeQuery = useQuery({
     queryKey: queryKeys.home,
     queryFn: api.getHome,
+    // 실패해도 이전 data가 남아 syncing 폴링이 이어지므로, 토큰 무효면 재연동 전까지 멈춘다.
     refetchInterval: (query) =>
-      query.state.data?.analysisStatus === 'syncing' ? 3000 : false,
+      (query.state.error as unknown as ApiError | null)?.error?.reason === 'github_token_invalid'
+        ? false
+        : query.state.data?.analysisStatus === 'syncing'
+          ? 3000
+          : false,
   });
 
   const home = homeQuery.data;
@@ -23,7 +28,12 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-paper text-ink">
-      <Header active="home" githubLinked={home?.githubLinked} name={home?.name} />
+      {/* /me/home 실패(토큰 무효 등) 중에는 캐시된 /me로 배지를 띄우지 않는다.
+          재조회가 실패해도 이전 data가 남으므로 토큰 무효면 캐시된 githubLinked도 무시한다. */}
+      <Header
+        githubLinked={!githubTokenInvalid && (home?.githubLinked ?? false)}
+        name={home?.name}
+      />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-10">
         <h1 className="text-lg font-bold">

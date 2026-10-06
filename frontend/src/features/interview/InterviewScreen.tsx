@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { BASE, api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
+import { refreshMeIfTokenInvalid } from '@/shared/queryClient';
 import Header from '@/shared/components/Header';
 import Footer from '@/shared/components/Footer';
 import { PERSONA_IMAGES, PERSONA_LABELS, PERSONA_ORDER } from '@/shared/persona';
@@ -141,6 +142,8 @@ export default function InterviewScreen() {
       } else if (message.type === 'interviewEnd') {
         navigate(`/interview/${id}/report`, { replace: true });
       } else if (message.type === 'error') {
+        // WS 오류는 전역 오류 처리를 거치지 않는다.
+        refreshMeIfTokenInvalid(message.reason);
         setError({
           reason: message.reason,
           code: message.code,
@@ -591,7 +594,6 @@ function Shell({
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
       <Header
-        active="interview"
         name={me?.name}
         avatarUrl={me?.avatarUrl ?? undefined}
         statusSlot={

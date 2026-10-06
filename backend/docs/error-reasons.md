@@ -45,6 +45,7 @@ OAuth와 분석·면접 등 모든 기능은 같은 레지스트리를 사용한
 | 면접 생성 | `too_many_repositories` | 400 |
 | 면접 생성 | `invalid_repository` | 400 |
 | 면접 생성 | `session_limit_exceeded` | 409 |
+| 면접 생성 | `run_expired` | 410 |
 | 면접 준비 | `prep_failed` | 409 |
 | 면접 준비 | `repo_unreachable` | 409 |
 | 면접 준비 재시도 | `prep_in_progress` | 409 |
@@ -121,6 +122,29 @@ GitHub가 만료·refresh 필드를 가진 유효한 토큰을 발급하면 `502
 - `jd_fetch_failed`
 - `jd_extraction_failed`
 - `not_a_job_posting`
+
+## GitHub 수집 오류의 계층
+
+GitHub 수집 실패는 세 층을 거치며, 각 층의 코드는 서로 다른 축이라 이름이 같아도 같은 값이 아니다.
+
+```
+GitHub HTTP 응답 / 응답 형식 오류
+  └─ integrations/github/client.py    GithubApiError.error_code   (예외에 실리는 내부 코드)
+       ├─ 목록 수집(initial_sync)      → analysis_jobs.error_code  (작업 전체 실패 원인)
+       └─ 저장소 상세(repo_detail)     → repo_analyses.error_code  (저장소 단위 실패 원인)
+                                          ※ API 응답 Reason(envelope)과는 별도 경계
+```
+
+| 상황 | `GithubApiError.error_code` | 비고 |
+| --- | --- | --- |
+| 401 | `token_invalid` | 호출부가 `token_status='revoked'`로 바꾼다 |
+| 429, 또는 헤더·본문이 제한을 가리키는 403 | `rate_limited` | 429는 헤더가 없어도 제한이다. 대기 초는 Retry-After 우선, 없으면 60초 |
+| 그 외 4xx/5xx, 네트워크 오류 | `repo_unreachable` | 일시 장애와 접근 불가를 이 코드만으로 구분하지 않는다 |
+| 200이지만 목록이 list가 아님, 항목 필수 필드(id·name·full_name·private) 누락·타입 오류, JSON 아님 | `repo_unreachable` | 빈 목록(`[]`)과 달리 **실패**다. 일부 page만 모은 목록도 돌려주지 않는다 |
+| next 주소가 API origin이 아니거나 경로가 다르거나 page가 증가하지 않음, 목록 응답이 3xx | `repo_unreachable` | 요청을 보내기 전에 중단하므로 토큰이 외부로 나가지 않는다 |
+
+목록 수집이 실패하면 `initial_sync`는 DB 변경을 rollback하고 `analysis_jobs`만 `failed`로 기록하므로
+기존 저장소를 접근 불가(`is_accessible=false`)로 바꾸지 않는다.
 
 ## Partial Mapping
 

@@ -1,8 +1,10 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
+import { refreshMeIfTokenInvalid } from '@/shared/queryClient';
 import Header from '@/shared/components/Header';
 import Footer from '@/shared/components/Footer';
 import { STEP_GROUPS, groupStatus } from '@/features/analysis/steps';
@@ -18,13 +20,15 @@ export default function AnalysisFailed() {
   });
 
   const run = runQuery.data;
+  // 실패 사유는 200 응답 안의 값이라 전역 오류 처리가 보지 못한다.
+  useEffect(() => refreshMeIfTokenInvalid(run?.failureReason), [run?.failureReason]);
   const stepStatus: Partial<Record<StepKey, StepStatus>> = Object.fromEntries(
     (run?.steps ?? []).map((s) => [s.key, s.status]),
   );
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
-      <Header active="interview" />
+      <Header />
 
       <main className="flex flex-1 flex-col items-center px-7 pb-7 pt-6">
         <div className="flex w-[380px] max-w-full flex-col gap-4 py-14">

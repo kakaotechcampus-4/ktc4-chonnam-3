@@ -32,6 +32,7 @@ REPO_PAGE_1 = [
         "id": 1,
         "name": "devon-api",
         "full_name": "octocat/devon-api",
+        "private": False,
         "language": "Python",
         "size": 300,
         "default_branch": "main",
@@ -42,6 +43,7 @@ REPO_PAGE_2 = [
         "id": 2,
         "name": "devon-web",
         "full_name": "octocat/devon-web",
+        "private": False,
         "language": "TypeScript",
         "size": 80,
         "default_branch": "main",
@@ -68,6 +70,17 @@ SAMPLE_REPO = RepoSummary(
 
 def _client(handler: Handler) -> httpx.AsyncClient:
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+def _repo(repo_id: int, **overrides: object) -> dict[str, object]:
+    """목록 API 가 항상 주는 필수 필드만 갖춘 repo 한 건."""
+    return {
+        "id": repo_id,
+        "name": f"repo-{repo_id}",
+        "full_name": f"octocat/repo-{repo_id}",
+        "private": False,
+        **overrides,
+    }
 
 
 def full_handler(request: httpx.Request) -> httpx.Response:
@@ -365,6 +378,88 @@ async def test_follows_redirect_and_parses_final_response() -> None:
         languages = await GithubClient("tok", client=client).fetch_languages("octocat/renamed-repo")
 
     assert languages == {"Python": 42}
+
+
+async def test_cross_host_redirect_does_not_forward_token() -> None:
+    """repo 상세 호출은 redirect 를 따라가지만, 다른 호스트로 가면 httpx 가 토큰을 제거한다."""
+    auth_by_host: dict[str, str | None] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        auth_by_host[request.url.host] = request.headers.get("authorization")
+        if request.url.host == "api.github.com":
+            return httpx.Response(301, headers={"location": "https://other.example/languages"})
+        return httpx.Response(200, json={"Python": 1})
+
+    async with _client(handler) as client:
+        await GithubClient("secret-token", client=client).fetch_languages("octocat/devon-api")
+
+    assert auth_by_host == {"api.github.com": "Bearer secret-token", "other.example": None}
+
+
+async def test_list_deduplicates_repo_moved_between_pages_keeping_order_and_latest() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.params.get("page") == "2":
+            repos = [
+                _repo(1, description="newer"),
+                _repo(3),
+            ]
+            return httpx.Response(200, json=repos)
+        return httpx.Response(
+            200,
+            json=[_repo(1, description="older"), _repo(2)],
+            headers={"link": '<https://api.github.com/user/repos?page=2>; rel="next"'},
+        )
+
+    async with _client(handler) as client:
+        repos = await GithubClient("tok", client=client).list_repositories()
+
+    assert [repo.github_repo_id for repo in repos] == [1, 2, 3]
+    assert repos[0].description == "newer"
+
+
+async def test_list_fails_instead_of_returning_partial_result_when_later_page_is_invalid() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.params.get("page") == "2":
+            return httpx.Response(200, json={"message": "unexpected"})
+        return httpx.Response(
+            200,
+            json=[_repo(1)],
+            headers={"link": '<https://api.github.com/user/repos?page=2>; rel="next"'},
+        )
+
+    async with _client(handler) as client:
+        with pytest.raises(GithubApiError) as caught:
+            await GithubClient("tok", client=client).list_repositories()
+
+    assert caught.value.error_code == GITHUB_ERROR_REPO_UNREACHABLE
+
+
+async def test_list_rejects_next_page_that_does_not_advance() -> None:
+    """page 가 앞으로 가지 않는 next 는 순환이므로 두 번째 요청 없이 실패한다."""
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(
+            200,
+            json=[_repo(1)],
+            headers={"link": '<https://api.github.com/user/repos?page=1>; rel="next"'},
+        )
+
+    async with _client(handler) as client:
+        with pytest.raises(GithubApiError):
+            await GithubClient("tok", client=client).list_repositories()
+
+    assert len(requests) == 1
+
+
+async def test_rate_limited_429_without_headers_is_rate_limited() -> None:
+    async with _client(lambda request: httpx.Response(429)) as client:
+        with pytest.raises(GithubApiError) as caught:
+            await GithubClient("tok", client=client).fetch_languages("octocat/devon-api")
+
+    assert caught.value.error_code == GITHUB_ERROR_RATE_LIMITED
+    assert caught.value.retry_after_seconds == 60
 
 
 async def test_branch_name_is_url_encoded() -> None:

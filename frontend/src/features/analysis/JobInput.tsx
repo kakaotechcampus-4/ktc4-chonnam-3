@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/shared/api';
 import Footer from '@/shared/components/Footer';
+import Header from '@/shared/components/Header';
 import { isApiError } from '@/types/api';
 import type { DocumentPreviewResponse } from '@/types/api';
 
@@ -279,6 +280,7 @@ export default function JobInput() {
 
   return (
     <div className="flex min-h-svh flex-col bg-paper">
+      <Header />
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-4 py-6">
         <p className="mb-2 text-sm text-muted">모의면접 · 1 / 3</p>
         <h1 className="mb-4 text-2xl font-bold text-ink">면접 보실 공고를 입력해주세요</h1>

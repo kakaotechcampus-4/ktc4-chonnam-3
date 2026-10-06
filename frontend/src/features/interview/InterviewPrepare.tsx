@@ -583,7 +583,6 @@ function Shell({ me, children }: { me?: MeResponse; children: React.ReactNode })
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
       <Header
-        active="interview"
         githubLinked={me?.githubLinked}
         name={me?.name}
         avatarUrl={me?.avatarUrl ?? undefined}

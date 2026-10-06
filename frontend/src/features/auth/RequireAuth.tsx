@@ -19,7 +19,8 @@ export default function RequireAuth() {
     );
   }
   // 인증 오류의 이동은 전역에서 처리하며, 네트워크·서버 장애는 로그인 만료로 취급하지 않는다.
-  if (me.isError) {
+  // 이미 확인한 세션의 백그라운드 재조회 실패로는 보던 화면을 가리지 않는다.
+  if (me.isError && !me.data) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-paper">
         <p role="alert" className="text-error">

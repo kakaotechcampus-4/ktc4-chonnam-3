@@ -69,7 +69,7 @@ export default function RepoSelect() {
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
-      <Header active="interview" />
+      <Header />
 
       <main className="flex flex-1 flex-col items-center px-10 pb-12 pt-10">
         <div className="w-full max-w-4xl">
