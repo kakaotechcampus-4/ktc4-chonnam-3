@@ -5,6 +5,51 @@ AI 작업의 구현·수정 내역, 코드 위치, 실행 결과와 남은 작�
 [decisions](decisions/README.md)에 보존한다. 문서 역할은
 [ADR 0020](decisions/0020-implementation-record-policy.md)을 따른다.
 
+## 2026-10-06 — task-10 Director 후보 복구 분류 경계
+
+관련 작업: AI task-10 잔여([Director 질문 결정](../../ai/docs/task-10-director.md)). PR 번호는 생성 후 기록한다.
+
+### 기준과 변경
+
+- 기준은 origin/develop `ef1a48d`다. `contracts.py`, 기존 `CandidateRecovery` 필드, 공개 enum·WS 이벤트, DB, 의존성은
+  변경하지 않았다. 기존 오류 코드(`director_input_invalid`, `director_candidate_invalid`,
+  `director_review_failed`, `director_review_timeout`)와 `ModelResult[ContractChecked[Question]]` 형태를 유지했다.
+- `ai/src/devon_ai/agents/director/agent.py`: `QuestionReviewer`의 반환 타입을 `QuestionReview | CandidateRecovery`로
+  넓혔다. 기존 검토기는 그대로 호환된다. 검토기가 `CandidateRecovery`를 반환하면 후보는 반환하지 않고
+  `semantic` 실패로 변환하며 분류는 `error_code`(`director_candidate_rewrite`, `director_candidate_replan`,
+  `director_no_valid_candidate`)로만 전달한다. `candidate_recovery(failure)`는 실패에서 `CandidateRecovery`를 복원한다.
+- 분류는 실행 권한이 아니다. 생성 모델·검토기를 다시 호출하지 않고 시도 기록은 그대로 보존하며, 상한 소진이나
+  분류 결과로 검증 실패 질문·정상 `finish`를 내보내지 않는다. 형식이 맞지 않는 검토기 반환값(dict·문자열)은
+  기존대로 `director_review_failed`다.
+- 테스트(`test_director.py`에 4개 함수·11 케이스 추가): 세 분류의 실패 변환·무재호출·시도 기록, 목적이 바뀐 문장("수정 특성 확인"
+  목적에 "TTL은 몇 분인가요?")은 분류되어 전달되지 않고 정상 문장은 `ContractChecked`가 되는 대조, 비구조 반환,
+  다른 실패의 비분류.
+- 이번 범위에서 제외했다: 목적 자동 선정, ask/retrieve/finish 결정 생성, 재작성·재계획 실행(AI-L04). 허용 Persona와
+  남은 질문 수는 기존처럼 Controller 입력이며 배분 계산·10번째 질문 차단·finish 수용은 BE 책임이다.
+
+### 실행 결과
+
+Windows, Python 3.12, 격리 worktree의 locked 환경에서 실행했다.
+
+| 작업 디렉터리 | 명령 | 결과 |
+| --- | --- | --- |
+| 루트 | `uv --directory ai run --locked ruff check .` / `ruff format --check .` | 통과 / 통과 |
+| 루트 | `uv --directory ai run --locked mypy` | 통과(소스 11개 파일) |
+| 루트 | `uv --directory ai run --locked pytest` | 204 passed(기준선 193 + 신규 11) |
+| 루트 | `uv --directory backend run --locked pytest tests/agents/test_ai_package_imports.py tests/integrations/test_director_boundary.py` | 16 passed |
+| 루트 | `python .claude/scripts/check_contracts.py` | 미실행(공통 계약 변경 없음) |
+
+### 한계와 후속 작업
+
+- 분류 판단은 주입된 독립 검토기의 몫이다. 코드는 검토기 결과가 이 후보와 결합돼 있는지, 분류 반환값이 구조에 맞는지만
+  강제한다. 테스트의 검토기는 합성 대역이며 목적 일치·전제 타당성의 실제 판정 품질은 검증하지 않았다(AI-L01).
+- 코드로 결정적으로 막는 것은 기존 입력 검사(허용 Persona·참조·Contract 동일성)뿐이다. 이미 확인한 목적의 반복은
+  `HistoryTurn`이 목적을 갖지 않아 코드로 판정하지 않고 검토기 분류에 맡긴다.
+- BE 연동은 미실행이다. `backend/app/agents/director/agent.py`(#82)는 `QuestionReviewer`를 타입으로만 쓰므로 변경은
+  필요 없다. 새 `error_code`를 소비해 재작성·재계획·실패 안내를 결정하는 부분과 호출 상한은 BE·AI-L04·AI-L09
+  합의 대상이다. `spec/ai/contracts.md`는 변경하지 않았다.
+- Persona 배분 정책 충돌(공통 0004 vs #97·#82)은 이 변경과 무관하며 AI 코드는 배분을 하드코딩하지 않는다.
+
 ## 2026-09-27 — PR #67 JD 분류 계약 리뷰 보완
 
 관련 PR: [JD 분류 category 통일 #67](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/67).
