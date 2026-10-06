@@ -119,3 +119,25 @@ test('홈 재조회가 github_token_invalid로 실패하면 캐시된 홈 데이
   await expect(page.getByRole('link', { name: 'GitHub 재연동' })).toBeVisible();
   await expect(page.getByText('GitHub 연동됨')).toHaveCount(0);
 });
+
+test('syncing 폴링 중 github_token_invalid가 나면 /me/home 폴링을 멈춘다', async ({ page }) => {
+  await page.goto('/home');
+  await expect(page.getByRole('heading', { name: '안녕하세요, 김개발 님!' })).toBeVisible();
+  const requests: string[] = [];
+  page.on('request', (request) => requests.push(new URL(request.url()).pathname));
+  await page.evaluate(async () => {
+    localStorage.setItem(
+      'msw.faults',
+      JSON.stringify([
+        { path: '/me/home', status: 403, reason: 'github_token_invalid', message: 'x' },
+      ]),
+    );
+    const queryUrl = '/src/shared/queryClient.ts';
+    const { queryClient } = await import(queryUrl);
+    // mock에 syncing 응답이 없어 캐시를 syncing으로 바꿔 폴링을 시작시킨다.
+    queryClient.setQueryData(['home'], (data: object) => ({ ...data, analysisStatus: 'syncing' }));
+  });
+  await expect(page.getByRole('link', { name: 'GitHub 재연동' })).toBeVisible({ timeout: 5000 });
+  await page.waitForTimeout(7000);
+  expect(requests.filter((path) => path === '/api/me/home')).toHaveLength(1);
+});
