@@ -40,3 +40,5 @@ export const SEED_SESSION_ID = 'sess_0000000000000001';
 export const SEED_FAILED_RUN_ID = '5c7b9e10-0000-4000-8000-00000000bbbb';
 /** 면접 준비 실패 화면(1b)용. lastError 가 채워져 있다. */
 export const SEED_PREPARING_FAILED_INTERVIEW_ID = 'a3d51c20-1009-4c00-9a00-000000000009';
+/** 면접 진행 화면(5b-v2)을 바로 여는 진행 중 면접. 새로고침해도 1턴부터 다시 시작한다. */
+export const SEED_IN_PROGRESS_INTERVIEW_ID = 'a3d51c20-1005-4c00-9a00-000000000005';

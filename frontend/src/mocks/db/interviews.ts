@@ -7,6 +7,7 @@ import {
   PREPARE_DURATION_MS,
   REPORT_GENERATE_MS,
   SEED_INTERVIEW_ID,
+  SEED_IN_PROGRESS_INTERVIEW_ID,
   SEED_PREPARING_FAILED_INTERVIEW_ID,
   SEED_RUN_ID,
   SEED_SESSION_ID,
@@ -131,8 +132,36 @@ export function interviewCurrentTurn(record: InterviewRecord, now = Date.now()) 
  * WS가 새 질문을 보낼 때 호출한다. 턴 번호를 매기고 레코드에 남긴다.
  * 답변은 아직 없으므로 `null`이다.
  */
+/**
+ * 진행 중 seed 면접의 턴은 새로고침해도 이어지게 sessionStorage에 둔다.
+ * 실제 서버가 턴을 DB에 저장하는 것을 흉내 낸다. 처음부터 보려면 탭을 새로 열거나
+ * `sessionStorage.clear()`를 부른다. 다른 면접은 레코드째 메모리에만 있어 새로고침하면 사라진다.
+ */
+const SEED_LIVE_TURNS_KEY = 'msw.seedLiveTurns';
+
+function persistLiveTurns(record: InterviewRecord) {
+  if (record.interviewId !== SEED_IN_PROGRESS_INTERVIEW_ID) return;
+  try {
+    sessionStorage.setItem(SEED_LIVE_TURNS_KEY, JSON.stringify(record.liveTurns ?? []));
+  } catch {
+    /* 저장이 막히면 새로고침 때 1턴부터 다시 시작한다. */
+  }
+}
+
+function restoreSeedLiveTurns(): InterviewTurn[] | undefined {
+  try {
+    const raw = sessionStorage.getItem(SEED_LIVE_TURNS_KEY);
+    return raw ? (JSON.parse(raw) as InterviewTurn[]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** 이미 있는 턴이면 다시 넣지 않는다. 재연결 이어가기와 답변 처리가 같은 질문을 낼 수 있다. */
 export function appendQuestion(record: InterviewRecord, turn: InterviewTurn) {
+  if (record.liveTurns?.some((item) => item.turn === turn.turn)) return record.liveTurns;
   record.liveTurns = [...(record.liveTurns ?? []), turn];
+  persistLiveTurns(record);
   return record.liveTurns;
 }
 
@@ -154,6 +183,7 @@ export function recordAnswer(record: InterviewRecord, turn: number, text: string
 
   const answered = { ...turns[index], answer: text };
   record.liveTurns = [...turns.slice(0, index), answered, ...turns.slice(index + 1)];
+  persistLiveTurns(record);
   return answered;
 }
 
@@ -216,7 +246,7 @@ const SEED_REPOSITORY_IDS = [
   '9f1c0a6e-0002-4f00-8a01-000000000002',
 ];
 
-/** 종료된 면접 1건과 준비 실패 면접 1건. 리포트·준비실패 화면을 바로 열기 위함이다. */
+/** 종료된 면접·준비 실패 면접·진행 중 면접 각 1건. 해당 화면을 바로 열기 위함이다. */
 function seedInterviews() {
   interviews.set(SEED_INTERVIEW_ID, {
     interviewId: SEED_INTERVIEW_ID,
@@ -245,6 +275,19 @@ function seedInterviews() {
       recoverable: true,
       occurredAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
     },
+  });
+
+  interviews.set(SEED_IN_PROGRESS_INTERVIEW_ID, {
+    interviewId: SEED_IN_PROGRESS_INTERVIEW_ID,
+    sessionId: 'sess_0000000000000005',
+    runId: SEED_RUN_ID,
+    repositoryIds: SEED_REPOSITORY_IDS,
+    // 준비가 막 끝난 시각으로 둔다. 남은 시간이 제한 시간 그대로 보인다.
+    createdAt: Date.now() - PREPARE_DURATION_MS,
+    position: jdPosition,
+    companyName: jdCompanyName,
+    fixedStatus: 'in_progress',
+    liveTurns: restoreSeedLiveTurns(),
   });
 }
 

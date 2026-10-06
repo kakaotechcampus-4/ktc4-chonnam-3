@@ -3,10 +3,11 @@ import { REQ_MONITORING, REQ_PAYMENT_DOMAIN, jdRequirements } from './jd';
 
 /**
  * 면접 턴 구성은 `spec/backend/features/interview.md`의 Turn 정책을 따른다.
- * 아래 예시는 9턴·첫 HR·기술 6턴·도메인 1턴·HR 2턴이며, 역할별 고정 배분을 뜻하지 않는다.
- * 실제 정책은 기술 목표 6턴·최소 5턴, 도메인·HR 합산 최소 3턴이고 개별 배분은 유동적이다.
+ * 총 9턴이며 꼬리질문도 1턴으로 센다. 아래 예시는 첫 HR·기술 6턴·도메인 1턴·HR 2턴이며,
+ * 역할별 고정 배분을 뜻하지 않는다. 실제 정책은 기술 목표 6턴·최소 5턴,
+ * 도메인·HR 합산 최소 3턴이고 개별 배분은 유동적이다.
+ * 2·3번째 메인 질문에 꼬리질문을 붙여 꼬리질문 표시를 볼 수 있게 했다.
  */
-export const TOTAL_TURNS = 9;
 
 /** 면접 생성 직후 준비가 끝나면 노출되는 첫 질문. */
 export const firstTurn: InterviewTurn = {
@@ -14,6 +15,8 @@ export const firstTurn: InterviewTurn = {
   persona: 'hr_manager',
   question: '먼저 긴장 푸시고, 선택하신 프로젝트 중 가장 애착이 가는 걸 하나만 소개해주세요.',
   answer: null,
+  mainIndex: 1,
+  followUpDepth: 0,
 };
 
 /** 이미 종료된 면접(seed)의 전체 턴. 리포트/마이페이지 화면 개발용. */
@@ -28,30 +31,40 @@ export const completedTurns: InterviewTurn[] = [
     question:
       'payment-service의 재시도를 지수 백오프로 구현하셨는데, 최대 재시도 횟수를 3회로 정한 근거가 있나요?',
     answer: 'PG사 타임아웃이 10초라 3회면 30초 안에 끝난다고 판단했습니다.',
+    mainIndex: 2,
+    followUpDepth: 0,
   },
   {
     turn: 3,
     persona: 'tech_lead',
     question: '재시도 중 중복 결제가 발생할 수 있는데 멱등성은 어떻게 보장했나요?',
     answer: '요청마다 멱등키를 만들어 Redis에 저장하고 중복이면 기존 결과를 반환했습니다.',
+    mainIndex: 2,
+    followUpDepth: 1,
   },
   {
     turn: 4,
     persona: 'tech_lead',
     question: 'Redis가 내려가면 멱등키도 함께 사라지는데, 그 상황은 어떻게 다뤘나요?',
     answer: '그 부분은 DB 유니크 제약으로 2차 방어를 뒀습니다.',
+    mainIndex: 2,
+    followUpDepth: 2,
   },
   {
     turn: 5,
     persona: 'tech_lead',
     question: 'project-a에서 캐시 TTL을 600초로 두셨습니다. 다른 값과 비교해본 근거가 있나요?',
     answer: '상품 정보 변경 주기가 10분 내외라고 보고 맞췄습니다.',
+    mainIndex: 3,
+    followUpDepth: 0,
   },
   {
     turn: 6,
     persona: 'tech_lead',
     question: '캐시 무효화는 TTL에만 의존했나요, 아니면 쓰기 시점에 직접 만료시켰나요?',
     answer: '상품 수정 API에서 해당 키를 직접 삭제했습니다.',
+    mainIndex: 3,
+    followUpDepth: 1,
   },
   {
     turn: 7,
@@ -59,6 +72,8 @@ export const completedTurns: InterviewTurn[] = [
     question:
       '상품 수정이 여러 서버에서 동시에 일어나면 캐시와 DB가 어긋날 수 있습니다. 그 경우는 어떻게 되나요?',
     answer: '거기까지는 고려하지 못했습니다.',
+    mainIndex: 4,
+    followUpDepth: 0,
   },
   {
     turn: 8,
@@ -66,6 +81,8 @@ export const completedTurns: InterviewTurn[] = [
     question:
       '결제 도메인에서는 정산 담당자가 장애 이후 데이터를 대사(reconciliation)하게 됩니다. 그 흐름까지 고려한 설계가 있었나요?',
     answer: '정산 팀과 협의해 실패 건을 따로 적재하는 테이블을 뒀습니다.',
+    mainIndex: 5,
+    followUpDepth: 0,
   },
   {
     turn: 9,
@@ -74,8 +91,12 @@ export const completedTurns: InterviewTurn[] = [
       '방금 말씀하신 협의 과정에서 의견이 갈렸던 적이 있나요? 어떻게 정리하셨는지 궁금합니다.',
     answer:
       '정산 팀은 실시간 알림을 원했고 저는 배치를 주장했는데, 비용을 근거로 배치로 합의했습니다.',
+    mainIndex: 6,
+    followUpDepth: 0,
   },
 ];
+
+export const TOTAL_TURNS = completedTurns.length;
 
 /**
  * score key/label은 `score_criteria` 시드에서 내려오는 값이다.

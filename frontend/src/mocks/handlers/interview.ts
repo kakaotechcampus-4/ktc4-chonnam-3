@@ -37,6 +37,7 @@ import {
   reportSummary,
   reportTotalScore,
 } from '../fixtures/interview';
+import { toneWav } from '../fixtures/questionAudio';
 import { errorResponse, path, type Res } from '../http';
 
 type IdParams = { id: string };
@@ -112,8 +113,8 @@ export const interviewHandlers = [
         sessionId: record.sessionId,
         runId: record.runId,
         status: interviewStatus(record),
-        // Sprint 1 은 텍스트 답변만 지원한다. enum 값이 하나뿐이다.
-        answerMode: 'text',
+        // Sprint 2부터 음성 면접만 남는다(0007 Proposed).
+        answerMode: 'voice',
         position: record.position,
         companyName: record.companyName,
         repositoryNames: interviewRepositoryNames(record),
@@ -123,6 +124,21 @@ export const interviewHandlers = [
         turns: interviewTurns(record),
         lastError: interviewLastError(record),
       });
+    },
+  ),
+
+  /**
+   * 질문 음성(TTS). spec/shared/decisions/0007 (Proposed).
+   * 실제 서버는 생성 중이면 완료까지 기다렸다 응답한다. mock은 짧게 지연만 준다.
+   */
+  http.get<{ id: string; turn: string }>(
+    path('/interviews/:id/turns/:turn/question-audio'),
+    async ({ params }) => {
+      if (!getInterview(String(params.id))) {
+        return errorResponse(404, 'not_found', '면접을 찾을 수 없어요.');
+      }
+      await delay(200);
+      return new HttpResponse(toneWav(1.2), { headers: { 'Content-Type': 'audio/wav' } });
     },
   ),
 
