@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "devon-ai"
 version = "0.1.0"
-description = "DEVON in-process AI package skeleton"
+description = "DEVON in-process AI contracts and validation"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []

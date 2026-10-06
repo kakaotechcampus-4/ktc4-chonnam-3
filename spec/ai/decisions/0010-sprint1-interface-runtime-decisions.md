@@ -67,7 +67,7 @@
 ### LLM attempt와 worker retry
 
 - LLM attempt는 공통 LLM gateway/task 호출 계층에서만 관리한다.
-- timeout/provider 오류/parse/schema 실패는 함수 내부에서 자동 1회 재호출하며 총 2회까지만 호출한다.
+- timeout·재시도 가능한 provider 오류·parse/schema 실패는 함수 내부에서 최대 1회 재호출하며 총 2회까지만 호출한다. 2026-09-23 PR #56 리뷰 보완으로 영구 HTTP 요청 오류·quota 소진은 provider 실패로 즉시 종료하고, 일시적 제한의 대기는 요청 timeout 이내로 제한한다. 상태별 분류·Retry-After·호출분 metadata는 [내부 호출 계약](../contracts.md#model-gateway와-실패)의 현행 규칙을 따른다.
 - semantic 실패는 재호출하지 않는다.
 - SDK/provider 자체 retry는 호출 수가 곱해지지 않게 끄거나 최소화한다.
 - ARQ 자동 retry는 Sprint 1에서 사용하지 않고 `max_tries=1`로 둔다.

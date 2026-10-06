@@ -1,1 +1,1 @@
-"""Agent skeletons follow spec/ai/features/interviewer.md; agent behavior is unimplemented."""
+"""단일 Director의 AI 구현 위치. 서비스 상태·권한·저장 처리는 BE가 맡는다."""

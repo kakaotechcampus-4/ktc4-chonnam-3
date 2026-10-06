@@ -12,8 +12,8 @@ Wanted 공고 수집과 `POST /documents/preview`를 구현한다.
 - Sprint 1은 Wanted URL만 지원한다.
 - Wanted normalized URL 기준으로 `job_postings`를 재사용한다. 변경된 공고와 이전 참조의 보존은 [분석 Run](../../spec/backend/features/analysis-run.md#공고-재조회와-이전-자료-보존)을 따른다.
 - `fetched_at` 7일 이내 성공본은 재사용한다.
-- Wanted 구조화 필드에서 required/preferred/unknown과 `skill_tags`를 추출한다.
-- API 표시 분류와 저장 분류의 변환, 원문 출처 보존, 본문에 접근 가능한 마감 공고의 분석은 [분석 Run](../../spec/backend/features/analysis-run.md#wanted-공고-수집분류)을 따른다.
+- Wanted 구조화 필드에서 `category`(`required`/`preferred`/`responsibility`)와 `skill_tags`를 추출한다.
+- `category`는 API·DB·AI에서 변환 없이 같은 값으로 사용하며 수집 단계의 `source_field`로 원문 출처를 보존한다. 상세 분류 규칙과 본문에 접근 가능한 마감 공고의 분석은 [분석 Run](../../spec/backend/features/analysis-run.md#wanted-공고-수집분류)을 따른다.
 - unsupported site는 공고 없이 진행으로 유도하지 않고 차단한다.
 - `POST /documents/preview`는 PDF/DOCX/TXT/MD만 지원한다.
 - 포트폴리오 파일 크기 상한은 20MB(20,971,520 bytes).
