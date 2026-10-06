@@ -29,10 +29,11 @@ class FakeRedis:
         self.values: dict[str, tuple[str, int]] = {}
         self.jobs: list[tuple[str, tuple[Any, ...]]] = []
 
-    async def set(self, key: str, value: str, ex: int) -> None:
+    async def set(self, key: str, value: str, ex: int, nx: bool = False) -> bool:
         if self.fail:
             raise RedisError("down")
         self.values[key] = (value, ex)
+        return True
 
     async def enqueue_job(self, name: str, *args: Any) -> None:
         self.jobs.append((name, args))
@@ -63,6 +64,7 @@ async def test_create_ok(db: AsyncSession) -> None:
     value, ttl = redis.values[f"rt:{session_id}"]
     assert json.loads(value) == {"interviewId": str(interview_id), "userId": str(run.user_id)}
     assert ttl == service.REALTIME_SESSION_TTL_SECONDS
+    assert redis.values[f"rt:interview:{interview_id}"] == (session_id, ttl)
     assert redis.jobs == [("interview_prep", (str(interview_id),))]
 
 

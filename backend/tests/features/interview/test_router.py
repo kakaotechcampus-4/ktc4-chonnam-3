@@ -61,3 +61,34 @@ async def test_create_error_envelope(client, run, payload, status, reason) -> No
     response = await client.post("/api/interviews", json={"runId": str(run.id), **payload})
     assert response.status_code == status
     assert response.json()["error"]["reason"] == reason
+
+
+async def test_get_after_create(client, db, run) -> None:
+    repo = await make_repo(db, run)
+    await db.commit()
+    created = (
+        await client.post(
+            "/api/interviews", json={"runId": str(run.id), "repositoryIds": [str(repo.id)]}
+        )
+    ).json()
+
+    response = await client.get(f"/api/interviews/{created['interviewId']}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["sessionId"] == created["sessionId"]  # 새로고침해도 같은 WS 키
+    assert {k: body[k] for k in ("id", "runId", "status", "repositoryNames", "turns")} == {
+        "id": created["interviewId"],
+        "runId": str(run.id),
+        "status": "preparing",
+        "repositoryNames": [repo.name],
+        "turns": [],
+    }
+    assert body["lastError"] is None
+
+
+@pytest.mark.parametrize("interview_id", [str(uuid.uuid4()), "not-a-uuid"])
+async def test_get_not_found(client, run, interview_id) -> None:
+    response = await client.get(f"/api/interviews/{interview_id}")
+    assert response.status_code == 404
+    assert response.json()["error"]["reason"] == "not_found"
