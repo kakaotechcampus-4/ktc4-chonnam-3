@@ -127,6 +127,23 @@ test('녹음은 최대 시간이 지나면 저절로 끝난다', async ({ page }
   await expect.poll(() => micStates(page)).toEqual([false, false]);
 });
 
+test('녹음을 재생하지 못하면 안내하고, 다시 테스트하면 안내를 지운다', async ({ page }) => {
+  // 자동재생 차단·스피커 분리 등으로 play()가 거부된 상황.
+  await page.addInitScript(() => {
+    HTMLMediaElement.prototype.play = () => Promise.reject(new DOMException('stub', 'NotAllowedError'));
+  });
+  await openPrepare(page, 'ok');
+  const notice = page.getByRole('alert').filter({ hasText: '재생하지 못했어요' });
+
+  await page.getByRole('button', { name: '마이크 테스트' }).click();
+  await page.getByRole('button', { name: /녹음 끝내기/ }).click();
+  await expect(notice).toBeVisible();
+  await expect(page.getByRole('button', { name: '마이크 테스트' })).toBeEnabled();
+
+  await page.getByRole('button', { name: '마이크 테스트' }).click();
+  await expect(notice).toHaveCount(0);
+});
+
 test('마이크 권한을 거부하면 허용 방법을 안내한다', async ({ page }) => {
   await openPrepare(page, 'NotAllowedError');
   await expect(page.getByText('권한 거부됨')).toBeVisible();

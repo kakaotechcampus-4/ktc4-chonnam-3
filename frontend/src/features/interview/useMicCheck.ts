@@ -81,6 +81,8 @@ export function useMicCheck() {
   const [levels, setLevels] = useState<number[]>(SILENT);
   const [phase, setPhase] = useState<MicTestPhase>('idle');
   const [secondsLeft, setSecondsLeft] = useState(0);
+  /** 녹음은 됐는데 재생이 거부·실패했다. 다음 테스트를 시작하면 지운다. */
+  const [playFailed, setPlayFailed] = useState(false);
   /** 올리면 권한·장치 확인을 처음부터 다시 한다. 다시 확인 버튼과 권한 변경 알림이 쓴다. */
   const [probeKey, setProbeKey] = useState(0);
 
@@ -179,6 +181,7 @@ export function useMicCheck() {
 
   const startTest = async () => {
     stopTest();
+    setPlayFailed(false);
     const seq = testSeqRef.current;
     const session: TestSession = { timers: [] };
     try {
@@ -207,11 +210,18 @@ export function useMicCheck() {
         session.url = URL.createObjectURL(new Blob(chunks, { type: recorder.mimeType }));
         const audio = new Audio(session.url);
         session.audio = audio;
+        // 중지·이탈로 멈춘 재생(pause가 부른 play 거부 등)은 실패로 알리지 않는다.
+        const fail = () => {
+          if (seq !== testSeqRef.current) return;
+          stopTest();
+          setPlayFailed(true);
+        };
         audio.onended = stopTest;
+        audio.onerror = fail;
         setPhase('playing');
         void routeTo(audio, speakerIdRef.current)
           .then(() => audio.play())
-          .catch(stopTest);
+          .catch(fail);
       };
       recorder.start();
 
@@ -260,6 +270,7 @@ export function useMicCheck() {
     levels,
     phase,
     secondsLeft,
+    playFailed,
     startTest,
     finishRecording,
     recheck,

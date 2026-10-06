@@ -528,6 +528,11 @@ export default function InterviewPrepare() {
               : '녹음한 목소리를 재생하고 있어요'}
           </p>
         )}
+        {mic.phase === 'idle' && mic.playFailed && (
+          <p role="alert" className="text-[11px] text-error">
+            재생하지 못했어요. 스피커 연결을 확인하고 다시 테스트해주세요.
+          </p>
+        )}
 
         <p className="mt-2 text-[13px] font-bold">스피커</p>
         <div className="flex items-center gap-2">
