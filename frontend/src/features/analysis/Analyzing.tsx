@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
+import Footer from '@/shared/components/Footer';
 import { STEP_GROUPS, groupStatus } from '@/features/analysis/steps';
 import type { RunStatus, StepKey, StepStatus } from '@/types/api';
 
@@ -178,11 +179,7 @@ export default function Analyzing() {
         </div>
       </main>
 
-      <footer className="flex items-center border-t border-line-soft px-5 py-2.5 text-[10.5px] text-muted">
-        <span>© 2026 DEVON</span>
-        <span className="flex-1" />
-        <span>이용약관 · 개인정보처리방침</span>
-      </footer>
+      <Footer />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import type { DragEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/shared/api';
+import Footer from '@/shared/components/Footer';
 import Header from '@/shared/components/Header';
 import { isApiError } from '@/types/api';
 import type { DocumentPreviewResponse } from '@/types/api';
@@ -334,10 +335,7 @@ export default function JobInput() {
         </div>
       </main>
 
-      <footer className="flex items-center justify-between border-t border-line-soft px-8 py-4 text-xs text-muted">
-        <span>© 2026 DEVON</span>
-        <span>이용약관 · 개인정보처리방침</span>
-      </footer>
+      <Footer />
     </div>
   );
 }
