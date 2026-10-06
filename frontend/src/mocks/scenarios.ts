@@ -1,6 +1,6 @@
 import { addFault, clearFaults, listFaults, type FaultRule } from './faults';
 import { setMockSession } from './session';
-import { dropInterviewSockets } from './ws/interview';
+import { dropInterviewSockets, failInterviewSockets } from './ws/interview';
 
 /**
  * 이름 붙인 실패 시나리오.
@@ -282,6 +282,11 @@ export function installMockConsole() {
     dropWs: () => {
       dropInterviewSockets();
       console.info('[msw] 면접 WS를 끊었습니다');
+    },
+    /** 열린 면접 소켓에 복구 불가 오류를 보내고 닫는다. 녹음 중 fatal 오류 확인용. */
+    failWs: (reason = 'repo_unreachable', code = 'ERR_REPO_UNREACHABLE') => {
+      failInterviewSockets(reason, code);
+      console.info(`[msw] 면접 WS에 ${reason}(recoverable: false)를 보냈습니다`);
     },
   };
   Object.assign(window, { msw: api });

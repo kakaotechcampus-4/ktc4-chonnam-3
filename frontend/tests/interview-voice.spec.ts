@@ -371,3 +371,21 @@ test('녹음기가 저절로 멈춘 뒤 답변 끝내기를 눌러도 화면이 
   await expect(page.getByRole('alert')).toContainText('마이크 연결이 끊겼어요');
   await expect.poll(() => liveMics(page)).toBe(0);
 });
+
+test('녹음 중 복구 불가 오류가 오면 마이크와 녹음 표시를 정리한다', async ({ page }) => {
+  await page.clock.install();
+  await stubMic(page);
+  await openSession(page);
+  await page.getByRole('button', { name: '답변 시작' }).click();
+  await expect(page.getByTestId('transcript-partial')).toBeVisible();
+  await page.evaluate(() =>
+    (window as unknown as { msw: { failWs: () => void } }).msw.failWs(),
+  );
+
+  await expect.poll(() => liveMics(page)).toBe(0);
+  await expect(page.getByText(/^녹음 중/)).toHaveCount(0);
+  expect(await page.evaluate(() => sessionStorage.getItem('devon.recordingAnswer'))).toBeNull();
+  // 180초 자동 종료가 남아 있으면 끊김 안내가 fatal 오류 위에 한 번 더 뜬다.
+  await page.clock.runFor(180_000);
+  await expect(page.getByText(/연결이 끊겨 답변이 저장되지 않았어요/)).toHaveCount(0);
+});

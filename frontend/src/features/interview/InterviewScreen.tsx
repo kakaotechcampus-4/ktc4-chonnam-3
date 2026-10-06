@@ -241,6 +241,15 @@ export default function InterviewScreen() {
           fail('rejected');
           return;
         }
+        // 서버가 세션을 닫아 소켓 끊김(onDrop)으로 정리되지 않는다. 녹음·전사 중이던 답변은
+        // 쓸 곳이 없으니 마이크를 닫고 표식과 상태를 지운다. 안내는 아래 오류 하나만 남긴다.
+        if (!message.recoverable) {
+          recorderRef.current?.cancel();
+          markRecording(id, null);
+          setAnswer((prev) =>
+            prev && (prev.phase === 'recording' || prev.phase === 'transcribing') ? null : prev,
+          );
+        }
         setError({
           reason: message.reason,
           code: message.code,
