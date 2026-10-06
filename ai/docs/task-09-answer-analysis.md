@@ -1,6 +1,6 @@
 # task-09 - 답변 정성 분석
 
-상태: 구현 가이드. 정성 평가 의미와 보존 원칙은 승인됐지만 task runtime·저장·복구는 아직 구현되지 않았다.
+상태: 구현 가이드. 단발 분석 task(`analyze_answer`)와 mock 기반 대조 사례 테스트를 구현했다. 실제 모델 품질·저장·복구·후속 보완의 최종 피드백 연결은 아직 검증하지 않았다. 기록은 [구현·검증 기록](../../spec/ai/implementation.md)을 따른다.
 
 ## 목표
 
@@ -28,7 +28,7 @@
 
 ## 대상 파일과 책임
 
-- [AI answer_analysis](../src/devon_ai/llm_tasks/answer_analysis.py): 단발 분석 후보 생성과 의미 검증을 소유하며 현재 docstring뿐이다.
+- [AI answer_analysis](../src/devon_ai/llm_tasks/answer_analysis.py): 단발 분석 후보 생성과 의미 검증을 소유한다.
 - [AI 계약 자리](../src/devon_ai/contracts.py): 채택 후 입력·출력 타입을 두며 현재 실제 클래스가 없다.
 - [BE turn service](../../backend/app/features/interview/turn_service.py): 확정 답변과 분석·결정의 저장 순서를 소유한다.
 - [BE Director adapter](../../backend/app/agents/director/agent.py): 검증된 분석을 다음 행동 후보에 전달한다.
@@ -61,7 +61,7 @@
 
 ## 검증
 
-- 예정 테스트: `ai/tests/llm_tasks/test_answer_analysis.py` (추가 예정, 현재 없음).
+- 테스트: `ai/tests/llm_tasks/test_answer_analysis.py`(입력·호출 경계), `test_answer_analysis_cases.py`(필수 대조 사례, 고정 fixture).
 - [ ] 같은 질문의 충분·부분·불충분 답변이 Contract 기준으로 구분되는지 검사한다.
 - [ ] 길고 틀린 답변과 짧고 타당한 답변에서 충분성과 정확성이 독립적인지 검사한다.
 - [ ] 질문 오류, 해석 불가, 정상 “모르겠습니다”, 실제 설명 부족을 대조한다.
