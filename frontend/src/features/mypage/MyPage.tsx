@@ -52,7 +52,6 @@ export default function MyPage() {
   return (
     <div className="flex min-h-screen flex-col bg-paper text-ink">
       <Header
-        active="mypage"
         githubLinked={profile?.github.linked}
         avatarUrl={profile?.avatarUrl}
         name={profile?.name}
