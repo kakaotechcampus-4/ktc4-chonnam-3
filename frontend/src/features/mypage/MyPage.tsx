@@ -6,6 +6,7 @@ import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import { clearSessionQueries } from '@/shared/queryClient';
 import Header from '@/shared/components/Header';
+import Footer from '@/shared/components/Footer';
 
 const PAGE_SIZE = 10;
 
@@ -59,7 +60,6 @@ export default function MyPage() {
   return (
     <div className="flex min-h-screen flex-col bg-paper text-ink">
       <Header
-        active="mypage"
         githubLinked={profile?.github.linked}
         avatarUrl={profile?.avatarUrl}
         name={profile?.name}
@@ -230,11 +230,7 @@ export default function MyPage() {
         </div>
       </main>
 
-      <footer className="flex items-center border-t border-line-soft px-5 py-2.5 text-[10.5px] text-muted">
-        <span>© 2026 DEVON</span>
-        <span className="flex-1" />
-        <span>이용약관 · 개인정보처리방침</span>
-      </footer>
+      <Footer />
 
       {logoutOpen && (
         <div className="fixed inset-0 flex items-center justify-center bg-ink/40 px-4">

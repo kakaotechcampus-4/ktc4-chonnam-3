@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
+import Footer from '@/shared/components/Footer';
 import { PERSONA_INITIALS, PERSONA_LABELS } from '@/shared/persona';
 import { isApiError } from '@/types/api';
 import type { AgentFeedback, ReportResponse } from '@/types/api';
@@ -62,7 +63,7 @@ export default function Report() {
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
-      <Header active="interview" />
+      <Header />
 
       <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-7 px-7 py-6">
         {reportQuery.isLoading && <p className="text-sm text-muted">불러오는 중...</p>}
@@ -221,11 +222,7 @@ export default function Report() {
         )}
       </main>
 
-      <footer className="flex items-center border-t border-line-soft px-5 py-2.5 text-[10.5px] text-muted">
-        <span>© 2026 DEVON</span>
-        <span className="flex-1" />
-        <span>이용약관 · 개인정보처리방침</span>
-      </footer>
+      <Footer />
     </div>
   );
 }
