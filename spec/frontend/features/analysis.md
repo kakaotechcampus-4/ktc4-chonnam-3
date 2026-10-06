@@ -160,9 +160,11 @@ Sprint 1에서 preview는 포트폴리오 전용이다. 자소서는 `/documents
 
 | 코드 | reason | 처리 |
 | --- | --- | --- |
-| 400 | `job_url_required` | 입력창 에러 |
+| 400 | `posting_url_required` | 입력창 에러 |
 | 400 | `unsupported_site` | "지원하지 않는 사이트예요" |
-| 400 | `url_unreachable` | "공고를 불러올 수 없어요" |
+| 400 | `invalid_request` | 첨부 포트폴리오를 찾지 못함 — 다시 올리도록 안내 |
+| 403 | `github_token_invalid` | GitHub 재연동 안내 (전역 로그인 이동 대상 아님) |
+| 409 | `document_extract_failed` | 첨부 포트폴리오 추출 실패 — 다시 올리거나 빼고 진행하도록 안내 |
 | 409 | `run_in_progress` | `error.details.runId`로 기존 분석 진행 화면(4-2-v2) 이동 |
 
 ### SSE 구독

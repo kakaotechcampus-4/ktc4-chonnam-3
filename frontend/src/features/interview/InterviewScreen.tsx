@@ -4,7 +4,9 @@ import { useQuery } from '@tanstack/react-query';
 
 import { BASE, api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
+import { refreshMeIfTokenInvalid } from '@/shared/queryClient';
 import Header from '@/shared/components/Header';
+import Footer from '@/shared/components/Footer';
 import { PERSONA_IMAGES, PERSONA_LABELS, PERSONA_ORDER } from '@/shared/persona';
 import { useInterviewSocket } from '@/features/interview/useInterviewSocket';
 import { useQuestionAudio } from '@/features/interview/useQuestionAudio';
@@ -233,6 +235,8 @@ export default function InterviewScreen() {
       } else if (message.type === 'interviewEnd') {
         navigate(`/interview/${id}/report`, { replace: true });
       } else if (message.type === 'error') {
+        // WS 오류는 전역 오류 처리를 거치지 않는다.
+        refreshMeIfTokenInvalid(message.reason);
         if (message.reason === 'stt_failed') {
           fail(message.details?.cause === 'empty_transcript' ? 'empty' : 'stt');
           return;
@@ -750,7 +754,6 @@ function Shell({
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
       <Header
-        active="interview"
         name={me?.name}
         avatarUrl={me?.avatarUrl ?? undefined}
         statusSlot={
@@ -764,11 +767,7 @@ function Shell({
       <main className="flex flex-1 flex-col items-center justify-center px-7 py-6">
         <div className="flex w-full max-w-3xl flex-col gap-5">{children}</div>
       </main>
-      <footer className="flex items-center border-t border-line-soft px-5 py-2.5 text-[10.5px] text-muted">
-        <span>© 2026 DEVON</span>
-        <span className="flex-1" />
-        <span>면접 중에는 페이지를 벗어나지 마세요</span>
-      </footer>
+      <Footer note="면접 중에는 페이지를 벗어나지 마세요" />
     </div>
   );
 }
