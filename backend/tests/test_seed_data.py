@@ -44,3 +44,17 @@ def test_domain_question_frames_no_duplicate_domain_axis_pairs() -> None:
 def test_domain_question_frames_have_non_empty_text() -> None:
     for frame in DOMAIN_QUESTION_FRAMES:
         assert frame.frame_text.strip()
+
+
+def test_domain_question_frames_are_hypothetical_questions() -> None:
+    # 사용자가 해당 도메인 경험이 있다고 전제하지 않는 가정형 질문이어야 한다.
+    for frame in DOMAIN_QUESTION_FRAMES:
+        assert frame.frame_text.endswith("시겠어요?"), frame.frame_text
+        assert "물어본다" not in frame.frame_text
+
+
+def test_score_criteria_level_one_requires_a_question_or_answer() -> None:
+    # 질문하지 않은 항목(미관찰)이 1단계로 읽히지 않아야 한다 (task-11).
+    for criterion in SCORE_CRITERIA:
+        level_one = criterion.rubric["1"]
+        assert "질문" in level_one or "답변" in level_one, criterion.score_key

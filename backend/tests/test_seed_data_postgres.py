@@ -123,3 +123,27 @@ async def test_domain_question_frames_seed_updates_changed_text(seed_sessions) -
         assert frame_text == "검수 후 수정된 문구"
         # 값만 바뀐 것이지 행이 추가되거나 지워지지 않는다(같은 PK 에 upsert).
         assert count == len(DOMAIN_QUESTION_FRAMES)
+
+
+async def test_seeds_insert_inactive_and_keep_manual_activation(seed_sessions) -> None:
+    # 검수 전 초안은 비활성으로 들어가고, 검수 후 활성화한 값을 재시드가 되돌리지 않는다.
+    async with seed_sessions() as session:
+        await seed_score_criteria(session)
+        await seed_domain_question_frames(session)
+        await session.commit()
+        for table in ("score_criteria", "domain_question_frames"):
+            active = await session.scalar(text(f"SELECT count(*) FROM {table} WHERE is_active"))
+            assert active == 0
+
+        await session.execute(text("UPDATE score_criteria SET is_active = TRUE"))
+        await session.execute(text("UPDATE domain_question_frames SET is_active = TRUE"))
+        await session.commit()
+
+        await seed_score_criteria(session)
+        await seed_domain_question_frames(session)
+        await session.commit()
+        for table in ("score_criteria", "domain_question_frames"):
+            inactive = await session.scalar(
+                text(f"SELECT count(*) FROM {table} WHERE NOT is_active")
+            )
+            assert inactive == 0
