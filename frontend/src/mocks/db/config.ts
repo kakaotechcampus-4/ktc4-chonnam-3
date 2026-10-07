@@ -42,3 +42,8 @@ export const SEED_FAILED_RUN_ID = '5c7b9e10-0000-4000-8000-00000000bbbb';
 export const SEED_PREPARING_FAILED_INTERVIEW_ID = 'a3d51c20-1009-4c00-9a00-000000000009';
 /** 면접 진행 화면(5b-v2)을 바로 여는 진행 중 면접. 새로고침해도 1턴부터 다시 시작한다. */
 export const SEED_IN_PROGRESS_INTERVIEW_ID = 'a3d51c20-1005-4c00-9a00-000000000005';
+/**
+ * 진행 중 seed 면접 전용 run. SEED_RUN_ID를 쓰면 그 run에 진행 중 면접이 늘 있어
+ * 새 면접 생성·다시 보기가 409 session_limit_exceeded로 막힌다. runs DB에는 없다.
+ */
+export const SEED_IN_PROGRESS_RUN_ID = '5c7b9e10-0000-4000-8000-00000000cccc';
