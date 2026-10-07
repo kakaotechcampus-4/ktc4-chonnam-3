@@ -8,6 +8,7 @@ import {
   REPORT_GENERATE_MS,
   SEED_INTERVIEW_ID,
   SEED_IN_PROGRESS_INTERVIEW_ID,
+  SEED_IN_PROGRESS_RUN_ID,
   SEED_PREPARING_FAILED_INTERVIEW_ID,
   SEED_RUN_ID,
   SEED_SESSION_ID,
@@ -280,7 +281,7 @@ function seedInterviews() {
   interviews.set(SEED_IN_PROGRESS_INTERVIEW_ID, {
     interviewId: SEED_IN_PROGRESS_INTERVIEW_ID,
     sessionId: 'sess_0000000000000005',
-    runId: SEED_RUN_ID,
+    runId: SEED_IN_PROGRESS_RUN_ID,
     repositoryIds: SEED_REPOSITORY_IDS,
     // 준비가 막 끝난 시각으로 둔다. 남은 시간이 제한 시간 그대로 보인다.
     createdAt: Date.now() - PREPARE_DURATION_MS,
