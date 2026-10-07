@@ -2,11 +2,30 @@
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import asdict
-from typing import cast
+from typing import Literal, cast
 
 from devon_ai import contracts as c
 
-type QuestionReviewer = Callable[[c.ModelRequest, c.Question], Awaitable[c.QuestionReview]]
+# 검토기는 승인하면 QuestionReview를, 후보를 쓸 수 없으면 ADR 0008의 복구 분류를 반환한다.
+type QuestionReviewer = Callable[
+    [c.ModelRequest, c.Question], Awaitable[c.QuestionReview | c.CandidateRecovery]
+]
+
+# 분류는 실패 코드로만 전달한다. 새 enum·상태·재호출 권한을 만들지 않으며 실행은 BE가 결정한다.
+type _Recovery = Literal["rewrite", "replan", "no_valid_candidate"]
+_RECOVERY_CODES: dict[_Recovery, str] = {
+    "rewrite": "director_candidate_rewrite",
+    "replan": "director_candidate_replan",
+    "no_valid_candidate": "director_no_valid_candidate",
+}
+
+
+def candidate_recovery(failure: c.CallFailure) -> c.CandidateRecovery | None:
+    """실패가 검토기의 후보 복구 분류이면 CandidateRecovery로 복원하고 아니면 None이다."""
+    for recovery, code in _RECOVERY_CODES.items():
+        if failure.error_code == code:
+            return c.CandidateRecovery(recovery, failure.reason_summary)
+    return None
 
 
 def _object_schema(properties: dict[str, object]) -> dict[str, object]:
@@ -207,10 +226,16 @@ async def generate_question(
     try:
         async with asyncio.timeout(limits.timeout_seconds):
             assessment = await review(request, candidate)
+        if type(assessment) is c.CandidateRecovery:
+            # 승인되지 않은 후보는 반환하지 않으며 같은 요청을 다시 생성·검토하지 않는다.
+            code = _RECOVERY_CODES[assessment.recovery]
+            failure = c.CallFailure("semantic", code, assessment.reason_summary)
+            return c.ModelResult(None, failure, result.attempts)
         # 생성 모델의 자기평가 대신 같은 문장·계약에 대한 독립 검토 결과를 요구한다.
         checked = c.validate_question(
             candidate,
-            review=assessment,
+            # 형식이 맞지 않는 반환값은 validate_question이 런타임에 schema 오류로 거절한다.
+            review=cast(c.QuestionReview, assessment),
             allowed_personas=context.allowed_personas,
             evidence_refs=evidence_refs,
             basis_refs=basis_refs,
