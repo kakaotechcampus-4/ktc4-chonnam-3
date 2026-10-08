@@ -131,6 +131,26 @@ async def test_successful_batch_maps_each_repository_to_a_row() -> None:
     assert rows[1]["batch_position"] == 1
 
 
+async def test_l1_passes_configured_proxy_and_keeps_prompt_model() -> None:
+    settings = SETTINGS.model_copy(
+        update={
+            "llm_base_url": "https://proxy.example/tenant/v1",
+            "openai_api_key": SecretStr("proxy-fixture"),
+            "llm_default_model": "different-registration-default",
+        }
+    )
+    sent: list[httpx.Request] = []
+    async with httpx.AsyncClient(transport=_transport([_batch(_item(REPO_1))], sent)) as http:
+        run = await repo_shallow.analyze_repositories(
+            (_input(REPO_1),), prompt=PROMPT, settings=settings, http_client=http
+        )
+    assert run.result.succeeded
+    assert len(sent) == 1
+    assert str(sent[0].url) == "https://proxy.example/tenant/v1/responses"
+    assert sent[0].headers["Authorization"] == "Bearer proxy-fixture"
+    assert json.loads(sent[0].content)["model"] == PROMPT.model
+
+
 async def test_schema_failed_repository_is_retried_once_and_stored_as_success() -> None:
     first = _batch(_item(REPO_1), _item(REPO_2, purpose=3))
     result, sent = await _run([first, _batch(_item(REPO_2))], _input(REPO_1), _input(REPO_2))

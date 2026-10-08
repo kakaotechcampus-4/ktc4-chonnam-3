@@ -43,6 +43,7 @@ class LLMSettings(BaseModel):
     model_config = ConfigDict(hide_input_in_errors=True)
 
     openai_api_key: SecretStr = Field(min_length=1)
+    llm_base_url: str = Field(default="https://api.openai.com/v1", repr=False)
     llm_default_model: str = Field(min_length=1)
     llm_timeout_seconds: LLMTimeout = Field(gt=0, allow_inf_nan=False)
     llm_max_output_tokens: LLMInteger = Field(gt=0)
@@ -62,6 +63,31 @@ class LLMSettings(BaseModel):
         if not value.strip():
             raise ValueError("llm_default_model must not be blank")
         return value.strip()
+
+    @field_validator("llm_base_url")
+    @classmethod
+    def validate_base_url(cls, value: str) -> str:
+        # urlsplit이 제어문자를 제거하기 전에 거절하고 오류에 접속 주소를 포함하지 않는다.
+        invalid = "LLM base URL must be HTTPS without credentials, query, or fragment"
+        if any(char.isspace() or ord(char) < 32 or 127 <= ord(char) <= 159 for char in value):
+            raise ValueError(invalid)
+        if any(char in value for char in ("\\", "?", "#")):
+            raise ValueError(invalid)
+        try:
+            parsed = urlsplit(value)
+            if (
+                parsed.scheme != "https"
+                or not parsed.hostname
+                or parsed.username is not None
+                or parsed.password is not None
+            ):
+                raise ValueError(invalid)
+            # 포트의 형식·범위 검증은 실제 속성 접근 때 수행된다.
+            _ = parsed.port
+        except ValueError:
+            raise ValueError(invalid) from None
+        # 프록시 namespace와 API 버전 경로를 유지하며 끝의 구분자만 제거한다.
+        return parsed.geturl().rstrip("/")
 
     def call_limits(self) -> CallLimits:
         """AI에는 환경변수나 비밀키 대신 공급자와 무관한 제한값만 전달한다."""
@@ -119,6 +145,9 @@ class Settings(BaseSettings):
     # 모델명을 코드 상수로 두지 않는다. 아래는 seed 가 읽는 기본값이고
     # 실제 사용값은 prompt_versions.model 등 DB 에 저장한다 (backend/CLAUDE.md).
     openai_api_key: SecretStr | None = None
+    proxy_token: SecretStr | None = None
+    chat_proxy_url: str | None = Field(default=None, repr=False)
+    openai_model: str | None = None
     llm_default_model: str | None = "gpt-5.6-luna"
     # 비어 있는 LLM 설정이 health 등 일반 앱 기동을 막지 않도록 호출 시점에 필수 검증한다.
     llm_timeout_seconds: LLMTimeout | None = None
@@ -154,6 +183,9 @@ class Settings(BaseSettings):
 
     @field_validator(
         "openai_api_key",
+        "proxy_token",
+        "chat_proxy_url",
+        "openai_model",
         "llm_default_model",
         "llm_timeout_seconds",
         "llm_max_output_tokens",
@@ -167,7 +199,16 @@ class Settings(BaseSettings):
 
     def require_llm(self) -> LLMSettings:
         """캐시된 설정만 검증하며 비밀키와 네 실행 상한이 준비되지 않으면 실패한다."""
-        return LLMSettings.model_validate(self, from_attributes=True)
+        if (self.proxy_token is None) != (self.chat_proxy_url is None):
+            raise ValueError("PROXY_TOKEN and CHAT_PROXY_URL must be configured together")
+        values = self.model_dump(include=set(LLMSettings.model_fields))
+        if self.chat_proxy_url is not None:
+            values["openai_api_key"] = self.proxy_token
+            values["llm_base_url"] = self.chat_proxy_url
+        # OPENAI_MODEL을 기본 모델보다 우선하되 원본 설정과 DB prompt 모델은 변경하지 않는다.
+        if self.openai_model is not None:
+            values["llm_default_model"] = self.openai_model
+        return LLMSettings.model_validate(values)
 
     def call_limits(self) -> CallLimits:
         """LLM 설정을 먼저 검증한 뒤 AI 호출에 전달할 상한을 만든다."""
