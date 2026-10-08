@@ -11,6 +11,7 @@ from app.core.config import LLMSettings
 from app.features.analysis import repo_analysis_queries as queries
 from app.features.analysis.candidates import repository_summary
 from app.features.analysis.matching import refresh_matches
+from app.features.analysis.partial_cache import record_truncation_cache
 from app.features.analysis.pipeline.steps.repo_detail import RateLimitRecorder, collect_repo_details
 from app.integrations.github.base import RepoDetail, RepoSummary
 from app.integrations.github.client import DEFAULT_README_MAX_CHARS, GithubClient
@@ -114,15 +115,31 @@ async def collect_candidate_batch(
     for repository_id, repo in repositories.items():
         detail = details[repo.full_name]
         if _unstorable(detail.readme_text):
-            detail = replace(detail, readme_text=None, errors=[*detail.errors, "no_readme"])
-            details[repo.full_name] = detail
-        if _unstorable(detail.languages):
             detail = replace(
                 detail,
-                languages={
-                    name: size for name, size in detail.languages.items() if not _unstorable(name)
-                },
+                readme_text=None,
+                errors=[*detail.errors, "no_readme"],
+                collected_fields=detail.collected_fields - {"readme_text", "readme_truncated"},
+            )
+            details[repo.full_name] = detail
+        elif detail.readme_text is not None and not detail.readme_text.strip():
+            # 확인된 빈 본문은 DB에 반영하되 AI에는 근거 없음으로 전달한다.
+            detail = replace(detail, errors=[*detail.errors, "no_readme"])
+            details[repo.full_name] = detail
+        if _unstorable(detail.languages):
+            languages = {
+                name: size for name, size in detail.languages.items() if not _unstorable(name)
+            }
+            detail = replace(
+                detail,
+                languages=languages,
                 errors=[*detail.errors, "repo_unreachable"],
+                # 전부 무효인 응답을 정상적인 빈 언어 목록으로 저장하지 않는다.
+                collected_fields=(
+                    detail.collected_fields
+                    if languages
+                    else detail.collected_fields - {"languages"}
+                ),
             )
             details[repo.full_name] = detail
         if detail.repository_inaccessible:
@@ -134,7 +151,11 @@ async def collect_candidate_batch(
                         repository_id=str(repository_id),
                         head_sha=detail.head_sha,
                         description=repo.description,
-                        readme_text=detail.readme_text,
+                        readme_text=(
+                            detail.readme_text
+                            if detail.readme_text and detail.readme_text.strip()
+                            else None
+                        ),
                         readme_truncated=detail.readme_truncated,
                         languages=tuple(
                             c.LanguageBytes(name, size) for name, size in detail.languages.items()
@@ -147,7 +168,12 @@ async def collect_candidate_batch(
                 continue
             except c.ContractError:
                 # 잘못된 source 값으로 LLM을 호출하거나 DB에 가짜 SHA를 만들지 않는다.
-                detail = replace(detail, head_sha=None, errors=[*detail.errors, "repo_unreachable"])
+                detail = replace(
+                    detail,
+                    head_sha=None,
+                    errors=[*detail.errors, "repo_unreachable"],
+                    collected_fields=detail.collected_fields - {"head_sha"},
+                )
                 details[repo.full_name] = detail
         snapshots[repository_id] = _snapshot(
             None,
@@ -202,7 +228,9 @@ async def analyze_collected_batch(
                     cached[repository_id].id,
                     item.head_sha,
                     prompt.version,
-                    "partial" if detail.is_partial else "succeeded",
+                    "partial"
+                    if detail.is_partial or cached[repository_id].status == "partial"
+                    else "succeeded",
                     detail.errors[0] if detail.errors else None,
                 )
 
@@ -214,6 +242,7 @@ async def analyze_collected_batch(
             missing, prompt=prompt, settings=settings, http_client=http_client
         )
         results = to_repo_analysis_rows(result, missing, prompt)
+        sources = {UUID(item.repository_id): item for item in missing}
         for values in results:
             repository_id = UUID(str(values["repository_id"]))
             values["batch_position"] = positions.get(repository_id)
@@ -236,6 +265,7 @@ async def analyze_collected_batch(
             if values["status"] == "succeeded" and detail.is_partial:
                 values["status"] = "partial"
                 values["error_code"] = detail.errors[0] if detail.errors else None
+            record_truncation_cache(values, sources[repository_id])
 
     async with session_factory() as session, session.begin():
         for values in sorted(results, key=lambda row: str(row["repository_id"])):

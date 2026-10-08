@@ -12,6 +12,7 @@ from app.core.errors import AppError
 from app.db.models.analysis import AnalysisJob, AnalysisRepoCandidate, RepoMatchScore
 from app.db.models.github import RepoAnalysis, Repository
 from app.db.models.user import GithubAccount
+from app.features.analysis.partial_cache import can_reuse_truncated
 from app.integrations.github.base import RepoDetail
 from app.shared.enums import Reason
 
@@ -50,17 +51,33 @@ async def load_batch(
 
 
 async def save_detail(session: AsyncSession, repository_id: UUID, detail: RepoDetail) -> None:
+    # 빈 값도 정상 수집 결과일 수 있다. 실패·미호출 필드는 이전 자료를 지우지 않는다.
+    repo = await session.scalar(
+        select(Repository).where(Repository.id == repository_id).with_for_update()
+    )
+    if repo is None:
+        return
+    fields = detail.collected_fields
     values: dict[str, object] = {
-        "languages": detail.languages,
-        "readme_text": detail.readme_text,
-        "readme_truncated": detail.readme_truncated,
-        "head_sha": detail.head_sha,
-        "commit_count": detail.commit_count,
-        "user_commit_count": detail.user_commit_count,
+        name: getattr(detail, name)
+        for name in ("languages", "readme_text", "readme_truncated")
+        if name in fields
     }
+    if "head_sha" in fields and detail.head_sha is not None:
+        values["head_sha"] = detail.head_sha
+        for name in ("commit_count", "user_commit_count"):
+            if name in fields:
+                values[name] = getattr(detail, name)
+            elif repo.head_sha != detail.head_sha:
+                # 새 SHA에 이전 커밋 수를 붙이지 않는다. 비교와 갱신은 같은 행 잠금 안에서 한다.
+                values[name] = None
+    # SHA를 확인하지 못했다면 이번 커밋 수를 과거 SHA와 섞지 않고 기존 쌍을 보존한다.
     if detail.repository_inaccessible:
         values["is_accessible"] = False
-    await session.execute(update(Repository).where(Repository.id == repository_id).values(**values))
+    if values:
+        await session.execute(
+            update(Repository).where(Repository.id == repository_id).values(**values)
+        )
 
 
 async def revoke_token(session: AsyncSession, user_id: UUID, token_encrypted: bytes) -> None:
@@ -83,14 +100,20 @@ async def load_cached(
     rows = await session.scalars(
         select(RepoAnalysis).where(
             RepoAnalysis.analysis_level == "l1",
-            RepoAnalysis.status == "succeeded",
+            RepoAnalysis.status.in_(("succeeded", "partial")),
             RepoAnalysis.prompt_version == prompt_version,
             tuple_(RepoAnalysis.repository_id, RepoAnalysis.head_sha).in_(
                 [(UUID(item.repository_id), item.head_sha) for item in inputs]
             ),
         )
     )
-    return {row.repository_id: row for row in rows}
+    sources = {UUID(item.repository_id): item for item in inputs}
+    return {
+        row.repository_id: row
+        for row in rows
+        if row.status == "succeeded"
+        or can_reuse_truncated(row, sources[row.repository_id], prompt_version)
+    }
 
 
 async def save_analysis(session: AsyncSession, values: Mapping[str, object]) -> UUID:
@@ -140,11 +163,24 @@ async def bind_snapshots(
         snapshot = snapshots[candidate.repository_id]
         signals = dict(candidate.ranking_signals or {})
         previous = signals.get("analysis")
+        # 재수집 실패는 새 분석의 근거가 아니다. 이 run이 이미 확정한 성공만 보존한다.
+        unverified_collection = (
+            candidate.repository_id not in inaccessible
+            and snapshot["status"] == "failed"
+            and snapshot["analysis_id"] is None
+            and snapshot["head_sha"] is None
+            and snapshot["prompt_version"] is None
+        )
         if (
             isinstance(previous, dict)
             and previous.get("status") == "succeeded"
-            and previous.get("head_sha") == snapshot["head_sha"]
-            and previous.get("prompt_version") == snapshot["prompt_version"]
+            and (
+                unverified_collection
+                or (
+                    previous.get("head_sha") == snapshot["head_sha"]
+                    and previous.get("prompt_version") == snapshot["prompt_version"]
+                )
+            )
         ):
             snapshot = previous
         changed = changed or previous != snapshot
