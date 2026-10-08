@@ -22,6 +22,8 @@
 
 - [0003 Task 10 후보 순위와 run별 L1 참조](0003-task10-ranking-and-analysis-reference.md): Proposed.
   기존 순위 표시값, 검증된 기여도 입력, run별 분석 참조와 추천 갱신의 동시성 경계를 정리한다.
+- [0007 Task 10 재수집 실패 보존과 README 축약 캐시](0007-task10-collection-retry-and-partial-cache.md): Proposed.
+  확인한 필드만 저장하고 같은 run의 성공을 보존한다. 축약 partial은 동일 입력일 때만 재사용한다.
 
 ## 관련 AI 결정
 
