@@ -32,7 +32,8 @@ async def preview_document(
     max_text_chars: int,
 ) -> DocumentPreviewResponse:
     try:
-        filename = (upload.filename or "").replace("\x00", "")
+        # 클라이언트 OS와 무관하게 경로를 제외한 표시용 파일명만 저장한다.
+        filename = (upload.filename or "").replace("\x00", "").replace("\\", "/").rsplit("/", 1)[-1]
         suffix = PurePath(filename).suffix.lower().removeprefix(".")
         # MIME은 클라이언트 입력이므로 미지원 확장자의 우회 근거로 사용하지 않는다.
         if suffix not in DocumentFormat:
