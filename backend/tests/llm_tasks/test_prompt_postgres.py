@@ -22,6 +22,7 @@ from app.llm_tasks.prompt_loader import (
 from scripts.seed_prompt_versions import (
     PROMPT_VERSIONS,
     PromptVersionConflictError,
+    register_prompt_versions,
     seed_prompt_versions,
 )
 
@@ -96,6 +97,56 @@ async def test_postgres_seed_roundtrip_and_idempotence(prompt_sessions):
         for prompt in prompts:
             assert await load_active_prompt(session, f" {prompt.task_name} ") == prompt
     # Includes UUIDs and timestamps: rerunning must not rewrite existing versions.
+    assert await _rows(prompt_sessions) == before
+
+
+async def test_postgres_partial_registration_versions_model_and_preserves_other_tasks(
+    prompt_sessions,
+):
+    prompts = _prompts()
+    old = next(prompt for prompt in prompts if prompt.task_name == "repo_shallow")
+    new = replace(old, version="repo_shallow_v2", model="local-model")
+    async with prompt_sessions.begin() as session:
+        await seed_prompt_versions(session, prompts)
+    before = await _rows(prompt_sessions)
+
+    async with prompt_sessions.begin() as session:
+        await register_prompt_versions(session, [new])
+        assert await load_active_prompt(session, "repo_shallow") == new
+    after = await _rows(prompt_sessions)
+
+    assert len(after) == 8
+    assert sum(row["is_active"] for row in after) == 7
+    old_before = next(row for row in before if row["task_name"] == "repo_shallow")
+    old_after = next(row for row in after if row["id"] == old_before["id"])
+    assert old_after["is_active"] is False
+    assert {k: v for k, v in old_after.items() if k not in {"is_active", "updated_at"}} == {
+        k: v for k, v in old_before.items() if k not in {"is_active", "updated_at"}
+    }
+    assert [row for row in after if row["task_name"] != "repo_shallow"] == [
+        row for row in before if row["task_name"] != "repo_shallow"
+    ]
+
+    async with prompt_sessions.begin() as session:
+        await register_prompt_versions(session, [new])
+    assert await _rows(prompt_sessions) == after
+
+
+async def test_postgres_partial_registration_conflict_precedes_all_mutation(prompt_sessions):
+    prompts = _prompts()
+    async with prompt_sessions.begin() as session:
+        await seed_prompt_versions(session, prompts)
+    before = await _rows(prompt_sessions)
+    director = next(prompt for prompt in prompts if prompt.task_name == "director")
+    shallow = next(prompt for prompt in prompts if prompt.task_name == "repo_shallow")
+
+    async with prompt_sessions.begin() as session:
+        # 호출자가 오류를 잡고 commit해도 앞선 task가 일부 활성 전환되어서는 안 된다.
+        with pytest.raises(PromptVersionConflictError):
+            await register_prompt_versions(
+                session,
+                [replace(director, version="director_v2"), replace(shallow, model="changed")],
+            )
     assert await _rows(prompt_sessions) == before
 
 

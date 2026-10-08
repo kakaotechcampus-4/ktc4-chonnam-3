@@ -18,7 +18,7 @@ PROMPT_VERSIONS = {
 
 
 class PromptSeedValidationError(ValueError):
-    """검수 입력이 고정 task/version 목록을 만족하지 않을 때 발생한다."""
+    """검수 입력이 초기 seed 또는 부분 등록 조건을 만족하지 않을 때 발생한다."""
 
 
 class PromptVersionConflictError(RuntimeError):
@@ -26,16 +26,25 @@ class PromptVersionConflictError(RuntimeError):
 
 
 async def seed_prompt_versions(session: AsyncSession, prompts: Iterable[PromptSpec]) -> None:
-    """검수된 일곱 prompt를 등록하고 task별 해당 version을 활성화한다.
-
-    호출자는 하나의 transaction 안에서 실행하고 commit/rollback을 관리한다.
-    task별 PostgreSQL transaction 잠금으로 동시에 실행된 seed의 활성화 경합을 직렬화한다.
-    기존 task/version의 모델과 본문은 덮어쓰지 않고 다르면 충돌로 처리한다.
-    """
+    """검수된 고정 일곱 v1 prompt를 등록하고 활성화한다."""
 
     prompt_list = list(prompts)
     _validate_prompts(prompt_list)
-    # 여러 task의 잠금을 항상 같은 순서로 잡아 seed끼리의 교착을 피한다.
+    await register_prompt_versions(session, prompt_list)
+
+
+async def register_prompt_versions(session: AsyncSession, prompts: Iterable[PromptSpec]) -> None:
+    """검수된 task별 명시적 version을 등록하고 해당 task만 활성 전환한다.
+
+    호출자는 하나의 transaction 안에서 실행하고 commit/rollback을 관리한다.
+    task별 PostgreSQL transaction 잠금으로 초기 seed와 부분 등록의 활성화 경합을 직렬화한다.
+    기존 task/version의 모델과 본문은 덮어쓰지 않고 다르면 충돌로 처리한다.
+    모델이나 본문을 바꿀 때는 새 version을 지정해야 이전 분석 캐시와 구분할 수 있다.
+    """
+
+    prompt_list = list(prompts)
+    _validate_registration(prompt_list)
+    # 여러 task의 잠금을 항상 같은 순서로 잡아 초기 seed와 부분 등록의 교착을 피한다.
     prompt_list.sort(key=lambda prompt: prompt.task_name)
 
     for prompt in prompt_list:
@@ -119,16 +128,29 @@ def _validate_prompts(prompts: list[PromptSpec]) -> None:
     actual = {(prompt.task_name, prompt.version) for prompt in prompts}
     if len(prompts) != len(expected) or actual != expected:
         raise PromptSeedValidationError("exactly the seven fixed task/version pairs are required")
+
+
+def _validate_registration(prompts: list[PromptSpec]) -> None:
+    if not prompts:
+        raise PromptSeedValidationError("at least one reviewed prompt is required")
+    seen: set[str] = set()
     for prompt in prompts:
-        if not prompt.model.strip():
-            raise PromptSeedValidationError(f"model must not be blank: {prompt.task_name}")
-        if not prompt.template.strip():
-            raise PromptSeedValidationError(f"template must not be blank: {prompt.task_name}")
+        if prompt.task_name not in PROMPT_VERSIONS:
+            raise PromptSeedValidationError(f"unknown prompt task: {prompt.task_name}")
+        if prompt.task_name in seen:
+            raise PromptSeedValidationError(
+                f"only one version per task is allowed: {prompt.task_name}"
+            )
+        seen.add(prompt.task_name)
+        for field in ("version", "model", "template"):
+            if not getattr(prompt, field).strip():
+                raise PromptSeedValidationError(f"{field} must not be blank: {prompt.task_name}")
 
 
 __all__ = [
     "PROMPT_VERSIONS",
     "PromptSeedValidationError",
     "PromptVersionConflictError",
+    "register_prompt_versions",
     "seed_prompt_versions",
 ]
