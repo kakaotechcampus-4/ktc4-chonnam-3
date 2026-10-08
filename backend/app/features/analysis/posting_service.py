@@ -10,23 +10,30 @@ from app.db.models.posting import JdRequirement, JobPosting
 from app.features.analysis.posting_queries import (
     get_current_successful_posting,
     get_posting_requirements,
+    get_reusable_failed_posting,
     lock_posting_url,
 )
-from app.integrations.jd.base import PostingContent, PostingFetchError, UnsupportedSiteError
+from app.integrations.jd.base import (
+    PostingContent,
+    PostingFetchError,
+    PostingInvalidResponseError,
+    UnsupportedSiteError,
+)
 from app.integrations.jd.wanted import WantedAdapter, extract_job_id
 from app.llm_tasks.jd_extract import JdExtractionError, JdRequirementDraft, build_requirement_drafts
 
 
 def normalize_posting_url(posting_url: str) -> str:
     """기존 Wanted 검증으로 얻은 ID만 사용하고 추적 query와 fragment는 제거한다."""
-    posting_id = extract_job_id(posting_url)
+    # 정규화에서 사라져도 raw_url에는 남을 수 있으므로 DB·HTTP보다 먼저 거절한다.
+    posting_id = None if "\x00" in posting_url else extract_job_id(posting_url)
     if posting_id is None:
         raise UnsupportedSiteError("지원하는 Wanted 공고 URL이 필요합니다.")
     return f"https://www.wanted.co.kr/wd/{posting_id}"
 
 
 def _fresh(posting: JobPosting | None, now: datetime, ttl: timedelta) -> bool:
-    # 정확히 7일인 경계까지 재사용하며, 단순 캐시 조회로 유효 기간을 연장하지 않는다.
+    # 전달된 TTL의 경계까지 재사용하며, 단순 캐시 조회로 유효 기간을 연장하지 않는다.
     return (
         posting is not None and posting.fetched_at is not None and posting.fetched_at >= now - ttl
     )
@@ -35,6 +42,14 @@ def _fresh(posting: JobPosting | None, now: datetime, ttl: timedelta) -> bool:
 def _content(snapshot: dict[str, object]) -> dict[str, object]:
     # 원문 그룹·표시 순서를 그대로 비교한다. 실제 수집 URL 표기만 내용 비교에서 제외한다.
     return {key: value for key, value in snapshot.items() if key != "fetch_url"}
+
+
+def _validate_content(content: PostingContent) -> None:
+    # JSONB뿐 아니라 TEXT·배열·요구사항에도 같은 원문이 저장되므로 모든 문자열을 검사한다.
+    for value in asdict(content).values():
+        values = value if isinstance(value, list) else [value]
+        if any(isinstance(item, str) and "\x00" in item for item in values):
+            raise PostingInvalidResponseError("공고 원문에 저장할 수 없는 NUL 문자가 있음")
 
 
 def _posting(
@@ -91,15 +106,34 @@ async def _save_posting_failure(
 ) -> None:
     async with session_factory.begin() as db:
         await lock_posting_url(db, prepared.normalized_url)
-        db.add(
-            _posting(
-                prepared.posting_url,
-                prepared.normalized_url,
-                prepared.content,
-                prepared.checked_at,
-                error_code=error_code,
-            )
+        current = await get_reusable_failed_posting(db, prepared.normalized_url)
+        if current is not None and current.updated_at > prepared.checked_at:
+            # 늦게 끝난 이전 요청이 더 최근 시도의 실패 상태를 덮어쓰지 않는다.
+            return
+        failure = _posting(
+            prepared.posting_url,
+            prepared.normalized_url,
+            prepared.content,
+            prepared.checked_at,
+            error_code=error_code,
         )
+        # 같은 오류가 반복돼 ORM이 변경을 생략해도 마지막 시도 시각은 명시적으로 남긴다.
+        failure.updated_at = prepared.checked_at
+        if current is None:
+            db.add(failure)
+        else:
+            # 성공·참조 자료는 보존한다. 원문 없는 수집 실패로 바뀌면 이전 원문도 비운다.
+            for name in (
+                "raw_url",
+                "position",
+                "company_name",
+                "skill_tags",
+                "raw_payload",
+                "parse_error_code",
+                "fetched_at",
+                "updated_at",
+            ):
+                setattr(current, name, getattr(failure, name))
 
 
 async def fetch_posting(
@@ -124,6 +158,8 @@ async def fetch_posting(
 
     try:
         content = await WantedAdapter(client=client).fetch(normalized_url)
+        # 실패 기록에는 오염된 content를 넘기지 않아 오류를 저장하다 다시 실패하지 않는다.
+        _validate_content(content)
     except PostingFetchError as error:
         # 성공 자료를 failed로 덮어쓰지 않는다. 예기치 않은 코드/DB 오류는 여기서 숨기지 않는다.
         await _save_posting_failure(

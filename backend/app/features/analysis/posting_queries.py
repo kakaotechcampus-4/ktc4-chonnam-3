@@ -5,6 +5,8 @@ from uuid import UUID
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.analysis import AnalysisJob
+from app.db.models.interview import InterviewSession
 from app.db.models.posting import JdRequirement, JobPosting
 
 
@@ -17,6 +19,24 @@ async def get_current_successful_posting(
         select(JobPosting)
         .where(JobPosting.normalized_url == normalized_url, JobPosting.parse_status == "succeeded")
         .order_by(JobPosting.created_at.desc(), JobPosting.id.desc())
+        .limit(1)
+    )
+    return posting
+
+
+async def get_reusable_failed_posting(db: AsyncSession, normalized_url: str) -> JobPosting | None:
+    """참조되지 않은 최신 실패 상태만 갱신 대상으로 고른다. URL 잠금 안에서 호출한다."""
+    posting: JobPosting | None = await db.scalar(
+        select(JobPosting)
+        .where(
+            JobPosting.normalized_url == normalized_url,
+            JobPosting.parse_status == "failed",
+            ~select(AnalysisJob.id).where(AnalysisJob.job_posting_id == JobPosting.id).exists(),
+            ~select(InterviewSession.id)
+            .where(InterviewSession.job_posting_id == JobPosting.id)
+            .exists(),
+        )
+        .order_by(JobPosting.updated_at.desc(), JobPosting.created_at.desc(), JobPosting.id.desc())
         .limit(1)
     )
     return posting
