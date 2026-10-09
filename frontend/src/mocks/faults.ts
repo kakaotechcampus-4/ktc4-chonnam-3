@@ -121,13 +121,19 @@ export function targetsWebSocket(rule: FaultRule) {
  * 규칙이 여기서 소비돼 정작 HTTP 요청에는 안 걸리고, `code` 가 없는 HTTP 규칙이
  * 계약에 없는 `ERR_UNKNOWN` 오류를 WS 로 내보낸다.
  * 그래서 경로를 `/ws/` 로 명시한 규칙만 받는다.
+ *
+ * `accept`는 답변 단계 규칙(`/ws/interviews/{세션}/stt` 등)만 고를 때 쓴다. 연결 단계 규칙
+ * `/ws/interviews/*`는 `*`가 `/`까지 맞춰 함께 걸리기 때문이다.
  */
-export function takeWsFault(pathname: string): FaultRule | null {
+export function takeWsFault(
+  pathname: string,
+  accept: (rule: FaultRule) => boolean = () => true,
+): FaultRule | null {
   const rules = read();
   const suffix = pathname.startsWith(BASE) ? pathname.slice(BASE.length) : pathname;
 
   const index = rules.findIndex(
-    (rule) => targetsWebSocket(rule) && matchesPath(rule.path, suffix),
+    (rule) => targetsWebSocket(rule) && accept(rule) && matchesPath(rule.path, suffix),
   );
   if (index === -1) return null;
 

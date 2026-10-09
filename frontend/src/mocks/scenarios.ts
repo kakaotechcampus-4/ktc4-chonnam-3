@@ -1,5 +1,6 @@
 import { addFault, clearFaults, listFaults, type FaultRule } from './faults';
 import { setMockSession } from './session';
+import { dropInterviewSockets, failInterviewSockets } from './ws/interview';
 
 /**
  * 이름 붙인 실패 시나리오.
@@ -21,6 +22,14 @@ export type ScenarioName =
   | 'ws-prepare-failed'
   | 'ws-question-failed'
   | 'ws-repo-unreachable'
+  | 'ws-stt-failed'
+  | 'ws-stt-empty'
+  | 'ws-repeat-request'
+  | 'ws-answer-rejected'
+  | 'ws-no-ack'
+  | 'ws-drop-before-ack'
+  | 'no-partial'
+  | 'tts-unavailable'
   | 'offline'
   | 'slow';
 
@@ -166,6 +175,68 @@ export const scenarios: Record<ScenarioName, Scenario> = {
     ],
   },
 
+  /**
+   * 답변 단계 규칙은 `/ws/interviews/{세션}/{kind}` 경로로 건다. 연결 단계 규칙과 끝이 달라
+   * 연결 시점에 소비되지 않는다(ws/voice.ts). times: 1이라 다시 답하면 성공한다.
+   */
+  'ws-stt-failed': {
+    describe: '다음 답변 1회 STT 실패. 같은 턴 다시 답변 경로를 본다.',
+    rules: [
+      { path: '/ws/interviews/*/stt', reason: 'stt_failed', code: 'ERR_STT_FAILED', times: 1 },
+    ],
+  },
+
+  'ws-stt-empty': {
+    describe: '다음 답변 1회 전사 결과가 빔. 마이크 확인 안내를 본다.',
+    rules: [
+      {
+        path: '/ws/interviews/*/stt',
+        reason: 'stt_failed',
+        code: 'ERR_STT_FAILED',
+        details: { cause: 'empty_transcript' },
+        times: 1,
+      },
+    ],
+  },
+
+  'ws-repeat-request': {
+    describe: '다음 답변 1회를 다시 듣기 요청으로 판단. 같은 턴 질문 재생을 본다.',
+    rules: [{ path: '/ws/interviews/*/repeat', times: 1 }],
+  },
+
+  'ws-answer-rejected': {
+    describe: '다음 answerStart 1회를 answer_rejected로 거절. 녹음 중 거절 처리를 본다.',
+    rules: [{ path: '/ws/interviews/*/reject', times: 1 }],
+  },
+
+  'ws-no-ack': {
+    describe: '다음 답변 1회 전사 뒤 저장·answerReceived 없이 멈춤. 저장 확인 타임아웃을 본다.',
+    rules: [{ path: '/ws/interviews/*/no-ack', times: 1 }],
+  },
+
+  'ws-drop-before-ack': {
+    describe: '다음 답변 1회 저장 뒤 answerReceived 전에 연결 끊김. 재연결 뒤 저장 확인을 본다.',
+    rules: [{ path: '/ws/interviews/*/drop-before-ack', times: 1 }],
+  },
+
+  'no-partial': {
+    describe: '임시 전사를 보내지 않는 STT. "전사 중" 표시만으로 진행되는지 본다.',
+    rules: [{ path: '/ws/interviews/*/no-partial' }],
+  },
+
+  /** 질문 음성(TTS)만 실패. 화면은 질문 텍스트로 대체해 진행해야 한다(0007). */
+  'tts-unavailable': {
+    describe: '질문 음성 주소가 500. 질문 텍스트 대체 표시를 본다.',
+    rules: [
+      {
+        path: '/interviews/*/turns/*/question-audio',
+        status: 500,
+        reason: 'internal_error',
+        message: '질문 음성을 만들지 못했어요.',
+      },
+    ],
+  },
+
   slow: {
     describe: '모든 요청이 10초 뒤 실패하고 WS 는 아무 말도 하지 않는다.',
     rules: [
@@ -218,6 +289,16 @@ export function installMockConsole() {
     clear: () => {
       clearFaults();
       console.info('[msw] 장애 주입 규칙 전부 해제');
+    },
+    /** 열린 면접 소켓을 서버 쪽에서 끊는다. 녹음 중 끊김 확인용. */
+    dropWs: () => {
+      dropInterviewSockets();
+      console.info('[msw] 면접 WS를 끊었습니다');
+    },
+    /** 열린 면접 소켓에 복구 불가 오류를 보내고 닫는다. 녹음 중 fatal 오류 확인용. */
+    failWs: (reason = 'repo_unreachable', code = 'ERR_REPO_UNREACHABLE') => {
+      failInterviewSockets(reason, code);
+      console.info(`[msw] 면접 WS에 ${reason}(recoverable: false)를 보냈습니다`);
     },
   };
   Object.assign(window, { msw: api });
