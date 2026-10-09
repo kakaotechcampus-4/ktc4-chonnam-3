@@ -186,6 +186,64 @@ test('녹음 중 연결이 끊기면 실패로 보고 다시 연결된 뒤 다�
   await expect(page.getByTestId('transcript-final')).toHaveText(FIRST_ANSWER);
 });
 
+// 전사(transcript)는 저장 완료가 아니다. 저장 완료 신호는 answerReceived다(0007 "실패와 복구").
+test('저장 확인이 30초 안에 오지 않으면 저장 실패로 안내하고 다시 답할 수 있다', async ({
+  page,
+}) => {
+  await page.clock.install();
+  await stubMic(page);
+  await openSession(page, 'ws-no-ack');
+  await answerOnce(page);
+  await expect(page.getByTestId('transcript-final')).toHaveText(FIRST_ANSWER);
+  await page.clock.runFor(30_000);
+
+  await expect(page.getByRole('alert')).toContainText('답변을 저장하지 못했어요');
+  await page.getByRole('button', { name: '다시 답변하기' }).click();
+  await answerOnce(page);
+  await expect(page.getByText('질문 2 / 9 · 개발팀')).toBeVisible({ timeout: 10_000 });
+});
+
+test('전사 뒤 저장 확인 전에 연결이 끊기면 실패로 보고 다시 답할 수 있다', async ({ page }) => {
+  await stubMic(page);
+  await openSession(page, 'ws-no-ack');
+  await answerOnce(page);
+  await expect(page.getByTestId('transcript-final')).toHaveText(FIRST_ANSWER);
+  await page.evaluate(() => (window as unknown as { msw: { dropWs: () => void } }).msw.dropWs());
+
+  await expect(page.getByRole('alert')).toContainText('연결이 끊겨 답변이 저장되지 않았어요');
+  await page.getByRole('button', { name: '다시 답변하기' }).click();
+  await expect(page.getByRole('button', { name: '답변 시작' })).toBeEnabled({ timeout: 10_000 });
+  await answerOnce(page);
+  await expect(page.getByText('질문 2 / 9 · 개발팀')).toBeVisible({ timeout: 10_000 });
+});
+
+test('저장 뒤 확인 전에 연결이 끊겨도 재연결 후 저장된 답변을 보여 준다', async ({ page }) => {
+  await stubMic(page);
+  await openSession(page, 'ws-drop-before-ack');
+  await answerOnce(page);
+
+  // 재연결 뒤 서버가 다음 질문을 만드는 동안 본다. 재연결 전 GET으로 저장 여부를 이미 받았다.
+  await expect(
+    page.getByRole('status').filter({ hasText: '다음 질문을 만들고 있어요' }),
+  ).toBeAttached({ timeout: 10_000 });
+  expect(await page.getByRole('alert').count()).toBe(0);
+  await expect(page.getByTestId('transcript-final')).toHaveText(FIRST_ANSWER);
+  await expect(page.getByText('질문 2 / 9 · 개발팀')).toBeVisible({ timeout: 10_000 });
+});
+
+test('전사 뒤 저장 확인 전에 새로고침하면 끊김 안내와 함께 같은 턴부터 다시 시작한다', async ({
+  page,
+}) => {
+  await stubMic(page);
+  await openSession(page, 'ws-no-ack');
+  await answerOnce(page);
+  await expect(page.getByTestId('transcript-final')).toHaveText(FIRST_ANSWER);
+  await page.reload();
+
+  await expect(page.getByRole('alert')).toContainText('연결이 끊겨 답변이 저장되지 않았어요');
+  await expect(page.getByText('질문 1 / 9 · 인사팀')).toBeVisible();
+});
+
 test('연결이 끊긴 동안에는 답변을 시작할 수 없다', async ({ page }) => {
   await stubMic(page);
   await openSession(page);

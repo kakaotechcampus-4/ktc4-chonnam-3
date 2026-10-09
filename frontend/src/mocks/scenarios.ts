@@ -26,6 +26,8 @@ export type ScenarioName =
   | 'ws-stt-empty'
   | 'ws-repeat-request'
   | 'ws-answer-rejected'
+  | 'ws-no-ack'
+  | 'ws-drop-before-ack'
   | 'no-partial'
   | 'tts-unavailable'
   | 'offline'
@@ -205,6 +207,16 @@ export const scenarios: Record<ScenarioName, Scenario> = {
   'ws-answer-rejected': {
     describe: '다음 answerStart 1회를 answer_rejected로 거절. 녹음 중 거절 처리를 본다.',
     rules: [{ path: '/ws/interviews/*/reject', times: 1 }],
+  },
+
+  'ws-no-ack': {
+    describe: '다음 답변 1회 전사 뒤 저장·answerReceived 없이 멈춤. 저장 확인 타임아웃을 본다.',
+    rules: [{ path: '/ws/interviews/*/no-ack', times: 1 }],
+  },
+
+  'ws-drop-before-ack': {
+    describe: '다음 답변 1회 저장 뒤 answerReceived 전에 연결 끊김. 재연결 뒤 저장 확인을 본다.',
+    rules: [{ path: '/ws/interviews/*/drop-before-ack', times: 1 }],
   },
 
   'no-partial': {
