@@ -24,8 +24,8 @@ const ERROR_MESSAGE: Record<string, string> = {
 /** 30초간 다른 메시지가 없으면 근거 확인 배너를 내린다. */
 const EVIDENCE_TIMEOUT_MS = 30_000;
 
-/** answerEnd 뒤 이 시간 안에 transcript가 없으면 스냅샷으로 저장 여부를 확인한다. */
-const TRANSCRIPT_TIMEOUT_MS = 30_000;
+/** answerEnd 뒤 이 시간 안에 answerReceived가 없으면 스냅샷으로 저장 여부를 확인한다. */
+const SAVE_CONFIRM_TIMEOUT_MS = 30_000;
 
 /** 녹음 중 새로고침을 알아채기 위한 표식. 녹음 시작에 남기고 제출·실패·재시도에 지운다. */
 const RECORDING_KEY = 'devon.recordingAnswer';
@@ -45,7 +45,11 @@ type LiveQuestion = {
   audioUrl: string | null;
 };
 
-/** 한 턴의 답변 단계. spec/frontend/designs/2026-10-05-voice-interview.md "턴 상태". */
+/**
+ * 한 턴의 답변 단계. spec/frontend/designs/2026-10-05-voice-interview.md "턴 상태".
+ * transcribing은 answerEnd부터 answerReceived(저장 완료)까지다. transcript가 와도 저장 전이면
+ * 머문다 — 전사와 저장은 별개이고, 이 사이에 끊기면 실패다(0007 "실패와 복구").
+ */
 type AnswerPhase = 'listening' | 'recording' | 'transcribing' | 'submitted' | 'failed';
 type Failure = 'disconnected' | 'stt' | 'empty' | 'rejected' | 'micLost' | 'micUnavailable';
 type AnswerState = {
@@ -222,10 +226,19 @@ export default function InterviewScreen() {
             : prev,
         );
       } else if (message.type === 'transcript') {
+        // 전사만 보여 준다. 저장 완료는 answerReceived가 알리므로 단계는 그대로 둔다.
+        setAnswer((prev) =>
+          prev && prev.turn === message.turn && prev.phase !== 'recording'
+            ? { ...prev, final: message.text }
+            : prev,
+        );
+      } else if (message.type === 'answerReceived') {
+        // 저장 완료(spec/frontend/features/interview.md "서버 → 클라이언트"). turn이 없어 지금
+        // 답변에 적용한다. 녹음 중이면 앞선 시도의 늦은 신호이므로 새 녹음을 건드리지 않는다.
         markRecording(id, null);
         setAnswer((prev) =>
-          prev && prev.turn === message.turn
-            ? { ...prev, phase: 'submitted', final: message.text, failure: null }
+          prev && prev.phase !== 'recording'
+            ? { ...prev, phase: 'submitted', failure: null }
             : prev,
         );
       } else if (message.type === 'thinking') {
@@ -262,7 +275,6 @@ export default function InterviewScreen() {
           occurredAt: message.occurredAt,
         });
       }
-      // answerReceived는 transcript 뒤에 오므로 화면이 따로 바꿀 것이 없다.
     },
   });
 
@@ -332,14 +344,23 @@ export default function InterviewScreen() {
   const questionAudio = useQuestionAudio(question?.audioUrl ?? null, playKey);
 
   /** 지금 턴의 답변 상태. 턴이 바뀌면 듣기부터 시작한다. */
-  const current: AnswerState =
+  const liveAnswer: AnswerState =
     answer && question && answer.turn === question.turn
       ? answer
       : { turn: question?.turn ?? -1, phase: 'listening', partial: '', final: null, failure: null };
+  /**
+   * 저장 여부는 연결과 따로 스냅샷으로 판단한다. answerReceived 전에 끊겨 실패로 돌렸어도
+   * 재연결 전에 다시 받은 GET에 그 턴 답변이 있으면 저장된 것이다. 안내를 지우고 그 답변을 보여 준다.
+   */
+  const savedAnswer = turns.find((entry) => entry.turn === liveAnswer.turn)?.answer ?? null;
+  const current: AnswerState =
+    liveAnswer.phase === 'failed' && savedAnswer !== null
+      ? { ...liveAnswer, phase: 'submitted', final: savedAnswer, failure: null }
+      : liveAnswer;
 
   /**
-   * 소켓은 붙어 있는데 서버가 transcript를 보내지 않을 수 있다. 일정 시간 뒤 스냅샷으로
-   * 그 턴이 저장됐는지 보고, 저장됐으면 제출 완료로, 아니면 끊김 실패로 돌린다.
+   * 소켓은 붙어 있는데 서버가 answerReceived를 보내지 않을 수 있다. 일정 시간 뒤 스냅샷으로
+   * 그 턴이 저장됐는지 보고, 저장됐으면 제출 완료로, 아니면 저장 실패로 돌린다.
    */
   useEffect(() => {
     if (current.phase !== 'transcribing') return;
@@ -347,22 +368,23 @@ export default function InterviewScreen() {
     const timer = setTimeout(() => {
       void refetchInterview().then(({ data, isError }) => {
         // 조회가 실패하면 캐시의 예전 값(answer: null)이 온다. 저장 여부를 모르므로
-        // 끊김으로 단정하지 않고 다음 주기에 다시 확인한다.
+        // 실패로 단정하지 않고 다음 주기에 다시 확인한다.
         if (isError) {
           setRecheck((count) => count + 1);
           return;
         }
         const saved = data?.turns.find((entry) => entry.turn === turn)?.answer ?? null;
         markRecording(id, null);
+        // 소켓이 살아 있어도 이 경로를 탄다. 끊김이 아니라 저장되지 않은 것으로 안내한다.
         setAnswer((prev) =>
           prev && prev.turn === turn && prev.phase === 'transcribing'
             ? saved !== null
               ? { ...prev, phase: 'submitted', final: saved }
-              : { ...prev, phase: 'failed', failure: 'disconnected' }
+              : { ...prev, phase: 'failed', failure: 'rejected' }
             : prev,
         );
       });
-    }, TRANSCRIPT_TIMEOUT_MS);
+    }, SAVE_CONFIRM_TIMEOUT_MS);
     return () => clearTimeout(timer);
   }, [current.phase, current.turn, refetchInterview, id, recheck]);
 

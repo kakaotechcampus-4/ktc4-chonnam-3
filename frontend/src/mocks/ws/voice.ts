@@ -1,6 +1,6 @@
 import { completedTurns } from '../fixtures/interview';
 import { takeWsFault } from '../faults';
-import type { InterviewRecord } from '../db';
+import { recordAnswer, type InterviewRecord } from '../db';
 import { parseClientMessage, send, wait, wsError, type Client } from './protocol';
 import { handleAnswer, resendPendingQuestion } from './turns';
 
@@ -19,14 +19,18 @@ const TRANSCRIBE_MS = 600;
 export const REPEAT_REQUEST_TEXT = '다시 한 번 말씀해 주시겠어요?';
 const FALLBACK_ANSWER = '네, 그 부분은 직접 설계하고 구현했습니다.';
 
-type AnswerFault = 'stt' | 'repeat' | 'no-partial' | 'reject';
+type AnswerFault = 'stt' | 'repeat' | 'no-partial' | 'reject' | 'no-ack' | 'drop-before-ack';
 
 /** `/ws/interviews/{sessionId}/{kind}` 규칙만 받는다. 연결 단계 규칙은 끝이 달라 걸러진다. */
 function takeAnswerFault(socketPath: string, kind: AnswerFault) {
   return takeWsFault(`${socketPath}/${kind}`, (rule) => rule.path.endsWith(`/${kind}`));
 }
 
-export function createAnswerHandler(client: Client, record: InterviewRecord, socketPath: string) {
+export function createAnswerHandler(
+  client: Client & { close: () => void },
+  record: InterviewRecord,
+  socketPath: string,
+) {
   /** 받는 중인 답변. 연결마다 따로 둔다 — 끊기면 받던 오디오는 함께 버려진다(0007). */
   let pending: { turn: number; chunks: number } | null = null;
   const answerText = (turn: number) => completedTurns[turn - 1]?.answer ?? FALLBACK_ANSWER;
@@ -57,6 +61,16 @@ export function createAnswerHandler(client: Client, record: InterviewRecord, soc
 
     const text = answerText(turn);
     send(client, { type: 'transcript', turn, text });
+
+    // 전사 뒤 저장도 answerReceived도 없이 멈춘 서버. 화면의 저장 확인 타임아웃을 본다.
+    if (takeAnswerFault(socketPath, 'no-ack')) return;
+    // 저장은 끝났는데 answerReceived를 보내기 전에 연결이 끊긴다. 바로 닫아 앞서 보낸
+    // transcript도 화면에 닿지 않는다(CLOSE_GRACE_MS 참고). 재연결 뒤 저장 확인을 본다.
+    if (takeAnswerFault(socketPath, 'drop-before-ack')) {
+      recordAnswer(record, turn, text);
+      client.close();
+      return;
+    }
     await handleAnswer(client, record, turn, text);
   }
 
