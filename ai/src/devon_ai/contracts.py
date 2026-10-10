@@ -1075,6 +1075,17 @@ def validate_deep_analysis(
     return _checked(candidate)
 
 
+@dataclass(frozen=True)
+class DomainPostingInput(_Contract):
+    """도메인 category 판정 입력(0022). 회사명·`industry_name`은 필드로 두지 않아 넣을 수 없다."""
+
+    position: str | None
+    intro: str | None
+    main_tasks: tuple[str, ...]
+    requirements: tuple[str, ...]
+    preferred_points: tuple[str, ...]
+
+
 def _json_value(value: object) -> object:
     if is_dataclass(value) and isinstance(value, _Contract):
         return {field.name: _json_value(getattr(value, field.name)) for field in fields(value)}
