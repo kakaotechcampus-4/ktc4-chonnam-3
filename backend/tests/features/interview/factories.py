@@ -1,10 +1,12 @@
 """면접 테스트 데이터. 기본값은 면접 생성 검사를 통과하는 상태이고, 인자 하나로 어긋나게 만든다.
+make_interview 이하는 interview_prep 이 끝난 상태를 대신 만든다 (턴 저장·조회용).
 
-task-13
+task-13 / task-15
 """
 
 import itertools
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,9 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import (
     AnalysisJob,
     AnalysisRepoCandidate,
+    Evidence,
+    InterviewSession,
+    InterviewTurn,
     JobPosting,
     RepoAnalysis,
     Repository,
+    SessionRepository,
     User,
 )
 
@@ -91,3 +97,74 @@ async def make_repo(
         )
     await db.flush()
     return repo
+
+
+async def make_interview(
+    db: AsyncSession, run: AnalysisJob, repos: list[Repository], **overrides: Any
+) -> InterviewSession:
+    """준비가 끝난 진행 중 면접. 첫 repo 가 primary 다."""
+    fields: dict[str, Any] = {
+        "user_id": run.user_id,
+        "analysis_job_id": run.id,
+        "job_posting_id": run.job_posting_id,
+        "status": "in_progress",
+        "started_at": datetime.now(UTC),
+    }
+    interview = InterviewSession(**(fields | overrides))
+    db.add(interview)
+    await db.flush()
+    db.add_all(
+        SessionRepository(
+            interview_session_id=interview.id,
+            repository_id=repo.id,
+            is_primary=i == 0,
+            display_order=i,
+        )
+        for i, repo in enumerate(repos)
+    )
+    await db.flush()
+    return interview
+
+
+async def make_evidence(
+    db: AsyncSession, interview: InterviewSession, repo: Repository, **overrides: Any
+) -> Evidence:
+    """L2 notable_areas 를 전개한 사전 분석 근거 (tool_name=NULL)."""
+    fields: dict[str, Any] = {
+        "interview_session_id": interview.id,
+        "repository_id": repo.id,
+        "source_type": "file",
+        "git_ref": "a" * 40,
+        "path": "src/app.py",
+        "snippet": "def main(): ...",
+    }
+    evidence = Evidence(**(fields | overrides))
+    db.add(evidence)
+    await db.flush()
+    return evidence
+
+
+async def make_turn(
+    db: AsyncSession,
+    interview: InterviewSession,
+    turn_no: int,
+    *,
+    answered: bool = False,
+    **overrides: Any,
+) -> InterviewTurn:
+    """질문까지 던진 턴. answered=True 면 답변도 채운다."""
+    now = datetime.now(UTC)
+    fields: dict[str, Any] = {
+        "interview_session_id": interview.id,
+        "turn_no": turn_no,
+        "persona": "hr_manager",
+        "status": "asked",
+        "question_text": f"질문 {turn_no}",
+        "asked_at": now,
+    }
+    if answered:
+        fields |= {"status": "answered", "answer_text": f"답변 {turn_no}", "answered_at": now}
+    turn = InterviewTurn(**(fields | overrides))
+    db.add(turn)
+    await db.flush()
+    return turn
