@@ -1,4 +1,4 @@
-"""/interviews REST. 구현 예정: /{id}/retry, /{id}/prepare/retry.
+"""/interviews REST. 구현 예정: /{id}/retry.
 준비 실패 재시도는 REST POST /interviews/{id}/prepare/retry이며 WS 메시지가 아니다.
 main.py 등록은 interview_prep 워커 연결(AI task-06) 때 한다.
 그 전에 열면 면접이 preparing 에 머문다.
@@ -47,11 +47,29 @@ async def create_interview(
 async def get_interview(
     interview_id: str, request: Request, db: Database, user: CurrentUser
 ) -> InterviewDetailResponse:
-    # 계약은 401/404 만 둔다. UUID 가 아닌 id 도 없는 면접이므로 400 대신 404.
-    try:
-        parsed = uuid.UUID(interview_id)
-    except ValueError:
-        raise AppError(Reason.NOT_FOUND) from None
     return await service.get_interview(
-        db, request.app.state.redis, user_id=user.id, interview_id=parsed
+        db,
+        request.app.state.redis,
+        user_id=user.id,
+        interview_id=_parse_id(interview_id, Reason.NOT_FOUND),
     )
+
+
+@router.post("/{interview_id}/prepare/retry", status_code=status.HTTP_204_NO_CONTENT)
+async def retry_prepare(
+    interview_id: str, request: Request, db: Database, user: CurrentUser
+) -> None:
+    await service.retry_prepare(
+        db,
+        request.app.state.redis,
+        user_id=user.id,
+        interview_id=_parse_id(interview_id, Reason.SESSION_EXPIRED),
+    )
+
+
+def _parse_id(interview_id: str, missing: Reason) -> uuid.UUID:
+    """UUID 가 아닌 id 도 없는 면접이다. 계약에 400 이 없어 그 route 의 '없음' reason 으로 낸다."""
+    try:
+        return uuid.UUID(interview_id)
+    except ValueError:
+        raise AppError(missing) from None

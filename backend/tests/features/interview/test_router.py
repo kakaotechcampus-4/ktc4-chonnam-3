@@ -9,6 +9,7 @@ import uuid
 
 import pytest
 
+from app.db.models import InterviewSession
 from app.features.interview.router import router
 
 from .factories import make_repo, make_run, make_user
@@ -92,3 +93,26 @@ async def test_get_not_found(client, run, interview_id) -> None:
     response = await client.get(f"/api/interviews/{interview_id}")
     assert response.status_code == 404
     assert response.json()["error"]["reason"] == "not_found"
+
+
+async def test_prepare_retry_204(client, db, run) -> None:
+    repo = await make_repo(db, run)
+    await db.commit()
+    created = (
+        await client.post(
+            "/api/interviews", json={"runId": str(run.id), "repositoryIds": [str(repo.id)]}
+        )
+    ).json()
+    interview = await db.get(InterviewSession, uuid.UUID(created["interviewId"]))
+    interview.status = "preparing_failed"
+    await db.commit()
+
+    response = await client.post(f"/api/interviews/{created['interviewId']}/prepare/retry")
+
+    assert response.status_code == 204
+
+
+async def test_prepare_retry_unknown_id_410(client, run) -> None:
+    response = await client.post("/api/interviews/not-a-uuid/prepare/retry")
+    assert response.status_code == 410
+    assert response.json()["error"]["reason"] == "session_expired"
