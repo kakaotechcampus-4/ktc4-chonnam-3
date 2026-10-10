@@ -16,6 +16,7 @@ from app.core.exception_handlers import (
 )
 from app.core.logging import RequestIdMiddleware, configure_logging
 from app.core.security import SessionCookieMiddleware
+from app.features.analysis.router import router as analysis_router
 from app.features.auth.oauth import GitHubOAuth, OAuthStateStore
 from app.features.auth.router import router as auth_router
 from app.features.auth.session_store import SessionStore
@@ -64,6 +65,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.add_middleware(RequestIdMiddleware)
     application.include_router(auth_router, prefix=settings.api_prefix)
     application.include_router(me_router, prefix=settings.api_prefix)
+    application.include_router(analysis_router, prefix=settings.api_prefix)
 
     @application.get(f"{settings.api_prefix}/health", tags=["ops"])
     async def health() -> dict[str, str]:
