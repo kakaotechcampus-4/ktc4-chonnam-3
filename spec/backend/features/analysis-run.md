@@ -109,6 +109,31 @@ FE 상태 매핑:
 - 같은 fingerprint의 `queued/running` job이 있으면 새 job을 만들지 않고 `409 run_in_progress`와 공통 오류 본문의 `error.details.runId`로 기존 run ID를 반환한다. FE는 이 ID로 기존 분석 진행 화면으로 이동한다.
 - 종료 상태(`succeeded`, `partial`, `failed`, `canceled`)면 새 run 생성을 허용한다.
 
+## 실행·조회 경계의 구체화
+
+아래는 Task 11의 현행 실행 설계다. 초기 [파이프라인 설계](../../../backend/docs/pipeline.md)와
+[Redis 키 설계](../../../backend/docs/redis-keys.md)의 분석 run/page NX 잠금은 아래 DB·큐 경계로 대체한다.
+다른 기능의 Redis 잠금과 기존 설계 원문은 유지한다. 구현 반영·검증 현황은 PR #81·#100에서 구분한다.
+
+- 분석 생성은 `user_id`, 정규화한 Wanted URL, `document_id` 또는 null의 fingerprint를 사용한다.
+  진행 중인 `analysis_run`은 `(user_id, fingerprint)` DB UNIQUE로 중복을 막고 다른 job의 사용자별 제약은 유지한다.
+- 실행 시작은 DB 행 잠금 아래 `queued → running`, 후보 page는 `pending → running` 전이로 확보한다.
+  중복 배달은 실행을 다시 시작하지 않는다. run/page 전용 Redis NX 잠금은 추가하지 않는다.
+- INSERT commit 후 결정적 ARQ ID로 enqueue한다. 큐 등록 실패는 확정된 DB 행을 되돌리지 않고
+  queued run/pending page를 30초 주기 reaper가 재등록한다. 초기 저장소 수집 중인 run은 queued로 대기한다.
+- ARQ 자동 재시도는 `max_tries=1`로 제한한다. 프로세스 종료로 남은 running 행은 자동 재실행하지 않으며,
+  이전 실행 종료 확인 후 실패 처리한다. Redis 키 유실만으로 실행 종료를 판정하지 않는다.
+- run과 최초 page의 종료 상태는 같은 transaction에서 확정하고, commit 후 전체 단계 mirror·TTL·이벤트를 보낸다.
+  알림 실패가 이미 확정된 분석 결과를 실패로 되돌리지는 않는다.
+- 후보 page 실행 지표는 별도 job 행 대신 `analysis_repo_candidate_pages`의 `started_at`, `duration_ms`,
+  `queue_wait_ms`에 저장한다. 실행 시간은 시작·종료 차이, 큐 대기는 요청·시작 차이의 밀리초이며 음수를 허용하지 않는다.
+- run 조회 TTL은 `created_at`부터 계산한다. 기본 7200초는 유지하며 영구 분석 자료를 삭제하지 않는다.
+  만료·타인 소유·미존재 run은 같은 `410 run_expired`로 응답한다.
+- 결과 조회는 succeeded/partial에서 허용한다. 집계는 run의 배정된 L1 snapshot을 기준으로 하며,
+  카드에서 나중에 제외된 저장소도 포함한다. 필수 요약 필드·실패 원소 형태는 공통 OpenAPI를 따른다.
+- 후보 page는 필수 양의 정수다. 범위 밖은 `200` 빈 배열, 실패한 page는 `409 candidate_page_failed`이며
+  조회만으로 실패 page를 재실행하지 않는다. queued/running run의 후보 조회는 기존 `202 analyzing`을 유지한다.
+
 ## 선택 가능 조건
 
 `POST /interviews`는 선택 repo가 모두 다음 조건을 만족해야 한다.
