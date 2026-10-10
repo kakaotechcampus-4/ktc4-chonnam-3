@@ -22,6 +22,7 @@ from app.features.interview import queries
 from app.features.interview.turn_service import (
     TurnRejected,
     complete_interview,
+    question_rejection,
     save_answer,
     save_question,
 )
@@ -51,8 +52,13 @@ async def ask_next_question(
     """다음 질문을 만들어 저장하고 question 을 보낸다.
 
     입력: 면접 id, 질문 생성기, 메시지 전송 함수.
-    출력: 보냈으면 True. save_question 이 막으면(진행 중 아님·미답변·턴 소진) False.
+    출력: 보냈으면 True. 질문을 저장할 수 없으면(진행 중 아님·미답변·턴 소진) False.
     """
+    # 막힐 상황이면 질문 생성(LLM)을 부르지 않는다. 최종 판정은 save_question 이 한다.
+    # ponytail: compose 동안 읽기 트랜잭션이 열려 있다. 트랜잭션 종료는 세션을 연 쪽 몫이라
+    # WS 핸들러 구현 때 LLM 호출 전에 읽기를 끝내도록 정리한다 (PR #66 리뷰 ③).
+    if await question_rejection(db, interview_id):
+        return False
     turns = await queries.list_turns(db, interview_id=interview_id)
     draft = await compose(turns)
     turn = await save_question(

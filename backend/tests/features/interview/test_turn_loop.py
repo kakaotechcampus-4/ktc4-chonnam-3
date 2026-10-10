@@ -106,6 +106,7 @@ async def test_no_question_when_not_in_progress(db: AsyncSession) -> None:
 
     assert sent is False
     assert rec.sent == []
+    assert rec.seen_turns == []  # 막힐 상황이면 질문 생성(LLM)을 부르지 않는다
 
 
 async def test_last_answer_completes_even_if_send_fails(db: AsyncSession) -> None:
@@ -130,3 +131,25 @@ async def test_last_answer_completes_even_if_send_fails(db: AsyncSession) -> Non
     interview = await db.get(InterviewSession, interview_id, populate_existing=True)
     assert interview is not None
     assert interview.status == "completed"
+
+
+async def test_compose_failure_keeps_answer_without_next_question(db: AsyncSession) -> None:
+    """질문 생성이 실패해도 답변은 저장되고 다음 질문은 만들어지지 않는다."""
+    interview_id, rec = await _start(db)
+
+    async def failing_compose(_: list[InterviewTurn]) -> QuestionDraft:
+        raise RuntimeError("llm down")
+
+    with pytest.raises(RuntimeError):
+        await handle_answer(
+            db,
+            interview_id=interview_id,
+            turn_no=1,
+            text="답변 1",
+            compose=failing_compose,
+            send=rec.send,
+        )
+
+    turns = await queries.list_turns(db, interview_id=interview_id)
+    assert [(t.turn_no, t.status) for t in turns] == [(1, "answered")]
+    assert [m["type"] for m in rec.sent] == ["question", "answerReceived", "thinking"]

@@ -14,6 +14,7 @@ from app.db.models import InterviewSession, InterviewTurn, TurnEvidence
 from app.features.interview.turn_service import (
     TurnRejected,
     complete_interview,
+    question_rejection,
     save_answer,
     save_question,
 )
@@ -63,6 +64,7 @@ async def test_next_question_after_answer(db: AsyncSession) -> None:
     interview, _ = await _setup(db, current_turn=1)
     await make_turn(db, interview, 1, answered=True)
 
+    assert await question_rejection(db, interview.id) is None  # 저장 가능 상태
     turn = await _ask(db, interview.id, depth=2, parent_turn_no=1)
 
     assert isinstance(turn, InterviewTurn)
@@ -87,6 +89,7 @@ async def test_question_blocked(
     if last_answered is not None:
         await make_turn(db, interview, overrides["current_turn"], answered=last_answered)
 
+    assert await question_rejection(db, interview.id) == reason  # LLM 전 사전 확인
     assert await _ask(db, interview.id) == reason
 
 
