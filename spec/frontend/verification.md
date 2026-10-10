@@ -11,6 +11,6 @@
 
 기능별 상세 검증 시나리오는 spec/frontend/features/<기능>.md에, 구현 완료 체크리스트는 frontend/docs/task-*.md에 둔다. 이 문서는 팀 전체가 보는 공통 검수 기준만 유지한다.
 
-현재 `frontend/package.json`에는 `test` 스크립트가 없다. 브라우저용 `frontend/docs/msw-smoke-check.js`는 수동 실행 스크립트이며 OpenAPI 전체·실제 인증·WS·실서버 동작을 자동 검증하지 않는다. 설계 문서에 보존된 과거 통과 기록과 현재 실행 결과를 구분한다. 면접 준비·진행 화면의 로컬 골격과 task 문서의 미완료·수정 보류 항목도 구현 완료로 세지 않는다.
+`frontend/package.json`의 `npm test`는 MSW 기반 화면 테스트(인증·분석 진행·면접 준비 장치 점검 등)이며, `npm run test:integration`은 GitHub HTTP만 대체하고 Vite·API·PostgreSQL·Redis·브라우저 쿠키를 연결하는 별도 테스트다. 실행 조건은 `frontend/README.md`, 인증 구현 범위와 실제 결과는 [인증 구현 기록](../backend/implementation-auth.md)을 따른다. 브라우저용 `frontend/docs/msw-smoke-check.js`는 수동 실행 스크립트이며 OpenAPI 전체·실제 GitHub 인증·WS·운영 배포 동작을 자동 검증하지 않는다. 설계 문서에 보존된 과거 통과 기록과 현재 실행 결과를 구분한다. 면접 준비·진행 화면의 로컬 골격과 task 문서의 미완료·수정 보류 항목도 구현 완료로 세지 않는다. 면접 준비 장치 점검 테스트는 `getUserMedia`·`enumerateDevices`·권한 상태 API를 대체하므로 실제 마이크 입력·스피커 출력·하울링은 검증하지 않으며, 실제 장치 확인은 별도 수동 점검으로 기록한다.
 
 이 표는 팀이 결과를 검수하는 기준이다. AI의 실행 명령·PR 준비 순서는 CLAUDE.md와 .claude/skills/에서 관리한다.

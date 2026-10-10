@@ -1,6 +1,30 @@
-"""GitHub 토큰 암복호화 (AES-GCM). access_token_encrypted / refresh_token_encrypted 는
-BYTEA 이고 평문 저장이 금지된다. 키는 TOKEN_ENCRYPTION_KEY.
-쿠키·OAuth state 는 core/security.py 담당 — 섞지 않는다.
+"""Authenticated encryption of GitHub tokens at rest."""
 
-확정본 §1 github_accounts / task-06
-"""
+import base64
+import binascii
+import secrets
+
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+
+class TokenCipher:
+    def __init__(self, base64_key: str) -> None:
+        try:
+            key = base64.b64decode(base64_key, validate=True)
+        except (ValueError, binascii.Error):
+            raise ValueError("TOKEN_ENCRYPTION_KEY must be base64 encoded") from None
+        if len(key) != 32:
+            raise ValueError("TOKEN_ENCRYPTION_KEY must contain exactly 32 bytes")
+        self._cipher = AESGCM(key)
+
+    def encrypt(self, value: str) -> bytes:
+        # 같은 키로 암호화할 때 nonce를 재사용하지 않으며 복호화를 위해 암호문 앞에 저장한다.
+        nonce = secrets.token_bytes(12)
+        return nonce + self._cipher.encrypt(nonce, value.encode(), None)
+
+    def decrypt(self, value: bytes) -> str:
+        try:
+            return self._cipher.decrypt(value[:12], value[12:], None).decode()
+        except (InvalidTag, ValueError, UnicodeDecodeError):
+            raise ValueError("Stored token cannot be decrypted") from None

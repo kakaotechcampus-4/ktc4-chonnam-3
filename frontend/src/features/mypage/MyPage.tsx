@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
+import { clearSessionQueries } from '@/shared/queryClient';
 import Header from '@/shared/components/Header';
+import Footer from '@/shared/components/Footer';
 
 const PAGE_SIZE = 10;
 
@@ -19,7 +21,6 @@ function formatDate(value: string | null) {
 
 export default function MyPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [logoutOpen, setLogoutOpen] = useState(false);
 
@@ -31,13 +32,16 @@ export default function MyPage() {
   const interviewsQuery = useQuery({
     queryKey: queryKeys.interviews(page),
     queryFn: () => api.getInterviews({ page, size: PAGE_SIZE }),
+    // 다음 페이지를 불러오는 동안 이전 페이지와 페이지 이동 UI를 유지한다.
+    placeholderData: keepPreviousData,
   });
 
   const logoutMutation = useMutation({
     mutationFn: api.logout,
-    onSuccess: () => {
-      queryClient.clear();
-      navigate('/login');
+    onSuccess: async () => {
+      await clearSessionQueries();
+      // 뒤로 가기로 방금 로그아웃한 마이페이지에 돌아오지 않도록 현재 기록을 교체한다.
+      navigate('/login', { replace: true });
     },
   });
 
@@ -46,21 +50,24 @@ export default function MyPage() {
   const completedInterviews = (interviewList?.interviews ?? []).filter(
     (item) => item.status === 'completed',
   );
-  const totalPages = interviewList ? Math.ceil(interviewList.total / interviewList.size) : 1;
+  // 조회가 실패하면 data가 비어 totalPages가 1로 떨어진다. 마지막 성공값으로 페이지 이동을 남긴다.
+  const [lastTotalPages, setLastTotalPages] = useState(1);
+  const totalPages = interviewList
+    ? Math.ceil(interviewList.total / interviewList.size)
+    : lastTotalPages;
+  if (totalPages !== lastTotalPages) setLastTotalPages(totalPages);
 
   return (
     <div className="flex min-h-screen flex-col bg-paper text-ink">
       <Header
-        active="mypage"
         githubLinked={profile?.github.linked}
         avatarUrl={profile?.avatarUrl}
         name={profile?.name}
       />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-10">
-        <h1 className="text-lg font-bold">
-          {profileQuery.isLoading ? '불러오는 중...' : `${profile?.name ?? ''} 님의 정보`}
-        </h1>
+        {profileQuery.isLoading && <h1 className="text-lg font-bold">불러오는 중...</h1>}
+        {profile && <h1 className="text-lg font-bold">{profile.name} 님의 정보</h1>}
 
         <section className="mt-5 flex flex-col gap-4 rounded-lg border border-accent/10 bg-surface p-5">
           <div className="flex items-center justify-between">
@@ -72,7 +79,10 @@ export default function MyPage() {
 
           {profileQuery.isLoading && <p className="text-sm text-muted">불러오는 중...</p>}
           {profileQuery.isError && (
-            <p className="text-sm text-error">정보를 불러오지 못했어요.</p>
+            <RetryRow
+              message="정보를 불러오지 못했어요."
+              onRetry={() => void profileQuery.refetch()}
+            />
           )}
 
           {profile && (
@@ -121,12 +131,17 @@ export default function MyPage() {
 
         <section className="mt-4 rounded-lg border border-accent/10 bg-surface px-5 pb-2 pt-5">
           <h2 className="text-sm font-bold text-ink">
-            면접 이력 · 총 {profile?.interviewSummary.totalCount ?? 0}회
+            면접 이력{profile && ` · 총 ${profile.interviewSummary.totalCount}회`}
           </h2>
 
           {interviewsQuery.isLoading && <p className="mt-6 text-sm text-muted">불러오는 중...</p>}
           {interviewsQuery.isError && (
-            <p className="mt-6 text-sm text-error">이력을 불러오지 못했어요.</p>
+            <div className="mt-6">
+              <RetryRow
+                message="이력을 불러오지 못했어요."
+                onRetry={() => void interviewsQuery.refetch()}
+              />
+            </div>
           )}
 
           {interviewList && completedInterviews.length === 0 && (
@@ -204,24 +219,36 @@ export default function MyPage() {
           <button
             type="button"
             className="rounded-lg border border-line px-4 py-2.5 font-bold hover:bg-surface"
-            onClick={() => setLogoutOpen(true)}
+            onClick={() => {
+              // 이전에 실패한 로그아웃 오류 문구가 다시 연 모달에 남지 않게 한다.
+              logoutMutation.reset();
+              setLogoutOpen(true);
+            }}
           >
             로그아웃
           </button>
         </div>
       </main>
 
-      <footer className="flex items-center border-t border-line-soft px-5 py-2.5 text-[10.5px] text-muted">
-        <span>© 2026 DEVON</span>
-        <span className="flex-1" />
-        <span>이용약관 · 개인정보처리방침</span>
-      </footer>
+      <Footer />
 
       {logoutOpen && (
         <div className="fixed inset-0 flex items-center justify-center bg-ink/40 px-4">
-          <div className="w-full max-w-sm rounded-card bg-surface p-6">
-            <h2 className="text-base font-bold">로그아웃 하시겠어요?</h2>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="logout-title"
+            className="w-full max-w-sm rounded-card bg-surface p-6"
+          >
+            <h2 id="logout-title" className="text-base font-bold">
+              로그아웃 하시겠어요?
+            </h2>
             <p className="mt-2 text-sm text-muted">다시 로그인하려면 GitHub 인증이 필요해요.</p>
+            {logoutMutation.isError && (
+              <p role="alert" className="mt-2 text-sm text-error">
+                로그아웃하지 못했어요. 잠시 후 다시 시도해주세요.
+              </p>
+            )}
             <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
@@ -242,6 +269,23 @@ export default function MyPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function RetryRow({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex items-center gap-3">
+      <p role="alert" className="text-sm text-error">
+        {message}
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="rounded-md border border-line px-4 py-2 text-sm"
+      >
+        다시 시도
+      </button>
     </div>
   );
 }

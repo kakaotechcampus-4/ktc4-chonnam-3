@@ -3,15 +3,74 @@
 docs/layer-rules.md 2절 · .env.example / task-01
 """
 
+import base64
+import binascii
 from functools import lru_cache
 from typing import Annotated, Literal
+from urllib.parse import urlsplit
 
-from pydantic import field_validator
+from devon_ai.contracts import CallLimits
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 AppEnv = Literal["local", "dev", "prod"]
-CookieSameSite = Literal["lax", "strict", "none"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
+
+
+def _reject_boolean_timeout(value: object) -> object:
+    if isinstance(value, bool):
+        raise ValueError("llm_timeout_seconds must be a number")
+    return value
+
+
+def _reject_non_integer_limit(value: object) -> object:
+    if isinstance(value, (bool, float)):
+        raise ValueError("LLM integer limits must be integers")
+    return value
+
+
+# 설정을 읽을 때 잘못된 숫자 타입이 먼저 변환되면 호출 시 검증에서 구분할 수 없다.
+LLMTimeout = Annotated[float, BeforeValidator(_reject_boolean_timeout)]
+LLMInteger = Annotated[int, BeforeValidator(_reject_non_integer_limit)]
+
+
+class LLMSettings(BaseModel):
+    """이미 읽은 설정에서 실제 LLM 호출에 필요한 값만 검증한다.
+
+    환경을 다시 읽거나 누락된 실행 상한을 채우지 않는다. 미설정이면 호출 전에 실패한다.
+    """
+
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    openai_api_key: SecretStr = Field(min_length=1)
+    llm_default_model: str = Field(min_length=1)
+    llm_timeout_seconds: LLMTimeout = Field(gt=0, allow_inf_nan=False)
+    llm_max_output_tokens: LLMInteger = Field(gt=0)
+    llm_max_input_bytes: LLMInteger = Field(gt=0)
+    llm_max_response_bytes: LLMInteger = Field(gt=0)
+
+    @field_validator("openai_api_key")
+    @classmethod
+    def validate_api_key(cls, value: SecretStr) -> SecretStr:
+        if not value.get_secret_value().strip():
+            raise ValueError("openai_api_key must not be blank")
+        return value
+
+    @field_validator("llm_default_model")
+    @classmethod
+    def validate_model_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("llm_default_model must not be blank")
+        return value.strip()
+
+    def call_limits(self) -> CallLimits:
+        """AI에는 환경변수나 비밀키 대신 공급자와 무관한 제한값만 전달한다."""
+        return CallLimits(
+            timeout_seconds=self.llm_timeout_seconds,
+            max_output_tokens=self.llm_max_output_tokens,
+            max_input_bytes=self.llm_max_input_bytes,
+            max_response_bytes=self.llm_max_response_bytes,
+        )
 
 
 class Settings(BaseSettings):
@@ -26,6 +85,8 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        # SecretStr 변환 전의 입력도 검증 오류 문자열에 노출되지 않게 한다.
+        hide_input_in_errors=True,
     )
 
     # ── 앱 ──
@@ -35,37 +96,37 @@ class Settings(BaseSettings):
     log_level: LogLevel = "INFO"
 
     # ── DB / Redis ──
-    database_url: str = "postgresql+asyncpg://devon:devon@localhost:5432/devon"
-    redis_url: str = "redis://localhost:6379/0"
+    database_url: str = Field(
+        default="postgresql+asyncpg://devon:devon@localhost:5432/devon", repr=False
+    )
+    redis_url: str = Field(default="redis://localhost:6379/0", repr=False)
 
     # ── 쿠키 / 세션 ──
     session_cookie_name: str = "devon_session"
-    session_ttl_seconds: int = 1209600
+    session_ttl_seconds: int = Field(default=1209600, gt=0)
     cookie_secure: bool = False
-    cookie_samesite: CookieSameSite = "lax"
-
-    # ── DEVON 자체 JWT ──
-    # payload 에 GitHub access token 을 넣지 않는다 (docs/db-schema.md).
-    auth_cookie_name: str = "accessToken"
-    jwt_secret: str = ""
-    jwt_algorithm: str = "HS256"
-    jwt_expires_seconds: int = 1209600
+    cookie_samesite: Literal["lax"] = "lax"
 
     # ── GitHub OAuth ──
     github_client_id: str = ""
-    github_client_secret: str = ""
+    github_client_secret: SecretStr = SecretStr("")
     github_login_scope: str = "read:user"
     github_link_scope: str = "read:user"
-    github_redirect_uri: str = "http://localhost:8000/api/auth/github/callback"
-    token_encryption_key: str = ""
+    github_redirect_uri: str = "http://localhost:5173/auth/github/callback"
+    token_encryption_key: SecretStr = SecretStr("")
 
     # ── LLM ──
     # 모델명을 코드 상수로 두지 않는다. 아래는 seed 가 읽는 기본값이고
     # 실제 사용값은 prompt_versions.model 등 DB 에 저장한다 (backend/CLAUDE.md).
-    openai_api_key: str = ""
-    llm_default_model: str = "gpt-5.6-luna"
-    llm_timeout_seconds: int = 60
-    llm_max_retries: int = 1
+    openai_api_key: SecretStr | None = None
+    llm_default_model: str | None = "gpt-5.6-luna"
+    # 비어 있는 LLM 설정이 health 등 일반 앱 기동을 막지 않도록 호출 시점에 필수 검증한다.
+    llm_timeout_seconds: LLMTimeout | None = None
+    llm_max_output_tokens: LLMInteger | None = None
+    llm_max_input_bytes: LLMInteger | None = None
+    llm_max_response_bytes: LLMInteger | None = None
+    # ADR 0010의 자동 재시도 1회(총 시도 2회)를 표시하며 변경 가능한 호출 예산이 아니다.
+    llm_max_retries: LLMInteger = Field(default=1, ge=1, le=1)
 
     # ── 정책 · 분석 ──
     analysis_run_ttl_seconds: int = 7200
@@ -91,6 +152,27 @@ class Settings(BaseSettings):
         "hr_manager": 1,
     }
 
+    @field_validator(
+        "openai_api_key",
+        "llm_default_model",
+        "llm_timeout_seconds",
+        "llm_max_output_tokens",
+        "llm_max_input_bytes",
+        "llm_max_response_bytes",
+        mode="before",
+    )
+    @classmethod
+    def _empty_llm_value_is_unset(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
+
+    def require_llm(self) -> LLMSettings:
+        """캐시된 설정만 검증하며 비밀키와 네 실행 상한이 준비되지 않으면 실패한다."""
+        return LLMSettings.model_validate(self, from_attributes=True)
+
+    def call_limits(self) -> CallLimits:
+        """LLM 설정을 먼저 검증한 뒤 AI 호출에 전달할 상한을 만든다."""
+        return self.require_llm().call_limits()
+
     @field_validator("persona_turn_quota", mode="before")
     @classmethod
     def _parse_persona_turn_quota(cls, value: object) -> object:
@@ -113,6 +195,43 @@ class Settings(BaseSettings):
     def is_prod(self) -> bool:
         """prod 환경 여부. 쿠키 secure 강제나 문서 노출 차단 판단에 쓴다."""
         return self.app_env == "prod"
+
+    @property
+    def github_link_redirect_uri(self) -> str:
+        return self.github_redirect_uri
+
+    def validate_auth(self) -> None:
+        """인증 설정만 기동 시 검증하고, LLM 설정은 실제 호출 시 별도로 검증한다."""
+        origin = urlsplit(self.frontend_origin)
+        callback = urlsplit(self.github_redirect_uri)
+        if (
+            origin.scheme not in {"http", "https"}
+            or not origin.netloc
+            or origin.username is not None
+            or origin.password is not None
+            or origin.path not in {"", "/"}
+            or origin.query
+            or origin.fragment
+            or (callback.scheme, callback.netloc) != (origin.scheme, origin.netloc)
+            or callback.path != "/auth/github/callback"
+            or callback.query
+            or callback.fragment
+        ):
+            raise ValueError("OAuth callback must be FRONTEND_ORIGIN/auth/github/callback")
+        if self.is_prod and (origin.scheme != "https" or not self.cookie_secure):
+            raise ValueError("Production requires HTTPS and Secure session cookies")
+        if self.api_prefix != "/api" or self.session_cookie_name != "devon_session":
+            raise ValueError("Sprint 1 requires /api and the devon_session cookie")
+        if self.github_login_scope != "read:user" or self.github_link_scope != "read:user":
+            raise ValueError("Sprint 1 GitHub scope must be read:user")
+        if not self.github_client_id or not self.github_client_secret.get_secret_value():
+            raise ValueError("GitHub OAuth client credentials must be configured")
+        try:
+            key = base64.b64decode(self.token_encryption_key.get_secret_value(), validate=True)
+        except (ValueError, binascii.Error):
+            raise ValueError("TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key") from None
+        if len(key) != 32:
+            raise ValueError("TOKEN_ENCRYPTION_KEY must be a base64-encoded 32-byte key")
 
 
 @lru_cache

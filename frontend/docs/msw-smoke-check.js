@@ -92,8 +92,6 @@
     (await call('GET', '/me/home?scenario=no_repository')).data.analysisStatus,
   );
   check('GET /me/interviews', 200, (await call('GET', '/me/interviews?page=1&size=20')).status);
-  check('POST /auth/refresh', 204, (await call('POST', '/auth/refresh')).status);
-  check('POST /auth/logout', 204, (await call('POST', '/auth/logout')).status);
 
   // 문서 preview ------------------------------------------------------------
   const pdf = new FormData();
@@ -355,10 +353,6 @@
       `${expired.status}/${expired.data?.error?.reason}`,
     );
 
-    msw.scenario('refresh-failed');
-    check('refresh-failed — /auth/refresh', 401, (await call('POST', '/auth/refresh')).status);
-    check('  └ 다른 경로는 정상', 200, (await call('GET', '/me')).status);
-
     msw.scenario('github-token-invalid');
     const gh = await call('GET', '/me/home');
     check(
@@ -537,11 +531,12 @@
   check('  └ 질문 turn', true, (prepared.got.find((m) => m.type === 'question')?.turn ?? 0) >= 1);
   check('  └ skipped 미사용', 0, prepared.got.filter((m) => m.status === 'skipped').length);
 
-  /** 소켓을 열고 한 번 보낸 뒤 조건이 맞을 때까지 모은다. */
-  const sendAndCollect = (payload, done, timeoutMs = 6000) =>
+  /** 소켓을 열고 첫 question 뒤 payloads를 차례로 보낸다. 숫자는 그 크기의 바이너리 조각이다. */
+  const sendSequence = (payloads, done, timeoutMs = 6000) =>
     new Promise((resolve) => {
       const socket = new WebSocket(wsUrl(sessionId));
       const got = [];
+      let sent = false;
       const finish = () => {
         try {
           socket.close();
@@ -550,33 +545,35 @@
         }
         resolve(got);
       };
-      socket.onmessage = (event) => {
+      socket.onmessage = async (event) => {
         got.push(JSON.parse(event.data));
-        if (done(got)) finish();
+        if (done(got)) return finish();
+        if (sent || !seen(got, 'question')) return;
+        sent = true;
+        for (const payload of payloads) {
+          socket.send(typeof payload === 'number' ? new Uint8Array(payload) : JSON.stringify(payload));
+          await new Promise((r) => setTimeout(r, 20));
+        }
       };
-      socket.onopen = () => setTimeout(() => socket.send(JSON.stringify(payload)), 300);
       setTimeout(finish, timeoutMs);
     });
 
-  const tooLong = await sendAndCollect({ type: 'answer', turn: 1, text: 'x'.repeat(2001) }, (got) =>
-    seen(got, 'error'),
-  );
-  const tooLongError = tooLong.find((m) => m.type === 'error');
-  check('WS 2000자 초과', 'answer_too_long', tooLongError?.reason);
-  check('  └ code', 'ERR_ANSWER_TOO_LONG', tooLongError?.code);
-  check('  └ recoverable', true, tooLongError?.recoverable);
+  const voiceAnswer = [
+    { type: 'answerStart', turn: 1, mimeType: 'audio/webm;codecs=opus' },
+    64,
+    64,
+    64,
+    64,
+    { type: 'answerEnd', turn: 1 },
+  ];
+  const answered = await sendSequence(voiceAnswer, (got) => seen(got, 'answerReceived'));
+  check('WS 음성 답변 임시 전사', true, seen(answered, 'transcriptPartial'));
+  check('  └ 최종 전사', true, seen(answered, 'transcript'));
+  check('  └ 답변 수신', true, seen(answered, 'answerReceived'));
 
-  const answered = await sendAndCollect({ type: 'answer', turn: 1, text: '정상 답변' }, (got) =>
-    seen(got, 'answerReceived'),
-  );
-  check('WS 답변 수신', true, seen(answered, 'answerReceived'));
-
-  // 같은 턴을 두 번 보내면 저장이 거부된다. answerReceived 를 보내면 화면이 다음 질문을 영영 기다린다.
-  const duplicated = await sendAndCollect(
-    { type: 'answer', turn: 1, text: '같은 턴 재전송' },
-    (got) => seen(got, 'error'),
-  );
-  check('WS 같은 턴 재전송', 'answer_rejected', duplicated.find((m) => m.type === 'error')?.reason);
+  // 이미 답한 턴으로 다시 시작하면 거부된다. answerReceived 를 보내면 화면이 다음 질문을 영영 기다린다.
+  const duplicated = await sendSequence([voiceAnswer[0]], (got) => seen(got, 'error'));
+  check('WS 같은 턴 재시작', 'answer_rejected', duplicated.find((m) => m.type === 'error')?.reason);
   check(
     '  └ answerReceived 미전송',
     0,
@@ -591,6 +588,12 @@
   );
 
   if (msw) msw.clear();
+
+  // Logout comes last: subsequent protected requests must be rejected.
+  check('POST /auth/logout', 204, (await call('POST', '/auth/logout')).status);
+  check('로그아웃 후 GET /me', 401, (await call('GET', '/me')).status);
+  check('중복 POST /auth/logout', 204, (await call('POST', '/auth/logout')).status);
+  if (msw) msw.session('authenticated');
 
   console.table(rows);
   const failed = rows.filter((r) => r.결과 === 'FAIL');

@@ -21,9 +21,9 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# set_main_option 은 ConfigParser(BasicInterpolation)를 거친다. URL 에 리터럴 %
-# (예: URL 인코딩된 비밀번호)가 있으면 보간 문법으로 오인돼 ValueError 가 난다.
-config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
+if not config.get_main_option("sqlalchemy.url"):
+    # ConfigParser 보간이 접속 문자열의 퍼센트 인코딩을 설정 참조로 해석하지 않게 한다.
+    config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 

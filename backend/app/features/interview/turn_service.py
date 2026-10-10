@@ -19,11 +19,25 @@ T4: decision UPDATE + interview_sessions.context_state / turn_count / elapsed_se
 import uuid
 from collections.abc import Collection
 from datetime import UTC, datetime
+from enum import StrEnum
 
 from sqlalchemy import Integer, cast, exists, func, insert, literal, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Evidence, InterviewSession, InterviewTurn, TurnEvidence
+from app.db.models.interview import PERSONAS
+
+
+class TurnRejected(StrEnum):
+    """질문·답변 저장을 막은 사유. BE 내부 값이다 — WS 로 보낼 reason 은 계약 합의 대기
+    (migration.md 같은 턴 중복 답변 PENDING_BE). 호출자가 복구 경로를 고르는 데 쓴다.
+    """
+
+    NOT_IN_PROGRESS = "not_in_progress"
+    PREVIOUS_UNANSWERED = "previous_unanswered"
+    TURNS_EXHAUSTED = "turns_exhausted"
+    NOT_CURRENT_TURN = "not_current_turn"
+    ALREADY_ANSWERED = "already_answered"
 
 
 async def save_question(
@@ -37,13 +51,16 @@ async def save_question(
     parent_turn_no: int | None = None,
     model: str | None = None,
     prompt_version: str | None = None,
-) -> InterviewTurn | None:
+) -> InterviewTurn | TurnRejected:
     """T1 — 다음 턴 질문을 저장하고 commit 한다.
 
     입력: 면접 id, Director 가 정한 질문 값, 같은 면접의 evidence id 목록(없어도 됨).
-    출력: 저장된 턴. 진행 중이 아니거나 이전 턴이 미답변이거나 total_turns 에 도달했으면 None.
-    다른 면접의 evidence id 가 섞이면 ValueError (아무것도 저장하지 않는다).
+    출력: 저장된 턴. 막히면 사유 — NOT_IN_PROGRESS / PREVIOUS_UNANSWERED / TURNS_EXHAUSTED.
+    다른 면접의 evidence id 가 섞이거나 persona 가 허용 밖이면 ValueError (저장하지 않는다).
     """
+    # 턴 번호를 올린 뒤 DB CHECK 에서 터지면 원인이 흐려지므로 먼저 막는다.
+    if persona not in PERSONAS:
+        raise ValueError(f"허용되지 않은 persona: {persona}")
     prev_answered = exists().where(
         InterviewTurn.interview_session_id == InterviewSession.id,
         InterviewTurn.turn_no == InterviewSession.current_turn,
@@ -65,7 +82,7 @@ async def save_question(
     # 거부 경로는 쓴 게 없어 rollback 하지 않는다 — rollback 은 세션 객체를 만료시키고
     # 호출자의 미커밋 작업까지 지운다. 트랜잭션 종료는 세션을 연 쪽이 맡는다.
     if turn_no is None:
-        return None
+        return await _question_rejection(db, interview_id)
 
     turn = InterviewTurn(
         interview_session_id=interview_id,
@@ -103,11 +120,12 @@ async def save_question(
 
 async def save_answer(
     db: AsyncSession, *, interview_id: uuid.UUID, turn_no: int, answer_text: str
-) -> bool:
+) -> TurnRejected | None:
     """T2 — 현재 턴 답변을 저장하고 commit 한다.
 
     입력: 면접 id, 클라이언트가 보낸 turn, 답변 원문.
-    출력: 저장했으면 True. 진행 중이 아니거나 현재 턴이 아니거나 이미 답변된 턴이면 False.
+    출력: 저장했으면 None. 막히면 사유 — NOT_IN_PROGRESS / NOT_CURRENT_TURN / ALREADY_ANSWERED.
+    ALREADY_ANSWERED 는 재전송이다 — 호출자가 다음 질문·종료 복구를 시도할 수 있다.
     """
     now = datetime.now(UTC)
     is_current = exists().where(
@@ -134,9 +152,9 @@ async def save_answer(
         .execution_options(synchronize_session=False)
     )
     if saved is None:  # 쓴 게 없어 rollback 하지 않는다 (save_question 참고)
-        return False
+        return await _answer_rejection(db, interview_id, turn_no)
     await db.commit()
-    return True
+    return None
 
 
 async def complete_interview(db: AsyncSession, *, interview_id: uuid.UUID) -> bool:
@@ -166,3 +184,38 @@ async def complete_interview(db: AsyncSession, *, interview_id: uuid.UUID) -> bo
         return False
     await db.commit()
     return True
+
+
+# 막힌 경우에만 다시 읽어 사유를 고른다. 판정 자체는 위 조건부 UPDATE 가 했으므로
+# 그 사이 상태가 바뀌었다면 사유는 최선 추정이다.
+async def _session_state(db: AsyncSession, interview_id: uuid.UUID) -> tuple[str, int, int] | None:
+    row = (
+        await db.execute(
+            select(
+                InterviewSession.status,
+                InterviewSession.current_turn,
+                InterviewSession.total_turns,
+            ).where(InterviewSession.id == interview_id)
+        )
+    ).first()
+    return None if row is None else (row[0], row[1], row[2])
+
+
+async def _question_rejection(db: AsyncSession, interview_id: uuid.UUID) -> TurnRejected:
+    state = await _session_state(db, interview_id)
+    if state is None or state[0] != "in_progress":
+        return TurnRejected.NOT_IN_PROGRESS
+    if state[1] >= state[2]:
+        return TurnRejected.TURNS_EXHAUSTED
+    return TurnRejected.PREVIOUS_UNANSWERED
+
+
+async def _answer_rejection(
+    db: AsyncSession, interview_id: uuid.UUID, turn_no: int
+) -> TurnRejected:
+    state = await _session_state(db, interview_id)
+    if state is None or state[0] != "in_progress":
+        return TurnRejected.NOT_IN_PROGRESS
+    if state[1] != turn_no:
+        return TurnRejected.NOT_CURRENT_TURN
+    return TurnRejected.ALREADY_ANSWERED

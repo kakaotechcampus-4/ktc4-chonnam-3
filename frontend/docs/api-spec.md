@@ -21,7 +21,7 @@
 
 ### 인증 구조
 
-[0003 결정](../../spec/shared/decisions/0003-sprint1-session-auth.md)에 따라 Sprint 1은 기존 Redis의 `auth:sess:{sid}`에 로그인 세션을 저장하고 브라우저에는 식별자만 전달한다. JWT·refresh는 Sprint 2로 보류한다. 아래 명세 정리는 실제 서버·FE·MSW 인증 구현 완료를 뜻하지 않는다.
+[0003 결정](../../spec/shared/decisions/0003-sprint1-session-auth.md)에 따라 Sprint 1은 Redis의 `auth:sess:{sid}`에 로그인 세션을 저장하고 브라우저에는 식별자만 전달한다. JWT·refresh는 Sprint 2로 보류한다. 서버 세션과 FE 가드·로그아웃·401 처리를 구현했으며, 자동 검증 범위는 [FE 실행 안내](../README.md)와 [BE 인증 작업](../../backend/docs/task-06-auth.md)을 따른다. 실제 GitHub 계정의 동의와 운영 배포 검증은 별도다.
 
 | 용도 | 쿠키명 | 만료 | Path |
 | --- | --- | --- | --- |
@@ -34,6 +34,8 @@ Set-Cookie: devon_session=<sid>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age
 ```
 
 `Secure`는 운영 HTTPS 환경에서 사용한다. 유효한 인증 요청에서 Redis TTL과 HTTP 응답의 쿠키 만료를 함께 14일로 연장하며 FE는 별도 갱신 요청을 보내지 않는다. REST·SSE·WS는 같은 쿠키로 인증한다. GitHub 토큰(`github_accounts.access_token_encrypted`)은 로그인 쿠키나 공개 응답에 담지 않고 서버가 조회한다.
+
+GitHub에 등록하는 공개 callback은 로그인·재연동 공통 `http://localhost:5173/auth/github/callback` 하나다. Vite/Caddy가 이 요청을 내부 `/api/auth/github/callback`으로 전달하며 query와 쿠키를 보존한다. OAuth code 교환의 `redirect_uri`도 공개 주소를 사용한다. 서버의 일회용 state에 저장한 목적과 사용자 ID로 로그인·재연동을 구분하므로 재연동 세션이 만료되었다고 새 로그인으로 처리하지 않는다. 운영에서는 같은 경로의 HTTPS 공개 origin을 사용한다.
 
 <details>
 <summary>이전 JWT 인증안 — Sprint 2 참고 기록, 세부 미확정</summary>
@@ -115,12 +117,14 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
 
 `devon_session`을 쓰는 모든 엔드포인트에 적용된다. 각 엔드포인트의 `Failure`에서는 "공통 인증 에러 참고"로 링크하고 그 엔드포인트 고유 실패만 별도로 적는다.
 
+아래 HTTP 상태는 일반 API 오류에 적용한다. 브라우저 callback(#2·#8)의 알려진 실패는 해당 절의 `302 /login?error=<표시 코드>` 규약을 따른다.
+
 | reason | 코드 | 의미 | 프론트 처리 |
 | --- | --- | --- | --- |
 | `unauthenticated` | 401 | 로그인 쿠키 없음 · Redis 세션 만료/유실/무효 | 전체 clear → `/login`, refresh 재시도 없음 |
 | `account_suspended` | 403 | `users.status = 'suspended'` | 정지 안내 |
 | `account_withdrawn` | 403 | `users.status = 'withdrawn'` | 재가입 불가 안내 |
-| `github_token_invalid` | 403 | `github_accounts.token_status`가 `expired`·`revoked` | GitHub 재연동 유도 |
+| `github_token_invalid` | 403 | `github_accounts.token_status`가 `invalid`·`revoked` | GitHub 재연동 유도 |
 
 ### 401 처리 정책
 
@@ -129,13 +133,15 @@ reasonType:       factual_error | insufficient_basis | overly_harsh
   └─ queryClient.clear() → /login
 ```
 
-Query·Mutation에 같은 처리를 적용한다. 401에 refresh 호출이나 원 요청 자동 재시도를 하지 않으며 이미 로그인 화면이면 반복 이동하지 않는다. 현재 공통 처리는 미완료이며 [auth 구현 작업](task-07-auth.md)에서 연결·검증한다.
+Query·Mutation에 같은 처리를 적용한다. 401에 refresh 호출이나 원 요청 자동 재시도를 하지 않으며 이미 로그인 화면이면 반복 이동하지 않는다. 정지·탈퇴 상태도 사용자 캐시를 비우고 해당 안내를 표시한다.
 
 Redis 조회 장애는 세션 만료·유실과 구분한다. 정상 인증이나 `401 unauthenticated`로 처리하지 않고 기존 공통 오류 계약의 서버 오류로 처리한다.
 
 ### CSRF
 
 `SameSite=Lax`로 방어한다. 상태 변경 요청은 모두 POST이며 `Lax`는 cross-site POST에 쿠키를 보내지 않는다. CSRF 토큰은 도입하지 않는다. `Strict`는 GitHub 콜백에서 돌아오는 top-level GET에 쿠키가 실리지 않아 쓰지 않는다.
+
+서버는 상태 변경 요청의 Origin이 있으면 `FRONTEND_ORIGIN`과 대조하며 WS handshake는 같은 Origin을 요구한다. 다른 Origin은 `403 unauthenticated`로 거부한다.
 
 ---
 
@@ -150,7 +156,7 @@ Redis 조회 장애는 세션 만료·유실과 구분한다. 정상 인증이�
 | 5 | GET | `/me` | fetch |
 | 6 | GET | `/me/profile` | fetch |
 | 7 | GET | `/auth/github/link` | 브라우저 이동 |
-| 8 | GET | `/auth/github/link/callback` | 프론트 무관 |
+| 8 | GET | `/auth/github/link/callback` | 재연동 호환 경로; 현재 GitHub callback은 #2 공유 |
 | 9 | GET | `/me/home` | fetch |
 | 10 | GET | `/me/interviews` | fetch |
 | 11 | POST | `/documents/preview` | fetch (multipart) |
@@ -167,7 +173,7 @@ Redis 조회 장애는 세션 만료·유실과 구분한다. 정상 인증이�
 | 20 | POST | `/interviews/{id}/retry` | fetch |
 | 21 | POST | `/interviews/{id}/feedback-disagreements` | 계약 잔존, Sprint 1 제공·호출 제외 |
 
-총 23개. 번호는 아래 "최종 엔드포인트 목록"·`shared/queryKeys.ts` 참조 번호와 같다. 22번은 `analysis-runs` 계열끼리 묶어 읽도록 15번 뒤에 배치했고, 23번은 준비 화면 흐름을 따라 17번 뒤에 두었다.
+참조 번호는 총 23개다(기존 22개 + 준비 재시도 #23). #3은 Sprint 2 예약이고 #21은 계약이 잔존하지만 Sprint 1 제공·호출 대상에서 제외하므로 이 숫자를 실제 제공 API 수로 해석하지 않는다. 번호는 아래 "최종 엔드포인트 목록"·`shared/queryKeys.ts` 참조 번호와 같다. 22번은 `analysis-runs` 계열끼리 묶어 읽도록 15번 뒤에 배치했고, 23번은 준비 화면 흐름을 따라 17번 뒤에 두었다.
 
 > 브라우저 이동 경로는 `shared/api.ts`에 넣지 않는다. `<a href>` 또는 `window.location`으로 처리한다.
 > 
@@ -193,13 +199,18 @@ Location: https://github.com/login/oauth/authorize
             &redirect_uri=<callback>
             &scope=read:user
             &state=<random>
+            &code_challenge=<S256 challenge>
+            &code_challenge_method=S256
 Set-Cookie: oauthState=<random>; HttpOnly; Secure; SameSite=Lax; Path=/auth/github; Max-Age=600
 ```
 
 | 항목 | 값 |
 | --- | --- |
 | `scope` | 로그인·연동 모두 `read:user`. 기존 BE 설정을 따르며 public 저장소 읽기에 `repo`·`public_repo` 권한은 요청하지 않음 |
-| `state` | 서버 생성 랜덤값 — `oauthState` 쿠키에 저장 (CSRF 방어) |
+| `state` | 서버 생성 랜덤값 — `oauthState` 쿠키와 Redis 일회용 레코드 대조, TTL 600초 |
+| PKCE | S256 challenge를 보내고 서버에 보관한 verifier로 code 교환 |
+
+GitHub OAuth App의 **Expire user access tokens는 OFF**로 유지한다. `offline_access`를 요청하지 않으며 만료·refresh 필드가 있는 응답은 현재 long-lived token 저장 모델에서 거부한다.
 
 **UI states**
 
@@ -207,11 +218,13 @@ Set-Cookie: oauthState=<random>; HttpOnly; Secure; SameSite=Lax; Path=/auth/gith
 
 **Failure**
 
-해당 없음 — 항상 302로 GitHub 인증 화면으로 이동한다.
+정상은 `302`다. Redis에 state를 저장할 수 없으면 `500 internal_error`를 반환한다.
 
 ---
 
 ## 2. GET /auth/github/callback
+
+로그인과 재연동의 공통 공개 callback이다. 아래 새 세션 응답은 로그인 state에 적용하고, 재연동 state에는 #8의 기존 세션 유지·계정 동일성 정책을 적용한다.
 
 **Request** (Query)
 
@@ -221,8 +234,8 @@ Set-Cookie: oauthState=<random>; HttpOnly; Secure; SameSite=Lax; Path=/auth/gith
 
 | 필드 | 필수 | 비고 |
 | --- | --- | --- |
-| `code` | ✅ | 1회용, 약 10분 유효 |
-| `state` | ✅ | `oauthState` 쿠키값과 대조 |
+| `code` | ✅ | 동의 성공 시 필수; 1회용, 약 10분 유효 |
+| `state` | ✅ | `oauthState` 쿠키값 및 Redis의 일회용 state와 대조; 저장된 목적·사용자 바인딩 확인 |
 | `error` | ❌ | 사용자 동의 거부 시 |
 
 **Response**
@@ -237,7 +250,7 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 
 서버는 Redis 로그인 세션을 생성하고 위 쿠키를 발급한다. `Secure`는 운영 HTTPS 환경 기준이며 로그인 세션은 14일 sliding 정책을 따른다.
 
-동의 거부 시
+state 검증을 통과한 로그인 동의 거부 시
 
 ```
 Location: /login?error=denied
@@ -250,21 +263,35 @@ Location: /login?error=denied
 
 **UI states**
 
-프론트 로직 없음(서버 302만 처리). 복귀 후 홈은 `analysisStatus: 'syncing'`으로 시작한다.
+callback 자체는 서버가 처리한다. 성공 복귀 후 홈은 `analysisStatus: 'syncing'`으로 시작한다. 실패 복귀 시 로그인 화면은 아래 허용된 `error` 값에 고정 안내를 표시한다. 등록되지 않은 값은 무시하며 오류 배너 없이 기본 GitHub 로그인 버튼을 표시한다. query나 공급자 원문을 그대로 표시하지 않는다.
+
+기본 버튼은 `/api/auth/github/login`으로 이동한다. 검증된 재연동 실패의 `flow=link`와 재시도 가능한 표시 코드가 함께 있으면 버튼은 `/api/auth/github/link`로 이동해 새 state·PKCE로 재연동을 시작한다. `flow`는 화면 선택용이며 인증 근거가 아니다. 임의의 재시도 URL을 query로 받지 않는다.
 
 **Failure**
 
-| 코드 | reason |
+알려진 callback 실패는 JSON 대신 `302`와 고정된 `Location: /login?error=<표시 코드>`를 반환한다.
+
+| 표시 코드 | 조건 |
 | --- | --- |
-| 400 | `invalid_state` · `invalid_code` |
-| 403 | `account_suspended` · `account_withdrawn` |
-| 502 | `provider_unavailable` |
+| `denied` | state 검증 후 GitHub 동의 거부 |
+| `invalid_state` | 쿠키 불일치, state 만료·재사용, 목적 또는 재연동 사용자 불일치 |
+| `invalid_code` | code 누락·무효 또는 처리할 수 없는 공급자 오류 |
+| `provider_unavailable` | GitHub 연결·응답 실패 |
+| `provider_configuration` | 지원하지 않는 GitHub expiry·refresh 토큰 설정; API reason은 `provider_unavailable` 유지 |
+| `github_already_linked` | 재연동에서 기존 계정과 다른 GitHub 사용자 ID |
+| `account_suspended` · `account_withdrawn` | 정지·탈퇴 계정 |
+
+재연동 state의 일회용 검증이 끝나고 현재 활성 사용자가 시작 사용자와 일치한 경우에만 `denied`·`invalid_code`·`provider_unavailable`·`provider_configuration`·`github_already_linked`에 `&flow=link`를 붙인다. `invalid_state`, 사용자 불일치, 정지·탈퇴에는 붙이지 않는다. 재연동 세션 만료·유실은 기존대로 `/login`으로 `302`하며 새 로그인 세션을 만들지 않는다. #8 호환 경로에도 같은 규칙을 적용한다.
+
+Redis·세션·DB·초기 job enqueue 등 내부 실패는 `500 internal_error` JSON envelope를 유지하며 로그인 안내로 바꾸지 않는다. 일반 REST의 reason·HTTP 상태·envelope는 그대로다. `denied`와 `provider_configuration`은 callback 표시 코드이며 API `Reason`에 추가하지 않는다.
+
+callback 응답은 `Cache-Control: no-store`, `Referrer-Policy: no-referrer`를 사용하며 state 쿠키를 만료시킨다. state 일회 소비와 PKCE 검증을 유지하고, 원래 query의 code·state·토큰·공급자 원문은 redirect URL에 복사하지 않는다.
 
 ---
 
 ## 3. POST /auth/refresh — Sprint 2 예약
 
-기존 참조 번호만 유지한다. Sprint 1 서버 세션 인증에서는 이 API를 제공·호출하지 않는다. 현재 코드에 남은 `api.refresh`·MSW 핸들러·smoke 검사는 후속 정리 대상이다.
+기존 참조 번호만 유지한다. Sprint 1 서버 세션 인증에서는 이 API를 제공·호출하지 않는다. FE의 `api.refresh`, MSW refresh 핸들러와 refresh 재시도 흐름도 제거했다.
 
 <details>
 <summary>이전 JWT refresh안 — 과거 기록, Sprint 2 착수 시 재검토</summary>
@@ -323,7 +350,7 @@ Set-Cookie: devon_session=; Max-Age=0; Path=/
 
 **Failure**
 
-없음 (멱등, 항상 `204`).
+쿠키·세션이 이미 없으면 `204`지만 Redis 삭제 장애는 `500 internal_error`다. FE는 실패 메시지를 표시하고 성공 전에는 로그아웃된 것으로 처리하지 않는다. 다른 Origin 요청은 `403 unauthenticated`로 거부한다.
 
 ---
 
@@ -347,7 +374,7 @@ Set-Cookie: devon_session=; Max-Age=0; Path=/
 | `avatarUrl` | string | ✅ |
 | `githubLinked` | boolean | ❌ |
 
-`name`은 `users.display_name` (GitHub `name`, 없으면 `login`).
+`name`은 `users.name` (GitHub `name`, 없으면 `login`).
 
 **UI states**
 
@@ -388,7 +415,7 @@ Set-Cookie: devon_session=; Max-Age=0; Path=/
 
 | 필드 | 타입 | null | 출처 |
 | --- | --- | --- | --- |
-| `name` | string | ❌ | `users.display_name` |
+| `name` | string | ❌ | `users.name` |
 | `avatarUrl` | string | ❌ | `users.avatar_url` |
 | `loginId` | string | ✅ | `github_accounts.login` |
 | `joinedAt` | string | ❌ | `users.created_at` |
@@ -446,13 +473,15 @@ Set-Cookie: oauthState=<random>; HttpOnly; Secure; SameSite=Lax; Path=/auth/gith
 
 **Failure**
 
-JSON 에러 없음 — 실패는 `/login` 302로 표현된다.
+로그인 쿠키·세션이 없으면 `/login`으로 `302`한다. 정지·탈퇴는 각각 `403 account_suspended`·`account_withdrawn`, Redis 장애는 `500 internal_error`다.
 
 ---
 
 ## 8. GET /auth/github/link/callback
 
-**Request** (Query) — `code`, `state` (login 콜백과 동일)
+이전 경로의 호환 처리다. 현재 `/auth/github/link`에서 시작한 OAuth도 GitHub에는 #2의 `/auth/github/callback`을 보낸다. 추가 callback 등록은 필요 없다. 이 호환 경로는 `link` 목적의 state만 허용하며 로그인 state를 거부한다.
+
+**Request** (Query) — `code`, `state`, `error` (#2 공통 callback과 동일)
 
 **Response**
 
@@ -463,17 +492,21 @@ Location: /home
 Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 ```
 
-`github_accounts.token_status`를 `valid`로 갱신한다. 기존 DEVON 로그인 세션을 유지하며 새 JWT를 발급하지 않는다. 세션 만료 연장은 공통 sliding 정책을 따른다.
+`github_accounts.token_status`를 `valid`로 갱신한다. 시작할 때 기록한 사용자와 현재 인증된 사용자가 같아야 하고 기존 GitHub 사용자 ID도 같아야 한다. 기존 DEVON 로그인 세션을 유지하며 세션 만료 연장은 공통 sliding 정책을 따른다. 유효한 연동 state가 있어도 DEVON 세션이 만료·유실되면 새 세션을 만들지 않고 `/login`으로 이동한다.
 
 **UI states**
 
-프론트 로직 없음. 복귀 후 `me`·`home` 쿼리를 무효화해 재연동 배너를 내린다.
+성공 복귀 후 `me`·`home` 쿼리를 무효화해 재연동 배너를 내린다. 실패 시 #2와 같은 고정 안내를 표시한다. 검증된 재연동 실패에만 `flow=link`를 붙이며 재시도 버튼은 고정된 `/api/auth/github/link`로 이동한다.
 
 **Failure**
 
-| 코드 | reason |
+| 코드 | 응답 |
 | --- | --- |
-| 409 | `github_already_linked` |
+| 302 | `/login?error=<표시 코드>` — #2의 허용 코드·`flow=link` 조건 적용 |
+| 302 | `/login` — 재연동 세션 만료·유실, 새 세션 생성 없음 |
+| 500 | `internal_error` JSON envelope — Redis·세션·DB·enqueue 등 내부 실패 |
+
+로그인 목적의 state는 `invalid_state`로 거부하며 `flow=link`를 붙이지 않는다. 정지·탈퇴·사용자 불일치도 일반 로그인 안내로 돌아간다. state 일회 소비·PKCE, state 쿠키 정리, `no-store`·`no-referrer`와 민감한 query 제외는 #2와 동일하다.
 
 ---
 
@@ -651,8 +684,8 @@ BE `spec/backend/features/documents.md`와 [0010 결정](../../spec/ai/decisions
 
 | 코드 | reason |
 | --- | --- |
-| 413 | `file_too_large` |
-| 415 | `unsupported_media_type` |
+| 413 | `document_too_large` |
+| 415 | `unsupported_document_type` |
 
 ---
 
@@ -692,12 +725,11 @@ Location: /analysis-runs/run_abc123
 
 | 코드 | reason | 처리 |
 | --- | --- | --- |
-| 400 | `job_url_required` | 입력창 에러 |
+| 400 | `posting_url_required` | 입력창 에러 |
 | 400 | `unsupported_site` | "지원하지 않는 사이트예요" |
-| 400 | `url_unreachable` | "공고를 불러올 수 없어요" |
 | 409 | `run_in_progress` | `error.details.runId`로 기존 분석 진행 화면(4-2-v2) 이동 |
 
-> 공고 수집·추출 실패는 잡 생성 후 발생하므로 `202`로 응답하고 `failureReason`으로 전달한다(`GET /analysis-runs/{runId}` 참고). `unsupported_site`·`url_unreachable`만 잡 생성 전에 판별 가능하므로 `400`이다.
+> 공고 수집·추출 실패는 잡 생성 후 발생하므로 `202`로 응답하고 `failureReason`으로 전달한다(`GET /analysis-runs/{runId}` 참고). `unsupported_site`만 잡 생성 전에 판별 가능하므로 `400`이다.
 > 
 
 ---
@@ -1153,7 +1185,7 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 
 준비 단계가 실패한 뒤 "다시 시도"를 눌렀을 때 호출한다. 서버는 실패한 `prepareStepKey`부터 다시 실행하고, 성공한 단계는 재실행하지 않는다. 세션과 `session_repositories`는 그대로 유지된다.
 
-2026-09-10에는 WS `prepareRetry` 메시지로 설계했으나 `spec/ai/decisions/0010:32`에서 REST로 확정했다. 재시도 거절을 상태코드로 구분할 수 있고, 만료 토큰 복구가 401 인터셉터를 타며, 새로고침 후 소켓이 없는 상태에서도 보낼 수 있다.
+2026-09-10에는 WS `prepareRetry` 메시지로 설계했으나 `spec/ai/decisions/0010:32`에서 REST로 확정했다. 재시도 거절을 상태코드로 구분할 수 있고, 로그인 세션 만료·유실은 공통 401 처리로 캐시를 비우고 `/login`으로 이동하며(refresh 재시도 없음), 새로고침 후 소켓이 없는 상태에서도 보낼 수 있다.
 
 **Request**
 
@@ -1271,7 +1303,7 @@ Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시�
 | `answer_too_long` | `ERR_ANSWER_TOO_LONG` | `true` | 같은 턴 재제출 |
 | `answer_rejected` | `ERR_ANSWER_REJECTED` | `true` | 같은 턴 재제출 (저장 실패) |
 | `answer_stale_turn` | `ERR_ANSWER_STALE_TURN` | `true` | 지나간 턴에 보낸 답변 — 초안을 버리고 현재 질문으로 |
-| `question_failed` | `ERR_QUESTION_FAILED` | `true` | 자동 1회 재시도 |
+| `question_failed` | `ERR_QUESTION_FAILED` | `true` | 허용된 시도 후 실패 안내·기록 보존·명시적 나가기 (아래 재시도 책임 참고) |
 | `question_gen_timeout` | `ERR_QUESTION_GEN_TIMEOUT` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
 | `persona_build_failed` | `ERR_PERSONA_BUILD_FAILED` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
 | `criteria_set_failed` | `ERR_CRITERIA_SET_FAILED` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
@@ -1560,7 +1592,7 @@ Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagr
 | `POST /interviews/{id}/retry` | `interviews` |
 | 면접 완료 (리포트 생성) | `home`, `interviews` |
 | 피드백 이의 제출 | `interview(id).report` |
-| `GET /auth/github/link/callback` 복귀 | `me`, `home` |
+| 재연동 state의 `GET /auth/github/callback` 복귀 (#8 호환 경로 포함) | `me`, `home` |
 | `POST /auth/logout` | 전체 `clear()` |
 | `401 unauthenticated` | 전체 `clear()` 후 `/login` |
 
@@ -1572,30 +1604,31 @@ Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagr
 | --- | --- | --- | --- | --- |
 | 1 | GET | `/auth/github/login` | 브라우저 이동 | 불필요 |
 | 2 | GET | `/auth/github/callback` | 프론트 무관 | 불필요 |
-| 3 | POST | `/auth/refresh` | fetch | `refreshToken` |
-| 4 | POST | `/auth/logout` | fetch | `accessToken` |
-| 5 | GET | `/me` | fetch | `accessToken` |
-| 6 | GET | `/me/profile` | fetch | `accessToken` |
-| 7 | GET | `/auth/github/link` | 브라우저 이동 | `accessToken` |
-| 8 | GET | `/auth/github/link/callback` | 프론트 무관 | `accessToken` |
-| 9 | GET | `/me/home` | fetch | `accessToken` |
-| 10 | GET | `/me/interviews` | fetch | `accessToken` |
-| 11 | POST | `/documents/preview` | fetch (multipart) | `accessToken` |
-| 12 | POST | `/analysis-runs` | fetch | `accessToken` |
-| 13 | GET | `/analysis-runs/{runId}/events` | EventSource | `accessToken` |
-| 14 | GET | `/analysis-runs/{runId}` | fetch | `accessToken` |
-| 15 | GET | `/analysis-runs/{runId}/result` | fetch | `accessToken` |
-| 16 | POST | `/interviews` | fetch | `accessToken` |
-| 17 | GET | `/interviews/{id}` | fetch | `accessToken` |
-| 18 | GET *(Upgrade)* | `/ws/interviews/{sessionId}` | WebSocket | `accessToken` |
-| 19 | GET | `/interviews/{id}/report` | fetch | `accessToken` |
-| 20 | POST | `/interviews/{id}/retry` | fetch | `accessToken` |
-| 21 | POST | `/interviews/{id}/feedback-disagreements` | fetch | `accessToken` |
-| 22 | GET | `/analysis-runs/{runId}/candidates` | fetch | `accessToken` |
+| 3 | POST | `/auth/refresh` | Sprint 2 예약 | Sprint 1 해당 없음 |
+| 4 | POST | `/auth/logout` | fetch | `devon_session` (만료·없음도 204) |
+| 5 | GET | `/me` | fetch | `devon_session` |
+| 6 | GET | `/me/profile` | fetch | `devon_session` |
+| 7 | GET | `/auth/github/link` | 브라우저 이동 | `devon_session` |
+| 8 | GET | `/auth/github/link/callback` | 재연동 호환 경로; 현재 callback은 #2 공유 | `devon_session` |
+| 9 | GET | `/me/home` | fetch | `devon_session` |
+| 10 | GET | `/me/interviews` | fetch | `devon_session` |
+| 11 | POST | `/documents/preview` | fetch (multipart) | `devon_session` |
+| 12 | POST | `/analysis-runs` | fetch | `devon_session` |
+| 13 | GET | `/analysis-runs/{runId}/events` | EventSource | `devon_session` |
+| 14 | GET | `/analysis-runs/{runId}` | fetch | `devon_session` |
+| 15 | GET | `/analysis-runs/{runId}/result` | fetch | `devon_session` |
+| 16 | POST | `/interviews` | fetch | `devon_session` |
+| 17 | GET | `/interviews/{id}` | fetch | `devon_session` |
+| 18 | GET *(Upgrade)* | `/ws/interviews/{sessionId}` | WebSocket | `devon_session` |
+| 19 | GET | `/interviews/{id}/report` | fetch | `devon_session` |
+| 20 | POST | `/interviews/{id}/retry` | fetch | `devon_session` |
+| 21 | POST | `/interviews/{id}/feedback-disagreements` | 계약 잔존, Sprint 1 제공·호출 제외 | `devon_session` |
+| 22 | GET | `/analysis-runs/{runId}/candidates` | fetch | `devon_session` |
+| 23 | POST | `/interviews/{id}/prepare/retry` | fetch | `devon_session` |
 
-총 23개.
+참조 번호는 총 23개다(기존 22개 + 준비 재시도 #23). #3은 Sprint 2 예약이고 #21은 계약이 잔존하지만 Sprint 1 제공·호출 대상에서 제외한다. 이 숫자는 실제 제공 API 수나 구현 완료 수가 아니다.
 
-`shared/api.ts`에 넣지 않는 것: 1, 2, 7, 8 (브라우저 이동 또는 프론트 무관). 3은 인터셉터 내부에서만 호출한다.
+`shared/api.ts`에 넣지 않는 것: 1, 2, 7, 8(브라우저 이동 또는 프론트 무관). 3은 Sprint 2 예약이므로 Sprint 1에서는 호출하지 않는다.
 
 ### 구현 방식별 분류
 
@@ -1604,7 +1637,7 @@ Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagr
 | 브라우저 이동 | 1, 7 |
 | 프론트 무관 (서버 302) | 2, 8 |
 | `fetch` GET | 5, 6, 9, 10, 14, 15, 17, 19, 22 |
-| `fetch` POST | 4, 12, 16, 20 |
+| `fetch` POST | 4, 12, 16, 20, 23 |
 | 계약 잔존, Sprint 1 제공·호출 제외 | 21 (이의 제기, 기존 Sprint 2 범위) |
 | Sprint 2 예약 | 3 (`POST /auth/refresh`) |
 | `fetch` POST (multipart) | 11 |
@@ -1735,3 +1768,4 @@ Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagr
 | 2026-09-23 | **준비 재시도를 WS `prepareRetry` → `POST /interviews/{id}/prepare/retry`(#23)로 이동** — `spec/ai/decisions/0010:32`(Accepted, 2026-09-15) 반영. 거절 reason `prep_in_progress`(409)·`session_expired`(410) 신설, 성공은 `204` |
 | 2026-09-23 | WS `answer`에 **`turn` 추가** — `spec/ai/decisions/0010:30` 반영. 불일치 시 `answer_stale_turn` 신설 |
 | 2026-09-17 | #19의 **`202 Accepted`를 Failure → Response로 이동** (생성 중은 실패가 아님), `error.retryAfter`와 본문 최상위 `retryAfter`의 위치 차이 명시 |
+| 2026-09-22 | [공통 0003](../../spec/shared/decisions/0003-sprint1-session-auth.md): Sprint 1은 기존 Redis·HttpOnly `devon_session`·14일 sliding 세션으로 확정. JWT·refresh 및 #3은 Sprint 2로 이관. 기존 번호와 과거안은 보존하며 실제 인증 구현·검증은 후속 작업으로 구분 |

@@ -19,7 +19,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import InterviewTurn
 from app.features.interview import queries
-from app.features.interview.turn_service import complete_interview, save_answer, save_question
+from app.features.interview.turn_service import (
+    TurnRejected,
+    complete_interview,
+    save_answer,
+    save_question,
+)
 from app.shared.enums import Persona
 
 
@@ -61,7 +66,7 @@ async def ask_next_question(
         model=draft.model,
         prompt_version=draft.prompt_version,
     )
-    if turn is None:
+    if isinstance(turn, TurnRejected):
         return False
     await send(
         {
@@ -88,8 +93,8 @@ async def handle_answer(
     입력: 면접 id, 클라이언트가 보낸 turn·답변 원문, 질문 생성기, 메시지 전송 함수.
     출력: 없음. answerReceived → thinking → (interviewEnd | question) 순서로 보낸다.
     """
-    if not await save_answer(db, interview_id=interview_id, turn_no=turn_no, answer_text=text):
-        return
+    if await save_answer(db, interview_id=interview_id, turn_no=turn_no, answer_text=text):
+        return  # 막힌 사유가 있으면 아무것도 보내지 않는다
     await send({"type": "answerReceived"})
     await send({"type": "thinking"})
     if await complete_interview(db, interview_id=interview_id):

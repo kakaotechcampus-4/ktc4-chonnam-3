@@ -1,81 +1,114 @@
-"""structlog 설정, request_id 바인딩.
-
-docs/layer-rules.md 1절 / task-01
-"""
+"""Structured logs without OAuth credentials, callback codes or session cookies."""
 
 import logging
 import sys
-import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import MutableMapping
+from typing import Any
+from uuid import UUID, uuid4
 
 import structlog
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import Response
-from structlog.types import Processor
+from starlette.datastructures import Headers, MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import LogLevel
 
 REQUEST_ID_HEADER = "X-Request-ID"
 
+_SECRET_KEYS = {
+    "access_token",
+    "refresh_token",
+    "client_secret",
+    "token_encryption_key",
+    "github_client_secret",
+    "authorization",
+    "cookie",
+    "set-cookie",
+    "devon_session",
+    "oauthstate",
+    "state",
+    "code",
+    "code_verifier",
+    "access_token_encrypted",
+}
+
+
+def redact_secrets(
+    _logger: object, _method: str, event: MutableMapping[str, Any]
+) -> dict[str, Any]:
+    def clean(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: "[REDACTED]" if str(key).lower() in _SECRET_KEYS else clean(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, (list, tuple)):
+            return [clean(item) for item in value]
+        return value
+
+    return {
+        key: "[REDACTED]" if key.lower() in _SECRET_KEYS else clean(value)
+        for key, value in event.items()
+    }
+
+
+def _redact_server_exception(record: logging.LogRecord) -> bool:
+    # Starlette가 처리한 500도 다시 던지므로 Uvicorn이 예외 원문의 비밀값을 기록하지 않게 한다.
+    if record.exc_info:
+        exception_type = record.exc_info[0]
+        record.msg = "ASGI application failed (%s)"
+        record.args = (exception_type.__name__ if exception_type else "Exception",)
+        record.exc_info = None
+        record.exc_text = None
+        record.stack_info = None
+    return True
+
 
 def configure_logging(level: LogLevel = "INFO", *, json_logs: bool = False) -> None:
-    """structlog 과 표준 logging 을 한 번에 설정한다.
-
-    입력: level(로그 레벨), json_logs(True 면 JSON 한 줄 출력, False 면 사람이 읽는 콘솔).
-    출력: 없음. 프로세스 전역 설정을 바꾼다.
-    """
-    shared: list[Processor] = [
-        structlog.contextvars.merge_contextvars,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.add_logger_name,
-        structlog.processors.TimeStamper(fmt="iso", utc=True),
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
-    ]
-    renderer: Processor = (
-        structlog.processors.JSONRenderer()
-        if json_logs
-        else structlog.dev.ConsoleRenderer(colors=False)
-    )
-
-    logging.basicConfig(format="%(message)s", stream=sys.stdout, level=level, force=True)
+    logging.basicConfig(format="%(message)s", stream=sys.stdout, level=level)
+    logging.getLogger("uvicorn.error").addFilter(_redact_server_exception)
+    # 외부 API URL, callback 쿼리, SQL 인자에 인증 정보가 포함될 수 있다.
+    for name in ("httpx", "httpcore", "uvicorn.access", "sqlalchemy.engine"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     structlog.configure(
-        processors=[*shared, renderer],
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.stdlib.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso", utc=True),
+            redact_secrets,
+            structlog.processors.JSONRenderer()
+            if json_logs
+            else structlog.dev.ConsoleRenderer(colors=False),
+        ],
         wrapper_class=structlog.make_filtering_bound_logger(logging.getLevelNamesMapping()[level]),
         logger_factory=structlog.stdlib.LoggerFactory(),
-        cache_logger_on_first_use=True,
     )
 
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
-    """모듈용 로거를 돌려준다. 입력: 로거 이름. 출력: BoundLogger."""
     logger: structlog.stdlib.BoundLogger = structlog.get_logger(name)
     return logger
 
 
-def bind_request_id(request_id: str) -> None:
-    """이후 같은 컨텍스트의 모든 로그에 request_id 를 붙인다.
+class RequestIdMiddleware:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
 
-    입력: request_id 문자열. 출력: 없음 (contextvars 에 바인딩).
-    """
-    structlog.contextvars.bind_contextvars(request_id=request_id)
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        try:
+            request_id = str(UUID(Headers(scope=scope).get(REQUEST_ID_HEADER, "")))
+        except ValueError:
+            request_id = str(uuid4())
+        tokens = structlog.contextvars.bind_contextvars(request_id=request_id)
 
+        async def send_with_id(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                MutableHeaders(scope=message)[REQUEST_ID_HEADER] = request_id
+            await send(message)
 
-class RequestIdMiddleware(BaseHTTPMiddleware):
-    """요청마다 request_id 를 만들어 로그 컨텍스트와 응답 헤더에 싣는다.
-
-    클라이언트가 X-Request-ID 를 보내면 그 값을 이어 쓰고, 없으면 uuid4 를 만든다.
-    """
-
-    async def dispatch(
-        self,
-        request: Request,
-        call_next: Callable[[Request], Awaitable[Response]],
-    ) -> Response:
-        request_id = request.headers.get(REQUEST_ID_HEADER) or str(uuid.uuid4())
-        structlog.contextvars.clear_contextvars()
-        bind_request_id(request_id)
-        response = await call_next(request)
-        response.headers[REQUEST_ID_HEADER] = request_id
-        return response
+        try:
+            await self.app(scope, receive, send_with_id)
+        finally:
+            structlog.contextvars.reset_contextvars(**tokens)

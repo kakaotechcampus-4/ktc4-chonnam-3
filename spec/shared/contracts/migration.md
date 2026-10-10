@@ -43,4 +43,4 @@
 
 ## PR #15 JD 분류 정합화
 
-API `JdCategory`와 DB·AI `requirement_type`은 서로 다른 의미이므로 기존 enum을 각각 유지한다. 이번 수정은 두 enum의 변환과 원문 출처 보존을 [분석 Run](../../backend/features/analysis-run.md#wanted-공고-수집분류)에 명시하고 추출 초안에 반영한다. 공개 API 값이나 DB enum을 변경하지 않는다.
+API `JdCategory`와 DB·AI `category`는 같은 값이다(2026-09-21 PR #41 코멘트로 확정, [공통 0005](../decisions/0005-jd-category-unification.md)로 AI 쪽도 통일). 별도 변환 레이어를 두지 않으며, 원문 출처 보존은 [분석 Run](../../backend/features/analysis-run.md#wanted-공고-수집분류)을 따른다. 공개 API 값이나 DB enum을 변경하지 않는다.
