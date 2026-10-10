@@ -15,7 +15,7 @@
 | 문서 | preview 지원 형식, 크기 제한, GitHub URL 정규화, 실패 후 계속 진행을 검증한다 |
 | GitHub | public repo만 수집/분석하고 private는 제외한다 |
 | Wanted | Sprint 1은 Wanted-only이며 unsupported site를 차단한다 |
-| 면접 | 9턴, 첫 hr_manager 질문, persona target distribution, 텍스트 WS를 검증한다 |
+| 면접 | [공통 0007](../shared/decisions/0007-fixed-persona-allocation.md)의 첫 HR 포함 기술 6회·도메인 2회·HR 1회, 이후 HR·할당 초과 거절, 기술·도메인 순서 자율, 중복·재생성의 질문 수 불변, 9번째 답변 후 종료·10번째 질문 없음, 중단 예외와 텍스트 WS를 검증한다 |
 | Evidence | `question_basis`와 `evaluation_basis`, `answer_vs_code` conflict 생성을 검증한다 |
 | Redis | 면접 Context `iv:ctx` snapshot 유실 시 Postgres에서 재구성한다. 로그인 `auth:sess`는 재구성하지 않고 만료·유실 시 재로그인한다 |
 | 리포트 | lazy generation 200/202/409를 검증한다. 이의 제기는 Sprint 1에 테이블만 두며 API·row 생성·기능 검증은 Sprint 2다 |

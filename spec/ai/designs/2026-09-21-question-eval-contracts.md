@@ -16,7 +16,7 @@
 | 질문·분석·판단 저장 | `interview_turns.question_contract`, `interview_turns.analysis`, `interview_turns.decision`의 JSONB 위치와 기존 평면 구조·T3/T4 순서를 따른다. 별도 공통 저장 객체나 JSON의 필수 `schema_version`은 추가하지 않는다. 실제 직렬화·DB 저장 연결은 구현·검증 작업이다. |
 | 질문 근거 참조 | `basis_refs`는 `{kind, id}` 목록이며 kind는 `evidence`, `jd_requirement`, `job_posting`, `answer_turn`, id는 실제 저장 자료의 UUID다. 본문을 복사하지 않고 질문 당시 자료를 연결한다. BE의 존재·권한·범위 검증과 임시 참조의 저장 ID 변환은 구현·검증한다. |
 | 공급자·모델 | [0011][adr-0011]에서 OpenAI `gpt-5.6-luna`를 선택했다. 인증·SDK/client 연결·계정 접근·task별 품질 검증은 남아 있다. |
-| Persona 배분 | [공통 0004][shared-0004]의 첫 HR·정상 9턴·기술 목표 6/최소 5·HR와 domain 합산 최소 3을 따른다. HR/domain 개별 횟수와 첫 질문 이후 순서를 고정하지 않는 정책도 확정됐으며, 실제 제어·검증은 남아 있다. |
+| Persona 배분 | 2026-10-06 후속 결정인 [공통 0007](../../shared/decisions/0007-fixed-persona-allocation.md)을 따른다. 아래 초기 검토 본문과 [당시 공통 0004][shared-0004]의 고정 커밋 링크는 이력으로 보존한다. |
 | 원문 보관·재사용 | [0018][adr-0018]에서 후속 내부 비교용 보관·재사용과 최종 내부 비교 검증 뒤 보관 유지, 별도 자동 삭제 기한 없음을 채택했다. 실제 자료의 사용 권한·영구 저장·마스킹·접근·보관 연결은 구현·검증 작업이다. |
 | 실행 상한·복구 | 공통 호출 총 2회·semantic 재호출 금지를 유지한다. 실행·조회 상한의 설정·측정과 기존 복구 의미의 반환·저장 연결은 구현 작업이며, 재작성·재계획 명목의 추가 자동 반복을 승인하지 않는다. |
 

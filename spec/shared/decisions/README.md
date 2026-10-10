@@ -19,9 +19,10 @@ API 원본 구분은 [공통 계약 안내](../contracts/README.md)와 병합된
 - [0007 음성 전용 면접 전환 — WS·REST 계약 변경](0007-voice-interview-contract.md) — Proposed, 2026-10-05. Sprint 2부터 답변은 음성만 받고 질문 음성은 `question-audio` URL로 전달한다. 꼬리질문 포함 9턴과 `totalTurns` 기존 의미를 유지하며 BE·AI 검토 대기.
 - [0005 JD 분류 category 통일](0005-jd-category-unification.md) — Proposed, 2026-09-27. DB·AI·API 모두 `category`(`required`/`preferred`/`responsibility`)로 통일하고 `requirement_type`·`unknown`과 변환 레이어를 폐기한다. 구동한 검토 대기.
 - [0003 Sprint 1 세션 인증 유지와 JWT의 Sprint 2 이관](0003-sprint1-session-auth.md) — Accepted, 2026-09-22. 기존 Redis·`devon_session`·14일 sliding 세션을 채택한다. JWT·갱신은 Sprint 2로 이관하며 실제 인증 구현·검증은 남는다.
-- [0004 면접 질문 배분의 기존 기준 복원](0004-flexible-persona-allocation-restoration.md) — Accepted, 2026-09-22. 정상 9턴·첫 HR을 유지하고 기술 목표 6턴·최소 5턴, 도메인·HR 합산 최소 3턴과 개별 배분 비고정을 복원한다. 실제 제어 구현·검증은 대기다.
-- [0002 로컬 기준의 업로드 용량·공고 재사용·면접 배분 채택](0002-local-policy-baseline.md) — Partially Superseded, 2026-09-22. 포트폴리오 20MB와 공고 재사용 7일은 유지하며 면접 배분은 0004를 따른다. 실제 구현 상태와 정책 확정은 구분한다.
+- [0007 정상 면접의 Persona 배분을 6/2/1로 고정](0007-fixed-persona-allocation.md) — Accepted, 2026-10-06. 첫 HR을 포함해 기술 6회·도메인 2회·HR 1회로 고정하며 이후 기술·도메인 순서는 자율이다. 이번 반영은 문서에 한정한다.
+- [0002 로컬 기준의 업로드 용량·공고 재사용·면접 배분 채택](0002-local-policy-baseline.md) — Partially Superseded, 2026-09-22. 포트폴리오 20MB와 공고 재사용 7일은 유지하며 면접 배분은 0004를 거쳐 0007을 따른다. 실제 구현 상태와 정책 확정은 구분한다.
 
 ## 과거 결정·제안 이력
 
+- [0004 면접 질문 배분의 기존 기준 복원](0004-flexible-persona-allocation-restoration.md) — Superseded by 0007. 당시 유동 배분 결정과 이유는 이력으로 보존한다.
 - [0001 공통 계약 이관](0001-contract-migration.md) — Superseded. 당시 제안은 보존하며 현행 원본 범위는 공통 계약 안내를 따른다. 전체 구현·검증 완료를 뜻하지 않는다.
