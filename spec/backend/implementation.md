@@ -2,6 +2,66 @@
 
 구현 범위와 실제 실행 결과를 기록한다. 기능 요구사항은 각 features 문서와 task 문서를 따른다.
 
+## 2026-10-09 — 현재 프록시 환경 설정과 L1 실행 연결
+
+기준 develop `4a3187e`, 원본 작업 브랜치 `fix/llm-proxy-env`.
+원본을 보존하고 같은 develop에서 `fix/llm-proxy-config` 게시용 브랜치를 구성했다.
+이번 신규 변경 18개 파일만 옮겼으며 실행 코드·테스트는 원본과 일치한다.
+
+### 변경 범위
+
+- `Settings.require_llm()`이 `PROXY_TOKEN`·`CHAT_PROXY_URL`을 함께 선택한다. 일부만 설정하면
+  호출 전에 실패하고, 프록시 설정이 없으면 기존 OpenAI 직접 연결을 유지한다.
+- 검증된 HTTPS 기본 주소를 공통 gateway와 L1 어댑터에 전달한다. 프록시 앞 경로와 기존
+  Responses 요청·strict JSON·재시도 예산을 유지한다. 주소·토큰은 설정 repr에서 숨긴다.
+- `OPENAI_MODEL`은 점검·등록 기본 모델로 우선 적용하며 실제 작업의 DB prompt 모델을
+  덮어쓰지 않는다. 모델·본문 변경은 새 version으로 등록해 L1 캐시를 구분한다.
+- 고정 일곱 v1 seed를 보존하면서 `register_prompt_versions`와 명시적 등록 CLI를 추가했다.
+  같은 version의 다른 내용은 거절하며 부분 등록·활성 전환·충돌 처리를 transaction에 묶는다.
+- `python -m scripts.check_llm`은 일반 설정 로더와 실제 L1 경로로 합성 저장소 1건을 분석한다.
+  임시 URL 변경이나 별도 공급자 구현이 없다. DB는 쓰지 않으며 호출 전 budget·항목 검증
+  실패도 안전한 분류로 출력한다. 설정과 실행 방법은 `backend/docs/llm-connection.md`에 둔다.
+- 로컬 `.env`의 비밀값은 유지하고 누락된 네 실행 상한만 1건 점검용으로 보완했다.
+  `.env`와 원본 백업은 ignored 파일이며 게시 대상에 포함하지 않는다.
+
+### 실행 결과
+
+Windows, Python 3.12.14, locked 의존성 환경. 자동 테스트의 외부 API는 가짜 응답을 사용했다.
+PostgreSQL 15·Redis 7은 전용 테스트 DB와 Redis 15에서 검증했다.
+
+| 검증 | 결과 |
+| --- | --- |
+| 수정 전 관련 기준선 | 133 passed |
+| BE 전체 테스트 — 게시본 단독 재검증 | 724 passed, skip 0 |
+| 독립 검토 후 점검 명령 오류 분류 회귀 | RED 2 failed → 5 passed (기존 3건 포함) |
+| AI 전체 테스트 | 193 passed |
+| BE Ruff·format·mypy | 통과; format 214개, app 118개 및 추가 scripts 3개 |
+| AI Ruff·format·mypy | 통과; format 40개, mypy 11개 |
+| 공통 계약 검사 | schema 2개·부분 OpenAPI·정상/오류 fixture 7개 통과 |
+| 실제 L1 호출 — 원본의 동일 실행 코드 | `gpt-6-luna`, 성공 1건·실패 0건, 1회 호출, 4,485ms, 입력 375·출력 330 token |
+| 프롬프트 등록 | 격리 PostgreSQL에서 부분 등록·동일 버전 충돌·멱등성·commit/rollback 검증 |
+| 독립 코드 검토 | 오류 원인 표시 누락 1건을 수정하고 재검토 완료 |
+
+실제 호출은 원본 작업공간의 `.env`를 `get_settings()`로 읽고 일반 HTTP client를 사용했다. 진단용
+`l1_connection_check` 프롬프트와 합성 입력으로 검증했으며 활성 DB prompt나 사용자 자료를
+변경하지 않았다. 기록한 모델은 로컬 선택값이며 팀 기본 모델 변경 결정이 아니다.
+게시본에는 비밀 `.env`를 복사하지 않았다. 원본의 실제 호출 기록과 게시본의 PostgreSQL·Redis
+자동 테스트를 구분하며 게시 과정에서 외부 모델을 중복 호출하지 않았다.
+
+### 선행 PR과 검증 한계
+
+- 미병합 #82의 Director 어댑터 보완은 별도 `fix/llm-proxy-director` 작업공간에 보존했다.
+  #82 `0e973f3` + develop `4a3187e` 로컬 통합본에 공통 설정·gateway 변경과 URL 전달을 적용했다.
+  #82의 `attempt_sink`를 보존했고, 전용 회귀를 포함해 BE 826개·AI 193개 테스트와
+  Ruff·format·mypy가 통과했다. 실제 Director 모델 호출은 수행하지 않았다.
+- Director 전용 변경은 어댑터·회귀 테스트 두 파일이며 원본 PR·브랜치를 변경하지 않았다.
+  해당 선행 구현을 이번 develop 기반 브랜치에 복사하지 않았다.
+- #80의 L1 pipeline과 #108의 API/worker는 `LLMSettings`를 기존 L1 어댑터에 전달하는
+  경계를 사용한다. 이번 공통 연결을 적용할 수 있으나 해당 PR들을 병합하거나 전체 서비스
+  E2E를 실행하지 않았다. 앞의 Director 통합 테스트 수치를 이 경로의 검증으로 사용하지 않는다.
+- 실제 DB 저장까지 포함한 L1 실행, 운영 프롬프트 품질, 다수 저장소 배치의 예산·품질은
+  이번 실제 모델 점검 범위에 포함하지 않는다. 공통 계약 검사는 부분 형식 검사다.
+
 ## 2026-09-27 — PR #45 GitHub 수집 리뷰 반영
 
 관련 PR: [GitHub 수집 #45](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/45).

@@ -108,6 +108,33 @@ async def test_validated_result_records_actual_model_and_injects_only_task_input
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("suffix", ["", "/"])
+async def test_proxy_keeps_base_path_and_uses_the_same_connection_on_retry(suffix):
+    sent = []
+
+    def transport(req):
+        sent.append(req)
+        if len(sent) == 1:
+            return httpx.Response(503, headers={"Retry-After": "0"})
+        return httpx.Response(200, json=response())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        result = await client.call_model(
+            request(),
+            validate,
+            api_key=SecretStr("proxy-fixture"),
+            base_url="https://proxy.example/tenant/v1" + suffix,
+            http_client=http,
+        )
+
+    assert result.succeeded and len(sent) == 2
+    for req in sent:
+        assert str(req.url) == "https://proxy.example/tenant/v1/responses"
+        assert req.headers["Authorization"] == "Bearer proxy-fixture"
+        assert json.loads(req.content)["model"] == "configured-model"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("first_failure", ["timeout", "provider", "parse", "schema"])
 async def test_retryable_failure_uses_exactly_one_retry(first_failure):
     calls = 0

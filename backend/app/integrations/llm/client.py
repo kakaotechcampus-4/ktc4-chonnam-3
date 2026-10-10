@@ -195,6 +195,7 @@ async def _attempt[T](
     api_key: SecretStr,
     body: bytes,
     attempt: int,
+    base_url: str,
 ) -> tuple[T | None, CallFailure | None, AttemptMetadata, float | None]:
     started = time.monotonic()
     model = request.prompt.model
@@ -209,7 +210,8 @@ async def _attempt[T](
         async with asyncio.timeout(request.limits.timeout_seconds):
             async with http.stream(
                 "POST",
-                "https://api.openai.com/v1/responses",
+                # 프록시의 tenant/v1 경로를 보존한다. 절대 경로 결합은 앞 경로를 지운다.
+                base_url.rstrip("/") + "/responses",
                 content=body,
                 headers={
                     "Authorization": f"Bearer {api_key.get_secret_value()}",
@@ -326,6 +328,7 @@ async def call_model[T](
     validator: Callable[[object], T],
     *,
     api_key: SecretStr,
+    base_url: str = "https://api.openai.com/v1",
     http_client: httpx.AsyncClient | None = None,
     budget: CallBudget | None = None,
 ) -> ModelResult[T]:
@@ -333,6 +336,7 @@ async def call_model[T](
 
     주입한 HTTP client의 수명은 호출자가 관리한다. 기본 client에는 별도 전송 재시도가
     없으며, 부분 배치의 실패 항목을 재요청할 때도 같은 budget을 공유해야 한다.
+    base_url과 api_key는 BE 설정에서 함께 검증·선택한 값을 전달한다.
     attempts는 이번 함수 호출분만 반환하고, attempt 번호는 공유 budget 안에서 이어진다.
     재시도 대기도 timeout_seconds 이내다. 각 시도 timeout과 별개이며 전체 deadline은 아니다.
     서버 대기는 budget에 보존하며 재호출·취소 이후에도 다음 시도 전에 남은 시간을 기다린다.
@@ -393,6 +397,7 @@ async def call_model[T](
                     api_key,
                     body,
                     budget._used,
+                    base_url,
                 )
                 attempts.append(metadata)
                 if failure is None:
