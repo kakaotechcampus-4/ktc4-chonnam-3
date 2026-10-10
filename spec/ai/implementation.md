@@ -230,3 +230,23 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
   통과를 durable 저장 완료로 보지 않는다.
 - 분석 API(`backend/app/features/analysis/router.py`)가 골격이라 L1 결과 조회는 검증하지 않았다.
 - 프로젝트 요약의 `summary` 저장 필드는 AI-L03의 BE 합의 후 연결한다.
+
+## 2026-09-28 — jd_requirements 초안 정리 (불릿·상한 배분)
+
+- 구현: `backend/app/llm_tasks/jd_extract.py`. 원문 줄머리 목록 기호(`•`·`∘`·`-` 등)를 떼고 기호만 있는 줄은 버린다.
+  합계가 20개(`MAX_REQUIREMENTS`)를 넘으면 필수 요건을 먼저 담고, 남은 자리는 우대와 주요 업무가 한 줄씩 번갈아 나눈다.
+  이전에는 필수→우대→업무 순으로 채워 우대가 긴 공고에서 주요 업무가 잘렸다(341487은 업무 15개가 모두 빠짐).
+- 검증: `backend`에서 `uv run python -m pytest tests/llm_tasks` 20 passed(13 skipped), 변경 파일 대상 `ruff check`·`ruff format --check`·`mypy` 통과.
+  실제 원티드 공고 5건(359638·281356·229817·341487·380611)에서 필수 요건이 잘리지 않고 주요 업무가 남는 것을 확인했다.
+- 범위 밖: 회사가 자격요건 칸에 우대 문장("~이면 좋아요")을 넣은 경우의 재분류는 `jd_extract_v1`의
+  "Wanted 필드를 추측으로 변경 금지"(`spec/ai/contracts.md`)에 따라 하지 않는다. "[함께 할 업무예요]" 같은
+  섹션 제목 줄도 내용 판단이 필요해 거르지 않았다.
+
+## 2026-10-05 — #77 리뷰 반영 (내용 속 `*`·`-` 보존, 상한 경계)
+
+- 리뷰(동한님): 기호 뒤 `\s*` 때문에 `*nix`·`*.yaml`·`-40°C`의 `*`·`-`까지 지워져 원문 의미가 바뀜.
+  `•`·`∘` 같은 전용 기호는 그대로 떼고, `*`·`-`는 뒤에 공백이 오거나 기호만 있는 줄일 때만 떼도록 고쳤다.
+- 상한 정책은 유지하고 경계를 명시했다: 카테고리별 최소 개수 보장 없음. (필수 19, 우대 1, 업무 1) → (19, 1, 0),
+  필수 20개 이상이면 필수 앞 20개만 남는다. docstring과 `test_cap_boundaries`에 기록.
+- 검증: `backend`에서 `python -m pytest tests/llm_tasks/test_jd_extract.py tests/integrations` 155 passed,
+  변경 파일 대상 `ruff check`·`ruff format --check`·`mypy` 통과.
