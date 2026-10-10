@@ -6,6 +6,7 @@ task-15
 import uuid
 from typing import Any
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import InterviewSession, InterviewTurn
@@ -105,3 +106,27 @@ async def test_no_question_when_not_in_progress(db: AsyncSession) -> None:
 
     assert sent is False
     assert rec.sent == []
+
+
+async def test_last_answer_completes_even_if_send_fails(db: AsyncSession) -> None:
+    """9번째 답 저장 뒤 첫 전송이 끊겨도 면접은 completed 로 확정된다 (PR #66 리뷰 ①)."""
+    interview_id, rec = await _start(db)
+    for turn in range(1, 9):
+        await _answer(db, interview_id, rec, turn)
+
+    async def broken_send(_: dict[str, Any]) -> None:
+        raise ConnectionError("ws closed")
+
+    with pytest.raises(ConnectionError):
+        await handle_answer(
+            db,
+            interview_id=interview_id,
+            turn_no=9,
+            text="답변 9",
+            compose=rec.compose,
+            send=broken_send,
+        )
+
+    interview = await db.get(InterviewSession, interview_id, populate_existing=True)
+    assert interview is not None
+    assert interview.status == "completed"

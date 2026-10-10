@@ -95,9 +95,12 @@ async def handle_answer(
     """
     if await save_answer(db, interview_id=interview_id, turn_no=turn_no, answer_text=text):
         return  # 막힌 사유가 있으면 아무것도 보내지 않는다
+    # 완료 확정을 전송보다 먼저 한다 — 전송이 실패해도 마지막 턴 면접이 in_progress 에
+    # 남지 않는다. 메시지 순서는 그대로이며 interviewEnd 를 못 받으면 FE 는 GET 으로 복구한다.
+    completed = await complete_interview(db, interview_id=interview_id)
     await send({"type": "answerReceived"})
     await send({"type": "thinking"})
-    if await complete_interview(db, interview_id=interview_id):
+    if completed:
         await send({"type": "interviewEnd"})
         return
     await ask_next_question(db, interview_id=interview_id, compose=compose, send=send)
