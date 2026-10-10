@@ -91,6 +91,8 @@ class RepoDetail:
     rate_limit_retry_after_seconds: int | None = None
     # 저장소 단위 404의 증거만 전달한다. 일시적인 장애는 후보 제외 사유가 아니다.
     repository_inaccessible: bool = False
+    # 실제 확인한 필드만 저장한다. 정상 빈 값·README 부재와 실패·미호출을 구분한다.
+    collected_fields: frozenset[str] = field(default_factory=frozenset)
 
     @property
     def is_partial(self) -> bool:

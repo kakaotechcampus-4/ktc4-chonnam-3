@@ -18,6 +18,13 @@
 - [0004 면접 질문 배분의 기존 기준 복원](../../shared/decisions/0004-flexible-persona-allocation-restoration.md): 2026-09-22 사용자 결정. 정상 9턴·첫 HR을 유지하고 기술 목표 6턴·최소 5턴, 도메인·HR 합산 최소 3턴과 개별 배분 비고정을 복원한다. DB·공개 API 구조는 유지하며 실제 횟수 제어는 구현·검증 대기다.
 - [0003 Sprint 1 세션 인증](../../shared/decisions/0003-sprint1-session-auth.md): 2026-09-22 사용자 결정. Redis `auth:sess:{sid}`·HttpOnly `devon_session`·14일 sliding 세션을 사용하고 JWT·refresh는 Sprint 2로 넘긴다. SQL `auth_sessions` 제외와 GitHub token의 암호화 DB 저장을 유지하며 실제 인증 연결은 구현·검증 대기다.
 
+## Task 10 내부 구현 결정
+
+- [0003 Task 10 후보 순위와 run별 L1 참조](0003-task10-ranking-and-analysis-reference.md): Proposed.
+  기존 순위 표시값, 검증된 기여도 입력, run별 분석 참조와 추천 갱신의 동시성 경계를 정리한다.
+- [0007 Task 10 재수집 실패 보존과 README 축약 캐시](0007-task10-collection-retry-and-partial-cache.md): Proposed.
+  확인한 필드만 저장하고 같은 run의 성공을 보존한다. 축약 partial은 동일 입력일 때만 재사용한다.
+
 ## 관련 AI 결정
 
 - [0011 Sprint 1 모델 선택](../../ai/decisions/0011-sprint1-model-selection.md): 2026-09-21 사용자 결정. Sprint 1 LLM 모델은 OpenAI `gpt-5.6-luna`다. 인증·SDK/client·호출 경로·버전 기록 방식은 AI-L01에서 계속 검토한다.
