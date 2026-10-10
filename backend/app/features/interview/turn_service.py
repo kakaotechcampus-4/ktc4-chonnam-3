@@ -24,6 +24,7 @@ from sqlalchemy import Integer, cast, exists, func, insert, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Evidence, InterviewSession, InterviewTurn, TurnEvidence
+from app.db.models.interview import PERSONAS
 
 
 async def save_question(
@@ -42,8 +43,11 @@ async def save_question(
 
     입력: 면접 id, Director 가 정한 질문 값, 같은 면접의 evidence id 목록(없어도 됨).
     출력: 저장된 턴. 진행 중이 아니거나 이전 턴이 미답변이거나 total_turns 에 도달했으면 None.
-    다른 면접의 evidence id 가 섞이면 ValueError (아무것도 저장하지 않는다).
+    다른 면접의 evidence id 가 섞이거나 persona 가 허용 밖이면 ValueError (저장하지 않는다).
     """
+    # 턴 번호를 올린 뒤 DB CHECK 에서 터지면 원인이 흐려지므로 먼저 막는다.
+    if persona not in PERSONAS:
+        raise ValueError(f"허용되지 않은 persona: {persona}")
     prev_answered = exists().where(
         InterviewTurn.interview_session_id == InterviewSession.id,
         InterviewTurn.turn_no == InterviewSession.current_turn,

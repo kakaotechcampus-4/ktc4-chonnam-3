@@ -95,6 +95,18 @@ async def test_foreign_evidence_rejected(db: AsyncSession) -> None:
     assert interview.current_turn == 0
 
 
+async def test_unknown_persona_rejected_before_update(db: AsyncSession) -> None:
+    """허용 밖 persona 는 턴 번호를 올리기 전에 막는다 — DB CHECK 오류로 늦게 터지지 않게."""
+    interview, _ = await _setup(db)
+
+    with pytest.raises(ValueError):
+        await save_question(db, interview_id=interview.id, persona="ceo", question_text="Q")
+
+    assert await db.scalar(select(InterviewTurn)) is None
+    await db.refresh(interview)
+    assert interview.current_turn == 0
+
+
 async def _answer(db: AsyncSession, interview_id: uuid.UUID, turn_no: int, text: str) -> bool:
     return await save_answer(db, interview_id=interview_id, turn_no=turn_no, answer_text=text)
 
