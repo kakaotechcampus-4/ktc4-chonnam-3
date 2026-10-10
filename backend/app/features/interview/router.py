@@ -1,4 +1,4 @@
-"""/interviews REST. 구현 예정: /{id}/retry.
+"""/interviews REST — 생성, 조회, 준비 재시도, 재도전.
 준비 실패 재시도는 REST POST /interviews/{id}/prepare/retry이며 WS 메시지가 아니다.
 main.py 등록은 interview_prep 워커 연결(AI task-06) 때 한다.
 그 전에 열면 면접이 preparing 에 머문다.
@@ -65,6 +65,23 @@ async def retry_prepare(
         user_id=user.id,
         interview_id=_parse_id(interview_id, Reason.SESSION_EXPIRED),
     )
+
+
+@router.post(
+    "/{interview_id}/retry",
+    status_code=status.HTTP_201_CREATED,
+    response_model=CreateInterviewResponse,
+)
+async def retry_interview(
+    interview_id: str, request: Request, db: Database, user: CurrentUser
+) -> CreateInterviewResponse:
+    new_id, session_id = await service.retry_interview(
+        db,
+        request.app.state.redis,
+        user_id=user.id,
+        interview_id=_parse_id(interview_id, Reason.NOT_FOUND),
+    )
+    return CreateInterviewResponse(session_id=session_id, interview_id=new_id)
 
 
 def _parse_id(interview_id: str, missing: Reason) -> uuid.UUID:

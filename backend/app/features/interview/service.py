@@ -47,11 +47,12 @@ async def create_interview(
     user_id: uuid.UUID,
     run_id: uuid.UUID,
     repository_ids: list[uuid.UUID],
+    retry_of: uuid.UUID | None = None,
 ) -> tuple[uuid.UUID, str]:
     """면접을 만들고 interview_prep 을 enqueue 한다.
 
-    입력: 요청 사용자 id, runId, 선택 repo id 목록(요청 순서 = display_order).
-    출력: (interviewId, sessionId). 검사 실패는 AppError.
+    입력: 요청 사용자 id, runId, 선택 repo id 목록(요청 순서 = display_order),
+    재도전이면 원본 interviewId. 출력: (interviewId, sessionId). 검사 실패는 AppError.
     """
     if not repository_ids:
         raise AppError(Reason.NO_REPOSITORY_SELECTED)
@@ -73,7 +74,10 @@ async def create_interview(
         raise AppError(Reason.SESSION_LIMIT_EXCEEDED)
 
     interview = InterviewSession(
-        user_id=user_id, analysis_job_id=run.id, job_posting_id=run.job_posting_id
+        user_id=user_id,
+        analysis_job_id=run.id,
+        job_posting_id=run.job_posting_id,
+        retry_of_interview_id=retry_of,
     )
     db.add(interview)
     try:
@@ -145,6 +149,40 @@ async def get_interview(
             else None
         ),
     )
+
+
+async def retry_interview(
+    db: AsyncSession, redis: ArqRedis, *, user_id: uuid.UUID, interview_id: uuid.UUID
+) -> tuple[uuid.UUID, str]:
+    """끝난 면접의 run·repo 조합으로 새 면접을 만든다. 생성 검사는 create_interview 그대로.
+
+    허용 상태는 BE 명세대로 completed·abandoned. FE 문서는 '완료 상태가 아님'으로 적어
+    다르다 (spec/frontend/features/report.md 계약 차이, PR 에서 명세 반영 확인).
+    없거나 남의 면접은 존재를 알리지 않도록 404 (계약에 404 없음, PR 에서 확인).
+    """
+    row = await queries.get_owned_interview(db, user_id=user_id, interview_id=interview_id)
+    if row is None:
+        raise AppError(Reason.NOT_FOUND)
+    original = row[0]
+    if original.status not in ("completed", "abandoned"):
+        raise AppError(Reason.ORIGINAL_NOT_COMPLETED)
+    # ponytail: repo 행이 삭제되면 session_repositories 도 CASCADE 로 사라져 일부 삭제는
+    # 알 수 없고 남은 repo 로 만든다. 전부 사라지면 아래에서 repository_unavailable.
+    repository_ids = await queries.list_repository_ids(db, interview_id=interview_id)
+    try:
+        return await create_interview(
+            db,
+            redis,
+            user_id=user_id,
+            run_id=original.analysis_job_id,
+            repository_ids=repository_ids,
+            retry_of=interview_id,
+        )
+    except AppError as exc:
+        # 원본 repo 가 private·접근 불가로 바뀌었거나 사라짐. 계약 reason 으로 바꾼다.
+        if exc.reason in (Reason.INVALID_REPOSITORY, Reason.NO_REPOSITORY_SELECTED):
+            raise AppError(Reason.REPOSITORY_UNAVAILABLE) from None
+        raise
 
 
 async def retry_prepare(

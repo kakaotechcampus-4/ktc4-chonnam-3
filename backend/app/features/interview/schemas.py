@@ -1,5 +1,5 @@
 """면접 요청/응답 스키마. 필드는 공통 OpenAPI 와 맞춘다.
-현재 POST /interviews, GET /interviews/{id} 가 있다. retry 계열은 구현 예정.
+재도전(/{id}/retry)은 CreateInterviewResponse 를 재사용하고, 준비 재시도는 본문이 없다.
 DB·API 상태는 preparing / preparing_failed / in_progress / completed / abandoned다.
 
 docs/pipeline.md 4.5절 / task-04

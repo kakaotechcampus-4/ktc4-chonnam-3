@@ -115,6 +115,16 @@ async def list_repository_names(db: AsyncSession, *, interview_id: uuid.UUID) ->
     return list(rows)
 
 
+async def list_repository_ids(db: AsyncSession, *, interview_id: uuid.UUID) -> list[uuid.UUID]:
+    """선택 repo id. 출력 순서 = 선택 순서(display_order). 재도전 복사용."""
+    rows = await db.scalars(
+        select(SessionRepository.repository_id)
+        .where(SessionRepository.interview_session_id == interview_id)
+        .order_by(SessionRepository.display_order)
+    )
+    return list(rows)
+
+
 async def list_turns(db: AsyncSession, *, interview_id: uuid.UUID) -> list[InterviewTurn]:
     """면접 턴 목록. 출력 순서 = turn_no."""
     rows = await db.scalars(

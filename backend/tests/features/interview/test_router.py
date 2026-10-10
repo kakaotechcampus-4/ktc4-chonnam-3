@@ -116,3 +116,28 @@ async def test_prepare_retry_unknown_id_410(client, run) -> None:
     response = await client.post("/api/interviews/not-a-uuid/prepare/retry")
     assert response.status_code == 410
     assert response.json()["error"]["reason"] == "session_expired"
+
+
+async def test_retry_201(client, db, run) -> None:
+    repo = await make_repo(db, run)
+    await db.commit()
+    created = (
+        await client.post(
+            "/api/interviews", json={"runId": str(run.id), "repositoryIds": [str(repo.id)]}
+        )
+    ).json()
+    interview = await db.get(InterviewSession, uuid.UUID(created["interviewId"]))
+    interview.status = "completed"
+    await db.commit()
+
+    response = await client.post(f"/api/interviews/{created['interviewId']}/retry")
+
+    assert response.status_code == 201
+    assert set(response.json()) == {"sessionId", "interviewId"}
+    assert response.json()["interviewId"] != created["interviewId"]
+
+
+async def test_retry_unknown_id_404(client, run) -> None:
+    response = await client.post("/api/interviews/not-a-uuid/retry")
+    assert response.status_code == 404
+    assert response.json()["error"]["reason"] == "not_found"
