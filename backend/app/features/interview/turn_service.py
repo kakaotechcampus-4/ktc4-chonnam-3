@@ -125,7 +125,8 @@ async def save_answer(
 
     입력: 면접 id, 클라이언트가 보낸 turn, 답변 원문.
     출력: 저장했으면 None. 막히면 사유 — NOT_IN_PROGRESS / NOT_CURRENT_TURN / ALREADY_ANSWERED.
-    ALREADY_ANSWERED 는 재전송이다 — 호출자가 다음 질문·종료 복구를 시도할 수 있다.
+    ALREADY_ANSWERED 는 재전송이다. 재전송으로 다음 질문을 다시 만들지 않는다 — 실패한 LLM
+    작업을 재호출하지 않는 규칙(spec/ai/features/interviewer.md:93), 복구는 재접속 후속 작업.
     """
     now = datetime.now(UTC)
     is_current = exists().where(
@@ -157,6 +158,35 @@ async def save_answer(
     return None
 
 
+async def complete_interview(db: AsyncSession, *, interview_id: uuid.UUID) -> bool:
+    """마지막 턴 답변 후 면접을 completed 로 바꾸고 commit 한다.
+
+    입력: 면접 id.
+    출력: 바꿨으면 True. 진행 중이 아니거나 total_turns 미도달이거나 마지막 턴이 미답변이면 False.
+    """
+    last_answered = exists().where(
+        InterviewTurn.interview_session_id == InterviewSession.id,
+        InterviewTurn.turn_no == InterviewSession.current_turn,
+        InterviewTurn.status == "answered",
+    )
+    done = await db.scalar(
+        update(InterviewSession)
+        .where(
+            InterviewSession.id == interview_id,
+            InterviewSession.status == "in_progress",
+            InterviewSession.current_turn == InterviewSession.total_turns,
+            last_answered,
+        )
+        .values(status="completed", completed_at=datetime.now(UTC))
+        .returning(InterviewSession.id)
+        .execution_options(synchronize_session=False)
+    )
+    if done is None:  # 쓴 게 없어 rollback 하지 않는다 (save_question 참고)
+        return False
+    await db.commit()
+    return True
+
+
 # 막힌 경우에만 다시 읽어 사유를 고른다. 판정 자체는 위 조건부 UPDATE 가 했으므로
 # 그 사이 상태가 바뀌었다면 사유는 최선 추정이다.
 async def _session_state(db: AsyncSession, interview_id: uuid.UUID) -> tuple[str, int, int] | None:
@@ -172,13 +202,34 @@ async def _session_state(db: AsyncSession, interview_id: uuid.UUID) -> tuple[str
     return None if row is None else (row[0], row[1], row[2])
 
 
-async def _question_rejection(db: AsyncSession, interview_id: uuid.UUID) -> TurnRejected:
+async def question_rejection(db: AsyncSession, interview_id: uuid.UUID) -> TurnRejected | None:
+    """지금 다음 질문을 저장할 수 없으면 그 사유, 저장할 수 있으면 None. 읽기만 한다.
+
+    LLM 질문 생성 전에 비용을 아끼려는 사전 확인이다. 최종 판정은 save_question 의
+    조건부 UPDATE 가 한다 (그 사이 상태가 바뀌어도 데이터는 꼬이지 않는다).
+    """
     state = await _session_state(db, interview_id)
     if state is None or state[0] != "in_progress":
         return TurnRejected.NOT_IN_PROGRESS
-    if state[1] >= state[2]:
+    _, current_turn, total_turns = state
+    if current_turn >= total_turns:
         return TurnRejected.TURNS_EXHAUSTED
-    return TurnRejected.PREVIOUS_UNANSWERED
+    if current_turn > 0 and not await db.scalar(
+        select(
+            exists().where(
+                InterviewTurn.interview_session_id == interview_id,
+                InterviewTurn.turn_no == current_turn,
+                InterviewTurn.status == "answered",
+            )
+        )
+    ):
+        return TurnRejected.PREVIOUS_UNANSWERED
+    return None
+
+
+async def _question_rejection(db: AsyncSession, interview_id: uuid.UUID) -> TurnRejected:
+    # UPDATE 가 막았는데 다시 읽으니 통과 상태라면 그 사이 다른 요청이 턴을 진행한 것.
+    return await question_rejection(db, interview_id) or TurnRejected.PREVIOUS_UNANSWERED
 
 
 async def _answer_rejection(
