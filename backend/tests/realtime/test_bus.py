@@ -7,6 +7,8 @@ FakeSubscription 을 쓰는 tests/features/test_analysis_events.py 와 달리, �
 
 from unittest import mock
 
+import anyio
+import anyio.lowlevel
 import pytest
 from redis.asyncio import Redis
 
@@ -79,6 +81,50 @@ async def test_subscribe_cleans_up_even_when_confirmation_fails() -> None:
 
     pubsub.unsubscribe.assert_awaited_once_with("run:1:events")
     pubsub.aclose.assert_awaited_once()
+
+
+async def test_subscribe_closes_even_when_unsubscribe_fails() -> None:
+    """unsubscribe 가 예외를 던져도 aclose 는 호출돼 연결이 풀에 반환돼야 한다."""
+    pubsub = _pubsub_mock(confirmation={"type": "subscribe"})
+    pubsub.unsubscribe.side_effect = ConnectionError("socket closed")
+    bus = RedisEventBus(_redis_with_pubsub(pubsub))
+
+    with pytest.raises(ConnectionError):
+        async with bus.subscribe("run:1:events"):
+            pass
+
+    pubsub.aclose.assert_awaited_once()
+
+
+async def test_subscribe_cleanup_completes_when_cancelled() -> None:
+    """SSE 접속 종료(AnyIO 취소) 중에도 unsubscribe→aclose 가 끝까지 실행돼야 한다."""
+    pubsub = _pubsub_mock(confirmation={"type": "subscribe"})
+    finished: list[str] = []
+
+    async def unsubscribe(channel: str) -> None:
+        await anyio.lowlevel.checkpoint()  # 취소가 걸리면 여기서 중단된다
+        finished.append("unsubscribe")
+
+    async def aclose() -> None:
+        await anyio.lowlevel.checkpoint()
+        finished.append("aclose")
+
+    pubsub.unsubscribe.side_effect = unsubscribe
+    pubsub.aclose.side_effect = aclose
+    bus = RedisEventBus(_redis_with_pubsub(pubsub))
+    entered = anyio.Event()
+
+    async def consume() -> None:
+        async with bus.subscribe("run:1:events"):
+            entered.set()
+            await anyio.sleep_forever()
+
+    async with anyio.create_task_group() as task_group:
+        task_group.start_soon(consume)
+        await entered.wait()
+        task_group.cancel_scope.cancel()
+
+    assert finished == ["unsubscribe", "aclose"]
 
 
 async def test_publish_forwards_to_redis() -> None:

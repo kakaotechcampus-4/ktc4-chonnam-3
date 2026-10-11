@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any, Protocol
 
+import anyio
 from redis.asyncio import Redis
 
 
@@ -45,9 +46,15 @@ class RedisEventBus:
                 raise RuntimeError(f"failed to confirm subscription to {channel}")
             yield pubsub
         finally:
-            await pubsub.unsubscribe(channel)
-            # redis-py 타입 스텁에 aclose() 시그니처가 없다.
-            await pubsub.aclose()  # type: ignore[no-untyped-call]
+            # SSE 접속이 끊기면 AnyIO 취소가 이 구간의 await 에도 걸린다. 보호하지 않으면
+            # aclose() 가 풀에 연결을 돌려주기 전에 중단돼 연결이 누수된다.
+            with anyio.CancelScope(shield=True):
+                try:
+                    await pubsub.unsubscribe(channel)
+                finally:
+                    # unsubscribe 가 실패해도 close 와 풀 반환은 반드시 수행한다.
+                    # redis-py 타입 스텁에 aclose() 시그니처가 없다.
+                    await pubsub.aclose()  # type: ignore[no-untyped-call]
 
     async def publish(self, channel: str, payload: str) -> None:
         """이벤트 하나를 publish 한다. 입력: 채널명, 직렬화된 payload 문자열. 출력: 없음."""

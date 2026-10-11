@@ -215,6 +215,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "anyio" },
     { name = "arq" },
     { name = "asyncpg" },
     { name = "devon-ai" },
@@ -243,6 +244,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic" },
+    { name = "anyio" },
     { name = "arq" },
     { name = "asyncpg" },
     { name = "devon-ai", editable = "../ai" },
