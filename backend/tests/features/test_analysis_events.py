@@ -223,3 +223,75 @@ async def test_first_terminal_status_is_kept_for_a_step() -> None:
 
     step_events = [e for e in events if e["event"] == "step"]
     assert len(step_events) == 1
+
+
+def _snapshots(*snapshots: RunSnapshot) -> Callable[[], Awaitable[RunSnapshot]]:
+    """호출할 때마다 다음 스냅샷을 돌려준다. 마지막 값은 반복한다."""
+    remaining = list(snapshots)
+
+    async def read() -> RunSnapshot:
+        return remaining.pop(0) if len(remaining) > 1 else remaining[0]
+
+    return read
+
+
+def _run(status: str, *steps: tuple[str, str]) -> RunSnapshot:
+    return RunSnapshot(status=status, steps=tuple(StepState(s, st) for s, st in steps))
+
+
+async def test_poll_fallback_sends_missed_step_changes_while_running() -> None:
+    """알림이 유실돼도 폴백 조회가 진행 중 단계 변경을 복구한다."""
+    bus = FakeBus(FakeSubscription([None, None]))
+    read_snapshot = _snapshots(
+        _run("running", ("jd_fetch", "running")),
+        _run("running", ("jd_fetch", "completed"), ("jd_extract", "running")),
+        _run("succeeded", ("jd_fetch", "completed"), ("jd_extract", "completed")),
+    )
+
+    events = await _collect(stream_run_progress("run-1", bus=bus, read_snapshot=read_snapshot))
+
+    steps = [json.loads(e["data"]) for e in events if e["event"] == "step"]
+    assert steps == [
+        {"step": "jd_fetch", "status": "running"},
+        {"step": "jd_fetch", "status": "completed"},
+        {"step": "jd_extract", "status": "running"},
+        {"step": "jd_extract", "status": "completed"},
+    ]
+    assert events[-1]["event"] == "completed"
+
+
+async def test_poll_fallback_sends_final_steps_before_terminal_event() -> None:
+    """종료 상태를 폴백으로 알게 돼도 마지막 단계(completed/failed/skipped)가 먼저 나간다."""
+    bus = FakeBus(FakeSubscription([None]))
+    read_snapshot = _snapshots(
+        _run("running", ("jd_fetch", "running")),
+        _run(
+            "failed",
+            ("jd_fetch", "completed"),
+            ("jd_extract", "failed"),
+            ("match_score", "skipped"),
+        ),
+    )
+
+    events = await _collect(stream_run_progress("run-1", bus=bus, read_snapshot=read_snapshot))
+
+    kinds = [e["event"] for e in events]
+    assert kinds == ["step", "step", "step", "step", "failed"]
+    last_steps = [json.loads(e["data"]) for e in events[1:4]]
+    assert last_steps == [
+        {"step": "jd_fetch", "status": "completed"},
+        {"step": "jd_extract", "status": "failed"},
+        {"step": "match_score", "status": "skipped"},
+    ]
+
+
+async def test_poll_fallback_does_not_resend_unchanged_steps() -> None:
+    bus = FakeBus(FakeSubscription([None]))
+    read_snapshot = _snapshots(
+        _run("running", ("jd_fetch", "running")),
+        _run("succeeded", ("jd_fetch", "running")),
+    )
+
+    events = await _collect(stream_run_progress("run-1", bus=bus, read_snapshot=read_snapshot))
+
+    assert [e["event"] for e in events] == ["step", "completed"]

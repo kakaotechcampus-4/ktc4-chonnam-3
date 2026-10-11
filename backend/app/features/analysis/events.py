@@ -66,9 +66,8 @@ async def stream_run_progress(
 
     async with bus.subscribe(f"run:{run_id}:events") as subscription:
         snapshot = await read_snapshot()
-        for step in snapshot.steps:
-            if _advance(latest, step.step, step.status):
-                yield _step_event(step)
+        for step_event in _snapshot_step_events(snapshot, latest):
+            yield step_event
 
         if snapshot.status in TERMINAL_JOB_STATUSES:
             yield _terminal_event(snapshot.status)
@@ -81,6 +80,9 @@ async def stream_run_progress(
             if message is None:
                 # 이 주기 동안 메시지가 없었다 — publish 유실에 대비해 Postgres 를 재확인한다.
                 snapshot = await read_snapshot()
+                # 유실된 단계 변경을 먼저 보낸 뒤 종료를 알린다.
+                for step_event in _snapshot_step_events(snapshot, latest):
+                    yield step_event
                 if snapshot.status in TERMINAL_JOB_STATUSES:
                     yield _terminal_event(snapshot.status)
                     return
@@ -92,6 +94,13 @@ async def stream_run_progress(
             yield event
             if event["event"] in ("completed", "failed"):
                 return
+
+
+def _snapshot_step_events(snapshot: RunSnapshot, latest: dict[str, str]) -> list[dict[str, Any]]:
+    """스냅샷에서 마지막으로 내보낸 상태보다 앞선 단계만 SSE 이벤트로 바꾼다."""
+    return [
+        _step_event(step) for step in snapshot.steps if _advance(latest, step.step, step.status)
+    ]
 
 
 def _handle_message(message: dict[str, Any], latest: dict[str, str]) -> dict[str, Any] | None:
