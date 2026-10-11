@@ -125,7 +125,8 @@ async def save_answer(
 
     입력: 면접 id, 클라이언트가 보낸 turn, 답변 원문.
     출력: 저장했으면 None. 막히면 사유 — NOT_IN_PROGRESS / NOT_CURRENT_TURN / ALREADY_ANSWERED.
-    ALREADY_ANSWERED 는 재전송이다 — 호출자가 다음 질문·종료 복구를 시도할 수 있다.
+    ALREADY_ANSWERED 는 재전송이다. 재전송으로 다음 질문을 다시 만들지 않는다 — 실패한 LLM
+    작업을 재호출하지 않는 규칙(spec/ai/features/interviewer.md:93), 복구는 재접속 후속 작업.
     """
     now = datetime.now(UTC)
     is_current = exists().where(

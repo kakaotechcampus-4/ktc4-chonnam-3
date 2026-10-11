@@ -17,6 +17,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.db.models import InterviewTurn
 from app.features.interview import queries
 from app.features.interview.turn_service import (
@@ -44,6 +45,7 @@ class QuestionDraft:
 
 ComposeQuestion = Callable[[list[InterviewTurn]], Awaitable[QuestionDraft]]
 Send = Callable[[dict[str, Any]], Awaitable[None]]
+logger = get_logger(__name__)
 
 
 async def ask_next_question(
@@ -109,4 +111,6 @@ async def handle_answer(
     if completed:
         await send({"type": "interviewEnd"})
         return
-    await ask_next_question(db, interview_id=interview_id, compose=compose, send=send)
+    if not await ask_next_question(db, interview_id=interview_id, compose=compose, send=send):
+        # thinking 뒤에 보낼 메시지가 없다 — 보낼 WS error reason 은 계약 합의 대기라 로그만 남긴다.
+        logger.warning("interview_next_question_rejected", interview_id=str(interview_id))
