@@ -106,8 +106,8 @@ Sprint 1에서 preview는 포트폴리오 전용이다. 자소서는 `/documents
 
 4-3-v2  분석 실패
   ├─ [다시 시도]        → 공고 입력 화면 값 유지 후 재호출 → 4-2-v2
-  ├─ [GitHub 재연동]    → /auth/github/link   (github_token_invalid)
-  └─ 재시도 불가 사유    → 안내만, 버튼 숨김   (no_public_repo, user_not_found)
+  ├─ [GitHub 재연동]    → /auth/github/link   (token_invalid)
+  └─ 재시도 불가 사유    → 안내만, 버튼 숨김   (no_public_repo)
 
 5a-v2  레포 확정
   ├─ [내 레포 더 보기] → GET /analysis-runs/{runId}/candidates?page=N
@@ -188,17 +188,19 @@ new EventSource(`/api/analysis-runs/${runId}/events`, { withCredentials: true })
 
 ### failureReason 분기 (4-3-v2)
 
+`failureReason`은 BE 내부 `analysis_jobs.error_code` 값이다(공통 0006, PR #81 미병합, 목록은 [`backend/docs/error-reasons.md`](../../../backend/docs/error-reasons.md)의 Job Error Code). HTTP reason `github_token_invalid`와 달리 job 코드는 `token_invalid`이다.
+
 | 값 | 문구 방향 | 재시도 |
 | --- | --- | --- |
+| `token_invalid` | 재연동 강조 | 재연동 후 |
 | `no_public_repo` | 안내만 | ❌ 버튼 숨김 |
-| `user_not_found` | 안내만 | ❌ |
-| `rate_limited` | 대기 시간 안내 (`retryAfter`) | 시간 후 |
-| `github_token_invalid` | 재연동 강조 | 재연동 후 |
-| `jd_fetch_failed` | 공고 URL 입력창 강조 | ✅ |
-| `jd_extraction_failed` | 공고 URL 입력창 강조 | ✅ |
-| `not_a_job_posting` | "채용 공고가 아닌 것 같아요" | ✅ |
-| `doc_extract_failed` | 첨부 파일 안내 | ✅ |
-| `llm_timeout` | "분석이 지연되고 있어요" | ✅ |
+| `unsupported_site` · `jd_fetch_failed` · `jd_extraction_failed` · `not_a_job_posting` | 공고 URL 확인 안내 | ✅ 공고 입력으로 |
+| `doc_extract_failed` | 첨부 파일 안내 | ✅ 공고 입력으로 |
+| `rate_limited` | 대기 후 재시도 안내 (대기 시간은 BE 계약 확정 후) | 시간 후 |
+| `run_expired` | 공고 입력부터 다시 | ✅ 공고 입력으로 |
+| `llm_timeout` · `llm_parse_failed` · `llm_failed` · `repo_unreachable` · `no_readme` · `input_too_large` · `internal_error` · 목록에 없는 값 | 일반 재시도 안내 | ✅ |
+
+재시도는 공고 입력 화면에 이전 공고 URL을 채워 보낸다. 첨부 파일은 다시 올린다.
 
 **분석 실패도 HTTP 200이다.** `status: "failed"` + `failureReason`으로 판단한다. [부분 실패 기준](../../backend/features/analysis-run.md#부분-실패)에 따라 DB run이 `partial`이면 FE에는 `failed`로 매핑하지만 성공한 저장소의 결과는 기존 result API로 조회할 수 있다. 개별 저장소의 `status: 'partial'`과는 다른 범위다. 실패 화면에서 성공 결과로 이동하는 경로는 task-09에 보완안만 기록했으며 버튼 방식이나 코드 수정이 승인·완료된 것은 아니다.
 
@@ -207,10 +209,14 @@ new EventSource(`/api/analysis-runs/${runId}/events`, { withCredentials: true })
 | `errorCode` | 문구 | 재시도 |
 | --- | --- | --- |
 | `llm_timeout` | "분석이 지연되고 있어요" | 자동 1회 |
-| `parse_failed` | "분석이 지연되고 있어요" | 자동 1회 |
+| `llm_parse_failed` | "분석이 지연되고 있어요" | 자동 1회 |
+| `rate_limited` | "분석이 지연되고 있어요" | ❌ |
 | `input_too_large` | "정보가 부족해요" | ❌ |
 | `no_readme` | "정보가 부족해요" | ❌ |
-| `github_token_invalid` | "GitHub 재연동이 필요해요" | 재연동 후 |
+| `repo_unreachable` | "레포에 접근할 수 없어요" | ❌ |
+| `llm_failed` · 목록에 없는 값 | "분석에 실패했어요" | ❌ |
+
+값은 BE `repo_analyses.error_code`([`backend/docs/error-reasons.md`](../../../backend/docs/error-reasons.md))를 따른다. 자동 재시도는 BE 공통 LLM 호출 계층의 1회 재시도이며 FE는 다시 호출하지 않는다.
 
 ### POST /interviews
 
