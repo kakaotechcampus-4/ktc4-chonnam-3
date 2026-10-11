@@ -684,8 +684,8 @@ BE `spec/backend/features/documents.md`와 [0010 결정](../../spec/ai/decisions
 
 | 코드 | reason |
 | --- | --- |
-| 413 | `file_too_large` |
-| 415 | `unsupported_media_type` |
+| 413 | `document_too_large` |
+| 415 | `unsupported_document_type` |
 
 ---
 
@@ -725,12 +725,11 @@ Location: /analysis-runs/run_abc123
 
 | 코드 | reason | 처리 |
 | --- | --- | --- |
-| 400 | `job_url_required` | 입력창 에러 |
+| 400 | `posting_url_required` | 입력창 에러 |
 | 400 | `unsupported_site` | "지원하지 않는 사이트예요" |
-| 400 | `url_unreachable` | "공고를 불러올 수 없어요" |
 | 409 | `run_in_progress` | `error.details.runId`로 기존 분석 진행 화면(4-2-v2) 이동 |
 
-> 공고 수집·추출 실패는 잡 생성 후 발생하므로 `202`로 응답하고 `failureReason`으로 전달한다(`GET /analysis-runs/{runId}` 참고). `unsupported_site`·`url_unreachable`만 잡 생성 전에 판별 가능하므로 `400`이다.
+> 공고 수집·추출 실패는 잡 생성 후 발생하므로 `202`로 응답하고 `failureReason`으로 전달한다(`GET /analysis-runs/{runId}` 참고). `unsupported_site`만 잡 생성 전에 판별 가능하므로 `400`이다.
 > 
 
 ---

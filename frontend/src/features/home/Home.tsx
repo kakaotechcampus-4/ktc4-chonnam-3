@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, BASE } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
+import Footer from '@/shared/components/Footer';
 import type { ApiError } from '@/types/api';
 
 export default function Home() {
@@ -12,8 +13,13 @@ export default function Home() {
   const homeQuery = useQuery({
     queryKey: queryKeys.home,
     queryFn: api.getHome,
+    // 실패해도 이전 data가 남아 syncing 폴링이 이어지므로, 토큰 무효면 재연동 전까지 멈춘다.
     refetchInterval: (query) =>
-      query.state.data?.analysisStatus === 'syncing' ? 3000 : false,
+      (query.state.error as unknown as ApiError | null)?.error?.reason === 'github_token_invalid'
+        ? false
+        : query.state.data?.analysisStatus === 'syncing'
+          ? 3000
+          : false,
   });
 
   const home = homeQuery.data;
@@ -22,12 +28,16 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen flex-col bg-paper text-ink">
-      <Header active="home" githubLinked={home?.githubLinked} name={home?.name} />
+      {/* /me/home 실패(토큰 무효 등) 중에는 캐시된 /me로 배지를 띄우지 않는다.
+          재조회가 실패해도 이전 data가 남으므로 토큰 무효면 캐시된 githubLinked도 무시한다. */}
+      <Header
+        githubLinked={!githubTokenInvalid && (home?.githubLinked ?? false)}
+        name={home?.name}
+      />
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-10">
-        <h1 className="text-lg font-bold">
-          {homeQuery.isLoading ? '불러오는 중...' : `안녕하세요, ${home?.name ?? ''} 님!`}
-        </h1>
+        {homeQuery.isLoading && <h1 className="text-lg font-bold">불러오는 중...</h1>}
+        {home && <h1 className="text-lg font-bold">안녕하세요, {home.name} 님!</h1>}
 
         {githubTokenInvalid && (
           <div className="mt-4 flex items-center justify-between rounded-card border border-error-soft bg-error-soft px-4 py-3 text-sm">
@@ -38,7 +48,18 @@ export default function Home() {
           </div>
         )}
         {homeQuery.isError && !githubTokenInvalid && (
-          <p className="mt-4 text-sm text-error">정보를 불러오지 못했어요.</p>
+          <div className="mt-4 flex items-center gap-3">
+            <p role="alert" className="text-sm text-error">
+              정보를 불러오지 못했어요.
+            </p>
+            <button
+              type="button"
+              onClick={() => void homeQuery.refetch()}
+              className="rounded-md border border-line px-4 py-2 text-sm"
+            >
+              다시 시도
+            </button>
+          </div>
         )}
 
         {home && (
@@ -136,11 +157,7 @@ export default function Home() {
         </button>
       </main>
 
-      <footer className="flex items-center border-t border-line-soft px-5 py-2.5 text-[10.5px] text-muted">
-        <span>© 2026 DEVON</span>
-        <span className="flex-1" />
-        <span>이용약관 · 개인정보처리방침</span>
-      </footer>
+      <Footer />
     </div>
   );
 }

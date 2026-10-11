@@ -132,6 +132,8 @@ class Settings(BaseSettings):
     analysis_run_ttl_seconds: int = 7200
     max_upload_bytes_cover_letter: int = 10485760
     max_upload_bytes_portfolio: int = 20971520
+    # 파일 byte 제한과 별개인 보관 텍스트 상한. URL 목록은 축약 전에 확보한다.
+    documents_max_text_chars: int = Field(default=50000, gt=0)
     repo_candidate_limit: int = 10
     repo_min_size_kb: int = 50
     jd_reuse_ttl_days: int = 7

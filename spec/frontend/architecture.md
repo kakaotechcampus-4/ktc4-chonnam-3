@@ -25,7 +25,7 @@ src/
 ├─ shared/        # 2개 이상 feature에서 공용으로 쓰는 것
 │  ├─ api.ts        # API 클라이언트 wrapper
 │  ├─ queryKeys.ts  # TanStack Query 키 팩토리
-│  └─ components/   # 공용 UI 컴포넌트 (AppHeader 등)
+│  └─ components/   # 공용 UI 컴포넌트 (Header 등)
 ├─ types/         # API 요청/응답 타입 (공통 계약의 원본·예외 범위 기준)
 ├─ routes.tsx     # 라우트 정의
 ├─ providers.tsx  # 전역 Provider (QueryClient 등)

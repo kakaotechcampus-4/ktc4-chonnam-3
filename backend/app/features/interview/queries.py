@@ -2,7 +2,7 @@
 
 면접 생성 검사 기준은 spec/backend/features/interview.md "생성 검사 해석"을 따른다.
 
-docs/layer-rules.md 1절 / task-13
+docs/layer-rules.md 1절 / task-13 / task-15
 """
 
 import uuid
@@ -126,7 +126,11 @@ async def list_repository_ids(db: AsyncSession, *, interview_id: uuid.UUID) -> l
 
 
 async def list_turns(db: AsyncSession, *, interview_id: uuid.UUID) -> list[InterviewTurn]:
-    """면접 턴 목록. 출력 순서 = turn_no."""
+    """면접의 턴을 turn_no 순으로. 입력: interviewId. 출력: 턴 목록 (없으면 빈 목록).
+
+    재연결 복구와 Redis context 만료 시 Postgres 재구성에 쓴다.
+    마지막 턴이 status='asked' 면 답변 대기 중인 현재 질문이다.
+    """
     rows = await db.scalars(
         select(InterviewTurn)
         .where(InterviewTurn.interview_session_id == interview_id)

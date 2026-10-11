@@ -16,6 +16,7 @@
 
 API 원본 구분은 [공통 계약 안내](../contracts/README.md)와 병합된 [PR #35](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/35)를 따른다. 과거 0001의 부분 이관 초안으로 현재 API 계약 전체를 미정 처리하지 않는다.
 
+- [0007 음성 전용 면접 전환 — WS·REST 계약 변경](0007-voice-interview-contract.md) — Proposed, 2026-10-05. Sprint 2부터 답변은 음성만 받고 질문 음성은 `question-audio` URL로 전달한다. 꼬리질문 포함 9턴과 `totalTurns` 기존 의미를 유지하며 BE·AI 검토 대기.
 - [0005 JD 분류 category 통일](0005-jd-category-unification.md) — Proposed, 2026-09-27. DB·AI·API 모두 `category`(`required`/`preferred`/`responsibility`)로 통일하고 `requirement_type`·`unknown`과 변환 레이어를 폐기한다. 구동한 검토 대기.
 - [0003 Sprint 1 세션 인증 유지와 JWT의 Sprint 2 이관](0003-sprint1-session-auth.md) — Accepted, 2026-09-22. 기존 Redis·`devon_session`·14일 sliding 세션을 채택한다. JWT·갱신은 Sprint 2로 이관하며 실제 인증 구현·검증은 남는다.
 - [0004 면접 질문 배분의 기존 기준 복원](0004-flexible-persona-allocation-restoration.md) — Accepted, 2026-09-22. 정상 9턴·첫 HR을 유지하고 기술 목표 6턴·최소 5턴, 도메인·HR 합산 최소 3턴과 개별 배분 비고정을 복원한다. 실제 제어 구현·검증은 대기다.

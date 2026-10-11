@@ -16,6 +16,7 @@ import base64
 import binascii
 import time
 from collections.abc import AsyncIterator
+from re import fullmatch
 from typing import Any
 from urllib.parse import parse_qs, quote, urlsplit
 
@@ -224,9 +225,13 @@ class GithubClient:
     async def fetch_languages(self, full_name: str) -> dict[str, int]:
         """언어별 바이트 수. 입력: owner/repo. 출력: {언어: 바이트}."""
         payload = (await self.request(f"/repos/{full_name}/languages")).json()
-        if not isinstance(payload, dict):
-            return {}
-        return {str(key): value for key, value in payload.items() if isinstance(value, int)}
+        if not isinstance(payload, dict) or any(
+            not isinstance(value, int) or isinstance(value, bool) or value < 0
+            for value in payload.values()
+        ):
+            # 형식 오류를 정상 빈 결과로 저장해 기존 언어 정보를 지우지 않는다.
+            raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE)
+        return {str(key): value for key, value in payload.items()}
 
     async def fetch_readme(
         self, full_name: str, *, max_chars: int = DEFAULT_README_MAX_CHARS
@@ -281,8 +286,9 @@ class GithubClient:
             raise
 
         payload = response.json()
-        returned = len(payload) if isinstance(payload, list) else 0
-        return total_from_per_page_one(response.headers.get("link"), returned)
+        if not isinstance(payload, list):
+            raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE)
+        return total_from_per_page_one(response.headers.get("link"), len(payload))
 
     async def fetch_repo_detail(
         self,
@@ -308,6 +314,7 @@ class GithubClient:
         retry_after: int | None = None
         stopped = False
         repository_inaccessible = False
+        collected_fields: set[str] = set()
 
         def _record(error: GithubApiError) -> None:
             nonlocal retry_after, stopped
@@ -320,6 +327,7 @@ class GithubClient:
         if not stopped:
             try:
                 languages = await self.fetch_languages(repo.full_name)
+                collected_fields.add("languages")
             except GithubApiError as error:
                 # README·브랜치의 404와 달리 languages의 404는 저장소 접근 불가 증거다.
                 repository_inaccessible = error.status_code == httpx.codes.NOT_FOUND
@@ -330,14 +338,20 @@ class GithubClient:
                 readme_text, readme_truncated = await self.fetch_readme(
                     repo.full_name, max_chars=readme_max_chars
                 )
+                collected_fields.update(("readme_text", "readme_truncated"))
                 repository_inaccessible = False
             except GithubApiError as error:
+                # 404만 확인된 부재다. 잘못된 본문의 no_readme로 기존 README를 지우지 않는다.
+                if error.error_code == GITHUB_ERROR_NO_README and error.status_code == 404:
+                    collected_fields.update(("readme_text", "readme_truncated"))
                 _record(error)
 
         branch = repo.default_branch
         if not stopped and branch:
             try:
                 head_sha = await self.fetch_head_sha(repo.full_name, branch)
+                if head_sha is not None and fullmatch(r"[0-9a-f]{40}", head_sha):
+                    collected_fields.add("head_sha")
                 repository_inaccessible = False
             except GithubApiError as error:
                 _record(error)
@@ -345,6 +359,8 @@ class GithubClient:
         if not stopped:
             try:
                 commit_count = await self.count_commits(repo.full_name)
+                if commit_count is not None:
+                    collected_fields.add("commit_count")
                 # 총 개수가 미확정이어도 정상 페이지를 받았다면 저장소에는 접근한 것이다.
                 repository_inaccessible = False
             except GithubApiError as error:
@@ -353,6 +369,8 @@ class GithubClient:
         if not stopped and login:
             try:
                 user_commit_count = await self.count_commits(repo.full_name, author=login)
+                if user_commit_count is not None:
+                    collected_fields.add("user_commit_count")
                 repository_inaccessible = False
             except GithubApiError as error:
                 _record(error)
@@ -367,6 +385,7 @@ class GithubClient:
             errors=errors,
             rate_limit_retry_after_seconds=retry_after,
             repository_inaccessible=repository_inaccessible,
+            collected_fields=frozenset(collected_fields),
         )
 
 
@@ -455,11 +474,14 @@ def _decode_readme(payload: Any) -> str | None:
     if not isinstance(payload, dict):
         return None
     content = payload.get("content")
-    if not isinstance(content, str) or not content.strip():
+    if not isinstance(content, str):
         return None
     if payload.get("encoding") != "base64":
         return content
     try:
-        return base64.b64decode(content).decode("utf-8", errors="replace")
+        # GitHub의 줄바꿈은 허용하되 잘못된 base64를 빈 본문으로 오인하지 않는다.
+        return base64.b64decode("".join(content.split()), validate=True).decode(
+            "utf-8", errors="replace"
+        )
     except (binascii.Error, ValueError):
         return None
