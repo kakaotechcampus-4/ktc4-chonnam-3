@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
 import Footer from '@/shared/components/Footer';
-import { STEP_GROUPS, groupStatus } from '@/features/analysis/steps';
+import RunLoadError from '@/features/analysis/RunLoadError';
+import { STEP_GROUPS, groupStatus, postingUrlFrom } from '@/features/analysis/steps';
 import type { RunStatus, StepKey, StepStatus } from '@/types/api';
 
 type StepMap = Record<StepKey, StepStatus>;
@@ -48,6 +49,8 @@ function mergeSteps(...snapshots: Partial<StepMap>[]): StepMap {
 export default function Analyzing() {
   const { runId = '' } = useParams<{ runId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
 
   const [sseSteps, setSseSteps] = useState<Partial<StepMap>>({});
   const [sseStatus, setSseStatus] = useState<RunStatus | null>(null);
@@ -97,12 +100,14 @@ export default function Analyzing() {
       }
     };
 
+    // EventSource는 상태 코드를 읽지 못한다. 만료(410)·인증 실패·끊김을 GET 1회로 판단한다.
     source.onerror = () => {
       source.close();
+      void queryClient.refetchQueries({ queryKey: queryKeys.analysisRun(runId) });
     };
 
     return () => source.close();
-  }, [runId]);
+  }, [runId, queryClient]);
 
   const steps: StepMap = mergeSteps(
     Object.fromEntries((runQuery.data?.steps ?? []).map((s) => [s.key, s.status])),
@@ -111,11 +116,17 @@ export default function Analyzing() {
   const runStatus: RunStatus = sseStatus ?? runQuery.data?.status ?? 'running';
   const hasFailedStep = Object.values(steps).some((status) => status === 'failed');
 
+  // 끝난 진행 화면을 기록에 남기면 뒤로 가기가 곧바로 다음 화면으로 되돌아온다.
+  const inputState = location.state;
   useEffect(() => {
     if (!runId) return;
-    if (runStatus === 'completed') navigate(`/interview/repos/${runId}`);
-    if (runStatus === 'failed') navigate(`/interview/failed/${runId}`);
-  }, [runStatus, runId, navigate]);
+    const options = { replace: true, state: inputState };
+    if (runStatus === 'completed') navigate(`/interview/repos/${runId}`, options);
+    if (runStatus === 'failed') navigate(`/interview/failed/${runId}`, options);
+  }, [runStatus, runId, navigate, inputState]);
+
+  // 첫 조회 실패면 data가 없어 폴링도 멈춘다. 안내 없이 스피너만 남지 않게 한다.
+  const loadError = runQuery.isError && !sseStatus;
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
@@ -126,7 +137,7 @@ export default function Analyzing() {
           <p className="text-[11px] font-bold text-accent">모의면접 · 분석 중</p>
 
           <div className="flex items-center gap-3">
-            {hasFailedStep ? (
+            {hasFailedStep || loadError ? (
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-error-soft text-sm font-bold text-error">
                 !
               </span>
@@ -176,6 +187,14 @@ export default function Analyzing() {
               );
             })}
           </ul>
+
+          {loadError && (
+            <RunLoadError
+              error={runQuery.error}
+              onRetry={() => void runQuery.refetch()}
+              postingUrl={postingUrlFrom(location.state)}
+            />
+          )}
         </div>
       </main>
 
