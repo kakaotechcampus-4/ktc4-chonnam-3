@@ -1,0 +1,107 @@
+name: Sync PR/Issue to Notion kanban
+# 팀 자유 영역 워크플로. PR·이슈가 열리거나 닫히면 팀 Notion 칸반 DB 카드를 만들거나 상태를 갱신한다.
+# 카드 제목은 "PR #12 제목" / "Issue #12 제목" — 이 접두사로 기존 카드를 찾으니 Notion에서 제목 앞부분은 고치지 말 것.
+
+on:
+  pull_request:
+    types: [opened, reopened, closed]
+  issues:
+    types: [opened, reopened, closed]
+  # 수동 실행: 지금 열려 있는 PR·이슈 전부를 카드로 만들거나 갱신 (워크플로 도입 전 PR 백필용)
+  workflow_dispatch:
+
+concurrency: notion-${{ github.event.pull_request.number || github.event.issue.number }}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_DB_ID: 3e22bb98425780419170de11806d31b1
+        with:
+          script: |
+            const DB = process.env.NOTION_DB_ID;
+            const notion = async (path, body, method = body ? 'POST' : 'GET') => {
+              const res = await fetch(`https://api.notion.com/v1/${path}`, {
+                method,
+                headers: {
+                  Authorization: `Bearer ${process.env.NOTION_TOKEN}`,
+                  'Notion-Version': '2022-06-28',
+                  'Content-Type': 'application/json',
+                },
+                body: body && JSON.stringify(body),
+              });
+              const json = await res.json();
+              if (!res.ok) throw new Error(`Notion ${path}: ${json.message}`);
+              return json;
+            };
+
+            // 주차: 월~일 기준, 2026-09-28(월)~10-04(일) KST가 8주차
+            const kstNow = Date.now() + 9 * 3600e3;
+            const week = 8 + Math.floor((kstNow - Date.UTC(2026, 8, 28)) / (7 * 864e5));
+
+            // 속성 타입(텍스트/선택/상태/숫자)에 맞춰 값을 만든다 — DB 속성 타입이 바뀌어도 안 깨지게
+            const { properties: props } = await notion(`databases/${DB}`);
+            const titleName = Object.keys(props).find((k) => props[k].type === 'title');
+            const val = (name, v) => {
+              const p = props[name];
+              if (!p) return core.warning(`Notion DB에 '${name}' 속성이 없어 건너뜀`);
+              if (p.type === 'rich_text') return { rich_text: [{ text: { content: String(v) } }] };
+              if (p.type === 'number') return { number: v };
+              if (['select', 'status', 'multi_select'].includes(p.type)) {
+                // "진행 중/Open"처럼 슬래시로 묶인 옵션은 어느 쪽 이름이 맞아도 매칭
+                const opt = p[p.type].options.find((o) =>
+                  o.name.toLowerCase().split('/').map((s) => s.trim()).includes(String(v).toLowerCase()) ||
+                  (typeof v === 'number' && Number(o.name.replace(/\D/g, '')) === v));
+                if (!opt && p.type === 'status') core.warning(`'${name}'에 '${v}' 옵션 없음. 있는 옵션: ${p[p.type].options.map((o) => o.name).join(', ')}`);
+                const optName = opt?.name ?? (typeof v === 'number' ? `${v}주차` : String(v));
+                return p.type === 'multi_select' ? { multi_select: [{ name: optName }] } : { [p.type]: { name: optName } };
+              }
+              core.warning(`'${name}' 속성 타입(${p.type})은 지원 안 해서 건너뜀`);
+            };
+
+            // GitHub 아이디 → 팀원 이름. 목록에 없으면 아이디 그대로 넣음
+            const MEMBERS = {
+              dreactive: '송유석',
+              jinyeonggg: '김진영',
+              kyeonsol: '박현솔',
+              geonyeong325: '이건영',
+              gdh0730: '구동한',
+            };
+            const sync = async (item, kind) => {
+              const prefix = `${kind} #${item.number} `;
+              const author = item.user.login;
+              // open / merged(머지됨) / closed(머지 없이 닫힘, 이슈는 닫히면 전부 closed)
+              const state = item.state === 'open' ? 'open' : item.merged_at ? 'merged' : 'closed';
+
+              const properties = {
+                [titleName]: { title: [{ text: { content: prefix + item.title, link: { url: item.html_url } } }] },
+                담당자: val('담당자', MEMBERS[author] ?? author),
+                상태: val('상태', state),
+                주차: val('주차', week),
+              };
+              for (const k of Object.keys(properties)) if (!properties[k]) delete properties[k];
+
+              const { results } = await notion(`databases/${DB}/query`, {
+                filter: { property: titleName, title: { starts_with: prefix } },
+              });
+              if (results[0]) {
+                await notion(`pages/${results[0].id}`, { properties }, 'PATCH');
+                core.info(`갱신: ${prefix}`);
+              } else {
+                await notion('pages', { parent: { database_id: DB }, properties });
+                core.info(`생성: ${prefix}`);
+              }
+            };
+
+            if (context.eventName === 'workflow_dispatch') {
+              const prs = await github.paginate(github.rest.pulls.list, { ...context.repo, state: 'open' });
+              for (const pr of prs) await sync(pr, 'PR');
+              // 이슈 목록 API는 PR도 같이 돌려주니 PR은 제외
+              const issues = await github.paginate(github.rest.issues.listForRepo, { ...context.repo, state: 'open' });
+              for (const issue of issues.filter((i) => !i.pull_request)) await sync(issue, 'Issue');
+            } else {
+              await sync(context.payload.pull_request ?? context.payload.issue, context.payload.pull_request ? 'PR' : 'Issue');
+            }

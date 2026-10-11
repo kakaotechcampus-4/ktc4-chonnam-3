@@ -1,4 +1,5 @@
-import type { InterviewTurn } from '@/types/api';
+import { BASE } from '@/shared/api';
+import type { InterviewTurn, WsServerMessage } from '@/types/api';
 import {
   appendQuestion,
   finishInterview,
@@ -7,7 +8,7 @@ import {
   type InterviewRecord,
 } from '../db';
 import { TOTAL_TURNS, completedTurns, firstTurn } from '../fixtures/interview';
-import { ANSWER_MAX_LENGTH, send, wait, wsError, type Client } from './protocol';
+import { send, wait, wsError, type Client } from './protocol';
 
 /** 면접 진행 턴. api-spec.md #18 */
 
@@ -25,13 +26,37 @@ const EVIDENCE_FILES = ['CacheConfig.java', 'PaymentRetryService.java', 'README.
 function questionForTurn(turn: number): InterviewTurn | null {
   const source = completedTurns[turn - 1];
   if (!source) return null;
-  return { turn, persona: source.persona, question: source.question, answer: null };
+  return {
+    turn,
+    persona: source.persona,
+    question: source.question,
+    answer: null,
+    mainIndex: source.mainIndex,
+    followUpDepth: source.followUpDepth,
+  };
+}
+
+/** 질문 음성 주소. 실제 서버는 세션 쿠키로 인증하는 같은 출처 엔드포인트다(0007). */
+export function questionAudioUrl(interviewId: string, turn: number) {
+  return `${BASE}/interviews/${interviewId}/turns/${turn}/question-audio`;
+}
+
+function questionMessage(record: InterviewRecord, turn: InterviewTurn): WsServerMessage {
+  return {
+    type: 'question',
+    persona: turn.persona,
+    text: turn.question,
+    turn: turn.turn,
+    mainIndex: turn.mainIndex,
+    followUpDepth: turn.followUpDepth,
+    audioUrl: questionAudioUrl(record.interviewId, turn.turn),
+  };
 }
 
 /** 질문을 보내고 레코드에도 남긴다. 둘이 어긋나면 재연결 후 화면이 틀어진다. */
 export function askQuestion(client: Client, record: InterviewRecord, turn: InterviewTurn) {
   appendQuestion(record, turn);
-  send(client, { type: 'question', persona: turn.persona, text: turn.question, turn: turn.turn });
+  send(client, questionMessage(record, turn));
 }
 
 /** 준비가 끝난 직후 보내는 첫 질문. 1턴은 `hr_manager` 고정이다. */
@@ -39,15 +64,37 @@ export function sendFirstQuestion(client: Client, record: InterviewRecord) {
   askQuestion(client, record, { ...firstTurn, answer: null });
 }
 
+/**
+ * 재연결. 아직 답하지 않은 질문을 다시 보낸다. 마지막 턴이 답변됐는데 다음 질문이 없으면
+ * (답변 처리 중 새로고침) 다음 질문을 이어서 낸다. 실제 서버는 연결과 무관하게 진행을 마친다.
+ */
+export async function resumeAfterReconnect(client: Client, record: InterviewRecord) {
+  const last = record.liveTurns?.at(-1);
+  if (!last) return;
+  if (last.answer === null) {
+    send(client, questionMessage(record, last));
+    return;
+  }
+  const next = questionForTurn(last.turn + 1);
+  if (!next || last.turn >= TOTAL_TURNS) {
+    finishInterview(record);
+    send(client, { type: 'interviewEnd' });
+    return;
+  }
+  send(client, { type: 'thinking' });
+  await wait(THINKING_MS);
+  askQuestion(client, record, next);
+}
+
 /** 재연결 시 아직 답변하지 않은 질문만 다시 보낸다. 레코드에는 이미 있으므로 추가하지 않는다. */
 export function resendPendingQuestion(client: Client, record: InterviewRecord) {
   const last = record.liveTurns?.[record.liveTurns.length - 1];
   if (!last || last.answer !== null) return;
-  send(client, { type: 'question', persona: last.persona, text: last.question, turn: last.turn });
+  send(client, questionMessage(record, last));
 }
 
 /**
- * 답변 1건을 처리한다.
+ * 최종 전사 1건을 답변으로 처리한다.
  *
  * 계약 순서를 지킨다: `answerReceived`(저장 완료) → `thinking` → `evidenceCheck` → 다음 `question`.
  *
@@ -61,12 +108,6 @@ export async function handleAnswer(
   turn: number,
   text: string,
 ) {
-  if (text.length > ANSWER_MAX_LENGTH) {
-    // 같은 턴 재제출. 답변은 저장하지 않는다.
-    send(client, wsError('answer_too_long', 'ERR_ANSWER_TOO_LONG', { recoverable: true }));
-    return;
-  }
-
   const answered = recordAnswer(record, turn, text);
   if (!answered) {
     // 없는 턴이거나 이미 답변된 턴. 같은 턴 재제출로 유도한다.

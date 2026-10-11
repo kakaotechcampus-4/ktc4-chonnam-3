@@ -11,6 +11,7 @@
 | run 이벤트 channel | `run:{runId}:events` | Pub/Sub | 없음 |
 | candidate page lock | `cand:lock:{runId}:{page}` | String NX | 10m |
 | 면접 context snapshot | `iv:ctx:{interviewId}` | JSON/Hash | 2h |
+| 면접 실시간 세션 | `rt:{sessionId}` | String(JSON: interviewId, userId) | 2h |
 | WS 단일 접속 lock | `ws:lock:{sessionId}` | String NX | 연결 중 |
 | report generation lock | `report:gen:{interviewId}` | String NX | 5m |
 | profile summary lock | `profile:gen:{userId}` | String NX | 10m |

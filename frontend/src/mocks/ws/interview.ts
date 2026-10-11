@@ -4,8 +4,9 @@ import { getInterviewBySessionId, interviewStatus, setPrepareFailure } from '../
 import { takeWsFault } from '../faults';
 import { path } from '../http';
 import { sendPrepareFailure, streamPrepare } from './prepare';
-import { CLOSE_GRACE_MS, parseClientMessage, send, wait, wsLastError } from './protocol';
-import { handleAnswer, resendPendingQuestion, sendFirstQuestion } from './turns';
+import { CLOSE_GRACE_MS, send, wait, wsLastError, type Client } from './protocol';
+import { resumeAfterReconnect, sendFirstQuestion } from './turns';
+import { createAnswerHandler } from './voice';
 
 /**
  * 면접 WebSocket mock. `frontend/docs/api-spec.md` #18.
@@ -19,6 +20,12 @@ import { handleAnswer, resendPendingQuestion, sendFirstQuestion } from './turns'
 export const interviewSocket = ws.link(path('/ws/interviews/:sessionId'));
 
 /**
+ * 열린 연결. `interviewSocket.clients`는 msw가 비동기 저장소를 거쳐 채우는데
+ * 테스트 브라우저에서 비어 있는 채로 남아 직접 추적한다.
+ */
+const openClients = new Set<Client & { close: (code?: number, reason?: string) => void }>();
+
+/**
  * 이 세션에 열려 있는 연결. 준비 재시도가 REST 로 들어오므로(0010 결정)
  * REST 핸들러가 진행 상황을 흘려보낼 상대를 찾아야 한다.
  * 열린 연결이 없으면 빈 배열이고, 다음 연결이 경과 시간 기준으로 이어받는다.
@@ -27,6 +34,19 @@ export function clientsForSession(sessionId: string) {
   return [...interviewSocket.clients].filter(
     (client) => new URL(client.url).pathname.endsWith(`/${sessionId}`),
   );
+}
+
+/** 개발·테스트용. 열린 면접 소켓을 서버 쪽에서 끊는다. 녹음 중 끊김을 재현한다. */
+export function dropInterviewSockets() {
+  openClients.forEach((client) => client.close());
+}
+
+/** 개발·테스트용. 진행 중에 복구 불가 오류를 보내고 세션을 닫는다. 녹음 중 fatal 오류를 재현한다. */
+export function failInterviewSockets(reason: string, code: string) {
+  openClients.forEach((client) => {
+    send(client, { type: 'error', ...wsLastError(reason, code, { recoverable: false }) });
+    void wait(CLOSE_GRACE_MS).then(() => client.close(1008, reason));
+  });
 }
 
 /**
@@ -58,14 +78,11 @@ export const interviewWsHandlers = [
      * 클라이언트 메시지 수신을 준비 단계보다 먼저 등록한다.
      * 준비가 끝나기를 기다리는 동안 들어온 메시지를 놓치지 않기 위해서다.
      */
-    client.addEventListener('message', (event) => {
-      const message = parseClientMessage(event.data);
-      if (!message) {
-        console.warn('[msw] 해석할 수 없는 WS 메시지', event.data);
-        return;
-      }
-      void handleAnswer(client, record, message.turn, message.text);
-    });
+    openClients.add(client);
+    client.addEventListener('close', () => openClients.delete(client));
+
+    const onMessage = createAnswerHandler(client, record, new URL(client.url).pathname);
+    client.addEventListener('message', (event) => onMessage(event.data));
 
     /**
      * 준비 실패 세션에는 오류를 다시 보내지 않는다.
@@ -121,11 +138,11 @@ export const interviewWsHandlers = [
 
     /**
      * 재연결. 계약상 FE는 `GET /interviews/{id}`로 turns를 다시 받고 붙는다(#18).
-     * 목은 준비 단계를 되풀이하지 않고, 아직 답변하지 않은 질문만 다시 보낸다.
+     * 목은 준비 단계를 되풀이하지 않고 진행 중이던 턴부터 이어 간다(resumeAfterReconnect).
      */
     if ((record.liveTurns?.length ?? 0) > 0) {
       send(client, { type: 'prepareCompleted' });
-      resendPendingQuestion(client, record);
+      await resumeAfterReconnect(client, record);
       return;
     }
 

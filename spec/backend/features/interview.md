@@ -12,6 +12,13 @@
 - 선택 repo는 current run, public, accessible, eligible, L1 succeeded여야 한다.
 - 성공 직후 `interview_prep` ARQ job을 enqueue한다.
 
+생성 검사 해석 (BE 구현 기준, 공통 계약 변경 없음):
+
+- current run: 본인 소유이고 `job_type='analysis_run'`이며 `status`가 `succeeded` 또는 `partial`인 run. 이 조건을 벗어나거나 run에 `job_posting_id`가 없으면 `410 run_expired`. 시간 기준 만료는 두지 않는다.
+- L1 succeeded: 해당 repo에 `analysis_level='l1'`, `status='succeeded'`인 `repo_analyses` 행이 있는 것. `partial`은 선택 대상이 아니다. `head_sha`·run 일치는 보지 않으며 최신 코드 분석은 `interview_prep`의 L2가 맡는다.
+- repo 검사: 해당 run의 `analysis_repo_candidates`에 있고 `filter_status='eligible'`, `repositories.is_private=false`, `is_accessible=true`, 위 L1 조건을 모두 만족해야 한다. 하나라도 어긋나면 `400 invalid_repository`.
+- 활성 면접 1개 제한은 사전 조회 후 DB partial unique index(`uq_interview_sessions_active_per_run`) 위반도 `409 session_limit_exceeded`로 변환한다.
+
 `/interviews/{id}/retry`
 
 - 원본이 `completed` 또는 `abandoned`일 때만 허용한다.

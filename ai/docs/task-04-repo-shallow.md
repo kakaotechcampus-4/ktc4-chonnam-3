@@ -1,6 +1,6 @@
 # task-04 - L1 저장소 기본 분석
 
-> 상태: 구현 가이드. `repo_shallow` runtime과 L1 callable은 아직 구현되지 않았다.
+> 상태: 구현 가이드. 진행 현황은 [AI 구현·검증 기록](../../spec/ai/implementation.md)을 따른다.
 > 선행: [전체 순서](pipeline.md), [task-02 내부 계약](task-02-contracts.md), [task-03 LLM 경계](task-03-llm-boundary.md)
 
 ## 목표
@@ -30,7 +30,7 @@
 - [ai/src/devon_ai/llm_tasks/repo_shallow.py](../src/devon_ai/llm_tasks/repo_shallow.py): 주입된 prompt/model 경계로 단발 L1 후보 생성과 순수 결과 검증을 맡는다.
 - [backend/app/llm_tasks/repo_shallow.py](../../backend/app/llm_tasks/repo_shallow.py): BE 입력·출력 adapter이며 prompt 로드, provider I/O, orchestration, 저장은 BE 책임으로 유지한다.
 - [backend/app/features/analysis/pipeline/steps/repo_analyze.py](../../backend/app/features/analysis/pipeline/steps/repo_analyze.py): cache 조회, batch 실행, 부분 상태와 durable 저장을 소유한다.
-- `ai/tests/llm_tasks/test_repo_shallow.py` (추가 예정, 현재 없음): 순수 L1 fixture와 batch 검증을 둔다.
+- `ai/tests/llm_tasks/test_repo_shallow.py`: 순수 L1 fixture와 batch 검증을 둔다.
 - 추천 점수, JD 선행 순서, DB migration, 공개 RepositoryCard serialization은 이 작업에 포함하지 않는다.
 
 ## 작업
