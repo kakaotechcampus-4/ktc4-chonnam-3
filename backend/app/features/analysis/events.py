@@ -23,6 +23,10 @@ from app.shared.enums import RunStatus, to_run_status
 POLL_FALLBACK_SECONDS = 5.0
 TERMINAL_JOB_STATUSES = frozenset({"succeeded", "partial", "failed", "canceled"})
 
+# 단계 상태의 진행 순서. 순위가 올라가는 전이만 내보내 오래된 이벤트가 상태를 되돌리지 못하게 한다.
+# completed/failed/skipped 는 모두 종료 상태라 같은 순위다(먼저 도착한 종료 상태를 유지).
+_STEP_RANK = {"pending": 0, "running": 1, "completed": 2, "failed": 2, "skipped": 2}
+
 
 @dataclass(frozen=True, slots=True)
 class StepState:
@@ -56,16 +60,14 @@ async def stream_run_progress(
 
     ⚠ 순서 고정 — `run:{runId}:events` 구독이 성립한 뒤에 Postgres 현재 상태를 읽는다.
     반대로 하면 스냅샷과 구독 사이에 run 이 끝났을 때 completed 를 영영 못 받는다.
-    step 단위 중복은 (step, status) 로 걸러 한 번만 내보낸다.
+    step 단위로 마지막에 내보낸 상태를 기억하고, 순위가 올라가는 전이만 내보낸다.
     """
-    seen: set[tuple[str, str]] = set()
+    latest: dict[str, str] = {}
 
     async with bus.subscribe(f"run:{run_id}:events") as subscription:
         snapshot = await read_snapshot()
         for step in snapshot.steps:
-            key = (step.step, step.status)
-            if key not in seen:
-                seen.add(key)
+            if _advance(latest, step.step, step.status):
                 yield _step_event(step)
 
         if snapshot.status in TERMINAL_JOB_STATUSES:
@@ -84,7 +86,7 @@ async def stream_run_progress(
                     return
                 continue
 
-            event = _handle_message(message, seen)
+            event = _handle_message(message, latest)
             if event is None:
                 continue
             yield event
@@ -92,8 +94,8 @@ async def stream_run_progress(
                 return
 
 
-def _handle_message(message: dict[str, Any], seen: set[tuple[str, str]]) -> dict[str, Any] | None:
-    """publish 된 메시지 하나를 SSE 이벤트로 바꾼다. 중복 step 이벤트는 None 을 돌려준다."""
+def _handle_message(message: dict[str, Any], latest: dict[str, str]) -> dict[str, Any] | None:
+    """publish 된 메시지 하나를 SSE 이벤트로 바꾼다. 중복·오래된 step 이벤트는 None 을 돌려준다."""
     payload = json.loads(message["data"])
     payload_type = payload.get("type")
 
@@ -105,11 +107,25 @@ def _handle_message(message: dict[str, Any], seen: set[tuple[str, str]]) -> dict
             "data": json.dumps({"status": "failed", "reason": payload.get("reason")}),
         }
 
-    key = (payload["step"], payload["status"])
-    if key in seen:
+    if not _advance(latest, payload["step"], payload["status"]):
         return None
-    seen.add(key)
     return _step_event(StepState(step=payload["step"], status=payload["status"]))
+
+
+def _advance(latest: dict[str, str], step: str, status: str) -> bool:
+    """step 의 상태가 앞으로 나아가면 latest 를 갱신하고 True. 중복·역행이면 False.
+
+    알 수 없는 상태는 순서를 판단할 수 없어 직전 값과 다를 때만 내보낸다.
+    """
+    previous = latest.get(step)
+    if previous is not None:
+        if previous == status:
+            return False
+        new_rank, old_rank = _STEP_RANK.get(status), _STEP_RANK.get(previous)
+        if new_rank is not None and old_rank is not None and new_rank <= old_rank:
+            return False
+    latest[step] = status
+    return True
 
 
 def _step_event(step: StepState) -> dict[str, Any]:

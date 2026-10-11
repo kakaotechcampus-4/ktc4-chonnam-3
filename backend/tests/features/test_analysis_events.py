@@ -170,3 +170,56 @@ async def test_message_timeout_falls_back_to_postgres_poll() -> None:
 
     assert events[-1]["event"] == "completed"
     assert calls["n"] == 2
+
+
+async def test_stale_pending_events_do_not_revert_snapshot_step() -> None:
+    """스냅샷이 대기 중인 이벤트보다 최신이면 running 이 completed 를 되돌리면 안 된다."""
+    bus = FakeBus(
+        FakeSubscription(
+            [
+                _message({"type": "step", "step": "jd_fetch", "status": "running"}),
+                _message({"type": "step", "step": "jd_fetch", "status": "completed"}),
+                _message({"type": "completed"}),
+            ]
+        )
+    )
+    read_snapshot = _snapshot("running", ("jd_fetch", "completed"))
+
+    events = await _collect(stream_run_progress("run-1", bus=bus, read_snapshot=read_snapshot))
+
+    step_events = [json.loads(e["data"]) for e in events if e["event"] == "step"]
+    assert step_events == [{"step": "jd_fetch", "status": "completed"}]
+
+
+async def test_forward_transition_after_snapshot_is_still_sent() -> None:
+    bus = FakeBus(
+        FakeSubscription(
+            [
+                _message({"type": "step", "step": "jd_fetch", "status": "completed"}),
+                _message({"type": "completed"}),
+            ]
+        )
+    )
+    read_snapshot = _snapshot("running", ("jd_fetch", "running"))
+
+    events = await _collect(stream_run_progress("run-1", bus=bus, read_snapshot=read_snapshot))
+
+    statuses = [json.loads(e["data"])["status"] for e in events if e["event"] == "step"]
+    assert statuses == ["running", "completed"]
+
+
+async def test_first_terminal_status_is_kept_for_a_step() -> None:
+    bus = FakeBus(
+        FakeSubscription(
+            [
+                _message({"type": "step", "step": "jd_fetch", "status": "failed"}),
+                _message({"type": "completed"}),
+            ]
+        )
+    )
+    read_snapshot = _snapshot("running", ("jd_fetch", "completed"))
+
+    events = await _collect(stream_run_progress("run-1", bus=bus, read_snapshot=read_snapshot))
+
+    step_events = [e for e in events if e["event"] == "step"]
+    assert len(step_events) == 1
