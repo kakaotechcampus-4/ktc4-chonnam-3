@@ -12,6 +12,11 @@
 
 팀 내부 결정만 기록한다. 계약·용어 영향이 있으면 spec/shared/decisions로 승격하고 이곳에는 링크를 둔다.
 
+## BE 내부 구현 결정
+
+- [0005 Director 호출·저장과 고정 코드 Evidence 경계](0005-director-storage-boundary.md):
+  Proposed. 짧은 DB transaction, 호출 기록, 고정 SHA 근거의 검증·저장 경계를 정의한다.
+
 ## 관련 공통 결정
 
 - [0002 로컬 정책 기준 채택](../../shared/decisions/0002-local-policy-baseline.md): 2026-09-22 사용자 결정. 포트폴리오 20MB와 공고 재사용 7일은 유지하며 면접 배분은 후속 0004로 대체한다. 실제 BE 연결·검증은 구현 작업으로 남긴다.

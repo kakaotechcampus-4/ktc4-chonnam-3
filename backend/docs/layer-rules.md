@@ -22,7 +22,7 @@ backend AI 연결 -> devon_ai
 
 `repository.py` 파일명은 쓰지 않는다. GitHub repository 도메인과 혼동되므로 DB 접근 모듈은 `queries.py`로 둔다.
 
-위 표는 `backend/app/` 기준이다. [승인된 패키지 설계](../../spec/ai/designs/2026-09-12-ai-package-structure.md)에 따라 Director와 네 LLM task의 AI 원본은 `ai/src/devon_ai/`에 둔다. 기존 BE 경로는 삭제하지 않고 향후 연결 계층으로 유지하며, 양쪽에 같은 로직을 구현하지 않는다. 현재 두 영역 모두 기능 함수가 없는 골격이다. AI 패키지는 BE·ORM·Redis·ARQ·구체 provider를 역으로 import하지 않는다.
+위 표는 `backend/app/` 기준이다. [승인된 패키지 설계](../../spec/ai/designs/2026-09-12-ai-package-structure.md)에 따라 Director와 네 LLM task의 AI 원본은 `ai/src/devon_ai/`에 둔다. 기존 BE 경로는 삭제하지 않고 연결 계층으로 유지하며, 양쪽에 같은 로직을 구현하지 않는다. 기능별 구현과 미연결 범위는 [BE 구현 기록](../../spec/backend/implementation.md)과 [AI 구현 기록](../../spec/ai/implementation.md)에서 확인한다. AI 패키지는 BE·ORM·Redis·ARQ·구체 provider를 역으로 import하지 않는다.
 
 ## 금지
 

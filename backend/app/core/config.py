@@ -5,6 +5,7 @@ docs/layer-rules.md 2절 · .env.example / task-01
 
 import base64
 import binascii
+from collections.abc import Mapping
 from functools import lru_cache
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
@@ -15,6 +16,10 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 AppEnv = Literal["local", "dev", "prod"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
+
+# PR #97의 공통 ADR 0007에 따라 정상 면접의 persona 배정과 총 턴을 고정한다.
+FIXED_PERSONA_TURN_QUOTA = {"tech_lead": 6, "domain_lead": 2, "hr_manager": 1}
+INTERVIEW_MAX_TURNS = 9
 
 
 def _reject_boolean_timeout(value: object) -> object:
@@ -142,15 +147,11 @@ class Settings(BaseSettings):
     max_active_interviews_per_user: int = 1
     max_selected_repos: int = 5
     max_ai_recommended: int = 5
-    interview_max_turns: int = 9
+    interview_max_turns: int = INTERVIEW_MAX_TURNS
     interview_duration_seconds: int = 1200
     # NoDecode — pydantic-settings 가 dict 를 JSON 으로 먼저 파싱하지 않게 한다.
     #            .env 는 `tech_lead:6,...` 형식이라 아래 validator 가 직접 해석한다.
-    persona_turn_quota: Annotated[dict[str, int], NoDecode] = {
-        "tech_lead": 6,
-        "domain_lead": 2,
-        "hr_manager": 1,
-    }
+    persona_turn_quota: Annotated[dict[str, int], NoDecode] = FIXED_PERSONA_TURN_QUOTA
 
     @field_validator(
         "openai_api_key",
@@ -176,20 +177,32 @@ class Settings(BaseSettings):
     @field_validator("persona_turn_quota", mode="before")
     @classmethod
     def _parse_persona_turn_quota(cls, value: object) -> object:
-        """`tech_lead:6,domain_lead:2,hr_manager:1` 형태를 dict 로 바꾼다.
+        """환경 문자열을 해석하고 타입 변환 전에 고정 배정을 검증한다."""
+        if isinstance(value, str):
+            quota: dict[str, int] = {}
+            for pair in value.split(","):
+                persona, separator, turns = pair.strip().partition(":")
+                persona = persona.strip()
+                if not separator or persona in quota:
+                    raise ValueError("persona_turn_quota requires unique role:count pairs")
+                quota[persona] = int(turns)
+            value = quota
+        if (
+            not isinstance(value, Mapping)
+            or any(type(turns) is not int for turns in value.values())
+            or value != FIXED_PERSONA_TURN_QUOTA
+        ):
+            raise ValueError("persona_turn_quota must be tech_lead:6,domain_lead:2,hr_manager:1")
+        return value
 
-        입력: env 문자열 또는 이미 dict 인 값. 출력: dict[str, int] 로 해석 가능한 값.
-        """
-        if not isinstance(value, str):
-            return value
-        quota: dict[str, int] = {}
-        for pair in value.split(","):
-            pair = pair.strip()
-            if not pair:
-                continue
-            persona, _, turns = pair.partition(":")
-            quota[persona.strip()] = int(turns)
-        return quota
+    @field_validator("interview_max_turns", mode="before")
+    @classmethod
+    def _validate_interview_max_turns(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = int(value)
+        if type(value) is not int or value != INTERVIEW_MAX_TURNS:
+            raise ValueError("interview_max_turns must be the integer 9")
+        return value
 
     @property
     def is_prod(self) -> bool:
