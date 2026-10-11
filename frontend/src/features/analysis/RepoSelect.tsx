@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
 import Footer from '@/shared/components/Footer';
 import { isApiError } from '@/types/api';
+import RunLoadError from '@/features/analysis/RunLoadError';
+import { postingUrlFrom, type AnalysisInputState } from '@/features/analysis/steps';
 
 const MAX_REPOSITORIES = 5;
 
@@ -16,17 +18,31 @@ const JD_CATEGORY_LABELS = {
   responsibility: '담당 업무',
 } as const;
 
+// errorCode는 BE repo_analyses.error_code 값이다(backend/docs/error-reasons.md).
 const REPO_ERROR_MESSAGES: Record<string, string> = {
   llm_timeout: '분석이 지연되고 있어요',
-  parse_failed: '분석이 지연되고 있어요',
+  llm_parse_failed: '분석이 지연되고 있어요',
+  rate_limited: '분석이 지연되고 있어요',
   input_too_large: '정보가 부족해요',
   no_readme: '정보가 부족해요',
-  github_token_invalid: 'GitHub 재연동이 필요해요',
+  repo_unreachable: '레포에 접근할 수 없어요',
+};
+
+// POST /interviews 실패 안내. 목록에 없는 reason은 일반 문구로 처리한다.
+const CREATE_ERROR: Record<string, string> = {
+  too_many_repositories: `레포는 최대 ${MAX_REPOSITORIES}개까지 선택할 수 있어요.`,
+  no_repository_selected: '면접에 사용할 레포를 선택해주세요.',
+  invalid_repository: '선택할 수 없는 레포가 있어요. 선택을 확인해주세요.',
+  session_limit_exceeded:
+    '이미 진행 중인 면접이 있어요. 그 면접을 끝내거나 나간 뒤 다시 시도해주세요.',
+  run_expired: '분석 결과가 만료됐어요. 공고 입력부터 다시 시작해주세요.',
 };
 
 export default function RepoSelect() {
   const { runId = '' } = useParams<{ runId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const postingUrl = postingUrlFrom(location.state);
   const queryClient = useQueryClient();
 
   const resultQuery = useQuery({
@@ -34,6 +50,27 @@ export default function RepoSelect() {
     queryFn: () => api.getAnalysisRunResult(runId),
     enabled: !!runId,
   });
+
+  // 409 not_ready는 run이 아직 진행 중이거나 실패한 경우다. 상태를 다시 확인해 맞는 화면으로 보낸다.
+  const notReady = isApiError(resultQuery.error) && resultQuery.error.error.reason === 'not_ready';
+  // 상태 확인 후에도 이동할 화면이 없으면(완료 직후 경합·조회 실패) 재시도 안내를 보인다.
+  const [runChecked, setRunChecked] = useState(false);
+  useEffect(() => {
+    if (!notReady) return;
+    void queryClient
+      .fetchQuery({
+        queryKey: queryKeys.analysisRun(runId),
+        queryFn: () => api.getAnalysisRun(runId),
+        staleTime: 0,
+      })
+      .then((run) => {
+        const options = { replace: true, state: location.state };
+        if (run.status === 'running') navigate(`/interview/analyzing/${runId}`, options);
+        else if (run.status === 'failed') navigate(`/interview/failed/${runId}`, options);
+        else setRunChecked(true);
+      })
+      .catch(() => setRunChecked(true));
+  }, [notReady, queryClient, runId, navigate, location.state]);
 
   const [selectedIds, setSelectedIds] = useState<string[] | null>(null);
 
@@ -60,12 +97,10 @@ export default function RepoSelect() {
 
   const mutationError = createInterviewMutation.error;
   const errorReason = isApiError(mutationError) ? mutationError.error.reason : null;
-  const tooMany = errorReason === 'too_many_repositories';
-  const submitError = tooMany
-    ? '레포는 최대 5개까지 선택할 수 있어요.'
-    : createInterviewMutation.isError
-      ? '면접을 시작하지 못했어요. 잠시 후 다시 시도해주세요.'
-      : null;
+  const submitError = createInterviewMutation.isError
+    ? ((errorReason && CREATE_ERROR[errorReason]) ??
+      '면접을 시작하지 못했어요. 잠시 후 다시 시도해주세요.')
+    : null;
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
@@ -80,8 +115,14 @@ export default function RepoSelect() {
           </p>
 
           {resultQuery.isLoading && <p className="mt-8 text-sm text-muted">불러오는 중...</p>}
-          {resultQuery.isError && (
-            <p className="mt-8 text-sm text-error">레포 목록을 불러오지 못했어요.</p>
+          {resultQuery.isError && (!notReady || runChecked) && (
+            <div className="mt-8">
+              <RunLoadError
+                error={resultQuery.error}
+                onRetry={() => void resultQuery.refetch()}
+                postingUrl={postingUrl}
+              />
+            </div>
           )}
 
           {result && (
@@ -154,7 +195,8 @@ export default function RepoSelect() {
                               )}
                               <span className="mt-1 block text-[11.5px] text-muted">
                                 {failed
-                                  ? (REPO_ERROR_MESSAGES[repo.errorCode ?? ''] ?? '분석에 실패했어요')
+                                  ? (REPO_ERROR_MESSAGES[repo.errorCode ?? ''] ??
+                                    '분석에 실패했어요')
                                   : repo.recommendReason}
                               </span>
                             </span>
@@ -200,7 +242,26 @@ export default function RepoSelect() {
                 </div>
               </div>
 
-              {submitError && <p className="mt-3 text-sm text-error">{submitError}</p>}
+              {submitError && (
+                <div className="mt-3 flex items-center gap-3">
+                  <p role="alert" className="text-sm text-error">
+                    {submitError}
+                  </p>
+                  {errorReason === 'run_expired' && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate('/interview/new', {
+                          state: { postingUrl } satisfies AnalysisInputState,
+                        })
+                      }
+                      className="shrink-0 rounded-md border border-line px-3 py-1.5 text-sm"
+                    >
+                      공고 다시 입력
+                    </button>
+                  )}
+                </div>
+              )}
 
               <button
                 type="button"
