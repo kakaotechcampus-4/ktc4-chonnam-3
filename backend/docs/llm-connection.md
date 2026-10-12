@@ -29,6 +29,13 @@ LLM_MAX_RESPONSE_BYTES=131072
 시간은 provider 시도 1회당 초, 크기는 HTTP 본문 byte다. 기존 총 2회 시도 상한과
 semantic 실패 재호출 금지 정책을 유지한다. 실제 키·프록시 주소를 커밋하지 않는다.
 
+새 어댑터에서 `call_model`을 연결할 때는 `require_llm()`이 반환한 설정의
+`api_key=settings.openai_api_key`와 `base_url=settings.llm_base_url`을 함께 전달한다.
+공식 주소 기본값은 설정 계층에만 두며 공통 호출 함수에서는 주소 생략을 허용하지 않는다.
+`partial`로 감싼 경우에도 실제 호출 시 주소 누락을 검사하며 HTTP 요청 전에 중단한다.
+Director(#82)와 L2(#119)는 이 공통 변경을 반영한 뒤 각 PR에서 주소 전달·회귀 검사를 추가한다.
+#82의 `attempt_sink`와 기존 호출 예산은 통합 과정에서도 보존해야 한다.
+
 ## 실제 연결 점검
 
 ```text

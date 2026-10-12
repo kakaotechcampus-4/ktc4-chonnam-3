@@ -2,6 +2,94 @@
 
 구현 범위와 실제 실행 결과를 기록한다. 기능 요구사항은 각 features 문서와 task 문서를 따른다.
 
+## 2026-09-27 — PR #45 GitHub 수집 리뷰 반영
+
+관련 PR: [GitHub 수집 #45](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/45).
+검토 기준은 #45 `cbd6bae`, 통합 검증 기준은 develop `aaee6a8`(#50·#67 병합 포함)이다.
+
+### 변경 범위
+
+- `integrations/github/client.py`: Retry-After를 우선하고 primary quota가 소진됐을 때만
+  reset을 사용한다. 나머지 제한 응답에는 60초 대기를 전달한다.
+- `pipeline/steps/repo_detail.py`: rate limit과 무효 토큰 모두 저장소 순회를 중단하고,
+  확보한 데이터와 미호출 저장소의 중단 원인을 보존한다.
+- `RepoDetail.repository_inaccessible`: 저장소 단위 languages 404를 명시적으로 전달한다.
+  후속 수집에 성공하면 이를 해제한다. 503·timeout·README/브랜치 404만으로 제외하지 않는다.
+- `pipeline/steps/repo_select.py`: 제외 후보와 첫 배치 밖의 정상 후보까지 모두 보존한다.
+  eligible 후보에서 포트폴리오 최대 3개·기본 순위 최대 5개·기여도 최대 2개를 각각 고른 뒤
+  중복 제거하며, 첫 배치의 `batch_no`·`batch_rank`·`selection_reason`을 별도로 표시한다.
+  포트폴리오 언급은 필터를 우회하지 않는다. 접근 불가 재분류 시 수집 당시 배치 이력은 유지한다.
+- 기여도 순서는 호출부가 근거로 제공한다. 정보가 없거나 후보가 겹쳐 비는 자리는 임의로 채우지
+  않는다. 기존 pushed_at 기반 순위를 유지하며 task-10의 종합 점수·기여도 산정·DB 저장은 포함하지 않는다.
+- 중복 `pipeline/initial_sync.py`·`workers/tasks/initial_sync.py`는 develop 골격으로 복원하고
+  해당 구현 전용 테스트를 제외했다. 토큰 복호화·폐기 상태 영속화·초기 동기화·큐 연결은 #57에서
+  통합한다. 이번 분리는 해당 경로의 롤백·부분 저장 문제를 수정 완료했다는 뜻이 아니다.
+- 공개 API·DB schema·enum·의존성은 변경하지 않았다. 필요한 오류·선택 경계에 한국어 주석을 추가했다.
+
+### 실행 결과
+
+Windows, Python 3.12, uv locked 환경에서 실행했다. 외부 GitHub 응답은 MockTransport를 사용했다.
+
+| 작업 디렉터리 / 기준 | 검증 | 결과 |
+| --- | --- | --- |
+| `backend`, 수정한 PR 브랜치 | 전체 pytest, 전용 PostgreSQL 연결 | 384 passed, skip 0 |
+| `backend`, develop 통합본 | 전체 pytest, 전용 PostgreSQL 연결 | 385 passed, skip 0 |
+| `ai`, develop 통합본 | 전체 pytest | 167 passed |
+| `backend`, 양쪽 기준 | Ruff check·format, mypy app | 통과; format 180개, mypy 115개 파일 |
+| 루트, develop 통합본 | 공통 계약 검사 | schema 2개·부분 OpenAPI·정상/오류 fixture 7개 통과 |
+| 회귀 검증 | 수정 전 실패를 확인한 뒤 동일 사례 재실행 | 제한 대기·토큰 중단·접근 증거·후보 보존·배치 규칙 통과 |
+| 독립 검토 | 코드·테스트·DB nullable 계약·중복 범위 | 추가 수정이 필요한 결함 없음 |
+
+PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 새 DB 쓰기 기능을 검증한 것은 아니다.
+실제 GitHub 장애·rate limit을 유발하지 않았으며 서비스 전체 연결이나 배포 검증 결과도 아니다.
+공통 계약 스크립트는 부분 형식 검사다.
+
+### 후속 연결
+
+- [#57](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/57)은 #45의 dataclass 반환값과
+  저장 직렬화를 맞추고, 인증·작업 ID 중심 worker와 수집 기능을 함께 보존해야 한다.
+- 상세 수집 호출부는 전체 후보 중 `filter_status='eligible'`이고 `batch_no=1`인 항목을 사용한다.
+  기여도 근거 공급·종합 ranking·후속 page 저장은 task-10에서 연결한다.
+- [#68](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/68)의 run partial/failed,
+  Redis 제한 기록·SSE 연결은 별도 작업이다. README의 중요한 섹션 중심 축약 정책도 후속 범위다.
+
+## 2026-10-13 — PR #114 호출 주소 누락 방지
+
+검토 기준은 #114 `7c1746f`, 통합 기준은 develop `bbe0121`이다. 아래 10월 9일 기록은 당시
+결과로 보존한다. 기존 PR 브랜치에 후속 변경만 추가하며 미병합 소비자 구현은 게시하지 않는다.
+
+- `call_model`의 `base_url` 기본값을 없애 주소 생략 시 HTTP 요청 전에 실패하게 했다.
+  공식 주소 기본값은 `LLMSettings`에 유지하고, L1은 검증된 주소·토큰을 함께 전달한다.
+- `partial`을 실제 호출하는 누락 회귀는 수정 전 실패를 확인한 뒤 통과했다. 기존 gateway와
+  AI 경계 테스트의 직접 연결 주소도 명시했다. 재시도·공유 예산·DB prompt 모델은 유지한다.
+- L1은 `Settings.require_llm()`부터 실제 어댑터·gateway를 거쳐 직접/프록시 주소와 인증 정보를
+  검증한다. 모든 HTTP는 fixture 토큰과 `MockTransport`를 사용하며 실제 LLM은 호출하지 않았다.
+- 이 문서의 기존 기록을 모두 보존하며 #114 기록의 삽입 위치를 조정했다. develop이 추가한
+  #79·Task 9 기록과 같은 위치에 삽입해 발생하던 문서 충돌을 피한다.
+
+| 검증 대상 | 이번 실행 결과 |
+| --- | --- |
+| #114 수정본 BE 전체 `pytest -q` | 585 passed, 141 skipped; DB·Redis 환경을 지정하지 않은 전체 실행 |
+| #114 수정본 BE Ruff·format·mypy | 통과; format 214파일, app 118파일 및 추가 scripts 3파일 |
+| #114 수정본 AI 전체 `pytest -q` | 193 passed |
+| 공통 계약 검사 | schema 2개·부분 OpenAPI·fixture 7개 통과; 전체 호환성 검증은 아님 |
+| develop + #114 수정본의 설정·gateway·AI 경계·LLM task 검사 | 249 passed, skip 0; 격리 PostgreSQL 프롬프트 검사 포함 |
+| 별도 #82·#119 소비자 보완 통합본 | 연결 관련 129 passed, AI 213 passed; 변경 파일 Ruff·format과 gateway/어댑터 mypy 통과 |
+
+첫 BE 전체 실행에서 테스트 helper의 URL 누락으로 17건 실패해 세 호출을 보완했다. PostgreSQL
+검사는 테스트 서버 포트 불일치로 16건 연결 오류가 있었으며, 포트·준비 상태를 확인한 뒤 같은
+통합 검사 249건을 다시 실행해 모두 통과했다. 위 표는 보완 후 결과다.
+
+최신 develop의 `tests/test_seed_all.py`는 `app.db.session.dispose_engine` 부재로 수집이
+중단된다. 순수 develop에서도 확인한 기존 문제이며 이번 PR에서 수정하거나 테스트를 제외해
+전체 통과로 보고하지 않는다. 별도 소비자 통합본에서 이 수집 오류를 제외한 추가 진단은
+824 passed, 304 skipped, 74 setup errors였고, 오류 74건은 Task 10의 `TEST_DATABASE_URL`
+미설정이었다. 관련 연결 검사 통과와 전체 서비스 검증을 구분한다.
+
+#82 `0e973f3`·#119 `3f945d3`의 어댑터는 주소 전달이 필요하다. 로컬에서 각 어댑터와 회귀
+총 4파일을 보완해 누락 실패 4건을 재현·해결했고 #82의 `attempt_sink`도 보존했다. 원격 두 PR은
+변경하지 않았다. #114 반영 후 각 PR을 최신 develop에 맞추고 해당 보완을 반영·재검증해야 한다.
+
 ## 2026-10-09 — 현재 프록시 환경 설정과 L1 실행 연결
 
 기준 develop `4a3187e`, 원본 작업 브랜치 `fix/llm-proxy-env`.
@@ -61,57 +149,6 @@ PostgreSQL 15·Redis 7은 전용 테스트 DB와 Redis 15에서 검증했다.
   E2E를 실행하지 않았다. 앞의 Director 통합 테스트 수치를 이 경로의 검증으로 사용하지 않는다.
 - 실제 DB 저장까지 포함한 L1 실행, 운영 프롬프트 품질, 다수 저장소 배치의 예산·품질은
   이번 실제 모델 점검 범위에 포함하지 않는다. 공통 계약 검사는 부분 형식 검사다.
-
-## 2026-09-27 — PR #45 GitHub 수집 리뷰 반영
-
-관련 PR: [GitHub 수집 #45](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/45).
-검토 기준은 #45 `cbd6bae`, 통합 검증 기준은 develop `aaee6a8`(#50·#67 병합 포함)이다.
-
-### 변경 범위
-
-- `integrations/github/client.py`: Retry-After를 우선하고 primary quota가 소진됐을 때만
-  reset을 사용한다. 나머지 제한 응답에는 60초 대기를 전달한다.
-- `pipeline/steps/repo_detail.py`: rate limit과 무효 토큰 모두 저장소 순회를 중단하고,
-  확보한 데이터와 미호출 저장소의 중단 원인을 보존한다.
-- `RepoDetail.repository_inaccessible`: 저장소 단위 languages 404를 명시적으로 전달한다.
-  후속 수집에 성공하면 이를 해제한다. 503·timeout·README/브랜치 404만으로 제외하지 않는다.
-- `pipeline/steps/repo_select.py`: 제외 후보와 첫 배치 밖의 정상 후보까지 모두 보존한다.
-  eligible 후보에서 포트폴리오 최대 3개·기본 순위 최대 5개·기여도 최대 2개를 각각 고른 뒤
-  중복 제거하며, 첫 배치의 `batch_no`·`batch_rank`·`selection_reason`을 별도로 표시한다.
-  포트폴리오 언급은 필터를 우회하지 않는다. 접근 불가 재분류 시 수집 당시 배치 이력은 유지한다.
-- 기여도 순서는 호출부가 근거로 제공한다. 정보가 없거나 후보가 겹쳐 비는 자리는 임의로 채우지
-  않는다. 기존 pushed_at 기반 순위를 유지하며 task-10의 종합 점수·기여도 산정·DB 저장은 포함하지 않는다.
-- 중복 `pipeline/initial_sync.py`·`workers/tasks/initial_sync.py`는 develop 골격으로 복원하고
-  해당 구현 전용 테스트를 제외했다. 토큰 복호화·폐기 상태 영속화·초기 동기화·큐 연결은 #57에서
-  통합한다. 이번 분리는 해당 경로의 롤백·부분 저장 문제를 수정 완료했다는 뜻이 아니다.
-- 공개 API·DB schema·enum·의존성은 변경하지 않았다. 필요한 오류·선택 경계에 한국어 주석을 추가했다.
-
-### 실행 결과
-
-Windows, Python 3.12, uv locked 환경에서 실행했다. 외부 GitHub 응답은 MockTransport를 사용했다.
-
-| 작업 디렉터리 / 기준 | 검증 | 결과 |
-| --- | --- | --- |
-| `backend`, 수정한 PR 브랜치 | 전체 pytest, 전용 PostgreSQL 연결 | 384 passed, skip 0 |
-| `backend`, develop 통합본 | 전체 pytest, 전용 PostgreSQL 연결 | 385 passed, skip 0 |
-| `ai`, develop 통합본 | 전체 pytest | 167 passed |
-| `backend`, 양쪽 기준 | Ruff check·format, mypy app | 통과; format 180개, mypy 115개 파일 |
-| 루트, develop 통합본 | 공통 계약 검사 | schema 2개·부분 OpenAPI·정상/오류 fixture 7개 통과 |
-| 회귀 검증 | 수정 전 실패를 확인한 뒤 동일 사례 재실행 | 제한 대기·토큰 중단·접근 증거·후보 보존·배치 규칙 통과 |
-| 독립 검토 | 코드·테스트·DB nullable 계약·중복 범위 | 추가 수정이 필요한 결함 없음 |
-
-PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 새 DB 쓰기 기능을 검증한 것은 아니다.
-실제 GitHub 장애·rate limit을 유발하지 않았으며 서비스 전체 연결이나 배포 검증 결과도 아니다.
-공통 계약 스크립트는 부분 형식 검사다.
-
-### 후속 연결
-
-- [#57](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/57)은 #45의 dataclass 반환값과
-  저장 직렬화를 맞추고, 인증·작업 ID 중심 worker와 수집 기능을 함께 보존해야 한다.
-- 상세 수집 호출부는 전체 후보 중 `filter_status='eligible'`이고 `batch_no=1`인 항목을 사용한다.
-  기여도 근거 공급·종합 ranking·후속 page 저장은 task-10에서 연결한다.
-- [#68](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/68)의 run partial/failed,
-  Redis 제한 기록·SSE 연결은 별도 작업이다. README의 중요한 섹션 중심 축약 정책도 후속 범위다.
 
 ## 2026-10-04 — release PR #85 멘토 리뷰 반영 (GitHub 목록 수집)
 
