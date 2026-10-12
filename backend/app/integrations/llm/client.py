@@ -328,7 +328,7 @@ async def call_model[T](
     validator: Callable[[object], T],
     *,
     api_key: SecretStr,
-    base_url: str = "https://api.openai.com/v1",
+    base_url: str,
     http_client: httpx.AsyncClient | None = None,
     budget: CallBudget | None = None,
 ) -> ModelResult[T]:
@@ -337,6 +337,7 @@ async def call_model[T](
     주입한 HTTP client의 수명은 호출자가 관리한다. 기본 client에는 별도 전송 재시도가
     없으며, 부분 배치의 실패 항목을 재요청할 때도 같은 budget을 공유해야 한다.
     base_url과 api_key는 BE 설정에서 함께 검증·선택한 값을 전달한다.
+    주소 누락으로 프록시 토큰이 공식 서버에 전송되지 않도록 기본 주소를 두지 않는다.
     attempts는 이번 함수 호출분만 반환하고, attempt 번호는 공유 budget 안에서 이어진다.
     재시도 대기도 timeout_seconds 이내다. 각 시도 timeout과 별개이며 전체 deadline은 아니다.
     서버 대기는 budget에 보존하며 재호출·취소 이후에도 다음 시도 전에 남은 시간을 기다린다.
