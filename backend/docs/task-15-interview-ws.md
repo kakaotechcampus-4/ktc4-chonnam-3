@@ -15,7 +15,7 @@ Sprint 1 텍스트 WS, turn loop, Redis context snapshot, evidence/conflict 흐�
 - 첫 질문은 `hr_manager` 고정이며 question evidence 없이 허용한다.
 - 2턴부터 Director가 답변 맥락과 남은 턴에 따라 persona를 선택한다. 첫 질문 이후의 persona 순서는 고정하지 않는다.
 - 총 9턴 종료를 유지한다.
-- [공통 0007](../../spec/shared/decisions/0007-fixed-persona-allocation.md)에 따라 정상 완료 배분은 `tech_lead` 6회·`domain_lead` 2회·`hr_manager` 1회다. 첫 HR이 유일한 HR이며 Controller는 확정·제시한 질문 수와 남은 할당으로 6/2/1 완주가 가능한 기술·도메인 후보만 허용한다.
+- [공통 0008](../../spec/shared/decisions/0008-fixed-persona-allocation.md)에 따라 정상 완료 배분은 `tech_lead` 6회·`domain_lead` 2회·`hr_manager` 1회다. 첫 HR이 유일한 HR이며 Controller는 확정·제시한 질문 수와 남은 할당으로 6/2/1 완주가 가능한 기술·도메인 후보만 허용한다.
 - Tool 호출·질문 재생성·중복 요청은 질문 수를 늘리지 않고, 9번째 답변 처리 후 종료한다. 사용자 이탈·실패로 중단된 면접에는 정상 완료 배분을 강제하지 않는다.
 - primary repo 1~2개 중심으로 꼬리질문 품질을 우선한다.
 - T3에서 evidence가 부족하면 README/metadata/commit/notable_areas 주변 파일을 후속 조회한다.

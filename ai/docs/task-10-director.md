@@ -30,7 +30,7 @@ jd_requirement_ids 다섯 필드만 받는다. 입력 QuestionContract 원본은
 
 - [Director와 텍스트 면접](../../spec/ai/features/interviewer.md)의 역할과 입력, 고정 9턴
   정책, 질문 생성과 검증, 답변부터 다음 질문까지를 따른다.
-- Persona 횟수는 [공통 0007 결정](../../spec/shared/decisions/0007-fixed-persona-allocation.md)의 기술 6회·도메인 2회·HR 1회를 따른다. 첫 HR이 유일한 HR이며 이후 기술·도메인의 순서는 고정하지 않는다. 정책의 문서 승인과 실제 구현 상태를 구분하며 후속 작업은 [구현 기록](../../spec/ai/implementation.md)을 따른다.
+- Persona 횟수는 [공통 0008 결정](../../spec/shared/decisions/0008-fixed-persona-allocation.md)의 기술 6회·도메인 2회·HR 1회를 따른다. 첫 HR이 유일한 HR이며 이후 기술·도메인의 순서는 고정하지 않는다. 정책의 문서 승인과 실제 구현 상태를 구분하며 후속 작업은 [구현 기록](../../spec/ai/implementation.md)을 따른다.
 - [내부 계약](../../spec/ai/contracts.md)의 질문 기준·기존 DirectorDecision은 [0014](../../spec/ai/decisions/0014-minimal-change-revision.md), Context·Question·Evidence 기본 구성과 ToolResult 부분 오류 처리는 [0015](../../spec/ai/decisions/0015-existing-contracts-and-tool-results.md)를 따른다.
   미채택 상세 타입·행동별 표현·Tool 인수는 기존 구조에 맞춰 구체화하고 fixture로 검토한다.
 - [도메인 질문 정책](../../spec/ai/decisions/0005-domain-question-policy.md)과

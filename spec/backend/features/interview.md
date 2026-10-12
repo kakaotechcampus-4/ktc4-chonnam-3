@@ -90,7 +90,7 @@ WS path는 realtime `sessionId` 기준 `/api/ws/interviews/{sessionId}`다. REST
 - Tool 호출·질문 재생성·중복 요청은 질문 수를 늘리지 않으며, 이미 제시한 질문의 Persona를 소급 변경하지 않는다.
 - 9번째 답변 처리 완료 후 정상 종료하며 10번째 질문은 생성하지 않는다. 사용자 이탈·실패로 중단된 면접에는 정상 완료 배분을 강제하지 않는다.
 
-[고정 배분 결정](../../shared/decisions/0007-fixed-persona-allocation.md)에 따른 승인 정책이다. 이번에는 문서만 반영하며, 실제 제어와 기존 구현의 정합성·검증 상태는 [AI 구현 기록](../../ai/implementation.md)을 따른다.
+[고정 배분 결정](../../shared/decisions/0008-fixed-persona-allocation.md)에 따른 승인 정책이다. 이번에는 문서만 반영하며, 실제 제어와 기존 구현의 정합성·검증 상태는 [AI 구현 기록](../../ai/implementation.md)을 따른다.
 
 기술 질문은 모든 선택 repo를 균등하게 다루지 않는다. primary repo 1~2개 중심으로 근거 있는 꼬리질문 품질을 우선한다.
 

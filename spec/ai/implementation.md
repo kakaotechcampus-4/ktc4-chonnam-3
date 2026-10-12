@@ -5,13 +5,66 @@ AI 작업의 구현·수정 내역, 코드 위치, 실행 결과와 남은 작�
 [decisions](decisions/README.md)에 보존한다. 문서 역할은
 [ADR 0020](decisions/0020-implementation-record-policy.md)을 따른다.
 
+## 2026-10-13 — PR #97 리뷰 대응과 면접 배분 구현 현황 재확인
+
+### 문서 번호와 최신 구현
+
+- 최신 `develop` `bbe01213d0bb791b64504f13fbe73ed4bb88d98b`에는 공통 ADR 0007인
+  `0007-voice-interview-contract.md`가 있어, 이번 고정 배분 결정은
+  [공통 ADR 0008](../shared/decisions/0008-fixed-persona-allocation.md)로 번호와 참조를 정리했다.
+  확인한 열린 PR 14개 중 #81이 0006을 사용하고 있으며, 공통 0008을 새로 사용하는 PR은 없었다.
+  아래 10월 6일의 번호 선택·구현 확인 기록은 당시 이력으로 보존한다.
+- [PR #82](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/82)의 최신 확인 head는
+  `0e973f3377553b13bbea419bfd662f968bf64b97`이다. 기존 `b262f29`와 달리 고정 6/2/1을
+  계산하는 `agent_context.allowed_personas`와 설정·이력 검증이 구현돼 있다. 첫 HR 이후에는
+  잔여 할당이 있는 기술·도메인만 허용하고, 도메인 할당이 남았는데 활성 프레임이 없으면
+  `domain_frames_unavailable`로 거절한다. 미분류 공고는 DB 값을 보존하며 활성 `etc` 프레임을 쓴다.
+- #82의 위 코드와 테스트는 이번 PR에 복사하지 않았다. 아래 검증은 #97의 문서·hook 검사와
+  #82의 기존 배분 함수 검사를 구분하며, #82 전체의 병합 가능이나 실제 면접 완료를 뜻하지 않는다.
+
+### 리뷰 대응과 남은 실행 연결
+
+- [기존 리뷰](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/97#issuecomment-6107262453)의
+  실행 프롬프트·Director 입력 검증 지적은 후속 구현 대상으로 유지한다. #97의 배분 변경 범위는
+  문서이며, 현재 AI Director는 허용 목록 밖 출력은 거절하지만 이후 HR·횟수 상한에 맞는
+  목록인지까지 검사하지 않는다. 프롬프트 문구 변경만으로 고정 배분이 보장되지는 않는다.
+- 후속 구현은 #82의 Controller를 재사용하고, 프롬프트에서 배분 계산과 후보 선택의 책임을
+  명확히 한다. Director의 보조 입력 검사에서는 이후 HR·이미 채운 할당과 함께
+  `persona_counts` 누락·질문 번호 불일치의 처리 기준을 맞춘다. 별도 배분 계산기를 복제하지 않는다.
+- FE mock의 6/1/2 예제, 실제 준비·턴 처리와의 연결, 중복·실패 시 질문 수 불변 및
+  9번째 **답변 처리 후** 정상 종료는 후속 통합 검증 범위다. #82의 9문항 저장 테스트는 답변을
+  fixture에서 직접 저장하므로 실제 답변 처리·WS 정상 종료를 검증한 것으로 취급하지 않는다.
+- #82의 기존 고정 커밋 링크는 당시 ADR 0007에 계속 접근할 수 있다. 이후 현행 정책 참조를
+  갱신할 때는 #97의 ADR 0008로 연결하며, 해당 PR의 실행 코드·이력은 이번에 수정하지 않는다.
+
+### 이번 수정의 검증
+
+Windows / Python 3.12, #97 게시 worktree와 최신 develop을 합친 별도 worktree에서 새로 실행했다.
+기존 준비 환경의 Python을 사용했고, AI·BE 연결 검사에는 검증할 worktree의 `PYTHONPATH`를 지정했다.
+
+| 검증 대상 | 명령 / 시나리오 | 결과 |
+| --- | --- | --- |
+| #97 루트 | `PYTHONUTF8=1`, `python -m unittest discover -s .claude/scripts/tests -v` | 17 passed, 1 skipped; Windows symlink 생성 불가 |
+| #97 루트 | hook 두 파일의 `ruff check --isolated` | 통과 |
+| #97 AI hook | 실제 uv·AI venv로 정상 Edit·오류 Write 실행 | F401·T201 검출, 정상 파일 통과, 소스·lock 불변 |
+| #97 `ai` | `python -m pytest -q -p no:cacheprovider`, Ruff·format·mypy | 193 passed; format 40개·mypy 11개 파일 통과 |
+| #97 `backend` | `python -m pytest tests/agents/test_ai_package_imports.py -q -p no:cacheprovider` | 1 passed |
+| #97·develop 통합본 | `.claude/scripts/check_contracts.py` | 각각 schema 2개·부분 OpenAPI·fixture 7개 통과 |
+| develop 통합본 | hook·계약 스크립트 unittest, 문서 링크·ADR 번호·본문 보존 | 17 passed, 1 skipped; 로컬 링크 284개, 번호 중복 없음, 기존 음성 ADR 보존 |
+| #97 문서 | 로컬 링크·다른 AI ADR 보존·`git diff --check` | 링크 279개 대상 존재, AI ADR 0007·0008 및 배분 정책 본문 보존, 공백 검사 통과 |
+| 별도 #82 `0e973f3` | `python -m pytest tests/agents/test_agent_context.py -q -p no:cacheprovider` | 24 passed; 정상 순서 28가지와 잘못된 횟수 검사 포함 |
+
+실제 Claude UI 기동·Linux·외부 LLM·DB/WS 면접 전체 흐름은 이번에 실행하지 않았다.
+#82의 DB 저장 회귀는 코드만 대조했으며 이번 24개 실행 결과에 포함하지 않았다.
+독립 검토에서도 추가 결함이 없었고, 이번 수정은 문서 번호·참조·현황 기록에 한정한다.
+
 ## 2026-10-06 — 고정 질문 배분 문서와 AI 변경 파일 lint
 
 ### 기준과 변경
 
 - `develop`의 `ef1a48d1531b43f382b69dee163419afb5709c6b`에서
   `refactor/interview-policy-ai-lint` 브랜치를 분리했다. 미병합 PR의 코드는 가져오지 않았다.
-- [공통 ADR 0007](../shared/decisions/0007-fixed-persona-allocation.md)에 따라 정상 완료 면접을
+- [고정 배분 결정](../shared/decisions/0008-fixed-persona-allocation.md)(당시 공통 ADR 0007, 현재 0008)에 따라 정상 완료 면접을
   기술 6회·도메인 2회·HR 1회로 정리했다. 첫 HR을 포함한 총 9문항이며, 이후 기술·도메인 순서는
   허용 후보 안에서 선택한다. 마지막 답변 처리 후 종료한다.
 - **면접 배분 변경은 문서에만 반영했다.** 현행 기능·계약·과제·검증 기준과 결정 색인을 맞추고,

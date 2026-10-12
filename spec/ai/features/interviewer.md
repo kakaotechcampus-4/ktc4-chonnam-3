@@ -31,7 +31,7 @@ Question Contract는 [0014](../decisions/0014-minimal-change-revision.md)에 따
 - 질문 하나와 그 답변이 한 Turn이다. Tool 호출·질문 재작성은 사용자 Turn 수에 넣지 않는다.
 - 정상 Sprint 1은 9번째 질문에 대한 답변 처리를 완료한 뒤 종료한다. 9번째 질문을 보냈다는 이유만으로 답변을 받기 전에 완료하지 않는다.
 - 첫 질문은 `hr_manager`, 이후 Persona는 Director가 선택한다.
-- [공통 0007 결정](../../shared/decisions/0007-fixed-persona-allocation.md)에 따라 정상 9턴은 `tech_lead` 6회·`domain_lead` 2회·`hr_manager` 1회로 고정한다. 첫 HR 질문이 유일한 HR 질문이다.
+- [공통 0008 결정](../../shared/decisions/0008-fixed-persona-allocation.md)에 따라 정상 9턴은 `tech_lead` 6회·`domain_lead` 2회·`hr_manager` 1회로 고정한다. 첫 HR 질문이 유일한 HR 질문이다.
 - [BE Turn 정책](../../backend/features/interview.md#turn-정책)에 따라 2번째 질문부터 Director가 허용된 기술·도메인 Persona 중 답변 맥락에 맞춰 선택한다. 두 역할의 질문 순서·교대는 고정하지 않으며 미관찰 Persona의 피드백을 지어내지 않는다.
 - 기술 질문은 primary repo 1~2개 중심으로 한다. 선택된 모든 repo를 균등하게 질문할 의무는 없다.
 - Director의 정상 조기 종료는 허용하지 않는다. 사용자 종료·장애 처리는 별도 service 정책이고, 분포를 채우기 위해 사용자 종료 이후 계속 질문하지 않는다.
