@@ -99,3 +99,97 @@ def test_unstructured_posting_raises_extraction_error():
         build_requirement_drafts(posting)
 
     assert exc_info.value.code == "jd_extraction_failed"
+
+
+def test_leading_bullets_are_stripped_and_bullet_only_lines_dropped():
+    drafts = build_requirement_drafts(
+        _posting(
+            requirements=["• Python 3년 이상", "∘ 하위 항목", "- RDBMS 경험", "•"],
+            preferred_points=[],
+            main_tasks=[],
+        )
+    )
+
+    assert [d.text for d in drafts] == ["Python 3년 이상", "하위 항목", "RDBMS 경험"]
+
+
+def test_cap_keeps_all_required_then_alternates_preferred_and_main_tasks():
+    """필수 요건을 먼저 담고, 우대가 길어도 주요 업무가 통째로 잘리지 않는다."""
+    posting = _posting(
+        requirements=[f"요건 {i}" for i in range(12)],
+        preferred_points=[f"우대 {i}" for i in range(12)],
+        main_tasks=[f"업무 {i}" for i in range(15)],
+    )
+
+    drafts = build_requirement_drafts(posting)
+
+    assert len(drafts) == MAX_REQUIREMENTS
+    counts = {c: sum(d.category == c for d in drafts) for c in JD_CATEGORIES}
+    # 필수 12개를 모두 담고 남은 8자리를 우대·업무가 4개씩 나눈다.
+    assert counts == {"required": 12, "preferred": 4, "responsibility": 4}
+    # 카테고리별 원문 앞부분이 남고 표시 순서는 연속이다.
+    assert [d.text for d in drafts if d.category == "preferred"] == [f"우대 {i}" for i in range(4)]
+    assert [d.display_order for d in drafts] == list(range(MAX_REQUIREMENTS))
+
+
+def test_short_category_leaves_its_share_to_the_other():
+    posting = _posting(
+        requirements=[f"요건 {i}" for i in range(4)],
+        preferred_points=[f"우대 {i}" for i in range(20)],
+        main_tasks=["업무 0", "업무 1"],
+    )
+
+    counts = {c: 0 for c in JD_CATEGORIES}
+    for d in build_requirement_drafts(posting):
+        counts[d.category] += 1
+
+    assert counts == {"required": 4, "preferred": 14, "responsibility": 2}
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["*nix 시스템 운영 경험", "*.yaml 배포 설정 관리 경험", "-40°C~85°C 환경의 장비 검증"],
+)
+def test_star_and_dash_that_are_content_are_kept(text):
+    """PR #77 리뷰: 뒤에 공백 없는 `*`·`-`는 목록 기호가 아니라 내용이다."""
+    drafts = build_requirement_drafts(
+        _posting(requirements=[text], preferred_points=[], main_tasks=[])
+    )
+
+    assert [d.text for d in drafts] == [text]
+
+
+def test_star_and_dash_bullets_with_space_or_alone_are_stripped():
+    drafts = build_requirement_drafts(
+        _posting(
+            requirements=["* Python 3년 이상", "-- RDBMS 경험", "-", "*"],
+            preferred_points=[],
+            main_tasks=[],
+        )
+    )
+
+    assert [d.text for d in drafts] == ["Python 3년 이상", "RDBMS 경험"]
+
+
+@pytest.mark.parametrize(
+    ("required", "expected"),
+    [
+        # 남은 자리가 1개면 우대가 먼저 가져가 주요 업무는 빠진다.
+        (19, {"required": 19, "preferred": 1, "responsibility": 0}),
+        # 필수가 상한 이상이면 필수 앞 20개만 남고 우대·업무는 0개다.
+        (25, {"required": 20, "preferred": 0, "responsibility": 0}),
+    ],
+)
+def test_cap_boundaries(required, expected):
+    posting = _posting(
+        requirements=[f"요건 {i}" for i in range(required)],
+        preferred_points=["우대 0"],
+        main_tasks=["업무 0"],
+    )
+
+    drafts = build_requirement_drafts(posting)
+
+    assert {c: sum(d.category == c for d in drafts) for c in JD_CATEGORIES} == expected
+    assert [d.text for d in drafts if d.category == "required"] == [
+        f"요건 {i}" for i in range(expected["required"])
+    ]
