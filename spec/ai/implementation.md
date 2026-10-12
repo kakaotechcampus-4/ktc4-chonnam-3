@@ -230,3 +230,31 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
   통과를 durable 저장 완료로 보지 않는다.
 - 분석 API(`backend/app/features/analysis/router.py`)가 골격이라 L1 결과 조회는 검증하지 않았다.
 - 프로젝트 요약의 `summary` 저장 필드는 AI-L03의 BE 합의 후 연결한다.
+
+## 2026-10-06 — 도메인 category LLM 판정 (0022)
+
+### 기준과 변경
+
+- 작업 브랜치: `feature/domain-category-llm`, 기준 develop `ef1a48d`. #74의 키워드 규칙안은 채택하지 않았다.
+- `ai/src/devon_ai/contracts.py`: `DomainPostingInput`(position·intro·main_tasks·requirements·preferred_points).
+  회사명·`industry_name` 필드가 없어 구조상 입력할 수 없다.
+- `ai/src/devon_ai/llm_tasks/domain_category.py`: `classify_domain`이 주입된 `model_call`로 한 번 호출하고
+  `{category, evidence}`를 검증한다. `etc`가 아닌데 공백 정규화한 근거가 원문에 없으면 `etc`, schema·provider
+  실패도 `etc`로 돌려준다(재호출 없음). 원문이 비면 호출하지 않는다. prompt·limits·입력 타입 오류는 호출 전에
+  거절한다.
+- `ai/prompts/domain-category-v1.md`: 검수 전 prompt 초안.
+- `ai/tests/llm_tasks/test_domain_category.py`: 입력 계약 필드, 근거 채택·정규화, 근거 불일치·빈 근거의 `etc`,
+  schema 위반 4종, provider 실패, 원문 없음 비호출, prompt 불일치 거절.
+
+### 실행 결과
+
+환경: Windows, uv. `ai`에서 `ruff check .`, `ruff format --check .`, `mypy`(12개 파일) 통과, `pytest -q`
+205 passed. `backend`에서 `tests/agents/test_ai_package_imports.py` 1 passed.
+
+### 검증 한계와 후속 작업
+
+- 실제 provider 호출과 정확도 평가는 미실행이다(API 키 없음). 평가 도구는 원티드 개발 공고 100건 표본과
+  미검토 라벨로 준비돼 있으며, 실행 시 데이터셋·모델 버전·비용·지표를 함께 기록한다.
+- BE 연결은 범위 밖이다: `PostingContent.intro` 필드, `jd_extract` 단계 안 호출, `seed_prompt_versions.py`의
+  `domain_category` 등록, BE adapter와 `postings.domain_category` 저장.
+
