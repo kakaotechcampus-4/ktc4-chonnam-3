@@ -11,6 +11,7 @@ jd_requirement_ids 다섯 필드만 받는다. 입력 QuestionContract 원본은
 여섯 필드 Question을 만들며, 모델이 계약을 다시 출력하거나 바꾸게 하지 않는다.
 [첫 구현 인계](../../spec/ai/designs/2026-09-23-director-question-path.md)에 입력과 책임,
 참조 검사, 요청별 시도 상한, 검토 실패와 [프롬프트 초안](../prompts/director-question-v1.md)을 기록했다.
+검토기는 승인 대신 `CandidateRecovery`를 반환할 수 있으며 `generate_question`은 이를 `director_candidate_rewrite`·`director_candidate_replan`·`director_no_valid_candidate` 실패로 변환한다(실행·재호출 없음).
 실제 의미 검토기와 provider 품질은 아직 검증하지 않았다. 아래 체크리스트는 전체 task 범위다.
 
 ## 목표
