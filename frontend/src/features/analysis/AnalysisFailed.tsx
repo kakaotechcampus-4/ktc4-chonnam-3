@@ -61,12 +61,7 @@ const FAILURE: Record<string, { message: string; action: FailureAction; label?: 
   rate_limited: {
     message: 'GitHub 요청이 많아 잠시 멈췄어요. 잠시 후 다시 시도해주세요.',
     action: 'input',
-    label: '다시 시도',
-  },
-  run_expired: {
-    message: '분석 시간이 만료됐어요. 공고 입력부터 다시 시작해주세요.',
-    action: 'input',
-    label: '공고 다시 입력',
+    label: '공고 입력으로',
   },
 };
 

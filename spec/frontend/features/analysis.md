@@ -196,8 +196,7 @@ GitHub 토큰 무효는 HTTP reason과 같은 `github_token_invalid`다([`api-sp
 | `no_public_repo` | 안내만 | ❌ 버튼 숨김 |
 | `unsupported_site` · `jd_fetch_failed` · `jd_extraction_failed` · `not_a_job_posting` | 공고 URL 확인 안내 | ✅ 공고 입력으로 |
 | `doc_extract_failed` | 첨부 파일 안내 | ✅ 공고 입력으로 |
-| `rate_limited` | 대기 후 재시도 안내 (대기 시간은 BE 계약 확정 후) | 시간 후 |
-| `run_expired` | 공고 입력부터 다시 | ✅ 공고 입력으로 |
+| `rate_limited` | 대기 후 재시도 안내 (대기 시간은 BE 계약 확정 후) | 시간 후 공고 입력으로 |
 | `llm_timeout` · `llm_parse_failed` · `llm_failed` · `repo_unreachable` · `no_readme` · `input_too_large` · `internal_error` · 목록에 없는 값 | 일반 재시도 안내 | ✅ |
 
 재시도는 공고 입력 화면에 이전 공고 URL을 채워 보낸다. 첨부 파일은 다시 올린다.
