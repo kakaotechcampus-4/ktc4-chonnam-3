@@ -48,6 +48,23 @@ test('분석이 끝나 이동한 뒤 뒤로 가기는 진행 화면으로 돌아
   await expect(page).toHaveURL(/\/home$/);
 });
 
+test('run 조회 410은 자동 재시도하지 않고 바로 만료 안내를 보여준다', async ({ page }) => {
+  // 한 번만 410을 준다. 재시도하면 두 번째 조회가 성공해 공고 실패 안내로 바뀐다.
+  await faults(page, [
+    {
+      path: `/analysis-runs/${FAILED_RUN}`,
+      method: 'GET',
+      status: 410,
+      reason: 'run_expired',
+      times: 1,
+    },
+  ]);
+  await page.goto(`/interview/failed/${FAILED_RUN}`);
+  await expect(page.getByRole('alert')).toContainText('분석 결과가 만료됐어요.');
+  await page.waitForTimeout(1500);
+  await expect(page.getByRole('alert')).toContainText('분석 결과가 만료됐어요.');
+});
+
 test('분석 실패 token_invalid는 github_token_invalid와 같은 재연동 안내를 보여준다', async ({
   page,
 }) => {
