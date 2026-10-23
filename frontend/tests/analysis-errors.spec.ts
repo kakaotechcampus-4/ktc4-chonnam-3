@@ -163,6 +163,24 @@ test('레포 목록 409 not_ready면 run 상태를 확인해 실패 화면으로
   await expect(page).toHaveURL(new RegExp(`/interview/failed/${FAILED_RUN}$`));
 });
 
+test('레포 목록 not_ready면 run 상태를 확인하는 동안 빈 화면 대신 로딩을 보여준다', async ({
+  page,
+}) => {
+  // 결과는 계속 not_ready, run은 완료라 이동할 화면이 없다. 상태 확인을 1.5초 늦춘다.
+  await faults(page, [
+    { path: `/analysis-runs/${DONE_RUN}/result`, status: 409, reason: 'not_ready' },
+    { path: `/analysis-runs/${DONE_RUN}`, kind: 'timeout', delayMs: 1500, times: 1 },
+  ]);
+  const checking = page.waitForRequest((req) =>
+    new RegExp(`/analysis-runs/${DONE_RUN}$`).test(req.url()),
+  );
+  await page.goto(`/interview/repos/${DONE_RUN}`);
+  // 결과 조회(재시도 포함)가 끝나고 상태 확인이 시작된 구간이다.
+  await checking;
+  await expect(page.getByText('불러오는 중...')).toBeVisible({ timeout: 1000 });
+  await expect(page.getByRole('alert')).toBeVisible({ timeout: 10_000 });
+});
+
 test('레포 목록 410이면 만료 안내를 보여준다', async ({ page }) => {
   await page.goto('/interview/repos/missing-run');
   await expect(page.getByRole('alert')).toContainText('분석 결과가 만료됐어요.');

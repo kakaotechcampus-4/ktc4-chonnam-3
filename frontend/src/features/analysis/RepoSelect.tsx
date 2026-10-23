@@ -71,6 +71,8 @@ export default function RepoSelect() {
       })
       .catch(() => setRunChecked(true));
   }, [notReady, queryClient, runId, navigate, location.state]);
+  // 상태 확인 중에는 오류도 데이터도 없어 화면이 비지 않게 로딩으로 보인다.
+  const checkingRun = notReady && !runChecked;
 
   const [selectedIds, setSelectedIds] = useState<string[] | null>(null);
 
@@ -114,12 +116,17 @@ export default function RepoSelect() {
             AI가 JD와 관련성이 높은 레포를 자동으로 선택했어요. 직접 추가하거나 제외할 수 있어요.
           </p>
 
-          {resultQuery.isLoading && <p className="mt-8 text-sm text-muted">불러오는 중...</p>}
-          {resultQuery.isError && (!notReady || runChecked) && (
+          {(resultQuery.isLoading || checkingRun) && (
+            <p className="mt-8 text-sm text-muted">불러오는 중...</p>
+          )}
+          {resultQuery.isError && !checkingRun && (
             <div className="mt-8">
               <RunLoadError
                 error={resultQuery.error}
-                onRetry={() => void resultQuery.refetch()}
+                onRetry={() => {
+                  setRunChecked(false);
+                  void resultQuery.refetch();
+                }}
                 postingUrl={postingUrl}
               />
             </div>
