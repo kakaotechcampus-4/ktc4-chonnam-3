@@ -8,7 +8,7 @@ import Header from '@/shared/components/Header';
 import Footer from '@/shared/components/Footer';
 import RunLoadError from '@/features/analysis/RunLoadError';
 import { STEP_GROUPS, groupStatus, postingUrlFrom } from '@/features/analysis/steps';
-import type { RunStatus, StepKey, StepStatus } from '@/types/api';
+import { isApiError, type RunStatus, type StepKey, type StepStatus } from '@/types/api';
 
 type StepMap = Record<StepKey, StepStatus>;
 
@@ -54,6 +54,8 @@ export default function Analyzing() {
 
   const [sseSteps, setSseSteps] = useState<Partial<StepMap>>({});
   const [sseStatus, setSseStatus] = useState<RunStatus | null>(null);
+  // 다시 시도를 누르면 닫힌 SSE도 새로 연다.
+  const [sseAttempt, setSseAttempt] = useState(0);
 
   // 같은 화면에서 runId만 A → B로 바뀌면 컴포넌트가 재사용돼 A의 SSE 상태가 남는다.
   // effect에서 비우면 한 번은 A의 completed로 렌더돼 B가 잘못 이동하므로 렌더 중에 비운다.
@@ -101,13 +103,13 @@ export default function Analyzing() {
     };
 
     // EventSource는 상태 코드를 읽지 못한다. 만료(410)·인증 실패·끊김을 GET 1회로 판단한다.
+    // 닫지 않는다. 네트워크 끊김은 브라우저가 다시 연결하고, HTTP 오류 응답이면 이미 CLOSED다.
     source.onerror = () => {
-      source.close();
       void queryClient.refetchQueries({ queryKey: queryKeys.analysisRun(runId) });
     };
 
     return () => source.close();
-  }, [runId, queryClient]);
+  }, [runId, queryClient, sseAttempt]);
 
   const steps: StepMap = mergeSteps(
     Object.fromEntries((runQuery.data?.steps ?? []).map((s) => [s.key, s.status])),
@@ -126,7 +128,9 @@ export default function Analyzing() {
   }, [runStatus, runId, navigate, inputState]);
 
   // 첫 조회 실패면 data가 없어 폴링도 멈춘다. 안내 없이 스피너만 남지 않게 한다.
-  const loadError = runQuery.isError && !sseStatus;
+  // 이미 받은 data가 있으면 폴링 한 번 실패는 무시한다. 만료(410)는 data가 있어도 알린다.
+  const expired = isApiError(runQuery.error) && runQuery.error.error.reason === 'run_expired';
+  const loadError = runQuery.isError && !sseStatus && (!runQuery.data || expired);
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
@@ -191,7 +195,10 @@ export default function Analyzing() {
           {loadError && (
             <RunLoadError
               error={runQuery.error}
-              onRetry={() => void runQuery.refetch()}
+              onRetry={() => {
+                setSseAttempt((n) => n + 1);
+                void runQuery.refetch();
+              }}
               postingUrl={postingUrlFrom(location.state)}
             />
           )}

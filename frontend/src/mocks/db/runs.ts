@@ -10,6 +10,7 @@ import {
   SEED_FAILED_RUN_ID,
   SEED_IN_PROGRESS_RUN_ID,
   SEED_RUN_ID,
+  SEED_RUNNING_RUN_ID,
   SEED_TOKEN_INVALID_RUN_ID,
   STEP_DURATION_MS,
   STEP_KEYS,
@@ -155,7 +156,7 @@ export function saveDocument(preview: DocumentPreviewResponse) {
 // seed -------------------------------------------------------------------
 
 /**
- * 완료된 run 2건과 실패한 run 2건(jd_fetch_failed, token_invalid). 분석을 처음부터 돌리지 않고 후속 화면을 열기 위함이다.
+ * 완료된 run 2건, 실패한 run 2건(jd_fetch_failed, token_invalid), 끝나지 않는 run 1건. 분석을 처음부터 돌리지 않고 후속 화면을 열기 위함이다.
  * SEED_IN_PROGRESS_RUN_ID는 진행 중 seed 면접의 "레포 다시 선택하기"가 410으로 막히지 않게 둔다.
  */
 function seedRuns() {
@@ -189,6 +190,13 @@ function seedRuns() {
     failedAtStep: 'repo_select',
   });
 
+  runs.set(SEED_RUNNING_RUN_ID, {
+    runId: SEED_RUNNING_RUN_ID,
+    postingUrl: 'https://www.wanted.co.kr/wd/888888',
+    documentId: null,
+    createdAt: Date.now(),
+    fixedStatus: 'running',
+  });
 }
 
 seedRuns();

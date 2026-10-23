@@ -4,6 +4,9 @@ import { expect, test, type Page } from '@playwright/test';
 const DONE_RUN = '5c7b9e10-0000-4000-8000-00000000aaaa';
 const FAILED_RUN = '5c7b9e10-0000-4000-8000-00000000bbbb';
 const TOKEN_INVALID_RUN = '5c7b9e10-0000-4000-8000-00000000dddd';
+const RUNNING_RUN = '5c7b9e10-0000-4000-8000-00000000eeee';
+const RUN_GET = new RegExp(`/analysis-runs/${RUNNING_RUN}$`);
+const RUN_EVENTS = new RegExp(`/analysis-runs/${RUNNING_RUN}/events$`);
 const POSTING_URL = 'https://www.wanted.co.kr/wd/999999';
 
 function faults(page: Page, rules: object[]) {
@@ -46,6 +49,58 @@ test('분석이 끝나 이동한 뒤 뒤로 가기는 진행 화면으로 돌아
   await expect(page).toHaveURL(new RegExp(`/interview/repos/${DONE_RUN}$`));
   await page.goBack();
   await expect(page).toHaveURL(/\/home$/);
+});
+
+test('진행 중 10초 폴링이 실패해도 이미 받은 진행 화면을 오류로 바꾸지 않는다', async ({
+  page,
+}) => {
+  test.setTimeout(30_000);
+  await page.goto(`/interview/analyzing/${RUNNING_RUN}`);
+  await expect(page.getByText('GitHub 레포를 분석하고 있어요')).toBeVisible();
+  // 첫 조회가 끝난 뒤부터 run 조회만 실패시킨다. SSE(/events)는 그대로 둔다.
+  await page.waitForResponse((res) => RUN_GET.test(res.url()) && res.ok());
+  await page.evaluate((runId) => {
+    localStorage.setItem(
+      'msw.faults',
+      JSON.stringify([
+        { path: `/analysis-runs/${runId}`, method: 'GET', status: 500, reason: 'internal_error' },
+      ]),
+    );
+  }, RUNNING_RUN);
+
+  // 폴링 1회 + 자동 재시도 1회가 모두 실패해야 isError가 된다.
+  await page.waitForResponse((res) => RUN_GET.test(res.url()) && res.status() === 500, {
+    timeout: 15_000,
+  });
+  await page.waitForResponse((res) => RUN_GET.test(res.url()) && res.status() === 500);
+  await page.waitForTimeout(300);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('조회와 SSE가 모두 실패한 뒤 다시 시도하면 SSE를 다시 연다', async ({ page }) => {
+  // 첫 조회(재시도 포함 2회)와 SSE 연결을 실패시킨다.
+  await faults(page, [
+    {
+      path: `/analysis-runs/${RUNNING_RUN}`,
+      method: 'GET',
+      status: 500,
+      reason: 'internal_error',
+      times: 2,
+    },
+    {
+      path: `/analysis-runs/${RUNNING_RUN}/events`,
+      status: 500,
+      reason: 'internal_error',
+      times: 1,
+    },
+  ]);
+  await page.goto(`/interview/analyzing/${RUNNING_RUN}`);
+  await expect(page.getByRole('alert')).toContainText('분석 정보를 불러오지 못했어요.');
+
+  const reopened = page.waitForRequest((req) => RUN_EVENTS.test(req.url()));
+  await page.getByRole('button', { name: '다시 시도' }).click();
+  await reopened;
+  await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
 test('run 조회 410은 자동 재시도하지 않고 바로 만료 안내를 보여준다', async ({ page }) => {
