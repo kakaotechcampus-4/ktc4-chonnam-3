@@ -188,3 +188,228 @@ def _input_payload(
         "prior_analyses": previous,
         "tool_results": [asdict(result) for result in tool_results],
     }, sources
+
+
+async def run_director(
+    context: c.Context,
+    *,
+    prompt: c.PromptSpec,
+    limits: c.CallLimits,
+    model_call: DirectorModelCall,
+    answer_analysis: c.ContractChecked[c.AnswerAnalysis] | None = None,
+    reference_texts: Mapping[c.BasisRef, str] | None = None,
+    prior_analyses: Mapping[str, c.ContractChecked[c.AnswerAnalysis]] | None = None,
+    tool_results: tuple[c.ToolResult, ...] = (),
+) -> c.ModelResult[DirectorOutcome]:
+    """목적·계약·초안을 한 번 생성하고 남은 한 번으로 독립 검토한다.
+
+    두 요청은 BE가 주입한 동일 CallBudget을 사용하며 각각 한 시도만 허용한다.
+    생성자 자기검토·정당화는 검토 입력에서 제외한다. 거절 후 재생성하지 않으며
+    취소·프로그래밍 오류는 상위로 전파한다. 종료 권한과 저장·Tool 실행은 BE 책임이다.
+    """
+    try:
+        payload, sources = _input_payload(
+            context,
+            prompt,
+            limits,
+            answer_analysis,
+            reference_texts,
+            prior_analyses,
+            tool_results,
+        )
+    except c.ContractError as exc:
+        return c.ModelResult(
+            None,
+            c.CallFailure(
+                exc.stage,
+                "director_input_invalid",
+                "Director input rejected.",
+            ),
+            (),
+        )
+    if context.limits.remaining_calls < 2:
+        return c.ModelResult(
+            None,
+            c.CallFailure(
+                "budget",
+                "llm_failed",
+                "Generation and independent review require two attempts.",
+            ),
+            (),
+        )
+
+    def validate_plan(raw: object) -> _Plan:
+        if type(raw) is not dict or set(raw) != {"question", "intent", "reason_summary"}:
+            raise c.ContractError("schema", "DirectorPlan")
+        candidate = _validate_candidate(c.decode(c.Question, raw["question"]), context, sources)
+        # 자유 텍스트인 의도·사유도 기존 결정 계약의 타입 검사로 검증한다.
+        proposal = c.DirectorDecision(
+            "ask",
+            raw["intent"],
+            candidate.persona,
+            candidate.question_contract.purpose,
+            (),
+            raw["reason_summary"],
+        )
+        return _Plan(candidate, proposal.intent, proposal.reason_summary)
+
+    generated = await model_call(
+        c.ModelRequest(
+            prompt,
+            {**payload, "operation": "plan"},
+            "DirectorPlan",
+            "director-plan.v1",
+            _plan_schema(),
+            limits,
+            max_attempts=1,
+        ),
+        validate_plan,
+    )
+    if generated.failure is not None:
+        return c.ModelResult(None, generated.failure, generated.attempts)
+    plan = generated.data
+    if type(plan) is not _Plan:
+        raise TypeError("ModelCall did not return a validated Director plan")
+    try:
+        _validate_candidate(plan.question, context, sources)
+    except c.ContractError as exc:
+        return c.ModelResult(
+            None,
+            c.CallFailure(
+                exc.stage,
+                "director_candidate_invalid",
+                "Question candidate rejected.",
+            ),
+            generated.attempts,
+        )
+
+    reviewed = await model_call(
+        c.ModelRequest(
+            prompt,
+            {
+                **payload,
+                "operation": "review",
+                "question": asdict(plan.question),
+                "intent": plan.intent,
+            },
+            "DirectorReview",
+            "director-review.v1",
+            _review_schema(),
+            limits,
+            max_attempts=1,
+        ),
+        lambda raw: _assessment(raw, plan.question),
+    )
+    attempts = generated.attempts + reviewed.attempts
+    if reviewed.failure is not None:
+        return c.ModelResult(None, reviewed.failure, attempts)
+    assessment = reviewed.data
+    if type(assessment) is c.CandidateRecovery:
+        return c.ModelResult(
+            None,
+            c.CallFailure(
+                "semantic",
+                _RECOVERY_CODES[assessment.recovery],
+                assessment.reason_summary,
+            ),
+            attempts,
+        )
+    try:
+        checked = c.validate_question(
+            plan.question,
+            review=cast(c.QuestionReview, assessment),
+            allowed_personas=context.allowed_personas,
+            evidence_refs=frozenset(
+                ref.id
+                for ref in plan.question.question_contract.basis_refs
+                if ref.kind == "evidence"
+            ),
+            basis_refs=frozenset(sources),
+            jd_requirement_ids=frozenset(
+                ref.id
+                for ref in plan.question.question_contract.basis_refs
+                if ref.kind == "jd_requirement"
+            ),
+        )
+        decision = c.validate_decision(
+            c.DirectorDecision(
+                "ask",
+                plan.intent,
+                plan.question.persona,
+                plan.question.question_contract.purpose,
+                (),
+                plan.reason_summary,
+            ),
+            question=checked,
+            allowed_personas=context.allowed_personas,
+            finish_allowed=False,
+            allowed_locations=frozenset(),
+        )
+    except c.ContractError as exc:
+        return c.ModelResult(
+            None,
+            c.CallFailure(
+                exc.stage,
+                "director_review_failed",
+                "Independent question review rejected.",
+            ),
+            attempts,
+        )
+    return c.ModelResult(DirectorOutcome(decision, checked, generated.attempts[-1]), None, attempts)
+
+
+def verification_decision(
+    context: c.Context,
+    analysis: c.ContractChecked[c.AnswerAnalysis],
+    *,
+    allowed_locations: frozenset[Location],
+) -> c.ContractChecked[c.DirectorDecision] | None:
+    """현재 T3의 명시적 필요·영향 판단에서 허용된 추가 조회만 제안한다.
+
+    기존 근거가 충분하다고 분석한 주장은 제외한다. 원문 의미의 충분성과 현재
+    판단에 대한 영향은 검증된 T3의 요청·목적에 의존한다. 조회·감점·종료는 하지 않는다.
+    """
+    if type(context) is not c.Context:
+        raise c.ContractError("schema", "Director context")
+    if type(analysis) is not c.ContractChecked or type(analysis.data) is not c.AnswerAnalysis:
+        raise c.ContractError("schema", "checked analysis")
+    if type(allowed_locations) is not frozenset:
+        raise c.ContractError("schema", "allowed locations")
+    repositories = {repo.repository_id: repo.git_ref for repo in context.repositories}
+    for location in allowed_locations:
+        if (
+            type(location) is not tuple
+            or len(location) != 3
+            or repositories.get(location[0]) != location[1]
+        ):
+            raise c.ContractError("semantic", "allowed location ref")
+    value = analysis.data
+    if not value.needs_verification:
+        return None
+    registered = frozenset(ref.id for ref in _references(context, {}) if ref.kind == "evidence")
+    supported = {
+        claim.claim_text
+        for claim in value.claim_checks
+        if claim.status == "supported"
+        and claim.evidence_refs
+        and set(claim.evidence_refs).issubset(registered)
+    }
+    requests = tuple(
+        request for request in value.verification_requests if request.claim_text not in supported
+    )
+    if not requests:
+        return None
+    return c.validate_decision(
+        c.DirectorDecision(
+            "retrieve",
+            "현재 주장을 원문으로 확인",
+            None,
+            requests[0].claim_text,
+            requests,
+            " ".join(request.purpose for request in requests),
+        ),
+        question=None,
+        allowed_personas=context.allowed_personas,
+        finish_allowed=False,
+        allowed_locations=allowed_locations,
+    )
