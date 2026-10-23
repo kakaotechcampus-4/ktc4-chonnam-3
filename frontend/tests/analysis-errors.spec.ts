@@ -181,6 +181,24 @@ test('레포 목록 not_ready면 run 상태를 확인하는 동안 빈 화면 �
   await expect(page.getByRole('alert')).toBeVisible({ timeout: 10_000 });
 });
 
+test('실패하지 않은 run으로 실패 화면에 들어오면 진행·레포 선택 화면으로 보낸다', async ({
+  page,
+}) => {
+  await page.goto(`/interview/failed/${RUNNING_RUN}`);
+  await expect(page).toHaveURL(new RegExp(`/interview/analyzing/${RUNNING_RUN}$`));
+  await page.goto(`/interview/failed/${DONE_RUN}`);
+  await expect(page).toHaveURL(new RegExp(`/interview/repos/${DONE_RUN}$`));
+});
+
+test('선택할 수 있는 레포가 없으면 안내와 공고 입력 이동을 보여준다', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('msw.result', 'all-failed'));
+  await page.goto(`/interview/repos/${DONE_RUN}`);
+  await expect(page.getByRole('alert')).toContainText('면접에 사용할 수 있는 레포가 없어요.');
+  await expect(page.getByRole('button', { name: '+ Private 레포 직접 추가' })).toBeDisabled();
+  await page.getByRole('button', { name: '공고 다시 입력' }).click();
+  await expect(page).toHaveURL(/\/interview\/new$/);
+});
+
 test('레포 목록 410이면 만료 안내를 보여준다', async ({ page }) => {
   await page.goto('/interview/repos/missing-run');
   await expect(page.getByRole('alert')).toContainText('분석 결과가 만료됐어요.');

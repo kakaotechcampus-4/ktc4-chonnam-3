@@ -81,6 +81,8 @@ export default function AnalysisFailed() {
     queryKey: queryKeys.analysisRun(runId),
     queryFn: () => api.getAnalysisRun(runId),
     enabled: !!runId,
+    // SSE failed로 넘어오면 캐시에는 진행 화면이 받은 running이 남아 있다. 들어올 때마다 새로 읽는다.
+    refetchOnMount: 'always',
   });
 
   const run = runQuery.data;
@@ -89,6 +91,15 @@ export default function AnalysisFailed() {
     run?.failureReason === 'token_invalid' ? 'github_token_invalid' : run?.failureReason;
   // 실패 사유는 200 응답 안의 값이라 전역 오류 처리가 보지 못한다.
   useEffect(() => refreshMeIfTokenInvalid(failureReason), [failureReason]);
+  // 실패하지 않은 run으로 직접 들어오면(링크·기록 이동) 맞는 화면으로 보낸다.
+  // 캐시 값으로 보내면 진행 화면과 오가므로 이 화면에서 새로 받은 값만 본다.
+  const runStatus = runQuery.isFetchedAfterMount && !runQuery.isFetching ? run?.status : undefined;
+  const inputState = location.state;
+  useEffect(() => {
+    const options = { replace: true, state: inputState };
+    if (runStatus === 'running') navigate(`/interview/analyzing/${runId}`, options);
+    if (runStatus === 'completed') navigate(`/interview/repos/${runId}`, options);
+  }, [runStatus, runId, navigate, inputState]);
   const failure = (failureReason && FAILURE[failureReason]) || DEFAULT_FAILURE;
   const stepStatus: Partial<Record<StepKey, StepStatus>> = Object.fromEntries(
     (run?.steps ?? []).map((s) => [s.key, s.status]),

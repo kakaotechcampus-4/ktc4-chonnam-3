@@ -77,6 +77,8 @@ export default function RepoSelect() {
   const [selectedIds, setSelectedIds] = useState<string[] | null>(null);
 
   const result = resultQuery.data;
+  // 실패 카드만 선택을 막는다. 하나도 고를 수 없으면 버튼만 꺼진 채 출구가 없어진다.
+  const noSelectable = !!result && result.repositories.every((r) => r.status === 'failed');
   const defaultSelected = result?.repositories.filter((r) => r.recommended).map((r) => r.id) ?? [];
   const selected = selectedIds ?? defaultSelected;
 
@@ -214,9 +216,11 @@ export default function RepoSelect() {
                   </ul>
                   <div className="mt-3 flex items-center justify-between">
                     <p className="text-[11.5px] text-muted">{selected.length}개 레포 선택됨</p>
+                    {/* ponytail: Private 레포 추가는 미구현이라 비활성. 기능이 생기면 연결한다. */}
                     <button
                       type="button"
-                      className="rounded-md border border-dashed border-line px-2.5 py-1.5 text-[11.5px] text-muted"
+                      disabled
+                      className="rounded-md border border-dashed border-line px-2.5 py-1.5 text-[11.5px] text-muted disabled:opacity-50"
                     >
                       + Private 레포 직접 추가
                     </button>
@@ -248,6 +252,25 @@ export default function RepoSelect() {
                   })}
                 </div>
               </div>
+
+              {noSelectable && (
+                <div className="mt-3 flex items-center gap-3">
+                  <p role="alert" className="text-sm text-error">
+                    면접에 사용할 수 있는 레포가 없어요. 다른 공고로 다시 시작해주세요.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate('/interview/new', {
+                        state: { postingUrl } satisfies AnalysisInputState,
+                      })
+                    }
+                    className="shrink-0 rounded-md border border-line px-3 py-1.5 text-sm"
+                  >
+                    공고 다시 입력
+                  </button>
+                </div>
+              )}
 
               {submitError && (
                 <div className="mt-3 flex items-center gap-3">
