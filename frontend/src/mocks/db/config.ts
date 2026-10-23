@@ -38,6 +38,8 @@ export const SEED_SESSION_ID = 'sess_0000000000000001';
 
 /** 분석 실패 화면(3-3)용. */
 export const SEED_FAILED_RUN_ID = '5c7b9e10-0000-4000-8000-00000000bbbb';
+/** GitHub 토큰 무효로 실패한 run. BE 현재 값인 token_invalid로 재연동 안내를 연다. */
+export const SEED_TOKEN_INVALID_RUN_ID = '5c7b9e10-0000-4000-8000-00000000dddd';
 /** 면접 준비 실패 화면(1b)용. lastError 가 채워져 있다. */
 export const SEED_PREPARING_FAILED_INTERVIEW_ID = 'a3d51c20-1009-4c00-9a00-000000000009';
 /** 면접 진행 화면(5b-v2)을 바로 여는 진행 중 면접. 새로고침해도 1턴부터 다시 시작한다. */

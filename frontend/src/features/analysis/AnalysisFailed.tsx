@@ -19,12 +19,12 @@ import type { StepKey, StepStatus } from '@/types/api';
 type FailureAction = 'relink' | 'input' | 'none';
 
 /**
- * failureReason은 BE 내부 analysis_jobs.error_code 값이다(공통 ADR 0006).
- * 목록은 backend/docs/error-reasons.md의 Job Error Code를 따른다. 없는 값은 DEFAULT_FAILURE.
+ * failureReason 값은 frontend/docs/api-spec.md의 failureReason 표를 따른다. 없는 값은 DEFAULT_FAILURE.
+ * GitHub 토큰 무효는 HTTP reason과 같은 github_token_invalid다(api-spec.md 변경 이력 2026-09-10).
  * input은 공고 입력 화면에 이전 URL을 채워 보낸다. 다시 분석은 사용자가 그 화면에서 시작한다.
  */
 const FAILURE: Record<string, { message: string; action: FailureAction; label?: string }> = {
-  token_invalid: {
+  github_token_invalid: {
     message: 'GitHub 연동이 만료됐어요. 다시 연동한 뒤 분석해주세요.',
     action: 'relink',
   },
@@ -89,16 +89,12 @@ export default function AnalysisFailed() {
   });
 
   const run = runQuery.data;
+  // ponytail: BE가 아직 내부 job 코드 token_invalid를 그대로 보낸다. BE가 github_token_invalid로 바꾸면 이 변환을 지운다.
+  const failureReason =
+    run?.failureReason === 'token_invalid' ? 'github_token_invalid' : run?.failureReason;
   // 실패 사유는 200 응답 안의 값이라 전역 오류 처리가 보지 못한다.
-  // job 내부 코드는 token_invalid라 HTTP reason 이름으로 바꿔 넘긴다.
-  useEffect(
-    () =>
-      refreshMeIfTokenInvalid(
-        run?.failureReason === 'token_invalid' ? 'github_token_invalid' : null,
-      ),
-    [run?.failureReason],
-  );
-  const failure = (run?.failureReason && FAILURE[run.failureReason]) || DEFAULT_FAILURE;
+  useEffect(() => refreshMeIfTokenInvalid(failureReason), [failureReason]);
+  const failure = (failureReason && FAILURE[failureReason]) || DEFAULT_FAILURE;
   const stepStatus: Partial<Record<StepKey, StepStatus>> = Object.fromEntries(
     (run?.steps ?? []).map((s) => [s.key, s.status]),
   );

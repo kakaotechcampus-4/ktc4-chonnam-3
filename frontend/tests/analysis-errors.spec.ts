@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test';
 // src/mocks/db/config.ts의 seed id. 완료 run과 jd_fetch_failed로 멈춘 실패 run이다.
 const DONE_RUN = '5c7b9e10-0000-4000-8000-00000000aaaa';
 const FAILED_RUN = '5c7b9e10-0000-4000-8000-00000000bbbb';
+const TOKEN_INVALID_RUN = '5c7b9e10-0000-4000-8000-00000000dddd';
 const POSTING_URL = 'https://www.wanted.co.kr/wd/999999';
 
 function faults(page: Page, rules: object[]) {
@@ -45,6 +46,17 @@ test('분석이 끝나 이동한 뒤 뒤로 가기는 진행 화면으로 돌아
   await expect(page).toHaveURL(new RegExp(`/interview/repos/${DONE_RUN}$`));
   await page.goBack();
   await expect(page).toHaveURL(/\/home$/);
+});
+
+test('분석 실패 token_invalid는 github_token_invalid와 같은 재연동 안내를 보여준다', async ({
+  page,
+}) => {
+  await page.goto(`/interview/failed/${TOKEN_INVALID_RUN}`);
+  await expect(page.getByRole('alert')).toContainText('GitHub 연동이 만료됐어요.');
+  await expect(page.getByRole('link', { name: 'GitHub 재연동' })).toHaveAttribute(
+    'href',
+    /\/auth\/github\/link$/,
+  );
 });
 
 test('분석 실패는 failureReason별 안내와 이전 URL을 채운 공고 입력 이동을 보여준다', async ({

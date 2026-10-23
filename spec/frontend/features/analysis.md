@@ -106,7 +106,7 @@ Sprint 1에서 preview는 포트폴리오 전용이다. 자소서는 `/documents
 
 4-3-v2  분석 실패
   ├─ [다시 시도]        → 공고 입력 화면 값 유지 후 재호출 → 4-2-v2
-  ├─ [GitHub 재연동]    → /auth/github/link   (token_invalid)
+  ├─ [GitHub 재연동]    → /auth/github/link   (github_token_invalid)
   └─ 재시도 불가 사유    → 안내만, 버튼 숨김   (no_public_repo)
 
 5a-v2  레포 확정
@@ -188,11 +188,11 @@ new EventSource(`/api/analysis-runs/${runId}/events`, { withCredentials: true })
 
 ### failureReason 분기 (4-3-v2)
 
-`failureReason`은 BE 내부 `analysis_jobs.error_code` 값이다(공통 0006, PR #81 미병합, 목록은 [`backend/docs/error-reasons.md`](../../../backend/docs/error-reasons.md)의 Job Error Code). HTTP reason `github_token_invalid`와 달리 job 코드는 `token_invalid`이다.
+GitHub 토큰 무효는 HTTP reason과 같은 `github_token_invalid`다([`api-spec.md`](../../../frontend/docs/api-spec.md) 변경 이력 2026-09-10). BE 현재 코드(`backend/app/features/analysis/schemas.py`)와 [`backend/docs/error-reasons.md`](../../../backend/docs/error-reasons.md)는 job 내부 코드 `token_invalid`를 그대로 내보낸다고 적고 있어 BE 반영을 요청한다. 반영 전까지 FE는 `token_invalid`도 같은 분기로 처리한다.
 
 | 값 | 문구 방향 | 재시도 |
 | --- | --- | --- |
-| `token_invalid` | 재연동 강조 | 재연동 후 |
+| `github_token_invalid` | 재연동 강조 | 재연동 후 |
 | `no_public_repo` | 안내만 | ❌ 버튼 숨김 |
 | `unsupported_site` · `jd_fetch_failed` · `jd_extraction_failed` · `not_a_job_posting` | 공고 URL 확인 안내 | ✅ 공고 입력으로 |
 | `doc_extract_failed` | 첨부 파일 안내 | ✅ 공고 입력으로 |
