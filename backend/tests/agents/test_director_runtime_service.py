@@ -219,3 +219,233 @@ def approved_review():
         "safe_alternative": True,
         "reason_summary": "적절한 질문",
     }
+
+
+async def test_all_nine_answers_use_analysis_then_independent_director_review(
+    agent_sessions, agent_seed
+):
+    from app.features.interview.director_service import process_answer, start_director
+
+    await seed_turns(agent_sessions, agent_seed, 0)
+    sent = []
+
+    async def handle(request):
+        body = json.loads(request.content)
+        payload = json.loads(body["input"][0]["content"][0]["text"])
+        sent.append(payload)
+        async with agent_sessions.begin() as db:
+            await db.execute(select(InterviewSession).with_for_update(nowait=True))
+        if "answer" in payload:
+            assert payload["answer"]["turn_id"] not in {
+                turn["turn_id"] for turn in payload["history"]
+            }
+            return response(asdict(analysis()), "analysis-model")
+        if payload["operation"] == "review":
+            assert "reason_summary" not in payload
+            return response(approved_review(), "review-model")
+        persona = payload["context"]["allowed_personas"][0]
+        if payload["context"]["turn_no"] > 1:
+            assert payload["prior_analyses"]
+            assert payload["answer_analysis"]["contribution_scope"]["scope"] == "teammate"
+        return response(plan(persona), "generation-model")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        first = await start_director(
+            agent_sessions,
+            user_id=agent_seed["owner"],
+            interview_id=agent_seed["interview_id"],
+            call_id=uuid4(),
+            settings=settings(),
+            http_client=http,
+        )
+        assert first.turn_id is not None
+        for turn_no in range(1, 10):
+            result = await process_answer(
+                agent_sessions,
+                user_id=agent_seed["owner"],
+                interview_id=agent_seed["interview_id"],
+                turn_no=turn_no,
+                text="팀원 담당입니다",
+                call_id=uuid4(),
+                settings=settings(),
+                http_client=http,
+            )
+            assert result.failure is None and result.discard_reason is None
+            assert result.completed is (turn_no == 9)
+    assert len(sent) == 27
+    async with agent_sessions() as db:
+        turns = list(await db.scalars(select(InterviewTurn).order_by(InterviewTurn.turn_no)))
+        assert len(turns) == 9 and all(turn.analysis is not None for turn in turns)
+        assert [turn.persona for turn in turns].count("hr_manager") == 1
+        assert [turn.persona for turn in turns].count("tech_lead") == 6
+        assert [turn.persona for turn in turns].count("domain_lead") == 2
+        assert all(turn.model == "generation-model" for turn in turns)
+
+
+async def test_lookup_failure_is_recorded_and_delivered_to_director_without_false_claim(
+    agent_sessions, agent_seed
+):
+    from app.features.interview.director_service import process_answer
+
+    await seed_turns(agent_sessions, agent_seed)
+    request = c.VerificationRequest(
+        "팀원 담당입니다",
+        "해당 파일의 구현 확인",
+        str(agent_seed["repo_id"]),
+        agent_seed["sha"],
+        ("src/main.py",),
+    )
+    original = replace(analysis(), needs_verification=True, verification_requests=(request,))
+    sent, checks = [], []
+
+    async def handle(req):
+        if req.url.host == "api.github.com":
+            assert checks == []
+            return httpx.Response(500)
+        body = json.loads(req.content)
+        payload = json.loads(body["input"][0]["content"][0]["text"])
+        sent.append(payload)
+        if "answer" in payload:
+            return response(asdict(original if not payload["tool_results"] else analysis()))
+        assert payload["tool_results"][0]["status"] == "tool_error"
+        return response(plan("tech_lead") if payload["operation"] == "plan" else approved_review())
+
+    async def check(value):
+        checks.append(value)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        result = await process_answer(
+            agent_sessions,
+            user_id=agent_seed["owner"],
+            interview_id=agent_seed["interview_id"],
+            turn_no=1,
+            text="팀원 담당입니다",
+            call_id=uuid4(),
+            settings=settings(),
+            http_client=http,
+            on_evidence_check=check,
+        )
+    assert result.next_turn_id is not None and result.failure is None
+    assert len(sent) == 4
+    async with agent_sessions() as db:
+        turn = await db.get(InterviewTurn, result.turn_id)
+        assert turn.analysis == json.loads(json.dumps(asdict(original)))
+        assert "tool_error" in turn.decision["reason_summary"]
+        record = await db.get(LLMCallRecord, result.call_id)
+        assert len(record.attempts) == 2
+
+
+async def test_cancel_during_lookup_preserves_first_analysis_and_records_requested_scope(
+    agent_sessions, agent_seed
+):
+    from app.features.interview.director_service import process_answer
+
+    await seed_turns(agent_sessions, agent_seed)
+    request = c.VerificationRequest(
+        "팀원 담당입니다",
+        "구현 확인",
+        str(agent_seed["repo_id"]),
+        agent_seed["sha"],
+        ("src/main.py",),
+    )
+    evidence_id = uuid4()
+    async with agent_sessions.begin() as db:
+        db.add(
+            Evidence(
+                id=evidence_id,
+                interview_session_id=agent_seed["interview_id"],
+                repository_id=agent_seed["repo_id"],
+                git_ref=agent_seed["sha"],
+                source_type="file",
+                path="src/main.py",
+                snippet="원문 근거",
+                tool_name="read_file",
+            )
+        )
+    original = replace(
+        analysis(),
+        needs_verification=True,
+        verification_requests=(request,),
+        technical_assessment=c.TechnicalAssessment(
+            "한정된 원문 검토", (), (str(evidence_id),), ("추가 조건 확인",)
+        ),
+    )
+    entered = asyncio.Event()
+
+    async def handle(req):
+        if req.url.host == "api.github.com":
+            entered.set()
+            await asyncio.Event().wait()
+        return response(asdict(original))
+
+    call_id = uuid4()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        task = asyncio.create_task(
+            process_answer(
+                agent_sessions,
+                user_id=agent_seed["owner"],
+                interview_id=agent_seed["interview_id"],
+                turn_no=1,
+                text="팀원 담당입니다",
+                call_id=call_id,
+                settings=settings(),
+                http_client=http,
+            )
+        )
+        await asyncio.wait_for(entered.wait(), 5)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    async with agent_sessions() as db:
+        turn = await db.scalar(select(InterviewTurn).where(InterviewTurn.turn_no == 1))
+        assert turn.analysis == json.loads(json.dumps(asdict(original)))
+        assert turn.decision["next_step"] == "retrieve"
+        assert (
+            "중단" in turn.decision["reason_summary"]
+            and "src/main.py" in turn.decision["reason_summary"]
+        )
+        record = await db.get(LLMCallRecord, call_id)
+        assert record.discard_reason == "canceled" and len(record.attempts) == 1
+        link = (await db.scalars(select(TurnEvidence))).one()
+        assert link.evidence_id == evidence_id and link.usage == "evaluation_basis"
+
+
+async def test_replay_during_tool_phase_is_still_in_progress(agent_sessions, agent_seed):
+    from app.features.interview.agent_context import AgentStateError
+    from app.features.interview.director_service import process_answer
+
+    await seed_turns(agent_sessions, agent_seed)
+    request = c.VerificationRequest(
+        "팀원 담당입니다",
+        "구현 확인",
+        str(agent_seed["repo_id"]),
+        agent_seed["sha"],
+        ("src/main.py",),
+    )
+    original = replace(analysis(), needs_verification=True, verification_requests=(request,))
+    entered = asyncio.Event()
+
+    async def handle(req):
+        if req.url.host == "api.github.com":
+            entered.set()
+            await asyncio.Event().wait()
+        return response(asdict(original))
+
+    options = dict(
+        user_id=agent_seed["owner"],
+        interview_id=agent_seed["interview_id"],
+        turn_no=1,
+        text="팀원 담당입니다",
+        call_id=uuid4(),
+        settings=settings(),
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        task = asyncio.create_task(process_answer(agent_sessions, **options, http_client=http))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            with pytest.raises(AgentStateError, match="call_in_progress"):
+                await process_answer(agent_sessions, **options, http_client=http)
+        finally:
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
