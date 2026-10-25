@@ -1,0 +1,221 @@
+"""자동 Director는 실제 PostgreSQL 상태와 HTTP 공급자 경계를 함께 사용한다."""
+
+import asyncio
+import json
+from dataclasses import asdict, replace
+from uuid import uuid4
+
+import httpx
+import pytest
+from devon_ai import contracts as c
+from sqlalchemy import select
+
+from app.core.config import Settings
+from app.db.models import (
+    Evidence,
+    EvidenceConflict,
+    InterviewSession,
+    InterviewTurn,
+    JobPosting,
+    LLMCallRecord,
+    PromptVersion,
+    TurnEvidence,
+)
+
+
+def contract():
+    return c.QuestionContract("역할 설명", (c.RequiredPoint("role", "본인 역할"),), (), (), "역할")
+
+
+def analysis():
+    return c.AnswerAnalysis(
+        "evaluated",
+        "sufficient",
+        (c.CoveredPoint("role", ("팀원 담당입니다",)),),
+        (),
+        c.TechnicalAssessment("기술적 판단 보류", (), (), ("코드 미확인",)),
+        c.ContributionScope("teammate", ("팀원 담당입니다",)),
+        (),
+        False,
+        (),
+        ("기술 미확인",),
+    )
+
+
+def settings():
+    return Settings(
+        _env_file=None,
+        openai_api_key="fixture-key",
+        llm_timeout_seconds=2,
+        llm_max_output_tokens=2048,
+        llm_max_input_bytes=262144,
+        llm_max_response_bytes=262144,
+    ).require_llm()
+
+
+def response(data, model="fixture-model"):
+    raw = json.dumps(data, ensure_ascii=False)
+    return httpx.Response(
+        200,
+        json={
+            "id": "fixture",
+            "model": model,
+            "status": "completed",
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [{"type": "output_text", "text": raw}],
+                }
+            ],
+            "usage": {"input_tokens": 8, "output_tokens": 6},
+        },
+    )
+
+
+async def seed_turns(sessions, seed, count=1):
+    order = ["hr_manager"] + ["tech_lead"] * 6 + ["domain_lead"] * 2
+    async with sessions.begin() as db:
+        interview = await db.get(InterviewSession, seed["interview_id"])
+        interview.current_turn = count
+        db.add(
+            PromptVersion(
+                task_name="answer_analysis",
+                version="analysis_v1",
+                model="analysis-model",
+                template="분석 fixture",
+                is_active=True,
+            )
+        )
+        for index, persona in enumerate(order[:count], 1):
+            db.add(
+                InterviewTurn(
+                    interview_session_id=seed["interview_id"],
+                    turn_no=index,
+                    persona=persona,
+                    question_text="본인의 역할을 설명해 주세요.",
+                    question_contract=asdict(contract()),
+                    topic_code="role",
+                    status="asked" if index == count else "answered",
+                    answer_text=None if index == count else "팀원 담당입니다",
+                )
+            )
+
+
+async def test_answer_loader_keeps_current_turn_outside_history_even_at_nine(
+    agent_sessions, agent_seed
+):
+    from app.features.interview.answer_context import load_answer_context
+
+    await seed_turns(agent_sessions, agent_seed, 9)
+    async with agent_sessions() as db:
+        loaded = await load_answer_context(
+            db,
+            user_id=agent_seed["owner"],
+            interview_id=agent_seed["interview_id"],
+            turn_no=9,
+            limits=c.ContextLimits(2, 0, "test"),
+        )
+    assert loaded.context.turn_no == 9
+    assert len(loaded.context.history) == 8
+    assert loaded.context.current_turn_id == loaded.turn_id
+    assert all(turn.turn_id != loaded.turn_id for turn in loaded.context.history)
+    assert loaded.question.data.question_contract == contract()
+    assert loaded.context.allowed_personas == ("domain_lead",)
+
+
+async def test_last_answer_is_analyzed_before_completion_and_replay_never_calls_again(
+    agent_sessions, agent_seed
+):
+    from app.features.interview.director_service import process_answer
+
+    await seed_turns(agent_sessions, agent_seed, 9)
+    sent, acknowledged = [], []
+
+    async def handle(request):
+        sent.append(request)
+        async with agent_sessions.begin() as db:
+            interview = await db.scalar(select(InterviewSession).with_for_update(nowait=True))
+            assert interview.status == "in_progress"
+        assert acknowledged == [True]
+        return response(asdict(analysis()))
+
+    async def acknowledge():
+        acknowledged.append(True)
+
+    call_id = uuid4()
+    options = dict(
+        user_id=agent_seed["owner"],
+        interview_id=agent_seed["interview_id"],
+        turn_no=9,
+        text="팀원 담당입니다",
+        call_id=call_id,
+        settings=settings(),
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        result = await process_answer(
+            agent_sessions, **options, http_client=http, on_answer_saved=acknowledge
+        )
+        replay = await process_answer(
+            agent_sessions, **options, http_client=http, on_answer_saved=acknowledge
+        )
+    assert result.completed and result.next_turn_id is None and result.failure is None
+    assert result.accepted and not replay.accepted
+    assert len(sent) == len(acknowledged) == 1
+    async with agent_sessions() as db:
+        interview = await db.get(InterviewSession, agent_seed["interview_id"])
+        turn = await db.get(InterviewTurn, result.turn_id)
+        record = await db.get(LLMCallRecord, call_id)
+        assert interview.status == "completed" and interview.completed_at is not None
+        assert interview.context_state["director"]["phase"] == "completed"
+        assert interview.context_state["director"]["current_turn_id"] == str(turn.id)
+        assert turn.analysis == json.loads(json.dumps(asdict(analysis())))
+        assert turn.decision["next_step"] == "finish"
+        assert record.task_name == "answer_analysis" and len(record.attempts) == 1
+
+
+async def test_analysis_failure_preserves_answer_and_does_not_complete(agent_sessions, agent_seed):
+    from app.features.interview.director_service import process_answer
+
+    await seed_turns(agent_sessions, agent_seed, 9)
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: response({"invalid": True}))
+    ) as http:
+        result = await process_answer(
+            agent_sessions,
+            user_id=agent_seed["owner"],
+            interview_id=agent_seed["interview_id"],
+            turn_no=9,
+            text="팀원 담당입니다",
+            call_id=uuid4(),
+            settings=settings(),
+            http_client=http,
+        )
+    assert result.failure.stage == "schema" and not result.completed
+    async with agent_sessions() as db:
+        turn = await db.get(InterviewTurn, result.turn_id)
+        assert turn.status == "answered" and turn.answer_text == "팀원 담당입니다"
+        assert turn.analysis is None
+        assert (await db.get(InterviewSession, agent_seed["interview_id"])).status == "in_progress"
+
+
+def plan(persona="hr_manager"):
+    return {
+        "question": asdict(
+            c.Question(persona, "본인의 역할을 설명해 주세요.", "role", contract(), (), ())
+        ),
+        "intent": "역할 확인",
+        "reason_summary": "현재 자료에 맞는 질문",
+    }
+
+
+def approved_review():
+    return {
+        "plan_valid": True,
+        "context_valid": True,
+        "wording_valid": True,
+        "contract_matches": True,
+        "safe_alternative": True,
+        "reason_summary": "적절한 질문",
+    }
