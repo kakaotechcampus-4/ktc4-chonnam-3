@@ -406,3 +406,102 @@ async def _execute(connection: _Connection, user_id: UUID, turn: int, text: str)
             with suppress(RedisError):
                 await _script(connection.redis, _RELEASE, 1, connection.work, connection.nonce)
     return result
+
+
+@router.websocket("/{session_id}")
+async def interview_socket(socket: WebSocket, session_id: str) -> None:
+    user_id = await _authenticated_user(socket)
+    if not _SESSION_ID.fullmatch(session_id):
+        await _deny(socket, "session_expired")
+        return
+    redis: Redis = socket.app.state.redis
+    raw = await redis.get(_rt_key(session_id))
+    try:
+        data = json.loads(raw) if raw is not None else None
+        if (
+            type(data) is not dict
+            or set(data) != {"interviewId", "userId"}
+            or type(data["interviewId"]) is not str
+            or type(data["userId"]) is not str
+            or UUID(data["userId"]) != user_id
+        ):
+            raise ValueError
+        interview_id = UUID(data["interviewId"])
+    except (ValueError, TypeError, UnicodeDecodeError):
+        await _deny(socket, "session_expired")
+        return
+    initial = await _read_state(socket, user_id, interview_id)
+    if initial.status in {"completed", "abandoned"}:
+        await _deny(socket, "session_expired")
+        return
+    nonce = secrets.token_urlsafe(32)
+    assert raw is not None
+    connection = _Connection(socket, redis, session_id, interview_id, raw, nonce)
+    heartbeat = watcher = None
+    control = redis.pubsub()
+    try:
+        await control.subscribe(f"ws:replace:{session_id}")
+        if not await connection.acquire():
+            await _deny(socket, "already_connected")
+            return
+        if not await connection.refresh():
+            await _deny(socket, "session_expired")
+            return
+        # 인계를 기다리는 사이 이전 실행이 면접을 끝냈을 수 있다.
+        if (await _read_state(socket, user_id, interview_id)).status in {"completed", "abandoned"}:
+            await _deny(socket, "session_expired")
+            return
+        if not await connection.refresh():
+            await _deny(socket, "session_expired")
+            return
+        await socket.accept()
+        watcher = asyncio.create_task(connection.watch_replacement(control))
+        heartbeat = asyncio.create_task(connection.heartbeat())
+        if not await connection.restore(user_id):
+            return
+        while connection.connected:
+            try:
+                raw_answer = await connection.receive()
+            except (ValueError, KeyError):
+                await connection.send(_error("answer_rejected"))
+                continue
+            # 로그인 인증은 handshake에서 확정한다. 답변에서는 면접 연결 소유권만 확인한다.
+            if not await connection.refresh():
+                await connection.close(1008)
+                return
+            parsed = _answer(raw_answer)
+            if isinstance(parsed, str):
+                await connection.send(_error(parsed))
+                continue
+            turn, text = parsed
+            try:
+                result = await _execute(connection, user_id, turn, text)
+            except AgentStateError as exc:
+                if exc.reason == "answer_turn_invalid":
+                    await connection.send(_error("answer_stale_turn"))
+                    continue
+                await connection.send(_error("question_failed"))
+                await connection.close()
+                return
+            if result.failure is not None or result.discard_reason is not None:
+                await connection.send(_error("question_failed"))
+                await connection.close()
+                return
+            if not await connection.restore(user_id):
+                return
+    except WebSocketDisconnect:
+        connection.connected = False
+    except Exception as exc:
+        logger.error("interview_ws_failed", exception_type=type(exc).__name__)
+        await connection.send(_error("question_failed"))
+        await connection.close(1011)
+    finally:
+        for task in (heartbeat, watcher):
+            if task is not None:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+        with CancelScope(shield=True), suppress(RedisError):
+            await _script(redis, _RELEASE, 1, connection.lock, nonce)
+        with CancelScope(shield=True), suppress(RedisError):
+            await cast(Callable[[], Awaitable[None]], control.aclose)()
