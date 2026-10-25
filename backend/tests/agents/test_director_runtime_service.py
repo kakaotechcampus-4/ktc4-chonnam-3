@@ -699,3 +699,40 @@ async def test_answer_loader_preserves_authorized_posting_basis_text(agent_sessi
             limits=c.ContextLimits(2, 0, "test"),
         )
     assert loaded.question.data.question_contract == stored
+
+
+async def test_director_updates_context_snapshot_without_losing_prepare_state(
+    agent_sessions, agent_seed
+):
+    from app.features.interview.director_service import start_director
+
+    await seed_turns(agent_sessions, agent_seed, 0)
+    async with agent_sessions.begin() as db:
+        interview = await db.get(InterviewSession, agent_seed["interview_id"])
+        interview.context_state = {
+            "prepare_job_id": "preserved",
+            "preparation_limitations": ["한정 범위"],
+        }
+
+    async def handle(req):
+        payload = json.loads(json.loads(req.content)["input"][0]["content"][0]["text"])
+        return response(plan() if payload["operation"] == "plan" else approved_review())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        result = await start_director(
+            agent_sessions,
+            user_id=agent_seed["owner"],
+            interview_id=agent_seed["interview_id"],
+            call_id=uuid4(),
+            settings=settings(),
+            http_client=http,
+        )
+    async with agent_sessions() as db:
+        interview = await db.get(InterviewSession, agent_seed["interview_id"])
+        snapshot = interview.context_state
+        assert snapshot["prepare_job_id"] == "preserved"
+        assert snapshot["preparation_limitations"] == ["한정 범위"]
+        assert snapshot["director"]["current_turn_id"] == str(result.turn_id)
+        assert snapshot["director"]["turn_no"] == 1
+        assert snapshot["director"]["phase"] == "awaiting_answer"
+        assert snapshot["director"]["decision"]["next_step"] == "ask"
