@@ -5,6 +5,22 @@ AI 작업의 구현·수정 내역, 코드 위치, 실행 결과와 남은 작�
 [decisions](decisions/README.md)에 보존한다. 문서 역할은
 [ADR 0020](decisions/0020-implementation-record-policy.md)을 따른다.
 
+## 2026-10-26 — #99 동시 변경을 보존한 최신 게시 기준 검증
+
+- 게시 전 #99가 팀원의 `ce1019a`로 갱신된 것을 감지해 push 전에 중단했다. 기존 로컬 수정본과
+  새 원격 head를 모두 보존하고 새 head 위에 원문 공백·CRLF·prompt v2 검증과 별도 회귀만 추가했다.
+  팀원의 기존 테스트 16사례·v1/v2 prompt·Accepted ADR0028·계약은 byte/blob 그대로다.
+- 중복될 로컬 ADR0028·명세 PR은 게시하지 않았다. 현재 명세를 준수하는 구현/검사 보완만 반영한다.
+- 이 최신 #99와 #102·#103·정정·최종 #119 및 필요한 #114를 새 환경에 결합해 AI 전체
+  **309 passed / BE 고유 163 passed**를 확인했다. AI Ruff·format 52·mypy 12 source,
+  BE Ruff·format 262·mypy 133 source, 부분 계약 schema 2개·fixture 7개도 통과했다.
+- Python 248파일의 검증 전후 hash가 같고 선택 25파일은 각 수정본과 byte가 같다. 실제 모듈은
+  새 통합본 경로이며 contracts의 #119 비도메인 AST와 팀원 DomainPostingInput AST를 보존했다.
+- 아래의 322사례는 동시 변경 발견 전 로컬 후보의 검증 이력이다. 최신 게시본의 수치에 합치거나
+  최신 원격 head의 결과로 재사용하지 않는다. 원격 최신 반영 후 새 의미 품질 평가는 별도다.
+- 결과·원본 대응·명령·노드 목록은 원본 저장소
+  `.claude/scratch/ai-pr-reviews-20261026/latest99-full-review-integration-result.json`과 관련 로그에 보존한다.
+
 ## 2026-10-26 — AI 리뷰 수정 다섯 PR 최종 결합 검증
 
 - 최신 develop `2ff1acf`에 #99 v2·#102 JD 원문·#103 복구 설명·#107 정정 사례·#119 L2 수정과
