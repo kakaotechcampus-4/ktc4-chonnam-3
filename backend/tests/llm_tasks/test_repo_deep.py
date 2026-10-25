@@ -4,10 +4,11 @@ import json
 import uuid
 
 import httpx
+import pytest
 from devon_ai import contracts as c
 from pydantic import SecretStr
 
-from app.core.config import LLMSettings
+from app.core.config import LLMSettings, Settings
 from app.llm_tasks import repo_deep
 
 SHA = "a" * 40
@@ -77,7 +78,9 @@ def _response(text: str) -> dict[str, object]:
     }
 
 
-async def _run(replies: list[object], *, settings: LLMSettings = SETTINGS, snapshot: str = SHA):
+async def _run_result(
+    replies: list[object], *, settings: LLMSettings = SETTINGS, snapshot: str = SHA
+):
     sent: list[httpx.Request] = []
     pending = iter(replies)
 
@@ -86,12 +89,19 @@ async def _run(replies: list[object], *, settings: LLMSettings = SETTINGS, snaps
         reply = next(pending)
         if isinstance(reply, Exception):
             raise reply
+        if isinstance(reply, httpx.Response):
+            return reply
         return httpx.Response(200, json=_response(str(reply)))
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
         result = await repo_deep.analyze_repository(
             _input(), snapshot_head_sha=snapshot, prompt=PROMPT, settings=settings, http_client=http
         )
+    return result, sent
+
+
+async def _run(replies: list[object], *, settings: LLMSettings = SETTINGS, snapshot: str = SHA):
+    result, sent = await _run_result(replies, settings=settings, snapshot=snapshot)
     return repo_deep.to_repo_analysis_row(result, _input(), PROMPT), sent
 
 
@@ -148,6 +158,68 @@ async def test_too_many_areas_is_retried_once_within_two_requests() -> None:
     assert (row["status"], row["attempt"]) == ("succeeded", 2)
 
 
+async def test_all_schema_invalid_areas_retry_and_preserve_attempt_errors() -> None:
+    invalid = _output(_area() | {"observation": ""})
+    valid = _output()
+    result, sent = await _run_result([invalid, valid])
+
+    assert len(sent) == 2
+    assert result.failure is None and result.data.data.analysis is not None
+    assert [attempt.error_stage for attempt in result.attempts] == ["schema", None]
+    assert [attempt.raw_output for attempt in result.attempts] == [invalid, valid]
+    assert result.attempts[0].error_code == "llm_failed"
+
+
+async def test_valid_area_is_preserved_when_another_area_has_schema_error() -> None:
+    result, sent = await _run_result([_output(_area(), _area("missing.py") | {"observation": ""})])
+
+    assert len(sent) == 1 and result.failure is None
+    assert [area.path for area in result.data.data.analysis.notable_areas] == ["src/cache.py"]
+    assert [(area.path, area.stage) for area in result.data.data.rejected_areas] == [
+        ("missing.py", "schema")
+    ]
+
+
+@pytest.mark.parametrize(
+    "first",
+    [
+        httpx.ReadTimeout("timed out"),
+        httpx.Response(503),
+        "not JSON",
+        _output(_area() | {"observation": ""}),
+    ],
+    ids=["timeout", "provider", "parse", "schema"],
+)
+async def test_schema_area_retry_never_resets_the_total_two_request_budget(first: object) -> None:
+    invalid = _output(_area() | {"observation": ""})
+    result, sent = await _run_result([first, invalid, _output()])
+
+    assert len(sent) == len(result.attempts) == 2
+    assert result.data is None and result.failure.stage == "schema"
+    assert result.attempts[-1].error_stage == "schema"
+
+
+@pytest.mark.parametrize("field", ["head_sha", "repository_id"])
+async def test_mismatched_ref_with_bad_summary_is_semantic_and_never_retried(field: str) -> None:
+    invalid = _output(
+        **{field: "b" * 40 if field == "head_sha" else str(uuid.UUID(int=2))},
+        architecture_summary="",
+    )
+    result, sent = await _run_result([invalid, _output()])
+
+    assert len(sent) == len(result.attempts) == 1
+    assert result.data is None and result.failure.stage == "semantic"
+    assert result.attempts[0].error_stage == "semantic"
+    assert result.attempts[0].raw_output == invalid
+
+
+async def test_malformed_ref_is_schema_and_uses_only_the_remaining_retry() -> None:
+    result, sent = await _run_result([_output(head_sha="not-a-sha"), _output()])
+
+    assert len(sent) == len(result.attempts) == 2 and result.failure is None
+    assert [attempt.error_stage for attempt in result.attempts] == ["schema", None]
+
+
 async def test_snapshot_mismatch_makes_no_request() -> None:
     row, sent = await _run([], snapshot="b" * 40)
 
@@ -170,3 +242,27 @@ async def test_request_over_the_input_byte_limit_is_stored_as_input_too_large() 
 
     assert sent == []
     assert (row["status"], row["error_code"]) == ("failed", "input_too_large")
+
+
+@pytest.mark.parametrize("proxy", [False, True], ids=["direct", "proxy"])
+async def test_adapter_uses_the_url_and_token_selected_by_settings(proxy: bool) -> None:
+    settings = Settings(
+        _env_file=None,
+        openai_api_key="direct-fixture-key",
+        llm_default_model="configured-model",
+        llm_timeout_seconds=1,
+        llm_max_output_tokens=512,
+        llm_max_input_bytes=65536,
+        llm_max_response_bytes=65536,
+        proxy_token="proxy-fixture-key" if proxy else None,
+        chat_proxy_url="https://proxy.example/namespace/v1/" if proxy else None,
+        openai_model="configured-model" if proxy else None,
+    ).require_llm()
+    result, sent = await _run_result([_output()], settings=settings)
+
+    assert result.failure is None and len(sent) == 1
+    expected_url = "https://proxy.example/namespace/v1" if proxy else "https://api.openai.com/v1"
+    expected_token = "proxy-fixture-key" if proxy else "direct-fixture-key"
+    assert str(sent[0].url) == expected_url + "/responses"
+    assert sent[0].headers["authorization"] == "Bearer " + expected_token
+    assert json.loads(sent[0].content)["model"] == PROMPT.model

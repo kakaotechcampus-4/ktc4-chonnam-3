@@ -158,6 +158,48 @@ def test_too_many_areas_is_retryable_schema_failure() -> None:
     assert (error.value.stage, error.value.field) == ("schema", "notable area count")
 
 
+def test_all_schema_invalid_areas_request_gateway_retry() -> None:
+    with pytest.raises(c.ContractError) as error:
+        c.parse_deep_analysis(_output(_area(observation="")), source=_input())
+
+    assert (error.value.stage, error.value.field) == ("schema", "notable areas")
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"head_sha": "b" * 40, "architecture_summary": ""},
+        {"repository_id": "repo-2", "architecture_summary": ""},
+        {"head_sha": "b" * 40, "notable_areas": "invalid"},
+        {"repository_id": "repo-2", "unexpected": True},
+    ],
+)
+def test_other_output_errors_cannot_hide_repository_ref_mismatch(
+    overrides: dict[str, object],
+) -> None:
+    with pytest.raises(c.ContractError) as error:
+        c.parse_deep_analysis(_output(**overrides), source=_input())
+
+    assert (error.value.stage, error.value.field) == ("semantic", "repository ref")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("repository_id", None),
+        ("repository_id", ""),
+        ("head_sha", None),
+        ("head_sha", "not-a-sha"),
+        ("head_sha", "z" * 40),
+    ],
+)
+def test_malformed_reference_is_schema_before_comparing_identity(field: str, value: object) -> None:
+    with pytest.raises(c.ContractError) as error:
+        c.parse_deep_analysis(_output(**{field: value}), source=_input())
+
+    assert (error.value.stage, error.value.field) == ("schema", field)
+
+
 @pytest.mark.parametrize(
     "areas",
     [
