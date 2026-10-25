@@ -5,6 +5,26 @@ AI 작업의 구현·수정 내역, 코드 위치, 실행 결과와 남은 작�
 [decisions](decisions/README.md)에 보존한다. 문서 역할은
 [ADR 0020](decisions/0020-implementation-record-policy.md)을 따른다.
 
+## 2026-10-26 — PR #102 참조 JD 입력과 대조 답변 보완
+
+- 기준은 리뷰 원본 `28e2663`이며 초기 설계·공개 계약·`AnswerAnalysis` 출력 필드는 변경하지 않았다.
+- `answer_analysis._referenced_jd`는 질문의 `jd_requirement_ids`와 Contract의 `jd_requirement`
+  basis 참조를 합쳐 해당 ID·원문·분류·source field·tech tags만 모델 입력으로 전달한다. 미참조 JD는
+  제외한다. 필수 원문 누락·중복 ID는 호출 전에 `answer_analysis_input_invalid`(semantic)로 거절한다.
+- `test_answer_analysis.py`에 7사례를 추가했다. Kafka/RabbitMQ 원문 변경이 실제 payload에 반영되고,
+  두 참조 경로 각각과 함께 쓸 때 원문 유실을 허용하지 않는지 검사한다. 공용 질문 helper는 변경하지 않았다.
+- 길고 틀린 답변에 실제로 "별도 갱신 없이도 캐시는 항상 최신 데이터를 보장합니다"라는 주장을 넣고,
+  분석의 `answer_quotes`도 그 구절을 인용하도록 맞췄다. 입력에 없는 주장을 비판하는 fixture를 제거했다.
+- 수정 전 새 회귀 7사례가 모두 실패함을 확인한 뒤 수정했다. 수정 후 직접 관련 33사례,
+  AI 전체 235사례, AI Ruff·format 45파일·mypy 11 source 모두 통과했다.
+- 실제 게시 원본 backend의 패키지 import·Director·공통 LLM·설정 경계 131사례가 통과했다.
+  실제 BE gateway와 모의 HTTP를 연결한 별도 5시나리오에서도 서로 다른 JD 원문 전달 2건과
+  필수 참조 누락의 HTTP 무호출 3건을 확인했다. 원문 전달 응답의 모델·prompt metadata도 보존됐다.
+- 기존 `backend/.venv`의 Python을 사용하고 각 worktree의 AI·BE 소스를 명시했다. 외부 API·실제 모델,
+  PostgreSQL 저장·면접 전체 흐름·분류 의미 품질은 이번 검증 범위가 아니다. 이전 실행 결과와 구분한다.
+- 기존 전용 계약 검사 환경에서 schema 2개·부분 OpenAPI·정상/오류 fixture 7개와 `git diff --check`도
+  통과했다. 부분 형식 검사를 전체 API 호환성 검증으로 확대하지 않는다.
+
 ## 2026-10-06 — task-09 답변 분석 task 구현
 
 관련 작업: AI task-09([답변 분석](../../ai/docs/task-09-answer-analysis.md)). PR 번호는 생성 후 기록한다.
