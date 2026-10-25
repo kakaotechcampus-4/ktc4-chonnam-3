@@ -1,6 +1,24 @@
-"""현행 interview_prep은 M4-a 면접 준비 태스크이며 연결은 구현 대기다.
-옛 M2의 7단계 분석은 analysis_run으로 분리해야 한다 (docs/pipeline.md).
-준비 재시도 REST API는 실패 단계부터 같은 준비 흐름을 사용한다.
+"""면접 식별자를 검증하고 같은 준비 실행 경로를 호출하는 ARQ 어댑터."""
 
-docs/layer-rules.md 1절 / task-11
-"""
+from typing import Any
+from uuid import UUID
+
+from app.core.config import get_settings
+from app.db.models import InterviewSession
+from app.features.interview.prepare import prepare_interview
+
+
+async def interview_prep(ctx: dict[str, Any], interview_id: str) -> None:
+    key = UUID(interview_id)
+    async with ctx["session_factory"]() as db:
+        row = await db.get(InterviewSession, key)
+        if row is None or row.status != "preparing":
+            return
+        user_id = row.user_id
+    await prepare_interview(
+        ctx["session_factory"],
+        user_id=user_id,
+        interview_id=key,
+        settings=ctx.get("settings") or get_settings(),
+        http_client=ctx["http_client"],
+    )
