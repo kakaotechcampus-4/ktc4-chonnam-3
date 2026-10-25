@@ -1,25 +1,168 @@
-name: Notify Discord on merge to develop
-# 팀 자유 영역 워크플로 (CODEOWNERS 운영진 4파일 아님). 다른 브랜치 → develop 머지 시 Discord 알림.
+name: LINKER 개인 채널 알림
 
 on:
   pull_request:
-    types: [closed]
-    branches: [develop]
+    types: [review_requested, closed]
+  issues:
+    types: [opened, edited, assigned]
+  issue_comment:
+    types: [created, edited]
+
+permissions:
+  contents: read
 
 jobs:
   notify:
     runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true
+    timeout-minutes: 5
+
     steps:
-      - name: Send Discord notification
+      - name: 개인 채널에 알림 전송
+        uses: actions/github-script@v7
         env:
-          DISCORD_WEBHOOK: ${{ secrets.LINKER_DISCORD_WEBHOOK }}
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          HEAD_REF: ${{ github.event.pull_request.head.ref }}
-        run: |
-          MESSAGE="$(printf '🔀 %s → develop 머지완료\nPR명 : %s\n작성자 : %s\n%s' "$HEAD_REF" "$PR_TITLE" "$PR_AUTHOR" "$PR_URL")"
-          curl -sf -X POST "$DISCORD_WEBHOOK" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -n --arg content "$MESSAGE" '{content: $content}')"
+          USER_MAP: ${{ vars.DISCORD_USER_MAP }}
+          GEONYEONG: ${{ secrets.DISCORD_WEBHOOK_GEONYEONG }}
+          KYEONSOL: ${{ secrets.DISCORD_WEBHOOK_KYEONSOL }}
+          JINYEONG: ${{ secrets.DISCORD_WEBHOOK_JINYEONG }}
+          DONGHAN: ${{ secrets.DISCORD_WEBHOOK_DONGHAN }}
+          YUSEOK: ${{ secrets.DISCORD_WEBHOOK_YUSEOK }}
+        with:
+          script: |
+            const e = context.payload;
+
+            // GitHub 아이디 → 개인 채널 웹훅
+            const webhooks = {
+              geonyeong325: process.env.GEONYEONG,
+              kyeonsol: process.env.KYEONSOL,
+              jinyeonggg: process.env.JINYEONG,
+              gdh0730: process.env.DONGHAN,
+              dreactive: process.env.YUSEOK
+            };
+
+            // 본문·댓글에서 @GitHub아이디 추출
+            const mentions = (text = '') => new Set(
+              [...text.matchAll(
+                /(?:^|[^a-z0-9_@/])@([a-z0-9-]+)(?![a-z0-9_/-])/gi
+              )].map(match => match[1].toLowerCase())
+            );
+
+            let recipients = [];
+            let item;
+            let url;
+            let message;
+
+            if (context.eventName === 'pull_request') {
+              item = e.pull_request;
+              url = item.html_url;
+
+              // 리뷰 요청 → 요청받은 리뷰어
+              if (e.action === 'review_requested' && !item.draft) {
+                recipients = [e.requested_reviewer?.login];
+                message = 'PR 리뷰를 요청받았어요.';
+
+              // 실제 머지 → PR 작성자
+              } else if (e.action === 'closed' && item.merged) {
+                recipients = [item.user.login];
+                message = `작성한 PR이 ${item.base.ref}에 머지됐어요.`;
+
+              } else {
+                return;
+              }
+
+            // 이슈 담당자 지정 → 새로 지정된 담당자
+            } else if (
+              context.eventName === 'issues' &&
+              e.action === 'assigned'
+            ) {
+              item = e.issue;
+              url = item.html_url;
+              recipients = [e.assignee?.login];
+              message = '이슈 담당자로 지정됐어요.';
+
+            // 이슈 본문·댓글의 멘션
+            } else {
+              item = e.issue;
+
+              // PR 댓글은 이슈 멘션 알림에서 제외
+              if (!item || item.pull_request) return;
+
+              const isComment = context.eventName === 'issue_comment';
+              const body = (isComment ? e.comment.body : item.body) || '';
+              url = isComment ? e.comment.html_url : item.html_url;
+
+              // 본문 변경 없는 수정은 알림 생략
+              if (e.action === 'edited' && !e.changes?.body) return;
+
+              // 수정 전 멘션은 제외하고 새로 추가된 대상만 추출
+              const previous = e.action === 'edited'
+                ? mentions(e.changes.body.from || '')
+                : new Set();
+
+              recipients = [...mentions(body)].filter(
+                login => !previous.has(login)
+              );
+
+              message = isComment
+                ? '이슈 댓글에서 멘션됐어요.'
+                : '이슈 본문에서 멘션됐어요.';
+            }
+
+            // 같은 이벤트의 수신자 중복 제거 및 팀원만 선택
+            recipients = [...new Set(
+              recipients
+                .filter(Boolean)
+                .map(login => login.toLowerCase())
+            )].filter(login => Object.hasOwn(webhooks, login));
+
+            if (!recipients.length) return;
+
+            if (!process.env.USER_MAP) {
+              throw new Error('DISCORD_USER_MAP 변수가 없어요.');
+            }
+
+            const users = JSON.parse(process.env.USER_MAP);
+
+            for (const login of recipients) {
+              const id = users[login];
+
+              if (
+                !webhooks[login] ||
+                typeof id !== 'string' ||
+                !/^\d+$/.test(id)
+              ) {
+                core.setFailed(
+                  `${login}: 웹훅 Secret 또는 사용자 ID를 확인하세요.`
+                );
+                continue;
+              }
+
+              try {
+                const webhook = new URL(webhooks[login]);
+                webhook.searchParams.set('wait', 'true');
+
+                const response = await fetch(webhook, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    content:
+                      `<@${id}> ${message}\n` +
+                      `#${item.number} ${item.title.slice(0, 200)}\n` +
+                      url,
+                    allowed_mentions: {
+                      parse: [],
+                      users: [id]
+                    }
+                  })
+                });
+
+                if (!response.ok) {
+                  core.setFailed(
+                    `${login}: 전송 실패 HTTP ${response.status}`
+                  );
+                }
+              } catch {
+                core.setFailed(`${login}: Discord 연결 실패`);
+              }
+            }
