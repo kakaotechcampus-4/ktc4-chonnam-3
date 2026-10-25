@@ -26,10 +26,9 @@ async def test_seed_all_calls_both_seeds_in_one_transaction() -> None:
         calls.append("domain_question_frames")
 
     with (
-        mock.patch.object(seed_all_module, "get_session_factory", return_value=session_factory),
         mock.patch.object(seed_all_module, "seed_score_criteria", fake_score_criteria),
         mock.patch.object(seed_all_module, "seed_domain_question_frames", fake_domain_frames),
     ):
-        await seed_all_module.seed_all()
+        await seed_all_module.seed_all(session_factory)
 
     assert calls == ["score_criteria", "domain_question_frames"]

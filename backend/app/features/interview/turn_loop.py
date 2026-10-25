@@ -73,6 +73,8 @@ async def ask_next_question(
         parent_turn_no=draft.parent_turn_no,
         model=draft.model,
         prompt_version=draft.prompt_version,
+        # 생성 시작 시점의 턴 — 그사이 다른 연결이 턴을 진행했으면 저장하지 않는다.
+        expected_current_turn=turns[-1].turn_no if turns else 0,
     )
     if isinstance(turn, TurnRejected):
         return False

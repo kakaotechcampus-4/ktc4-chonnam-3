@@ -13,24 +13,27 @@ README.md / task-03
 
 import asyncio
 
-from app.db.session import dispose_engine, get_session_factory
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from app.core.config import get_settings
 from scripts.seed_domain_question_frames import seed_domain_question_frames
 from scripts.seed_score_criteria import seed_score_criteria
 
 
-async def seed_all() -> None:
+async def seed_all(session_factory: async_sessionmaker[AsyncSession]) -> None:
     """도메인 지식 시드 전체를 한 transaction 에서 실행하고 commit 한다."""
-    session_factory = get_session_factory()
     async with session_factory() as session, session.begin():
         await seed_score_criteria(session)
         await seed_domain_question_frames(session)
 
 
 async def _main() -> None:
+    # 엔진은 앱 lifespan 이 소유한다 (app/db/session.py). 스크립트는 직접 만들고 닫는다.
+    engine = create_async_engine(get_settings().database_url, pool_pre_ping=True)
     try:
-        await seed_all()
+        await seed_all(async_sessionmaker(engine, expire_on_commit=False))
     finally:
-        await dispose_engine()
+        await engine.dispose()
 
 
 if __name__ == "__main__":

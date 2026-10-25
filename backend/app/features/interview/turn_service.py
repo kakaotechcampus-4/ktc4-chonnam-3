@@ -21,7 +21,7 @@ from collections.abc import Collection
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from sqlalchemy import Integer, cast, exists, func, insert, literal, or_, select, update
+from sqlalchemy import Integer, cast, exists, func, insert, literal, or_, select, true, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Evidence, InterviewSession, InterviewTurn, TurnEvidence
@@ -51,10 +51,13 @@ async def save_question(
     parent_turn_no: int | None = None,
     model: str | None = None,
     prompt_version: str | None = None,
+    expected_current_turn: int | None = None,
 ) -> InterviewTurn | TurnRejected:
     """T1 — 다음 턴 질문을 저장하고 commit 한다.
 
-    입력: 면접 id, Director 가 정한 질문 값, 같은 면접의 evidence id 목록(없어도 됨).
+    입력: 면접 id, Director 가 정한 질문 값, 같은 면접의 evidence id 목록(없어도 됨),
+    질문 생성을 시작할 때 본 current_turn(expected_current_turn, 생략하면 확인하지 않는다).
+    생성하는 사이 다른 요청(재연결·다중 연결)이 턴을 진행했다면 저장하지 않는다.
     출력: 저장된 턴. 막히면 사유 — NOT_IN_PROGRESS / PREVIOUS_UNANSWERED / TURNS_EXHAUSTED.
     다른 면접의 evidence id 가 섞이거나 persona 가 허용 밖이면 ValueError (저장하지 않는다).
     """
@@ -66,6 +69,12 @@ async def save_question(
         InterviewTurn.turn_no == InterviewSession.current_turn,
         InterviewTurn.status == "answered",
     )
+    # 생성 시작 시점의 턴 번호가 그대로일 때만 저장한다 — 겹친 생성의 늦은 쪽을 막는다.
+    unchanged_since_start = (
+        true()
+        if expected_current_turn is None
+        else InterviewSession.current_turn == expected_current_turn
+    )
     # 조건 확인과 턴 번호 증가를 UPDATE 한 번으로 — 동시 호출은 세션 행 락에서 한쪽만 통과한다.
     turn_no = await db.scalar(
         update(InterviewSession)
@@ -74,6 +83,7 @@ async def save_question(
             InterviewSession.status == "in_progress",
             InterviewSession.current_turn < InterviewSession.total_turns,
             or_(InterviewSession.current_turn == 0, prev_answered),
+            unchanged_since_start,
         )
         .values(current_turn=InterviewSession.current_turn + 1)
         .returning(InterviewSession.current_turn)
