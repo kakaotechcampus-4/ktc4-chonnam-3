@@ -75,6 +75,8 @@ def test_sufficiency_that_contradicts_the_points_is_a_semantic_failure(kit, run,
 
 # 2. 길고 틀린 답변과 짧고 맞는 답변을 별도 축으로 판단한다.
 def test_sufficiency_and_technical_assessment_are_independent_axes(kit, run):
+    wrong_claim = "별도 갱신 없이도 캐시는 항상 최신 데이터를 보장합니다."
+    long_answer = FULL + " " + wrong_claim
     long_wrong = kit.analysis_output(
         sufficiency="sufficient",
         covered_points=covered(
@@ -85,15 +87,18 @@ def test_sufficiency_and_technical_assessment_are_independent_axes(kit, run):
         missing_points=[],
         technical_assessment={
             "explanation": "필수 항목은 모두 설명했지만 캐시가 항상 최신이라는 전제는 부정확하다.",
-            "answer_quotes": ["DB 부하를 줄이려고 캐시했습니다"],
+            "answer_quotes": [wrong_claim],
             "evidence_refs": [],
             "limitations": [],
         },
     )
     short_right = kit.analysis_output()
-    long_result = run(kit.Provider(long_wrong), answer=FULL).data.data
+    provider = kit.Provider(long_wrong)
+    long_result = run(provider, answer=long_answer).data.data
     short_result = run(kit.Provider(short_right)).data.data
     assert long_result.sufficiency == "sufficient"
+    assert provider.requests[0].payload["answer"]["text"] == long_answer
+    assert long_result.technical_assessment.answer_quotes == (wrong_claim,)
     assert "부정확" in long_result.technical_assessment.explanation
     assert short_result.sufficiency == "partial"
     assert "타당" in short_result.technical_assessment.explanation

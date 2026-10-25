@@ -1,5 +1,5 @@
 import json
-from dataclasses import replace
+from dataclasses import asdict, replace
 
 import pytest
 
@@ -47,6 +47,98 @@ def test_request_carries_the_question_scope_and_answer_but_no_persona_proxy(kit,
     # 평가 기준은 Persona별로 달라지지 않으므로 모델 입력에 Persona를 넣지 않는다.
     dumped = json.dumps(payload, ensure_ascii=False)
     assert "persona" not in dumped and "tech_lead" not in dumped and "hr_manager" not in dumped
+
+
+def jd_question(kit, reference_kind):
+    basis = (c.BasisRef("jd_requirement", "jd-1"),) if reference_kind != "question" else ()
+    ids = ("jd-1",) if reference_kind != "basis" else ()
+    contract = c.QuestionContract(
+        "공고의 메시징 요구사항과 구현의 연결",
+        (c.RequiredPoint("jd_alignment", "공고 조건과 본인 구현의 연결"),),
+        (),
+        basis,
+        "질문이 참조한 공고 원문의 조건",
+    )
+    question = replace(
+        kit.checked_question().data,
+        text="본인의 메시징 설계가 해당 공고의 요구사항을 어떻게 충족하나요?",
+        question_contract=contract,
+        jd_requirement_ids=ids,
+    )
+    return c.validate_question(
+        question,
+        review=c.QuestionReview(question.text, contract),
+        allowed_personas=("tech_lead",),
+        evidence_refs=frozenset(),
+        basis_refs=frozenset(basis),
+        jd_requirement_ids=frozenset(ids),
+    )
+
+
+@pytest.mark.parametrize("reference_kind", ["question", "basis", "both"])
+def test_referenced_jd_source_reaches_the_model_and_changes_the_payload(kit, run, reference_kind):
+    question = jd_question(kit, reference_kind)
+    payloads = []
+    answer = "Kafka로 이벤트를 발행합니다."
+    for source in (
+        "Kafka 기반 비동기 이벤트 처리가 필요합니다.",
+        "RabbitMQ 메시징 경험이 필요합니다.",
+    ):
+        requirement = c.JDRequirement("jd-1", source, "required", "requirements", ())
+        context = kit.make_context(
+            current_question_contract=question.data.question_contract,
+            jd_requirements=(
+                requirement,
+                c.JDRequirement(
+                    "jd-unrelated", "질문에서 참조하지 않은 조건", "preferred", "requirements", ()
+                ),
+            ),
+        )
+        output = kit.analysis_output(
+            covered_points=[{"key": "jd_alignment", "answer_quotes": [answer]}],
+            missing_points=[],
+            sufficiency="sufficient",
+            technical_assessment={
+                "explanation": "조건과의 부합은 제공된 JD 원문을 확인해야 한다.",
+                "answer_quotes": [answer],
+                "evidence_refs": [],
+                "limitations": ["이 테스트는 실제 모델의 비교 판단을 검증하지 않는다."],
+            },
+        )
+        provider = kit.Provider(output)
+        assert run(provider, context=context, question=question, answer=answer).succeeded
+        payload = provider.requests[0].payload
+        assert payload["question"]["jd_requirement_ids"] == list(question.data.jd_requirement_ids)
+        assert payload["jd_requirements"] == [asdict(requirement)]
+        payloads.append(payload)
+    assert payloads[0] != payloads[1]
+
+
+@pytest.mark.parametrize("reference_kind", ["question", "basis", "both"])
+def test_missing_referenced_jd_is_rejected_before_model_call(kit, run, reference_kind):
+    question = jd_question(kit, reference_kind)
+    context = kit.make_context(current_question_contract=question.data.question_contract)
+    provider = kit.Provider(kit.analysis_output())
+    result = run(provider, context=context, question=question)
+    assert result.failure.error_code == "answer_analysis_input_invalid"
+    assert result.failure.stage == "semantic"
+    assert result.attempts == () and provider.requests == []
+
+
+def test_duplicate_jd_id_cannot_choose_an_ambiguous_source(kit, run):
+    question = jd_question(kit, "both")
+    context = kit.make_context(
+        current_question_contract=question.data.question_contract,
+        jd_requirements=(
+            c.JDRequirement("jd-1", "Kafka 경험", "required", "requirements", ()),
+            c.JDRequirement("jd-1", "RabbitMQ 경험", "required", "requirements", ()),
+        ),
+    )
+    provider = kit.Provider(kit.analysis_output())
+    result = run(provider, context=context, question=question)
+    assert result.failure.error_code == "answer_analysis_input_invalid"
+    assert result.failure.stage == "semantic"
+    assert result.attempts == () and provider.requests == []
 
 
 def test_model_may_only_return_the_ten_analysis_fields(kit, run):
