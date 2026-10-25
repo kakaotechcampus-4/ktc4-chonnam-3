@@ -397,3 +397,245 @@ async def _release_stale(
         and (row.context_state or {}).get("prepare_job_id") == str(job_id)
     ):
         _mark_failed(row, "preparation_changed", step)
+
+
+async def _store_analysis(
+    db: AsyncSession,
+    repo: PreparedRepository,
+    values: dict[str, object],
+) -> None:
+    replaceable = RepoAnalysis.status != "succeeded"
+    if repo.invalid_cache is not None:
+        key, result, areas = repo.invalid_cache
+        result_matches = (
+            RepoAnalysis.result == result
+            if result is not None
+            else or_(RepoAnalysis.result.is_(None), RepoAnalysis.result == JSON.NULL)
+        )
+        areas_match = (
+            RepoAnalysis.notable_areas == areas
+            if areas is not None
+            else or_(RepoAnalysis.notable_areas.is_(None), RepoAnalysis.notable_areas == JSON.NULL)
+        )
+        # 외부 호출 중 다른 작업이 고친 성공 캐시는 읽기 당시의 invalid 값으로 덮지 않는다.
+        replaceable = or_(
+            replaceable,
+            and_(
+                RepoAnalysis.id == key,
+                result_matches,
+                areas_match,
+            ),
+        )
+    query = insert(RepoAnalysis).values(**values)
+    await db.execute(
+        query.on_conflict_do_update(
+            constraint="uq_repo_analyses_repo_level_sha_prompt",
+            set_=values,
+            where=replaceable,
+        )
+    )
+
+
+async def prepare_interview(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    user_id: UUID,
+    interview_id: UUID,
+    settings: Settings,
+    http_client: httpx.AsyncClient,
+) -> bool:
+    """외부 호출은 transaction 밖에서 하고 현재 선택·상태가 같은 결과만 적용한다."""
+    job_id, step = uuid4(), "analyze_repo"
+    call_records: list[LLMCallRecord] = []
+    active_attempts: list[c.AttemptMetadata] = []
+    active_recorded, records_saved = False, False
+    try:
+        claimed = await _claim(sessions, user_id, interview_id, job_id)
+        if claimed is not False:
+            return claimed is True
+        prompt, repositories, snapshot = await _snapshot(sessions, user_id, interview_id, job_id)
+        llm = settings.require_llm()
+        collected: list[tuple[PreparedRepository, c.DeepRepoAnalysis, SourceCollection]] = []
+        pending_rows: list[tuple[PreparedRepository, dict[str, object]]] = []
+        failures: list[str] = []
+        repository_limitations: dict[str, list[str]] = {}
+        for repo in repositories:
+            budget = CallBudget()
+            active_attempts, active_recorded = [], False
+            try:
+                sources = await collect_repository_sources(
+                    scope=repo.scope,
+                    shallow=repo.shallow,
+                    prompt=prompt,
+                    settings=settings,
+                    http_client=http_client,
+                    budget=budget,
+                    attempt_sink=active_attempts,
+                    paths=None
+                    if repo.cached is None
+                    else tuple(area.path for area in repo.cached.notable_areas),
+                )
+                repository_limitations[repo.scope.repository_id] = list(sources.limitations)
+                if repo.cached is None:
+                    result = await analyze_repository(
+                        sources.item,
+                        snapshot_head_sha=repo.scope.git_ref,
+                        prompt=prompt,
+                        settings=llm,
+                        http_client=http_client,
+                        budget=budget,
+                        attempt_sink=active_attempts,
+                        source_limitations=sources.limitations,
+                    )
+                    call_records.append(
+                        LLMCallRecord(
+                            interview_session_id=interview_id,
+                            task_name="repo_deep",
+                            attempts=[asdict(attempt) for attempt in active_attempts],
+                            failure=asdict(result.failure) if result.failure else None,
+                        )
+                    )
+                    active_recorded = True
+                    row_values = to_repo_analysis_row(result, sources.item, prompt)
+                    pending_rows.append((repo, row_values))
+                    if result.data is None or result.data.data.analysis is None:
+                        failures.append("l2_failed")
+                        continue
+                    analysis = result.data.data.analysis
+                else:
+                    analysis = c.validate_deep_analysis(repo.cached, source=sources.item).data
+                collected.append((repo, analysis, sources))
+            except SourcePreparationError as error:
+                failures.append(error.code)
+                failures.extend(error.limitations)
+                repository_limitations[repo.scope.repository_id] = [error.code, *error.limitations]
+                if error.attempts:
+                    call_records.append(
+                        LLMCallRecord(
+                            interview_session_id=interview_id,
+                            task_name="repo_deep",
+                            attempts=[asdict(attempt) for attempt in error.attempts],
+                            failure=asdict(
+                                error.failure
+                                or c.CallFailure(
+                                    "semantic", error.code, "L2 source preparation failed."
+                                )
+                            ),
+                        )
+                    )
+                    active_recorded = True
+            except c.ContractError:
+                failures.append("l2_cache_source_mismatch")
+                repository_limitations[repo.scope.repository_id] = ["l2_cache_source_mismatch"]
+        async with sessions.begin() as db:
+            row = await _unchanged(db, user_id, interview_id, job_id, snapshot)
+            if row is None:
+                for record in call_records:
+                    record.discard_reason = "context_changed"
+                db.add_all(call_records)
+                await _release_stale(db, user_id, interview_id, job_id, step)
+                return False
+            db.add_all(call_records)
+            for repo, row_values in pending_rows:
+                await _store_analysis(db, repo, row_values)
+            for repo, analysis, sources in collected:
+                by_path = {item.path: item for item in sources.item.sources}
+                for area in analysis.notable_areas:
+                    source = by_path.get(area.path)
+                    if source is None or source.kind != "file" or source.read_scope != area.scope:
+                        continue
+                    existing = await db.scalar(
+                        select(Evidence.id).where(
+                            Evidence.interview_session_id == interview_id,
+                            Evidence.repository_id == UUID(repo.scope.repository_id),
+                            Evidence.git_ref == repo.scope.git_ref,
+                            Evidence.path == source.path,
+                            Evidence.snippet == source.content,
+                            Evidence.tool_name.is_(None),
+                        )
+                    )
+                    if existing is None:
+                        db.add(
+                            Evidence(
+                                interview_session_id=interview_id,
+                                repository_id=UUID(repo.scope.repository_id),
+                                source_type="file",
+                                git_ref=repo.scope.git_ref,
+                                path=source.path,
+                                snippet=source.content,
+                                summary=area.observation,
+                                tool_name=None,
+                                start_line=1,
+                                end_line=max(1, len(source.content.splitlines())),
+                            )
+                        )
+                failures.extend(sources.limitations)
+            if collected:
+                state = dict(row.context_state or {})
+                state["preparation_limitations"] = failures
+                state["preparation_repository_limitations"] = repository_limitations
+                row.context_state, row.prepare_steps = state, _steps(3)
+            else:
+                state = dict(row.context_state or {})
+                state["preparation_limitations"] = failures
+                state["preparation_repository_limitations"] = repository_limitations
+                row.context_state = state
+        records_saved = True
+        if not collected:
+            raise SourcePreparationError(failures[0] if failures else "l2_unavailable")
+        step = "compose_question"
+        outcome = await start_director(
+            sessions,
+            user_id=user_id,
+            interview_id=interview_id,
+            call_id=uuid4(),
+            settings=llm,
+            http_client=http_client,
+        )
+        if outcome.turn_id is None:
+            raise SourcePreparationError("first_question_failed")
+        async with sessions.begin() as db:
+            row = await _unchanged(db, user_id, interview_id, job_id, snapshot)
+            if row is None:
+                await _release_stale(db, user_id, interview_id, job_id, step)
+                return False
+            row.status, row.started_at = "in_progress", datetime.now(UTC)
+            row.prepare_steps, row.last_error = _steps(4), None
+            row.context_state = {
+                key: value
+                for key, value in (row.context_state or {}).items()
+                if key != "prepare_job_id"
+            }
+        return True
+    except (PromptNotFoundError, PromptConfigurationError):
+        await _fail(sessions, user_id, interview_id, job_id, "prompt_unavailable", step)
+        return False
+    except (SourcePreparationError, c.ContractError) as error:
+        code = (
+            error.code
+            if isinstance(error, SourcePreparationError)
+            else "preparation_contract_invalid"
+        )
+        if code == "score_criteria_unavailable":
+            step = "set_criteria"
+        elif code == "domain_frames_unavailable":
+            step = "build_persona"
+        await _fail(sessions, user_id, interview_id, job_id, code, step)
+        return False
+    except (asyncio.CancelledError, Exception) as error:
+        if active_attempts and not active_recorded:
+            call_records.append(
+                LLMCallRecord(
+                    interview_session_id=interview_id,
+                    task_name="repo_deep",
+                    attempts=[asdict(attempt) for attempt in active_attempts],
+                    discard_reason="canceled"
+                    if isinstance(error, asyncio.CancelledError)
+                    else "execution_error",
+                )
+            )
+        if not records_saved and call_records:
+            async with sessions.begin() as db:
+                db.add_all(call_records)
+        await _fail(sessions, user_id, interview_id, job_id, "preparation_interrupted", step)
+        raise
