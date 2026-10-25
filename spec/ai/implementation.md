@@ -5,6 +5,75 @@ AI 작업의 구현·수정 내역, 코드 위치, 실행 결과와 남은 작�
 [decisions](decisions/README.md)에 보존한다. 문서 역할은
 [ADR 0020](decisions/0020-implementation-record-policy.md)을 따른다.
 
+## 2026-10-26 — PR #107 기여 정정 질문·이력 일치 보완
+
+- 리뷰 원본 `ce24c82`의 사례 수와 검증 목적을 보존했다. 역할 확인은 실제 역할 질문과 역할 계약,
+  직접 구현 전제 정정은 실제 직접 구현 질문과 해당 계약으로 검증된 Question을 구성한다.
+- 공용 `conftest.py`와 제품 코드는 바꾸지 않았다. 이 테스트 파일의 도우미에서만 문장과 계약을
+  함께 만들고, 실제 분석 모델 payload에 그 문장이 전달되는지 검사한다.
+- 최초 답변의 질문도 최초 분석과 HistoryTurn에 같은 문자열을 쓰며, 정정 분석 이후 Director에
+  전달하는 이력에는 분석에 사용한 역할 질문을 그대로 넣고 원문 일치를 확인한다.
+- 먼저 payload 일치 검사를 추가해 잘못된 질문이 쓰인 기존 4사례의 실패(4 failed / 4 passed)를
+  재현했다. 수정 후 원본 8사례, AI 전체 236사례가 통과했다. AI Ruff·format 46파일·mypy
+  11 source, BE 패키지 import 1사례와 부분 계약 검사(schema 2개·OpenAPI·fixture 7개)도 통과했다.
+- 기존 Python 환경을 사용하고 이 worktree의 AI 소스 경로를 명시했다. 외부 모델·GitHub 호출,
+  DB 영구 보존·전체 면접 완주·실제 정정 판단 품질은 실행하지 않았다.
+- 기존 #107은 선행 #102 base이므로 원본 브랜치·head와 백업을 보존하고 최신 develop에서
+  이번 테스트·기록만 별도 게시한다. 선행 답변 분석·공용 fixture·Director는 복사하지 않으며,
+  독립 게시본의 실패와 최신 선행 결합 검증 결과는 아래 후속 기록으로 구분한다.
+
+### 독립 게시본과 최신 선행 결합 검증
+
+- `develop@2ff1acf`의 별도 게시본에는 정정 테스트 248행과 원본 #107 기록 40행·이번 보완 기록만
+  옮겼다. #102의 답변 분석 본체·공용 conftest와 기존 테스트는 복사하지 않았다.
+- 실제 게시본 Ruff·format 41파일은 통과했다. 정정 8사례는 선행 #102의 `kit` fixture 부재로
+  모두 setup error다. 이 실패를 기능 통과로 처리하지 않고 Draft로 게시한다.
+- 같은 최신 develop에 #102·#103 수정과 정정 테스트만 결합한 별도 환경에서는 AI 전체
+  254 passed·Ruff·format 46파일·mypy 11 source, BE 호출 경계 131 passed와 부분 계약 검사가
+  통과했다. 실제 모듈 경로가 해당 통합본이며 Python 238파일의 검증 전후 hash가 같다.
+- 통합에서 develop #77 기록과 각 PR의 고유 기록을 함께 보존했다. 이 수치를 독립 게시본의
+  통과로 사용하지 않으며 원본 #107은 대체 PR 검증·상호 연결 후 병합 없이 닫는다.
+
+## 2026-10-06 — 기여 정정 사례 테스트
+
+관련 작업: AI task-09·10 후속 사례([task-09](../../ai/docs/task-09-answer-analysis.md)). 선행: #102(`feature/ai-answer-analysis-v2`) 위에 쌓은 변경이며 PR 번호는 생성 후 기록한다.
+
+### 기준과 변경
+
+- 기준은 #102 head `28e2663`(origin/develop `ef1a48d` 위)다. 새 구조를 만들지 않는 범위(A안)로 `contracts.py`, 필드, enum, 함수 시그니처,
+  의존성은 변경하지 않았다. 기존 `analyze_answer`·`validate_analysis`·`generate_question`의 동작을 사례로 고정한다.
+- `ai/tests/llm_tasks/test_answer_correction.py`(8건)를 추가했다. 새 구현이 없어 테스트가 먼저 실패하는 단계는 없다.
+  - 역할을 물은 질문에 "팀원이 했습니다"는 역할 정보 확인(`covered`)이며 정정은 `contribution_scope=teammate`로 남는다.
+  - 같은 정정 답변도 질문이 요구하지 않은 key로 충분이 될 수 없고, 요구 항목을 설명하지 않았다면 `insufficient`다.
+    요구 항목 누락·질문 밖 key로 `sufficient`를 주장하면 semantic 실패다.
+  - 직접 구현을 전제로 한 질문에 정정이 오면 `needs_clarification`(충분성 null, 사유 보존)을 받아들이고, 사유 없는 상태 변경은 거절한다.
+  - 정정은 새 분석으로만 남고 과거 답변 원문·최초 분석은 그대로이며(frozen) 이력 payload에도 원문으로 전달된다.
+  - 정정이 반영된 검증된 분석이 다음 질문의 Director 입력(`answer_analysis`, `history`)에 변경 없이 전달된다.
+  - 이력에 이미 있는 Turn의 재제출은 거절한다. 이는 AI-L09 복구·재평가 정책을 구현한 것이 아니라 현재 경계일 뿐이다.
+
+### 실행 결과
+
+Windows, Python 3.12, 격리 worktree의 locked 환경에서 실행했다.
+
+| 작업 디렉터리 | 명령 | 결과 |
+| --- | --- | --- |
+| 루트 | `uv --directory ai sync --locked --python 3.12` | 통과 |
+| 루트 | `uv --directory ai run --locked ruff check .` / `ruff format --check .` | 통과 / 통과 |
+| 루트 | `uv --directory ai run --locked mypy` | 통과 |
+| 루트 | `uv --directory ai run --locked pytest` | 236 passed(#102 기준 228 + 신규 8) |
+| 루트 | `uv --directory backend run --locked pytest tests/agents/test_ai_package_imports.py` | 통과 |
+| 루트 | `python .claude/scripts/check_contracts.py` | 미실행(공통 계약 변경 없음) |
+
+### 한계와 후속 작업
+
+- 모델 출력은 고정 fixture다. 정정 여부와 어느 주장에 대한 정정인지의 판단, 질문 전제 오류를 `insufficient`가 아닌
+  `needs_clarification`으로 구분하는 것은 모델 판단이며 코드는 구조 모순만 거절한다. 전제 오류를 `evaluated`·`insufficient`로
+  낸 결과는 구조상 유효해 코드로 막지 못한다. 실제 판정 품질은 검증하지 않았다(AI-L01, 평가는 task-12).
+- 다른 task에서 구현·검증: 정정·후속 보완을 반영한 최종 피드백 입력 구성(task-11, 입력·출력 타입이 아직 미채택).
+- 합의가 필요하며 이번 범위에서 구현하지 않음: 정정·보완이 가리키는 이전 Turn의 연결 형식(AI-L02·AI-L18), 이전 분석 내용을 이후
+  Director와 피드백 입력에 전달하는 방식(`HistoryTurn`은 `analysis_ref`뿐), 사용자 입력 복구·재제출·재평가의 상태 매핑(AI-L09,
+  보류). 이 때문에 정정이 Turn 5 이후 질문의 전제에 지속적으로 반영되는 동작은 아직 구현·검증하지 않았다.
+
 ## 2026-09-27 — PR #67 JD 분류 계약 리뷰 보완
 
 관련 PR: [JD 분류 category 통일 #67](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/67).
