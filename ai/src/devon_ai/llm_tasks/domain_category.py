@@ -15,7 +15,7 @@ DomainCategory = Literal["finance", "game", "travel", "shopping", "medical", "mo
 CATEGORIES: tuple[DomainCategory, ...] = get_args(DomainCategory)
 FIELDS = ("position", "intro", "main_tasks", "requirements", "preferred_points")
 SCHEMA_VERSION = "2"
-_BLANK_LINE = re.compile(r"\n\s*\n")
+_BLANK_LINE = re.compile(r"\r?\n(?:[^\S\r\n]*\r?\n)+")
 
 
 @dataclass(frozen=True)
@@ -54,8 +54,9 @@ def _paragraphs(posting: c.DomainPostingInput) -> dict[str, list[dict[str, str]]
     for name in FIELDS:
         value = getattr(posting, name)
         items = (value,) if isinstance(value, str) else (value or ())
-        texts = [part.strip() for item in items for part in _BLANK_LINE.split(item)]
-        texts = [text for text in texts if text]
+        texts = [part for item in items for part in _BLANK_LINE.split(item)]
+        # 빈 문단만 제외한다. 선택한 원문의 양 끝 공백도 재작성하지 않는다.
+        texts = [text for text in texts if text.strip()]
         result[name] = [{"id": f"{name}:{i}", "text": text} for i, text in enumerate(texts)]
     return result
 
@@ -89,7 +90,11 @@ async def classify_domain(
 ) -> DomainDecision:
     """공고 1건의 category를 고른다. 호출·근거 검증 실패는 기록을 남기고 `etc`다(0022 결정 4·5)."""
     try:
-        if type(prompt) is not c.PromptSpec or prompt.task_name != "domain_category":
+        if (
+            type(prompt) is not c.PromptSpec
+            or prompt.task_name != "domain_category"
+            or prompt.version != "domain_category_v2"
+        ):
             raise c.ContractError("schema", "domain_category prompt")
         if type(limits) is not c.CallLimits:
             raise c.ContractError("schema", "domain_category limits")
