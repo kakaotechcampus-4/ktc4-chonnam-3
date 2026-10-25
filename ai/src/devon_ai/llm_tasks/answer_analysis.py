@@ -77,6 +77,26 @@ def _evidence_ids(context: c.Context, tool_results: tuple[c.ToolResult, ...]) ->
     return frozenset(ids)
 
 
+def _referenced_jd(context: c.Context, question: c.Question) -> tuple[c.JDRequirement, ...]:
+    """질문의 두 참조 경로가 요구하는 JD 원문만 모으며 누락·중복 ID는 거절한다."""
+    registered = {item.id: item for item in context.jd_requirements}
+    if len(registered) != len(context.jd_requirements):
+        raise c.ContractError("semantic", "duplicate JD requirement")
+    ids = tuple(
+        dict.fromkeys(
+            question.jd_requirement_ids
+            + tuple(
+                ref.id
+                for ref in question.question_contract.basis_refs
+                if ref.kind == "jd_requirement"
+            )
+        )
+    )
+    if any(identifier not in registered for identifier in ids):
+        raise c.ContractError("semantic", "missing JD requirement")
+    return tuple(registered[identifier] for identifier in ids)
+
+
 def _check_input(
     context: c.Context,
     question: c.ContractChecked[c.Question],
@@ -84,7 +104,7 @@ def _check_input(
     answer_text: str,
     tool_results: tuple[c.ToolResult, ...],
     allowed_locations: frozenset[Location],
-) -> frozenset[str]:
+) -> tuple[frozenset[str], tuple[c.JDRequirement, ...]]:
     """질문·Contract·제출 답변의 대응을 모델을 부르기 전에 코드로 확인한다."""
     if type(context) is not c.Context:
         raise c.ContractError("schema", "context")
@@ -113,7 +133,7 @@ def _check_input(
             or refs.get(location[0]) != location[1]
         ):
             raise c.ContractError("semantic", "allowed location ref")
-    return _evidence_ids(context, tool_results)
+    return _evidence_ids(context, tool_results), _referenced_jd(context, question.data)
 
 
 def _payload(
@@ -123,6 +143,7 @@ def _payload(
     answer_text: str,
     tool_results: tuple[c.ToolResult, ...],
     allowed_locations: frozenset[Location],
+    jd_requirements: tuple[c.JDRequirement, ...],
 ) -> dict[str, object]:
     # 평가 기준은 Persona에 따라 달라지지 않으므로 질문·이력에서 Persona를 빼고 전달한다.
     return {
@@ -130,7 +151,9 @@ def _payload(
             "text": question.text,
             "topic_code": question.topic_code,
             "question_contract": asdict(question.question_contract),
+            "jd_requirement_ids": list(question.jd_requirement_ids),
         },
+        "jd_requirements": [asdict(item) for item in jd_requirements],
         "answer": {"turn_id": turn_id, "text": answer_text},
         "history": [
             {
@@ -171,7 +194,7 @@ async def analyze_answer(
             raise c.ContractError("schema", "answer_analysis prompt")
         if type(limits) is not c.CallLimits:
             raise c.ContractError("schema", "answer_analysis limits")
-        evidence_refs = _check_input(
+        evidence_refs, jd_requirements = _check_input(
             context, question, turn_id, answer_text, tool_results, allowed_locations
         )
     except c.ContractError as exc:
@@ -202,7 +225,13 @@ async def analyze_answer(
     request = c.ModelRequest(
         prompt=prompt,
         payload=_payload(
-            context, question.data, turn_id, answer_text, tool_results, allowed_locations
+            context,
+            question.data,
+            turn_id,
+            answer_text,
+            tool_results,
+            allowed_locations,
+            jd_requirements,
         ),
         schema_name="AnswerAnalysis",
         schema_version="1",
