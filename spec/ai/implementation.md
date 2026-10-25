@@ -230,3 +230,35 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
   통과를 durable 저장 완료로 보지 않는다.
 - 분석 API(`backend/app/features/analysis/router.py`)가 골격이라 L1 결과 조회는 검증하지 않았다.
 - 프로젝트 요약의 `summary` 저장 필드는 AI-L03의 BE 합의 후 연결한다.
+
+## 2026-10-26 — PR #119 L2 검증·재시도와 호출 주소 리뷰 반영
+
+- 기준은 원본 `3f945d3`이며 원본 브랜치와 `backup/pr119-before-review-fix-20261026`을 보존했다.
+- `parse_deep_analysis`는 repository ID·SHA의 형식을 먼저 검사하고 입력 ref와 대조한다.
+  형식이 유효한 다른 ref는 빈 요약·잘못된 area 목록·추가 필드와 함께 와도 semantic 실패다.
+  ref 자체의 형식 오류는 schema 실패이며 다른 저장소의 결과를 복구 대상으로 사용하지 않는다.
+- 검증된 area가 하나라도 있으면 기존 부분 성공과 거절 목록을 보존한다. 검증된 area가 없고
+  schema 거절이 있으면 gateway에 schema 오류를 전달해 남은 재시도만 사용한다. semantic 거절만
+  있으면 기존처럼 재호출하지 않는다. task 내부 재시도 loop나 새 gateway·기본 관찰을 만들지 않았다.
+- BE adapter는 `base_url=settings.llm_base_url`을 실제 호출에 전달한다. 직접/프록시 주소와 토큰
+  조합을 실제 adapter→AI→gateway와 HTTP 대역으로 검사한다. #114의 설정·gateway 본체는 복사하지 않았다.
+- #133의 미적용 `03-repo_deep.patch`에도 같은 주소 전달 행이 있으므로 이번 head를 반영해 해당
+  중복을 제거하고 exact base/result·manifest를 다시 검증해야 한다. 다른 후속 보완은 보존 대상이다.
+
+### 실행 결과와 범위
+
+| 환경 | 실행 | 실제 결과 |
+| --- | --- | --- |
+| 원본 코드 + 새 회귀 | L2 AI / BE 테스트 | 5 failed·20 passed / 7 failed·7 passed로 두 검증 문제 재현 |
+| #114 결합 + 새 주소 검사, 수정 전 | 직접/프록시 2사례 | 둘 다 필수 `base_url` 누락으로 실패, 외부 요청 없음 |
+| 수정 게시본 AI | 전체 pytest·Ruff·format·mypy | 223 passed, format 41파일·type 11 source 모두 통과 |
+| 수정 게시본 BE | AI package import·Ruff·format | 1 passed, format 250파일·Ruff 통과 |
+| 수정 게시본 BE | L2 pytest·mypy app | 실패: L2 17사례 모두 #114의 `llm_base_url` 필드 부재. mypy 1파일 2오류·133 source로 선행 의존 확인 |
+| 최신 develop `2ff1acf` + #119 수정 + #114 `6135275` | AI 전체·BE L2/gateway/proxy 설정/import | 223 passed / 124 passed. L2 17사례 포함, raw·오류 기록·총 HTTP 2회·semantic 무재호출·직접/프록시 전달 확인 |
+| 같은 통합본 | AI·BE Ruff·format·mypy | 모두 통과. format 41/261파일, type 11/133 source |
+| 수정 게시본 루트 | 기존 전용 venv로 계약 검사 | schema 2개·부분 OpenAPI·fixture 7개 통과. 전체 API 호환성 검증은 아님 |
+
+검증 전후 AI·BE 실행 소스 해시는 동일하다. 실제 모델·GitHub·DB 저장·전체 서비스 E2E는 실행하지
+않았다. 테스트 통과를 언어·규모별 분석 의미 품질로 해석하지 않는다. 단독 실행은 #114 미병합으로
+제한되므로 Draft로 검토하고 필요한 선행을 반영한 최신 base에서 재검증해야 한다. 실행 로그는
+원본 저장소 `.claude/scratch/ai-pr-reviews-20261026/pr119-validation/`에 보존한다.
