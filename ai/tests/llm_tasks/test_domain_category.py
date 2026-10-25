@@ -6,15 +6,15 @@ import pytest
 from devon_ai import contracts as c
 from devon_ai.llm_tasks import domain_category
 
-PROMPT = c.PromptSpec("domain_category", "domain_category_v1", "fixture-model", "template")
+PROMPT = c.PromptSpec("domain_category", "domain_category_v2", "fixture-model", "template")
 LIMITS = c.CallLimits(10, 1000, 100_000, 100_000)
 
 
 def _posting(**overrides: object) -> c.DomainPostingInput:
     values: dict[str, object] = {
         "position": "백엔드 개발자",
-        "intro": "에누마는 글로벌 에듀테크 기업입니다.",
-        "main_tasks": ("간편송금 서비스의 결제 API 개발",),
+        "intro": "에누마는 글로벌 에듀테크 기업입니다.\n\n아이들의 학습을 돕습니다.",
+        "main_tasks": ("간편송금 서비스의\n결제 API 개발",),
         "requirements": ("Python 3년 이상",),
         "preferred_points": ("여행을 좋아하는 분",),
     }
@@ -22,14 +22,23 @@ def _posting(**overrides: object) -> c.DomainPostingInput:
     return c.DomainPostingInput(**values)  # type: ignore[arg-type]
 
 
-def _metadata(attempt: int = 1) -> c.AttemptMetadata:
+def _metadata(attempt: int = 1, failure: c.CallFailure | None = None) -> c.AttemptMetadata:
     return c.AttemptMetadata(
-        attempt, "fixture", "fixture-model", "domain_category_v1", "1", 2, None, 1
+        attempt,
+        "fixture",
+        "fixture-model",
+        "domain_category_v2",
+        "2",
+        2,
+        None,
+        1,
+        error_stage=failure.stage if failure else None,
+        error_code=failure.error_code if failure else None,
     )
 
 
 class Provider:
-    """외부 모델 대역. 응답마다 실제 validator를 실행한다. CallFailure는 그대로 반환한다."""
+    """BE gateway 대역. 응답마다 실제 validator를 실행하고, semantic이면 재시도하지 않는다."""
 
     def __init__(self, *responses: object) -> None:
         self.responses = list(responses)
@@ -37,16 +46,15 @@ class Provider:
 
     async def __call__(self, request, validator):
         self.requests.append(request)
-        attempt = _metadata(len(self.requests))
         response = self.responses.pop(0)
         if type(response) is c.CallFailure:
-            return c.ModelResult(None, response, (attempt,))
+            return c.ModelResult(None, response, (_metadata(len(self.requests), response),))
         try:
             data = validator(response)
         except c.ContractError as exc:
             failure = c.CallFailure(exc.stage, "llm_failed", "invalid")
-            return c.ModelResult(None, failure, (attempt,))
-        return c.ModelResult(data, None, (attempt,))
+            return c.ModelResult(None, failure, (_metadata(len(self.requests), failure),))
+        return c.ModelResult(data, None, (_metadata(len(self.requests)),))
 
 
 def _classify(provider: Provider, posting: c.DomainPostingInput | None = None, prompt=PROMPT):
@@ -62,53 +70,68 @@ def test_input_contract_has_no_company_fields() -> None:
     assert names == {"position", "intro", "main_tasks", "requirements", "preferred_points"}
 
 
-def test_category_with_quoted_evidence_is_accepted_in_one_call() -> None:
-    provider = Provider({"category": "finance", "evidence": "간편송금 서비스의  결제 API"})
+def test_payload_is_paragraphs_with_ids_and_text_kept_as_is() -> None:
+    provider = Provider({"category": "etc", "evidence_id": None})
+    _classify(provider)
+
+    payload = provider.requests[0].payload
+    assert list(payload) == list(domain_category.FIELDS)
+    assert payload["intro"] == [
+        {"id": "intro:0", "text": "에누마는 글로벌 에듀테크 기업입니다."},
+        {"id": "intro:1", "text": "아이들의 학습을 돕습니다."},
+    ]
+    # 빈 줄이 아닌 줄바꿈은 문단 안에 그대로 둔다.
+    assert payload["main_tasks"] == [
+        {"id": "main_tasks:0", "text": "간편송금 서비스의\n결제 API 개발"}
+    ]
+    assert provider.requests[0].schema_version == "2"
+
+
+def test_selected_id_is_restored_to_source_text_in_one_call() -> None:
+    provider = Provider({"category": "finance", "evidence_id": "main_tasks:0"})
     decision = _classify(provider)
 
     assert decision.category == "finance"
-    assert decision.evidence == "간편송금 서비스의 결제 API"
+    assert decision.evidence == "간편송금 서비스의\n결제 API 개발"
     assert decision.failure is None
-    assert len(provider.requests) == 1
-    request = provider.requests[0]
-    assert set(request.payload) == {
-        "position",
-        "intro",
-        "main_tasks",
-        "requirements",
-        "preferred_points",
-    }
-    assert request.output_schema["properties"]["category"]["enum"] == list(
-        domain_category.CATEGORIES
-    )
-
-
-def test_evidence_not_in_source_falls_back_to_etc_without_retry() -> None:
-    provider = Provider({"category": "finance", "evidence": "국내 1위 은행"})
-    decision = _classify(provider)
-
-    assert decision.category == "etc"
-    assert decision.evidence is None
-    assert decision.failure is None
+    assert decision.attempts[0].error_stage is None
     assert len(provider.requests) == 1
 
 
-def test_empty_evidence_for_non_etc_falls_back_to_etc() -> None:
-    decision = _classify(Provider({"category": "travel", "evidence": "  "}))
-    assert decision.category == "etc"
-
-
-def test_etc_answer_keeps_etc() -> None:
-    decision = _classify(Provider({"category": "etc", "evidence": ""}))
+def test_etc_with_null_id_is_success() -> None:
+    decision = _classify(Provider({"category": "etc", "evidence_id": None}))
     assert (decision.category, decision.evidence, decision.failure) == ("etc", None, None)
+    assert decision.attempts[0].error_stage is None
 
 
 @pytest.mark.parametrize(
     "response",
     [
-        {"category": "education", "evidence": "에듀테크"},
+        {"category": "finance", "evidence_id": "main_tasks:9"},
+        {"category": "finance", "evidence_id": "국내 1위 은행"},
+        {"category": "finance", "evidence_id": None},
+        {"category": "etc", "evidence_id": "intro:0"},
+    ],
+)
+def test_wrong_evidence_id_is_semantic_failure_recorded_without_retry(response: object) -> None:
+    provider = Provider(response)
+    decision = _classify(provider)
+
+    assert decision.category == "etc"
+    assert decision.evidence is None
+    assert decision.failure is not None and decision.failure.stage == "semantic"
+    assert decision.attempts[0].error_stage == "semantic"
+    assert decision.attempts[0].error_code == "llm_failed"
+    assert len(provider.requests) == 1
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        {"category": "education", "evidence_id": "intro:0"},
         {"category": "finance"},
-        {"category": "finance", "evidence": 1},
+        {"category": "finance", "evidence": "간편송금"},
+        {"category": "finance", "evidence_id": 1},
         ["finance"],
     ],
 )
