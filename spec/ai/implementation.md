@@ -5,6 +5,22 @@ AI 작업의 구현·수정 내역, 코드 위치, 실행 결과와 남은 작�
 [decisions](decisions/README.md)에 보존한다. 문서 역할은
 [ADR 0020](decisions/0020-implementation-record-policy.md)을 따른다.
 
+## 2026-10-26 — AI 리뷰 수정 다섯 PR 최종 결합 검증
+
+- 최신 develop `2ff1acf`에 #99 v2·#102 JD 원문·#103 복구 설명·#107 정정 사례·#119 L2 수정과
+  필요한 #114 gateway를 별도 로컬 환경에서 결합했다. 선행을 원격 병합하거나 게시본에 복사하지 않았다.
+- AI 전체 322 passed, BE 고유 163 passed다. BE는 import 1·Director 15·gateway 72·설정 50·
+  L2 18·도메인 7사례이며 실제 고유 노드 목록을 보존했다.
+- AI/BE Ruff·format(51/262파일)·mypy(12/133 source), 부분 계약 schema 2개·fixture 7개가 통과했다.
+  실제 모듈 경로가 새 통합본이며 Python 247파일의 검증 전후 hash가 같다. 선택 20파일은 각 최종
+  수정본과 byte가 같고 contracts는 #119 비도메인 AST와 #99 도메인 입력 AST를 모두 보존했다.
+- 제품 코드는 새 통합본 구성 중 수정하지 않았다. 전체 서비스·DB·실제 모델·GitHub API 호출은
+  실행하지 않았다. 기술적 통과를 도메인 분류·면접 판단의 의미 품질로 해석하지 않는다.
+- 이 결합 결과를 각 게시본 단독 통과로 표시하지 않는다. #119의 #114 의존과 정정 게시본의 #102
+  fixture 부재는 그대로다. #133의 일반 코드 반영과 call_model 기록 hook은 별도 후속이다.
+- 결과·정확한 노드·구성·원본 대응은 원본 저장소의
+  `.claude/scratch/ai-pr-reviews-20261026/full-review-integration-result.json`과 관련 로그에 보존한다.
+
 ## 2026-10-26 — PR #107 기여 정정 질문·이력 일치 보완
 
 - 리뷰 원본 `ce24c82`의 사례 수와 검증 목적을 보존했다. 역할 확인은 실제 역할 질문과 역할 계약,
