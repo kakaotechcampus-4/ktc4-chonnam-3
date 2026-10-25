@@ -165,6 +165,15 @@ def test_all_schema_invalid_areas_request_gateway_retry() -> None:
     assert (error.value.stage, error.value.field) == ("schema", "notable areas")
 
 
+def test_schema_and_semantic_rejections_are_preserved_without_retry() -> None:
+    result = c.parse_deep_analysis(
+        _output(_area(observation=""), _area("missing.py")), source=_input()
+    )
+
+    assert result.data.analysis is None
+    assert [area.stage for area in result.data.rejected_areas] == ["schema", "semantic"]
+
+
 @pytest.mark.parametrize(
     "overrides",
     [

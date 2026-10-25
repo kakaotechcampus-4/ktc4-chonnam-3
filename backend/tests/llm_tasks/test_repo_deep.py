@@ -180,6 +180,16 @@ async def test_valid_area_is_preserved_when_another_area_has_schema_error() -> N
     ]
 
 
+async def test_mixed_schema_and_semantic_rejections_do_not_retry_semantic_areas() -> None:
+    invalid = _output(_area() | {"observation": ""}, _area("missing.py"))
+    result, sent = await _run_result([invalid, _output()])
+
+    assert len(sent) == len(result.attempts) == 1 and result.failure is None
+    assert result.data.data.analysis is None
+    assert [area.stage for area in result.data.data.rejected_areas] == ["schema", "semantic"]
+    assert repo_deep.to_repo_analysis_row(result, _input(), PROMPT)["status"] == "failed"
+
+
 @pytest.mark.parametrize(
     "first",
     [
