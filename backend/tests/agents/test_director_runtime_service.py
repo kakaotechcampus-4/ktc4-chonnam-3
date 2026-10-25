@@ -449,3 +449,253 @@ async def test_replay_during_tool_phase_is_still_in_progress(agent_sessions, age
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
+
+
+@pytest.mark.parametrize("duplicate_claim", [False, True])
+async def test_real_lookup_stores_source_before_notification_and_links_evaluation_conflict(
+    agent_sessions,
+    agent_seed,
+    duplicate_claim,
+):
+    from app.features.interview.director_service import process_answer
+
+    await seed_turns(agent_sessions, agent_seed)
+    request = c.VerificationRequest(
+        "팀원 담당입니다",
+        "구현 확인",
+        str(agent_seed["repo_id"]),
+        agent_seed["sha"],
+        ("src/main.py",),
+    )
+    original = replace(analysis(), needs_verification=True, verification_requests=(request,))
+    root, source, blob = "b" * 40, "c" * 40, "ce013625030ba8dba906f756967f9e9ca394464a"
+    prefix = "/repos/owner/sample"
+    replies = {
+        prefix: {"id": 123, "full_name": "owner/sample", "private": False, "visibility": "public"},
+        prefix + "/git/commits/" + agent_seed["sha"]: {
+            "sha": agent_seed["sha"],
+            "tree": {"sha": root},
+        },
+        prefix + "/git/trees/" + root: {
+            "sha": root,
+            "truncated": False,
+            "tree": [{"path": "src", "mode": "040000", "type": "tree", "sha": source}],
+        },
+        prefix + "/git/trees/" + source: {
+            "sha": source,
+            "truncated": False,
+            "tree": [{"path": "main.py", "mode": "100644", "type": "blob", "sha": blob}],
+        },
+        prefix + "/contents/src/main.py": {
+            "type": "file",
+            "encoding": "base64",
+            "size": 6,
+            "path": "src/main.py",
+            "sha": blob,
+            "content": "aGVsbG8K\n",
+        },
+    }
+    notified = []
+
+    async def notify(items):
+        async with agent_sessions() as db:
+            for item in items:
+                stored = await db.get(Evidence, item.evidence_id)
+                assert stored is not None and stored.snippet == "hello\n"
+        notified.extend(items)
+
+    async def handle(req):
+        if req.url.host == "api.github.com":
+            async with agent_sessions.begin() as db:
+                await db.execute(select(InterviewSession).with_for_update(nowait=True))
+            return httpx.Response(200, json=replies[req.url.path])
+        payload = json.loads(json.loads(req.content)["input"][0]["content"][0]["text"])
+        if "answer" in payload:
+            if not payload["tool_results"]:
+                return response(asdict(original))
+            assert notified
+            item = payload["tool_results"][0]["items"][0]
+            checked = replace(
+                analysis(),
+                claim_checks=(
+                    c.ClaimCheck(
+                        "팀원 담당입니다",
+                        "conflicting",
+                        (item["evidence_id"],),
+                        ("버전과 조건 추가 확인",),
+                    ),
+                ),
+            )
+            if duplicate_claim:
+                checked = replace(checked, claim_checks=checked.claim_checks * 2)
+            return response(asdict(checked))
+        return response(plan("tech_lead") if payload["operation"] == "plan" else approved_review())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        result = await process_answer(
+            agent_sessions,
+            user_id=agent_seed["owner"],
+            interview_id=agent_seed["interview_id"],
+            turn_no=1,
+            text="팀원 담당입니다",
+            call_id=uuid4(),
+            settings=settings(),
+            http_client=http,
+            on_evidence_check=notify,
+        )
+    assert result.failure is None and result.next_turn_id is not None
+    async with agent_sessions() as db:
+        link = (await db.scalars(select(TurnEvidence))).one()
+        conflict = (await db.scalars(select(EvidenceConflict))).one()
+        assert link.usage == "evaluation_basis" and link.turn_id == result.turn_id
+        assert conflict.evidence_id == link.evidence_id and conflict.verdict == "unresolved"
+        assert conflict.evidence_text == "hello\n" and conflict.claim_id is None
+        assert (await db.get(Evidence, link.evidence_id)).retrieved_for_turn == 1
+        turn = await db.get(InterviewTurn, result.turn_id)
+        assert turn.analysis == json.loads(json.dumps(asdict(original)))
+        assert "found" in turn.decision["reason_summary"]
+        from app.features.interview.answer_context import load_answer_context, prior_analyses
+
+        next_context = await load_answer_context(
+            db,
+            user_id=agent_seed["owner"],
+            interview_id=agent_seed["interview_id"],
+            turn_no=2,
+            limits=c.ContextLimits(2, 0, "test"),
+        )
+        past = await prior_analyses(db, next_context.context)
+        assert past[str(result.turn_id)].data.claim_checks[0].status == "conflicting"
+
+
+@pytest.mark.parametrize("turn_no", [1, 9])
+async def test_enrichment_cannot_reset_exhausted_analysis_budget_or_finish(
+    agent_sessions,
+    agent_seed,
+    turn_no,
+):
+    from app.features.interview.director_service import process_answer
+
+    await seed_turns(agent_sessions, agent_seed, turn_no)
+    request = c.VerificationRequest(
+        "팀원 담당입니다",
+        "구현 확인",
+        str(agent_seed["repo_id"]),
+        agent_seed["sha"],
+        ("src/main.py",),
+    )
+    original = replace(analysis(), needs_verification=True, verification_requests=(request,))
+    sent = []
+
+    async def handle(req):
+        if req.url.host == "api.github.com":
+            return httpx.Response(500)
+        sent.append(req)
+        return response({"invalid": True} if len(sent) == 1 else asdict(original))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        result = await process_answer(
+            agent_sessions,
+            user_id=agent_seed["owner"],
+            interview_id=agent_seed["interview_id"],
+            turn_no=turn_no,
+            text="팀원 담당입니다",
+            call_id=uuid4(),
+            settings=settings(),
+            http_client=http,
+        )
+    assert result.failure is not None and result.failure.stage == "budget"
+    assert result.next_turn_id is None and not result.completed
+    assert len(sent) == 2
+    async with agent_sessions() as db:
+        turn = await db.get(InterviewTurn, result.turn_id)
+        assert turn.analysis == json.loads(json.dumps(asdict(original)))
+        assert "tool_error" in turn.decision["reason_summary"]
+        assert (await db.get(InterviewSession, agent_seed["interview_id"])).status == "in_progress"
+
+
+async def test_answer_replay_preserves_independent_review_failure(agent_sessions, agent_seed):
+    from app.features.interview.director_service import process_answer
+
+    await seed_turns(agent_sessions, agent_seed)
+    sent = []
+
+    async def handle(req):
+        payload = json.loads(json.loads(req.content)["input"][0]["content"][0]["text"])
+        sent.append(payload)
+        if "answer" in payload:
+            return response(asdict(analysis()))
+        if payload["operation"] == "plan":
+            return response(plan("tech_lead"))
+        return response({**approved_review(), "plan_valid": False})
+
+    options = dict(
+        user_id=agent_seed["owner"],
+        interview_id=agent_seed["interview_id"],
+        turn_no=1,
+        text="팀원 담당입니다",
+        call_id=uuid4(),
+        settings=settings(),
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        first = await process_answer(agent_sessions, **options, http_client=http)
+        replay = await process_answer(agent_sessions, **options, http_client=http)
+    assert first.failure is not None and first.failure.stage == "semantic"
+    assert replay.failure == first.failure and replay.next_turn_id is None
+    assert len(sent) == 3 and not replay.accepted
+
+
+def test_restored_question_does_not_register_its_own_unknown_evidence():
+    from app.features.interview.agent_context import AgentStateError
+    from app.features.interview.answer_context import restored_question
+
+    context = c.Context(
+        "interview",
+        None,
+        1,
+        9,
+        (),
+        ("hr_manager",),
+        (),
+        (),
+        (),
+        None,
+        (),
+        (),
+        c.ContextLimits(2, 0, "test"),
+    )
+    stored = replace(contract(), basis_refs=(c.BasisRef("evidence", "missing"),))
+    turn = InterviewTurn(
+        id=uuid4(),
+        interview_session_id=uuid4(),
+        turn_no=1,
+        persona="hr_manager",
+        question_text="역할을 설명해 주세요.",
+        topic_code="role",
+        question_contract=json.loads(json.dumps(asdict(stored))),
+        jd_requirement_ids=[],
+    )
+    with pytest.raises(AgentStateError, match="question_contract_invalid"):
+        restored_question(turn, context)
+
+
+async def test_answer_loader_preserves_authorized_posting_basis_text(agent_sessions, agent_seed):
+    from app.features.interview.answer_context import load_answer_context
+
+    await seed_turns(agent_sessions, agent_seed)
+    stored = replace(
+        contract(), basis_refs=(c.BasisRef("job_posting", str(agent_seed["posting_id"])),)
+    )
+    async with agent_sessions.begin() as db:
+        turn = await db.scalar(select(InterviewTurn))
+        turn.question_contract = json.loads(json.dumps(asdict(stored)))
+        posting = await db.get(JobPosting, agent_seed["posting_id"])
+        posting.raw_payload = {"body": "실제 공고 원문"}
+    async with agent_sessions() as db:
+        loaded = await load_answer_context(
+            db,
+            user_id=agent_seed["owner"],
+            interview_id=agent_seed["interview_id"],
+            turn_no=1,
+            limits=c.ContextLimits(2, 0, "test"),
+        )
+    assert loaded.question.data.question_contract == stored
