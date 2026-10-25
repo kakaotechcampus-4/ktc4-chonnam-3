@@ -501,3 +501,120 @@ async def test_third_connection_waits_until_the_middle_socket_has_actually_close
             finally:
                 close_release.set()
                 model_release.set()
+
+
+async def test_failed_ack_delivery_preserves_answer_and_finishes_analysis_once(
+    agent_sessions,
+    agent_seed,
+    connect_ws,
+    monkeypatch,
+):
+    await seed_turns(agent_sessions, agent_seed, 9)
+    original = WebSocket.send_json
+    sent = []
+    acknowledged = threading.Event()
+
+    async def fail_ack(socket, data, mode="text"):
+        if data.get("type") == "answerReceived":
+            acknowledged.set()
+            raise OSError("connection lost")
+        await original(socket, data, mode=mode)
+
+    monkeypatch.setattr(WebSocket, "send_json", fail_ack)
+
+    def model(request):
+        sent.append(request)
+        return response(asdict(analysis()))
+
+    with connect_ws(model) as (client, _, path, _, _):
+        with client.websocket_connect(path, headers={"origin": "http://localhost:5173"}) as socket:
+            assert socket.receive_json()["turn"] == 9
+            socket.send_json({"type": "answer", "turn": 9, "text": "팀원 담당입니다"})
+            assert acknowledged.wait(5)
+        with pytest.raises(WebSocketDenialResponse) as caught:
+            with client.websocket_connect(path, headers={"origin": "http://localhost:5173"}):
+                pytest.fail("완료된 면접 연결을 수락했다")
+        assert caught.value.status_code == 409
+        snapshot = client.get(
+            f"/api/interviews/{agent_seed['interview_id']}",
+            headers={"origin": "http://localhost:5173"},
+        )
+        assert snapshot.status_code == 200 and snapshot.json()["status"] == "completed"
+    assert len(sent) == 1
+    async with agent_sessions() as db:
+        turn = await db.scalar(select(InterviewTurn).where(InterviewTurn.turn_no == 9))
+        assert turn.answer_text == "팀원 담당입니다" and turn.analysis is not None
+        assert (await db.get(InterviewSession, agent_seed["interview_id"])).status == "completed"
+
+
+async def test_evidence_check_is_sent_only_after_actual_evidence_is_committed(
+    agent_sessions,
+    agent_seed,
+    connect_ws,
+):
+    await seed_turns(agent_sessions, agent_seed, 9)
+    sha = agent_seed["sha"]
+    root, src = "b" * 40, "c" * 40
+    blob = "ce013625030ba8dba906f756967f9e9ca394464a"
+    base = "/repos/owner/sample"
+    github = {
+        base: {"id": 123, "full_name": "owner/sample", "private": False, "visibility": "public"},
+        f"{base}/git/commits/{sha}": {"sha": sha, "tree": {"sha": root}},
+        f"{base}/git/trees/{root}": {
+            "sha": root,
+            "truncated": False,
+            "tree": [{"path": "src", "type": "tree", "mode": "040000", "sha": src}],
+        },
+        f"{base}/git/trees/{src}": {
+            "sha": src,
+            "truncated": False,
+            "tree": [{"path": "main.py", "type": "blob", "mode": "100644", "sha": blob}],
+        },
+        f"{base}/contents/src/main.py": {
+            "path": "src/main.py",
+            "type": "file",
+            "encoding": "base64",
+            "size": 6,
+            "sha": blob,
+            "content": "aGVsbG8K\n",
+        },
+    }
+    initial = replace(
+        analysis(),
+        needs_verification=True,
+        verification_requests=(
+            c.VerificationRequest(
+                "팀원 담당입니다",
+                "현재 구현 확인",
+                str(agent_seed["repo_id"]),
+                sha,
+                ("src/main.py",),
+            ),
+        ),
+    )
+
+    def model(request):
+        if request.url.host == "api.github.com":
+            return httpx.Response(200, json=github[request.url.path])
+        payload = json.loads(json.loads(request.content)["input"][0]["content"][0]["text"])
+        return response(asdict(analysis() if payload["tool_results"] else initial))
+
+    with connect_ws(model) as (client, _, path, _, _):
+        with client.websocket_connect(path, headers={"origin": "http://localhost:5173"}) as socket:
+            socket.receive_json()
+            socket.send_json({"type": "answer", "turn": 9, "text": "팀원 담당입니다"})
+            assert socket.receive_json() == {"type": "answerReceived"}
+            assert socket.receive_json() == {"type": "thinking"}
+            assert socket.receive_json() == {
+                "type": "evidenceCheck",
+                "repository": "sample",
+                "file": "src/main.py",
+            }
+
+            async def stored():
+                async with agent_sessions() as db:
+                    row = await db.scalar(select(Evidence))
+                    return row.snippet, row.git_ref
+
+            assert client.portal.call(stored) == ("hello\n", sha)
+            assert socket.receive_json() == {"type": "interviewEnd"}
