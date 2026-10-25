@@ -488,3 +488,139 @@ async def test_canceled_source_fetch_keeps_completed_selection_attempt(agent_ses
         assert record.attempts[0]["schema_version"] == "1"
         assert PATH in record.attempts[0]["raw_output"]
     assert transport.model_operations == ["select"]
+
+
+async def test_failed_question_retries_through_real_rest_queue_and_worker(
+    agent_sessions,
+    ready,
+    test_redis_url,
+):
+    from uuid import uuid4
+
+    from arq.connections import RedisSettings, create_pool
+    from fastapi import FastAPI
+
+    from app.core.deps import current_user
+    from app.db.models import User
+    from app.db.session import get_db
+    from app.features.interview.router import router
+    from app.workers.tasks.interview_prep import interview_prep
+
+    invalid = Transport(ready)
+    invalid.outputs[0]["question"]["text"] = ""
+    assert not await run(agent_sessions, ready, invalid)
+    async with agent_sessions() as db:
+        row = await db.get(InterviewSession, ready["interview_id"])
+        assert row.status == "preparing_failed" and "prepare_job_id" not in row.context_state
+        original = await db.scalar(select(Evidence.id))
+    queue = "arq:director-prepare-test:" + uuid4().hex
+    broker = await create_pool(RedisSettings.from_dsn(test_redis_url), default_queue_name=queue)
+    app = FastAPI()
+    app.include_router(router, prefix="/api")
+    app.state.redis = broker
+
+    async def database():
+        async with agent_sessions() as db:
+            yield db
+
+    async def owner():
+        async with agent_sessions() as db:
+            return await db.get(User, ready["owner"])
+
+    app.dependency_overrides[get_db] = database
+    app.dependency_overrides[current_user] = owner
+    jobs = []
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as api:
+            result = await api.post(f"/api/interviews/{ready['interview_id']}/prepare/retry")
+        assert result.status_code == 204
+        jobs = await broker.queued_jobs()
+        assert len(jobs) == 1 and jobs[0].function == "interview_prep"
+        transport = Transport(ready)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+            await interview_prep(
+                dict(session_factory=agent_sessions, settings=settings(), http_client=http),
+                jobs[0].args[0],
+            )
+        async with agent_sessions() as db:
+            row = await db.get(InterviewSession, ready["interview_id"])
+            assert row.status == "in_progress"
+            assert (await db.scalars(select(Evidence.id))).all() == [original]
+        assert transport.model_operations == ["plan", "review"]
+    finally:
+        await broker.delete(queue, *("arq:job:" + item.job_id for item in jobs))
+        await broker.aclose()
+
+
+async def test_changed_selection_releases_owned_claim_and_allows_retry(agent_sessions, ready):
+    transport = Transport(ready)
+    changed = False
+
+    async def stale(request):
+        nonlocal changed
+        if not changed:
+            async with agent_sessions.begin() as db:
+                await db.execute(update(SessionRepository).values(snapshot_head_sha="f" * 40))
+            changed = True
+        return await transport(request)
+
+    assert not await run(agent_sessions, ready, stale)
+    async with agent_sessions() as db:
+        row = await db.get(InterviewSession, ready["interview_id"])
+        assert row.status == "preparing_failed"
+        assert "prepare_job_id" not in row.context_state
+        assert row.last_error["code"] == "preparation_changed"
+        assert await db.scalar(select(Evidence)) is None
+
+
+async def test_collector_limits_are_forwarded_to_the_actual_l2_model():
+    from uuid import UUID
+
+    from app.llm_tasks.repo_deep import analyze_repository
+
+    seed = dict(repo_id=UUID(int=1), sha="a" * 40)
+    transport = Transport(seed)
+    transport.outputs = [deep(seed)]
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        result = await analyze_repository(
+            c.DeepRepoInput(
+                str(seed["repo_id"]),
+                seed["sha"],
+                shallow(seed),
+                (c.SourceDocument(PATH, "file", TEXT, "entire file"),),
+            ),
+            snapshot_head_sha=seed["sha"],
+            prompt=c.PromptSpec("repo_deep", "v1", "fixture", "fixture"),
+            settings=settings().require_llm(),
+            http_client=http,
+            source_limitations=("구조 깊이 상한으로 나머지 파일은 확인하지 못했습니다.",),
+        )
+    assert result.succeeded
+    assert transport.model_payloads[0]["source_limitations"] == [
+        "구조 깊이 상한으로 나머지 파일은 확인하지 못했습니다.",
+    ]
+
+
+async def test_committed_valid_first_question_recovers_without_model_call(agent_sessions, ready):
+    async with agent_sessions.begin() as db:
+        row = await db.get(InterviewSession, ready["interview_id"])
+        row.current_turn = 1
+        row.context_state = dict(prepare_job_id="previous-worker", preserved="원본")
+        db.add(
+            InterviewTurn(
+                interview_session_id=row.id,
+                turn_no=1,
+                persona="hr_manager",
+                topic_code="role",
+                question_text="프로젝트에서 맡은 역할을 소개해 주세요.",
+                question_contract=plan()["question"]["question_contract"],
+            )
+        )
+    transport = Transport(ready)
+    assert await run(agent_sessions, ready, transport)
+    async with agent_sessions() as db:
+        row = await db.get(InterviewSession, ready["interview_id"])
+        assert row.status == "in_progress" and row.context_state == dict(preserved="원본")
+    assert transport.model_operations == transport.github == []
