@@ -248,3 +248,243 @@ async def run(sessions, seed, transport):
             settings=settings(),
             http_client=http,
         )
+
+
+async def test_cached_l2_reads_real_fixed_source_and_starts_actual_director(agent_sessions, ready):
+    transport = Transport(ready)
+    success = await run(agent_sessions, ready, transport)
+    async with agent_sessions() as db:
+        row = await db.get(InterviewSession, ready["interview_id"])
+        assert success, row.last_error
+    async with agent_sessions() as db:
+        interview = await db.get(InterviewSession, ready["interview_id"])
+        selected = await db.scalar(select(SessionRepository))
+        evidence = await db.scalar(select(Evidence))
+        turn = await db.scalar(select(InterviewTurn))
+        assert interview.status == "in_progress" and interview.started_at is not None
+        assert interview.last_error is None and interview.current_turn == 1
+        assert [step["status"] for step in interview.prepare_steps] == ["completed"] * 4
+        assert selected.snapshot_head_sha == ready["sha"] and selected.is_primary
+        assert evidence.snippet == TEXT and evidence.tool_name is None
+        assert (evidence.path, evidence.git_ref, evidence.start_line, evidence.end_line) == (
+            PATH,
+            ready["sha"],
+            1,
+            2,
+        )
+        assert turn.question_contract is not None
+    assert transport.model_operations == ["plan", "review"]
+
+
+async def test_missing_active_prompt_fails_explicitly_without_external_io(agent_sessions, ready):
+    async with agent_sessions.begin() as db:
+        await db.execute(
+            update(PromptVersion)
+            .where(PromptVersion.task_name == "answer_analysis")
+            .values(is_active=False)
+        )
+    transport = Transport(ready)
+    assert not await run(agent_sessions, ready, transport)
+    async with agent_sessions() as db:
+        interview = await db.get(InterviewSession, ready["interview_id"])
+        assert interview.status == "preparing_failed"
+        assert interview.last_error["recoverable"] is True
+        assert interview.last_error["code"] == "prompt_unavailable"
+    assert transport.model_operations == transport.github == []
+
+
+async def test_l2_miss_selects_sources_and_analyzes_with_two_total_attempts(agent_sessions, ready):
+    async with agent_sessions.begin() as db:
+        await db.execute(
+            update(RepoAnalysis)
+            .where(RepoAnalysis.analysis_level == "l2")
+            .values(status="failed", result=None, notable_areas=None)
+        )
+    transport = Transport(ready, miss=True)
+    success = await run(agent_sessions, ready, transport)
+    async with agent_sessions() as db:
+        row = await db.get(InterviewSession, ready["interview_id"])
+        assert success, row.last_error
+    assert transport.model_operations == ["select", "analyze", "plan", "review"]
+    async with agent_sessions() as db:
+        l2 = await db.scalar(select(RepoAnalysis).where(RepoAnalysis.analysis_level == "l2"))
+        assert l2.status == "succeeded" and l2.attempt == 2
+
+
+async def test_duplicate_worker_and_abandoned_result_do_not_generate_question(
+    agent_sessions, ready
+):
+    entered, release = asyncio.Event(), asyncio.Event()
+    transport = Transport(ready)
+
+    async def delayed(request):
+        entered.set()
+        await release.wait()
+        return await transport(request)
+
+    task = asyncio.create_task(run(agent_sessions, ready, delayed))
+    await asyncio.wait_for(entered.wait(), timeout=3)
+    try:
+        assert not await run(agent_sessions, ready, transport)
+        async with agent_sessions.begin() as db:
+            await db.execute(update(InterviewSession).values(status="abandoned"))
+    finally:
+        release.set()
+    assert not await task
+    assert transport.model_operations == []
+    async with agent_sessions() as db:
+        assert await db.scalar(select(InterviewTurn)) is None
+
+
+@pytest.mark.parametrize("invalid", ["scope", "duplicate", "source_mismatch", "json_null"])
+async def test_invalid_success_cache_is_reanalyzed_and_replaced(agent_sessions, ready, invalid):
+    async with agent_sessions.begin() as db:
+        row = await db.scalar(select(RepoAnalysis).where(RepoAnalysis.analysis_level == "l2"))
+        value = deep(ready)
+        if invalid == "scope":
+            value["notable_areas"][0]["scope"] = "unrecoverable excerpt"
+        elif invalid == "duplicate":
+            value["notable_areas"].append(dict(value["notable_areas"][0]))
+        row.notable_areas = value["notable_areas"] if invalid != "source_mismatch" else []
+        row.result = dict(analysis=value, rejected_areas=[])
+        if invalid == "json_null":
+            row.notable_areas, row.result = None, None
+    transport = Transport(ready, miss=True)
+    assert await run(agent_sessions, ready, transport)
+    async with agent_sessions() as db:
+        row = await db.scalar(select(RepoAnalysis).where(RepoAnalysis.analysis_level == "l2"))
+        assert row.notable_areas == [area()]
+        assert row.result["analysis"]["notable_areas"] == [area()]
+
+
+async def test_invalid_selection_stops_after_one_call_and_keeps_raw_attempt(agent_sessions, ready):
+    async with agent_sessions.begin() as db:
+        await db.execute(
+            update(RepoAnalysis)
+            .where(RepoAnalysis.analysis_level == "l2")
+            .values(status="failed", result=None, notable_areas=None)
+        )
+    transport = Transport(ready, miss=True)
+    transport.outputs[0] = dict(selected_paths=["unread.py"])
+    assert not await run(agent_sessions, ready, transport)
+    assert transport.model_operations == ["select"]
+    assert (
+        transport.model_payloads[0]["max_selected_files"] == settings().director_prepare_max_files
+    )
+    async with agent_sessions() as db:
+        record = await db.scalar(
+            select(LLMCallRecord).where(LLMCallRecord.task_name == "repo_deep")
+        )
+        assert len(record.attempts) == 1
+        assert "unread.py" in record.attempts[0]["raw_output"]
+        assert record.attempts[0]["error_stage"] == "semantic"
+
+
+@pytest.mark.parametrize("case", ["private", "wrong_sha", "bad_blob"])
+async def test_untrusted_github_source_never_starts_director(agent_sessions, ready, case):
+    transport = Transport(ready)
+
+    async def invalid(request):
+        response = await transport(request)
+        value = response.json()
+        if case == "private" and request.url.path.endswith("/owner/sample"):
+            value["private"] = True
+        if case == "wrong_sha" and "/git/trees/" in request.url.path:
+            value["sha"] = "d" * 40
+        if case == "bad_blob" and "/contents/" in request.url.path:
+            value["content"] = base64.b64encode(b"different").decode()
+        return httpx.Response(200, json=value)
+
+    assert not await run(agent_sessions, ready, invalid)
+    assert transport.model_operations == []
+    async with agent_sessions() as db:
+        assert await db.scalar(select(Evidence)) is None
+        assert await db.scalar(select(InterviewTurn)) is None
+
+
+async def test_registered_worker_uses_context_and_duplicate_delivery_reuses_question(
+    agent_sessions, ready
+):
+    from app.workers.tasks.interview_prep import interview_prep
+
+    transport = Transport(ready, miss=True)
+    async with agent_sessions.begin() as db:
+        await db.execute(
+            update(RepoAnalysis)
+            .where(RepoAnalysis.analysis_level == "l2")
+            .values(status="failed", result=None, notable_areas=None)
+        )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        ctx = dict(session_factory=agent_sessions, settings=settings(), http_client=http)
+        await interview_prep(ctx, str(ready["interview_id"]))
+        await interview_prep(ctx, str(ready["interview_id"]))
+    assert transport.model_operations == ["select", "analyze", "plan", "review"]
+    async with agent_sessions() as db:
+        records = (await db.scalars(select(LLMCallRecord).order_by(LLMCallRecord.created_at))).all()
+        assert [[item["attempt"] for item in row.attempts] for row in records] == [[1, 2], [1, 2]]
+
+
+@pytest.mark.parametrize("invalid", ["contract", "basis"])
+async def test_invalid_existing_first_question_becomes_preparation_failure(
+    agent_sessions, ready, invalid
+):
+    async with agent_sessions.begin() as db:
+        row = await db.get(InterviewSession, ready["interview_id"])
+        row.current_turn = 1
+        stored = {"invalid": True}
+        if invalid == "basis":
+            stored = plan()["question"]["question_contract"]
+            stored["basis_refs"] = [
+                dict(kind="evidence", id="00000000-0000-0000-0000-000000000001")
+            ]
+        db.add(
+            InterviewTurn(
+                interview_session_id=row.id,
+                turn_no=1,
+                persona="hr_manager",
+                question_text="기존 질문",
+                question_contract=stored,
+                topic_code="role",
+            )
+        )
+    transport = Transport(ready)
+    assert not await run(agent_sessions, ready, transport)
+    async with agent_sessions() as db:
+        row = await db.get(InterviewSession, ready["interview_id"])
+        assert row.status == "preparing_failed"
+        assert row.last_error["code"] == "prepared_question_invalid"
+    assert transport.model_operations == transport.github == []
+
+
+async def test_canceled_source_fetch_keeps_completed_selection_attempt(agent_sessions, ready):
+    async with agent_sessions.begin() as db:
+        await db.execute(
+            update(RepoAnalysis)
+            .where(RepoAnalysis.analysis_level == "l2")
+            .values(status="failed", result=None, notable_areas=None)
+        )
+    entered = asyncio.Event()
+    transport = Transport(ready, miss=True)
+
+    async def pending(request):
+        if "/contents/" in request.url.path:
+            entered.set()
+            await asyncio.Event().wait()
+        return await transport(request)
+
+    task = asyncio.create_task(run(agent_sessions, ready, pending))
+    await asyncio.wait_for(entered.wait(), timeout=5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    async with agent_sessions() as db:
+        row = await db.get(InterviewSession, ready["interview_id"])
+        record = await db.scalar(
+            select(LLMCallRecord).where(LLMCallRecord.task_name == "repo_deep")
+        )
+        assert row.status == "preparing_failed"
+        assert "prepare_job_id" not in row.context_state
+        assert record.discard_reason == "canceled" and len(record.attempts) == 1
+        assert record.attempts[0]["schema_version"] == "1"
+        assert PATH in record.attempts[0]["raw_output"]
+    assert transport.model_operations == ["select"]
