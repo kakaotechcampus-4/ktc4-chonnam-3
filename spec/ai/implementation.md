@@ -278,3 +278,45 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
 - BE 연결은 범위 밖이다: `PostingContent.intro` 필드, `jd_extract` 단계 안 호출, `seed_prompt_versions.py`의
   `domain_category` 등록, BE adapter와 `postings.domain_category` 저장.
 
+## 2026-10-26 — 도메인 category v2: 근거 문단 ID와 semantic 실패 기록 (0028, #99 리뷰 반영)
+
+### 기준과 변경
+
+- 작업 브랜치: `feature/domain-category-llm`, develop `2ff1acf`로 rebase. 리뷰 기준 원본은 `be44f00`.
+- `ai/src/devon_ai/llm_tasks/domain_category.py`: 입력 필드를 `[{id, text}]` 문단 목록으로 바꿔 보내고
+  `{category, evidence_id}`를 받는다. 요청별 문단 표로 만든 validator가 schema·semantic을 검사하고, 선택한
+  ID의 원문을 `evidence`로 복원한다. 근거 검증이 공통 호출 계층 안으로 들어가 semantic 실패가 `failure`와
+  attempt `error_stage/error_code`로 남는다(리뷰 P2).
+- `ai/prompts/domain-category-v2.md`: 문단 ID 선택, 산업 전용 지원 서비스와 `mobility` 범위·경계. v1은 보존.
+- `ai/tests/llm_tasks/test_domain_category.py`: 문단 변환(빈 줄 분리, 문단 안 줄바꿈 유지), ID의 원문 복원,
+  정상 `etc` 성공, 잘못된 ID 4종(없는 ID, 인용문을 ID로, non-etc `null`, `etc`의 ID)의 semantic 기록·무재시도,
+  schema 위반 5종, provider 실패, 원문 없음 비호출, prompt 불일치 거절.
+
+### 실행 결과 (이 브랜치, 2026-10-26)
+
+환경: Windows, uv. `ai`에서 `ruff check .`·`ruff format --check .`·`mypy`(12개 파일) 통과, `pytest -q` 209 passed.
+`backend`에서 `tests/agents/test_ai_package_imports.py` 1 passed.
+
+실제 BE `call_model` + `httpx.MockTransport`(외부 호출 없음)로 4개 응답을 확인했다.
+
+| 모델 응답 | category | failure | attempt 오류 | HTTP 호출 |
+| --- | --- | --- | --- | --- |
+| `medical`, 있는 ID | `medical`(원문 복원) | 없음 | 없음 | 1 |
+| `medical`, 없는 ID | `etc` | semantic | (semantic, llm_failed) | 1 |
+| `medical`, `null` | `etc` | semantic | (semantic, llm_failed) | 1 |
+| `etc`, `null` | `etc` | 없음 | 없음 | 1 |
+
+### 리뷰어 실측 (동한님, 2026-10-12, 로컬 수정 후보 기준 — 이 브랜치 코드로 재실행하지 않음)
+
+모델 `gpt-6-luna`, PR #114 gateway.
+
+- v1, 원티드 공고 500건: 의료 4·금융 3건이 인용 재작성으로 `etc`, 실패 기록 누락 재현.
+- v2, 같은 500건: 호출·근거 검증 실패 0건, 위 7건 medical 4 / finance 3 채택. 입력 토큰 916,031 → 1,244,571(+35.9%).
+- v2, 회귀 61사례 61/61, 신규 회사 공고 40건 사전 기대 38/40(허용 경계 포함 39/40). 기대값은 확정된 사람
+  정답표가 아니다.
+
+### 검증 한계와 후속 작업
+
+- 이 브랜치의 v2 코드·prompt로 실제 모델을 호출하지 않았다(API 키 없음). 리뷰어 수치는 같은 설계의 로컬 후보 결과다.
+- ID 검증 성공은 분류 정확도를 보증하지 않는다. 사람 라벨 평가는 0022의 100건 표본 계획을 따른다.
+- BE 연결은 0022와 같은 후속 범위이며, 등록할 prompt version은 `domain_category_v2`다.

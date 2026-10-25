@@ -1,6 +1,6 @@
 # 0022 공고 도메인 category의 LLM 판정
 
-- 상태: Accepted
+- 상태: Partially Superseded — 결정 4(근거 검증)·8(version 이름)은 [0028](0028-domain-category-evidence-id.md)로 대체
 - 날짜: 2026-10-06
 - 결정자: 박현솔 (AI C 역할 — JD·문서·Domain Context Builder 담당)
 - 관련 PR: 없음 (이 결정과 함께 올림). 채택하지 않은 규칙안: #74
