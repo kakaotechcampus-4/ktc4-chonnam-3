@@ -5,6 +5,15 @@ AI 작업의 구현·수정 내역, 코드 위치, 실행 결과와 남은 작�
 [decisions](decisions/README.md)에 보존한다. 문서 역할은
 [ADR 0020](decisions/0020-implementation-record-policy.md)을 따른다.
 
+## 2026-10-26 — PR #103 검토 결과의 검증 범위 설명 보완
+
+- 리뷰 원본 `742e5a2`의 문서 지적을 반영했다. 승인 `QuestionReview`의 문장·Contract 대조와
+  `CandidateRecovery` 분류·사유 전달을 구분하고, 후자의 반환값 자체를 후보와 별도 대조하지 않음을 명시했다.
+- 제품 코드·계약·테스트는 바꾸지 않았다. 기존 Python 환경에서 이 worktree 소스를 명시해
+  AI 전체 204사례, AI Ruff·format 40파일·mypy 11 source, BE import·Director·LLM·설정 경계
+  131사례를 재실행해 모두 통과했다. 실제 검토기의 의미 품질·모델 호출·DB 저장은 검증하지 않았다.
+- 기존 전용 계약 검사 환경의 schema 2개·부분 OpenAPI·fixture 7개와 `git diff --check`도 통과했다.
+
 ## 2026-10-06 — task-10 Director 후보 복구 분류 경계
 
 관련 작업: AI task-10 잔여([Director 질문 결정](../../ai/docs/task-10-director.md)). PR 번호는 생성 후 기록한다.
@@ -41,8 +50,10 @@ Windows, Python 3.12, 격리 worktree의 locked 환경에서 실행했다.
 
 ### 한계와 후속 작업
 
-- 분류 판단은 주입된 독립 검토기의 몫이다. 코드는 검토기 결과가 이 후보와 결합돼 있는지, 분류 반환값이 구조에 맞는지만
-  강제한다. 테스트의 검토기는 합성 대역이며 목적 일치·전제 타당성의 실제 판정 품질은 검증하지 않았다(AI-L01).
+- 분류 판단은 주입된 독립 검토기의 몫이다. 승인 결과(`QuestionReview`)는 후보의 문장·질문 계약과 일치하는지 검사한다.
+  복구 분류(`CandidateRecovery`)는 현재 검토 호출에서 반환된 분류·사유를 실패 결과로 전달하며, 반환값 자체가
+  해당 후보에 대한 판단인지 별도로 대조하지 않는다. 테스트의 검토기는 합성 대역이며 목적 일치·전제 타당성의
+  실제 판정 품질은 검증하지 않았다(AI-L01).
 - 코드로 결정적으로 막는 것은 기존 입력 검사(허용 Persona·참조·Contract 동일성)뿐이다. 이미 확인한 목적의 반복은
   `HistoryTurn`이 목적을 갖지 않아 코드로 판정하지 않고 검토기 분류에 맡긴다.
 - BE 연동은 미실행이다. `backend/app/agents/director/agent.py`(#82)는 `QuestionReviewer`를 타입으로만 쓰므로 변경은
