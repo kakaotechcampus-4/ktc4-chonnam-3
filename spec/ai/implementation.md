@@ -320,3 +320,33 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
 - 이 브랜치의 v2 코드·prompt로 실제 모델을 호출하지 않았다(API 키 없음). 리뷰어 수치는 같은 설계의 로컬 후보 결과다.
 - ID 검증 성공은 분류 정확도를 보증하지 않는다. 사람 라벨 평가는 0022의 100건 표본 계획을 따른다.
 - BE 연결은 0022와 같은 후속 범위이며, 등록할 prompt version은 `domain_category_v2`다.
+
+## 2026-10-26 — #99 동시 갱신 보존 후 원문·version 회귀 보완
+
+- 리뷰 대응 중 팀원 head가 `be44f001`에서 `ce1019a9`로 갱신된 것을 확인했다. 기존 로컬 수정·
+  게시 후보는 보존하고 최신 head에서 새 작업 트리를 만들었다. 팀원의 v2 코드·기존 AI 테스트
+  16사례·prompt·Accepted ADR0028·계약·실행 기록을 유지하며, 별도 중복 설계·ADR은 추가하지 않는다.
+- 원문 ID·semantic 기록·산업 지원 범위의 주요 리뷰는 최신 팀원 변경이 해결했다. 이번 추가는
+  원문 복원과 v2/schema 2 일치라는 같은 계약을 끝까지 지키는 보완과 실제 gateway 회귀다.
+- `_paragraphs`에서 양 끝 공백을 지우지 않고 빈 문단만 제외한다. CRLF 빈 줄 경계는 정확히
+  분리하되 문단 내부 줄바꿈·비가시 문자·오탈자·공백을 그대로 반환한다. v1/v3 prompt는 schema 2와
+  혼용하지 않도록 모델 호출 전에 거절한다. 분류 정책·공개 API·DB 구조는 바꾸지 않는다.
+- 팀원 테스트 파일은 교체하지 않고 `test_domain_category_review.py`에 8사례를 추가했다.
+  source에 존재하는 ID도 현재 요청의 원문에서 복원하는지 검사한다. 산업 의미의 정확도 검사는 아니다.
+- 실제 gateway 7사례는 `test_domain_category.py`에 별도로 둔다. raw·오류·실제 모델·token·version,
+  semantic 무재시도·정상 etc·schema 오류 후 총 2회 상한을 검사한다. 테스트 helper만 #114의
+  주소 인자가 있으면 명시적 fixture 주소를 주입한다. 제품의 기본 주소·호환 gateway는 추가하지 않는다.
+
+| 최신 head 기준 이번 검증 | 실제 결과 |
+| --- | --- |
+| 보완 전 새 AI 회귀 | 7 failed / 1 passed. 공백·CRLF·버전 혼용을 실제로 재현 |
+| 보완 후 팀원 기존 16 + 새 8사례 | 24 passed. 기존 테스트 파일 무변경 |
+| AI 전체 pytest | 217 passed. 이전 로컬 후보 230개 결과와 구분 |
+| BE import·기존 gateway·새 도메인 회귀 | 77 passed. 새 도메인 7사례 포함 |
+| AI / BE Ruff·format·mypy | 모두 통과. format 45/254파일, type 12/133 source |
+| 기존 전용 환경의 부분 계약 검사 | schema 2개·부분 OpenAPI·fixture 7개 통과. 전체 API/FE 호환성은 아님 |
+
+검사 전후 Python 소스 해시는 같다. 외부 모델·GitHub 호출·패키지 설치는 0회이며 DB·서비스 완주와
+실제 분류 품질은 검증하지 않았다. 로그는 `.claude/scratch/ai-pr-reviews-20261026/pr99-concurrent/`에
+보존한다. 이전 v1·로컬 v2 후보·팀원 원본의 검증 수치를 이번 보완본의 새 결과로 합치지 않는다.
+다른 PR과 새로 결합한 결과 및 실제 게시 head는 후속 게시·재검증에서 구분해 기록한다.
