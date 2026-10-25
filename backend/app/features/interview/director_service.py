@@ -322,3 +322,265 @@ async def _evaluation_rows(
                     )
                 )
                 conflicts.add((UUID(ref), claim.claim_text))
+
+
+async def process_answer(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    user_id: UUID,
+    interview_id: UUID,
+    turn_no: int,
+    text: str,
+    call_id: UUID,
+    settings: LLMSettings,
+    http_client: httpx.AsyncClient | None = None,
+    limits: c.ContextLimits = DEFAULT_LIMITS,
+    evidence_limits: EvidenceLimits | None = None,
+    on_answer_saved: Callable[[], Awaitable[None]] | None = None,
+    on_evidence_check: Callable[[tuple[c.Evidence, ...]], Awaitable[None]] | None = None,
+) -> AnswerExecution:
+    """답변을 먼저 확정하고 T3·제한 조회·T4를 수행한다. 마지막 T3 성공 후에만 완료한다."""
+    if type(text) is not str or not text.strip():
+        raise AgentStateError("answer_text_invalid")
+    async with sessions.begin() as db:
+        interview = await _owned(db, user_id, interview_id)
+        record = await db.get(LLMCallRecord, call_id)
+        if record is not None:
+            if (
+                record.interview_session_id != interview_id
+                or record.task_name != "answer_analysis"
+                or record.turn_no != turn_no
+            ):
+                raise AgentStateError("call_scope_mismatch")
+            if not (record.turn_id or record.failure or record.discard_reason):
+                raise AgentStateError("call_in_progress")
+            return await _replay(db, interview, record, turn_no, call_id)
+        if interview.status != "in_progress" or interview.current_turn != turn_no:
+            raise AgentStateError("answer_turn_invalid")
+        loaded = await load_answer_context(
+            db,
+            user_id=user_id,
+            interview_id=interview_id,
+            turn_no=turn_no,
+            limits=limits,
+            lock=True,
+        )
+        turn = await db.get(InterviewTurn, UUID(loaded.turn_id))
+        assert turn is not None
+        if turn.status == "answered":
+            return await _replay(db, interview, None, turn_no, call_id)
+        await _pending(db, interview_id, turn_no, "answer_analysis")
+        prompt = await load_active_prompt(db, "answer_analysis")
+        scopes = [
+            await load_evidence_scope(
+                db,
+                user_id=user_id,
+                interview_id=interview_id,
+                repository_id=UUID(repo.repository_id),
+            )
+            for repo in loaded.context.repositories
+        ]
+        locations = frozenset(
+            (scope.repository_id, scope.git_ref, path)
+            for scope in scopes
+            for path in scope.allowed_paths
+        )
+        now = datetime.now(UTC)
+        turn.answer_text, turn.status, turn.answered_at = text, "answered", now
+        if turn.asked_at is not None:
+            turn.answer_duration_sec = max(0, int((now - turn.asked_at).total_seconds()))
+        db.add(
+            LLMCallRecord(
+                id=call_id,
+                interview_session_id=interview_id,
+                turn_no=turn_no,
+                task_name="answer_analysis",
+                attempts=[],
+            )
+        )
+    attempts: list[c.AttemptMetadata] = []
+    budget = CallBudget()
+    try:
+        if on_answer_saved is not None:
+            await on_answer_saved()
+        initial = await analyze_answer(
+            loaded.context,
+            loaded.question,
+            turn_id=loaded.turn_id,
+            answer_text=text,
+            prompt=prompt,
+            settings=settings,
+            budget=budget,
+            allowed_locations=locations,
+            http_client=http_client,
+            attempt_sink=attempts,
+        )
+        async with sessions.begin() as db:
+            record = await db.get(LLMCallRecord, call_id, with_for_update=True)
+            assert record is not None
+            record.attempts = [asdict(item) for item in attempts]
+            record.failure = asdict(initial.failure) if initial.failure else None
+            if initial.failure:
+                return AnswerExecution(
+                    call_id, UUID(loaded.turn_id), None, False, initial.failure, None, True
+                )
+            try:
+                current = await load_answer_context(
+                    db,
+                    user_id=user_id,
+                    interview_id=interview_id,
+                    turn_no=turn_no,
+                    limits=limits,
+                    lock=True,
+                )
+                valid = current.context == loaded.context and current.answer_text == text
+            except AgentStateError:
+                valid = False
+            if not valid:
+                record.discard_reason = "context_changed"
+                return AnswerExecution(
+                    call_id, UUID(loaded.turn_id), None, False, None, "context_changed", True
+                )
+            assert initial.data is not None
+            turn = await db.get(InterviewTurn, UUID(loaded.turn_id))
+            assert turn is not None
+            if turn.analysis is None:
+                turn.analysis = c.to_data(initial.data)
+                await _evaluation_rows(db, turn.id, initial.data, loaded.context.evidence)
+        selected = initial.data
+        tool_result, summary = await _retrieve(
+            sessions,
+            user_id,
+            interview_id,
+            loaded.context,
+            selected,
+            locations,
+            scopes,
+            evidence_limits,
+            http_client,
+            on_evidence_check,
+        )
+        final_evidence = loaded.context.evidence
+        if tool_result is not None:
+            final_evidence += tool_result.items
+            # 같은 T3 예산을 사용한다. 최초 호출이 재시도했다면 추가 provider 호출은 없다.
+            enriched = await analyze_answer(
+                loaded.context,
+                loaded.question,
+                turn_id=loaded.turn_id,
+                answer_text=text,
+                prompt=prompt,
+                settings=settings,
+                budget=budget,
+                tool_results=(tool_result,),
+                allowed_locations=locations,
+                http_client=http_client,
+                attempt_sink=attempts,
+            )
+            if enriched.data is not None:
+                selected = enriched.data
+            elif enriched.failure is not None:
+                summary += (
+                    "\n보강 분석 미완료: "
+                    + enriched.failure.stage
+                    + "/"
+                    + enriched.failure.error_code
+                )
+                async with sessions.begin() as db:
+                    record = await db.get(LLMCallRecord, call_id, with_for_update=True)
+                    assert record is not None
+                    record.attempts = [asdict(item) for item in attempts]
+                    record.failure = asdict(enriched.failure)
+                    record.turn_id = UUID(loaded.turn_id)
+                    turn = await db.get(InterviewTurn, UUID(loaded.turn_id))
+                    if turn is not None and turn.decision is not None:
+                        turn.decision = {**turn.decision, "reason_summary": summary}
+                return AnswerExecution(
+                    call_id, UUID(loaded.turn_id), None, False, enriched.failure, None, True
+                )
+        async with sessions.begin() as db:
+            record = await db.get(LLMCallRecord, call_id, with_for_update=True)
+            assert record is not None
+            record.attempts = [asdict(item) for item in attempts]
+            try:
+                interview = await _owned(db, user_id, interview_id)
+                current = await load_answer_context(
+                    db,
+                    user_id=user_id,
+                    interview_id=interview_id,
+                    turn_no=turn_no,
+                    limits=limits,
+                    lock=True,
+                )
+                valid = (
+                    replace(current.context, evidence=loaded.context.evidence) == loaded.context
+                    and frozenset(current.context.evidence) == frozenset(final_evidence)
+                    and current.answer_text == text
+                )
+            except AgentStateError:
+                valid = False
+            if not valid:
+                record.discard_reason = "context_changed"
+                return AnswerExecution(
+                    call_id, UUID(loaded.turn_id), None, False, None, "context_changed", True
+                )
+            turn = await db.get(InterviewTurn, UUID(loaded.turn_id))
+            assert turn is not None
+            await _evaluation_rows(db, turn.id, selected, final_evidence)
+            if turn_no == 9:
+                decision = c.validate_decision(
+                    c.DirectorDecision(
+                        "finish",
+                        "정상 면접 완료",
+                        None,
+                        None,
+                        (),
+                        "9번째 확정 답변 분석 완료" + ("\n" + summary if summary else ""),
+                    ),
+                    question=None,
+                    allowed_personas=(),
+                    finish_allowed=True,
+                    allowed_locations=locations,
+                )
+                turn.decision = c.to_data(decision)
+                interview.status, interview.completed_at = "completed", datetime.now(UTC)
+                _save_context_snapshot(interview, current.context, turn, turn, phase="completed")
+            elif summary:
+                from devon_ai.agents.director.runtime import verification_decision
+
+                lookup = verification_decision(
+                    loaded.context, initial.data, allowed_locations=locations
+                )
+                if lookup is not None:
+                    turn.decision = asdict(
+                        replace(
+                            lookup.data, reason_summary=lookup.data.reason_summary + "\n" + summary
+                        )
+                    )
+            record.turn_id = turn.id
+        if turn_no == 9:
+            return AnswerExecution(call_id, UUID(loaded.turn_id), None, True, None, None, True)
+        question = await start_director(
+            sessions,
+            user_id=user_id,
+            interview_id=interview_id,
+            call_id=uuid5(call_id, "director"),
+            settings=settings,
+            http_client=http_client,
+            limits=limits,
+            answer_analysis=selected,
+            lookup_summary=summary,
+            tool_results=() if tool_result is None else (tool_result,),
+        )
+        return AnswerExecution(
+            call_id,
+            UUID(loaded.turn_id),
+            question.turn_id,
+            False,
+            question.failure,
+            question.discard_reason,
+            True,
+        )
+    except (asyncio.CancelledError, Exception) as error:
+        await _close_claim(sessions, call_id, attempts, error)
+        raise
