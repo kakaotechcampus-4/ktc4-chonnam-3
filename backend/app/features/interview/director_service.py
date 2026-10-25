@@ -584,3 +584,87 @@ async def process_answer(
     except (asyncio.CancelledError, Exception) as error:
         await _close_claim(sessions, call_id, attempts, error)
         raise
+
+
+async def _retrieve(
+    sessions: async_sessionmaker[AsyncSession],
+    user_id: UUID,
+    interview_id: UUID,
+    context: c.Context,
+    analysis: c.ContractChecked[c.AnswerAnalysis],
+    locations: frozenset[tuple[str, str, str]],
+    scopes: list[EvidenceScope],
+    evidence_limits: EvidenceLimits | None,
+    http_client: httpx.AsyncClient | None,
+    on_evidence_check: Callable[[tuple[c.Evidence, ...]], Awaitable[None]] | None,
+) -> tuple[c.ToolResult | None, str]:
+    from devon_ai.agents.director.runtime import verification_decision
+
+    decision = verification_decision(context, analysis, allowed_locations=locations)
+    if decision is None:
+        return None, ""
+    assert context.current_turn_id is not None
+    request = decision.data.tool_requests[0]
+    requested = f"{request.repository_id}@{request.git_ref}: " + ", ".join(request.allowed_paths)
+
+    async def remember(summary: str) -> None:
+        async with sessions.begin() as db:
+            await _owned(db, user_id, interview_id)
+            turn = await db.get(InterviewTurn, UUID(context.current_turn_id), with_for_update=True)
+            if turn is not None:
+                turn.decision = asdict(replace(decision.data, reason_summary=summary))
+
+    await remember("근거 조회 요청; 실제 확인 아직 없음; 요청: " + requested)
+    limits = evidence_limits
+    if limits is None:
+        config = get_settings()
+        limits = EvidenceLimits(
+            config.director_evidence_max_requests,
+            config.director_evidence_max_files,
+            config.director_evidence_max_response_bytes,
+            config.director_evidence_max_total_bytes,
+            config.director_evidence_timeout_seconds,
+        )
+    scope = next(scope for scope in scopes if scope.repository_id == request.repository_id)
+
+    async def execute(http: httpx.AsyncClient) -> c.ToolResult:
+        return await read_files(
+            request, scope=scope, paths=request.allowed_paths, limits=limits, http_client=http
+        )
+
+    try:
+        if http_client is None:
+            async with httpx.AsyncClient(follow_redirects=False) as http:
+                result = await execute(http)
+        else:
+            result = await execute(http_client)
+    except asyncio.CancelledError:
+        await remember("근거 조회 중단; 완료된 확인 범위 없음; 요청: " + requested)
+        raise
+    async with sessions.begin() as db:
+        stored = await store_evidence(
+            db, user_id=user_id, interview_id=interview_id, items=result.items
+        )
+        if stored:
+            await db.execute(
+                update(Evidence)
+                .where(
+                    Evidence.id.in_(
+                        [UUID(item.evidence_id) for item in stored if item.evidence_id]
+                    ),
+                )
+                .values(retrieved_for_turn=context.turn_no)
+            )
+    result = replace(result, items=stored)
+    summary = "근거 조회 " + result.status + "; 실제 확인: " + ", ".join(result.searched_scope)
+    summary += "; 요청: " + requested
+    if result.error_code:
+        summary += "; 오류: " + result.error_code
+    if result.limitations:
+        summary += "; 한계: " + "; ".join(result.limitations)
+    if len(decision.data.tool_requests) > 1:
+        summary += "; 한 라운드 제한으로 나머지 요청은 실행하지 않음"
+    await remember(summary)
+    if stored and on_evidence_check is not None:
+        await on_evidence_check(stored)
+    return result, summary
