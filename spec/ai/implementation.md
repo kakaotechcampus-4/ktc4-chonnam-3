@@ -230,3 +230,74 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
   통과를 durable 저장 완료로 보지 않는다.
 - 분석 API(`backend/app/features/analysis/router.py`)가 골격이라 L1 결과 조회는 검증하지 않았다.
 - 프로젝트 요약의 `summary` 저장 필드는 AI-L03의 BE 합의 후 연결한다.
+
+## 2026-10-25 — 미게시 면접 실행과 후속 보완의 Draft 게시
+
+### 원본과 신규 범위
+
+- 원본 tree `c8f2cb5d`와 실제 worktree·index를 보존했다.
+  `backup/director-unpublished-before-pr-20261025`는 원본 tree를 보존한 commit을 가리킨다.
+- 선행 통합 tree `a4d7c1bf` 대비 원본 신규 36파일을 대조했다. 기게시 신규분 10파일,
+  일부 게시 11파일, 전부 미게시 13파일, #131 담당으로 제외·보존한 seed 2파일이다.
+  파일 수만이 아니라 함수·수정 구간과 테스트 사례까지 대응시켰다.
+- 게시 기준은 `develop@dbd7f890`이다. 기존 #124~#127, #131과 다른 선행 PR은 변경·병합하지 않았다.
+  초기 설계는 보존하고 실행 명세는 [#132](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/132),
+  미적용 Context·L2 보완은 [#133](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/133)으로 분리했다.
+
+| 구간 | 이번 게시의 배치 |
+| --- | --- |
+| 준비·Director 실행·WS·앱/worker | 신규 실행 코드와 회귀 검사를 이 구현 PR에 게시 |
+| 현재 답변 Context·9번째 답변·수집 한계 | #133의 `agent_context.py`, `answer_context.py` 미적용 패치 |
+| L2 예산·호출 기록·base URL·한계 | #133의 `repo_deep.py` 미적용 패치 |
+| 기존 Director 생성기의 base URL 한 줄 | #133의 어댑터 미적용 패치 |
+| 수집 상한 | #126의 8개 설정은 재게시하지 않고 남은 진행 중 조회 3개와 검증만 추가 |
+| 준비 테스트 | #126에 옮긴 2함수·3사례를 제외하고 나머지 함수 AST를 보존 |
+| WS·준비·현재 답변의 통합 회귀 | 실행 서비스에 의존하므로 이 구현 PR에 함께 게시 |
+| seed 실행·추가 seed 검사 | 이번 변경에서 제외. #131 전담과 로컬 원본 보존 유지 |
+
+#133은 일반 Python 파일에 아직 적용하지 않은 검토 자료다. 패치만 병합해도 기능은 활성화되지
+않으며 앱·빌드·CI에서 자동 적용하지 않는다. 정확한 선행 base에서 일반 코드에 적용하고
+재검증해야 한다. 선행 구현·DB 모델·migration·의존성·기게시 함수 전체를 복사하지 않았다.
+
+### 게시본 단독 검사
+
+| 검사 | 실제 결과 |
+| --- | --- |
+| 명세 #132의 부분 계약 검사 | schema 2개·부분 OpenAPI·fixture 7개 통과 |
+| 실행 게시본 Ruff·format | 통과, format 260파일 |
+| 실행 게시본의 조회 상한 검사 | 3 passed |
+| 실행 게시본 전체 pytest | 수집 오류 9건. #82의 모델·#120의 router 등 선행 부재와 기존 seed import 오류 |
+| 실행 게시본 mypy | 4파일 30오류, 134 source 검사. 선행 어댑터·모델·Context·REST 타입 부재 |
+| 패치 4개 | SHA-256·base/result blob 일치, 정확한 선행에서 적용 검사·적용 후 원본 blob 대조 통과 |
+| 원본 보존·범위 | 원본 36파일·index 동일, 신규 PR 간 파일 중복 없음, seed·DB 모델·선행 migration 미포함 |
+
+### 별도 로컬 통합 검증
+
+원본 선행 통합과 이번 코드·패치를 결합한 별도 환경을 사용했다. runtime 함수와 분리한 테스트는
+원본 AST와 대조했다. 설정 3개와 #126의 나머지 설정도 원본과 일치한다. seed 오류 해결은
+게시하지 않고 #131의 seed 두 파일을 검증 환경에만 연결했다. 외부 모델·GitHub는 대역이며
+실제 외부 모델·서비스 DB·사용자 자료에 접근하지 않았다.
+
+- 기존 Python 3.12.14, 새 전용 PostgreSQL 15.19·Redis 7.4.11을 사용했다.
+- BE 첫 전체 실행: 1,231 passed·74 setup errors·경고 2개. 74건 모두 분석 fixture의
+  `task10_test` DB 이름 조건 위반이며 기능 실패는 없었다. 통과·오류를 합쳐 전체 통과로 쓰지 않는다.
+- AI 전체 실행: 295 passed. BE/AI Ruff·format·mypy 통과이며 각각 format 292/52파일,
+  type 검사 141/12 source다.
+- 올바른 새 `task10_test` DB에서 정확히 그 74개 오류 사례만 재실행해 74 passed를 확인했다.
+  첫 전체 445.54초·exit 1과 재실행 108.78초·exit 0을 구분하며, 서로 다른 고유 BE 사례
+  1,305개를 검증했다. 한 번의 전체 실행이 모두 통과했다고 표시하지 않는다.
+- 각 실행 전후 통합 Python 소스 해시는 같았다. 생성한 두 테스트 DB 삭제·임시 schema 0개·
+  연결 0개·DB 목록 복원·Redis/PG 종료와 포트 해제를 확인했다. 기존 서비스는 변경하지 않았다.
+
+검증 보조 스크립트의 첫 Redis 기동은 Cygwin의 config 경로 해석으로 중단됐으며 생성 DB·서버를
+정리하고 상대 config 경로로 재실행했다. DB 명명 문제도 보조 환경만 수정했으며 Python 소스는
+변경하지 않았다. 실제 결과와 오류 목록은 원본 저장소의
+`.claude/scratch/director-remaining-publication-20261025/validation-runtime/`에 보존한다.
+
+### 병합 전 조건과 남은 범위
+
+- Draft다. 필요한 선행·#132 명세·#133 후속 패치의 일반 코드 반영 뒤 최신 base에서 통합 재검증한다.
+- #124/#125/#127과 공유하는 계약·설정·결정 색인·구현 기록은 각 신규 구간을 합쳐 보존한다.
+  이번 PR의 파일 전체로 다른 PR의 추가 구간을 덮어쓰지 않는다.
+- 준비 이벤트·preparing WS 유지·정확한 단계 재개·명시적 이탈 wire·일반 lease/reaper는 미완료다.
+  Report·음성·다언어/대형 레포의 의미 품질·실제 모델 평가·배포도 이번 완료 범위가 아니다.
