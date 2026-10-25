@@ -1,0 +1,86 @@
+{
+  "format_version": 1,
+  "state": "unapplied_review_patches",
+  "original_source_tree": "c8f2cb5d749b55cd2ed7ead78c95041448be61c7",
+  "prerequisite_integration_tree": "a4d7c1bf17b9845a19ef4ddd8e9d74505af42773",
+  "base": "dbd7f89002fd236c8160ffcea2e8d511b78c5dd7",
+  "original_backup": "backup/director-unpublished-before-pr-20261025",
+  "rule": "base blob must match exactly; re-review on prerequisite changes; never force or auto-apply",
+  "patches": [
+    {
+      "order": 1,
+      "patch": "backend/patches/director-followups/01-agent_context.patch",
+      "target": "backend/app/features/interview/agent_context.py",
+      "base_blob": "e199df05e9a7d11d486499277b9c91d7287d03d1",
+      "result_blob": "a474136cf2eb282ccaa2ab202a08688fbb801dda",
+      "patch_sha256": "25634539ecfb205dd952c259aeceb4fb0785d95691248c271060fff1c8023957",
+      "prerequisites": [
+        {
+          "pr": 82,
+          "head": "0e973f3377553b13bbea419bfd662f968bf64b97"
+        }
+      ],
+      "application": "manual after prerequisite integration; no runtime hook"
+    },
+    {
+      "order": 2,
+      "patch": "backend/patches/director-followups/02-answer_context.patch",
+      "target": "backend/app/features/interview/answer_context.py",
+      "base_blob": "1f5c7991e86aafcc25a71cc63dc72653acb4958b",
+      "result_blob": "c49ee3860dd83fafd179bcbc7991a251539e981f",
+      "patch_sha256": "513d0213e1943dedcf7b6d28dbd7d411a4e2bdf04a683cefbf3a4008968bc302",
+      "prerequisites": [
+        {
+          "pr": 126,
+          "head": "e29c8f971fa87b32aace1bd5a3d6be1d43c88478"
+        },
+        {
+          "patch_order": 1
+        }
+      ],
+      "application": "manual after prerequisite integration; no runtime hook"
+    },
+    {
+      "order": 3,
+      "patch": "backend/patches/director-followups/03-repo_deep.patch",
+      "target": "backend/app/llm_tasks/repo_deep.py",
+      "base_blob": "8c86a265c13a63fa879743f60bff25fe7f3a3f9d",
+      "result_blob": "8ce0d810617c17280ba47e02edc33f31ca4b503d",
+      "patch_sha256": "0307c4cc58aa7b243bea57be651b7a58f1ba4046458e648d132d4955d4ade74f",
+      "prerequisites": [
+        {
+          "pr": 119,
+          "head": "3f945d338505c34beabc1fc4b55af263b0fdf6da"
+        },
+        {
+          "pr": 114,
+          "head": "613527512da46d2de9bf9cdd32f14dc261f68c87"
+        }
+      ],
+      "application": "manual after prerequisite integration; no runtime hook"
+    },
+    {
+      "order": 4,
+      "patch": "backend/patches/director-followups/04-agent.patch",
+      "target": "backend/app/agents/director/agent.py",
+      "base_blob": "a41c5842a084e0365cbe0c7556269091d1a32639",
+      "result_blob": "69fcf40a0739469fe07bbe8dbd1414ce561ad95b",
+      "patch_sha256": "0d2ed7808001234fdc95507a10d99ec877404cdc5fadd96004c3b69f6d7da922",
+      "prerequisites": [
+        {
+          "pr": 82,
+          "head": "0e973f3377553b13bbea419bfd662f968bf64b97"
+        },
+        {
+          "pr": 126,
+          "head": "e29c8f971fa87b32aace1bd5a3d6be1d43c88478"
+        },
+        {
+          "pr": 114,
+          "head": "613527512da46d2de9bf9cdd32f14dc261f68c87"
+        }
+      ],
+      "application": "manual after prerequisite integration; no runtime hook"
+    }
+  ]
+}
