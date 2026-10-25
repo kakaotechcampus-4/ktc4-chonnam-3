@@ -1103,6 +1103,13 @@ def parse_deep_analysis(
     _convert(DeepRepoInput, source, "deep input", wire=False)
     if type(payload) is not dict:
         raise ContractError("schema", "deep analysis")
+    # 형식이 올바른 다른 저장소 응답은 내용의 schema 오류와 관계없이 재호출하지 않는다.
+    repository_id, head_sha = payload.get("repository_id"), payload.get("head_sha")
+    _text(repository_id, "repository_id")
+    _text(head_sha, "head_sha")
+    _sha(cast(str, head_sha))
+    if repository_id != source.repository_id or head_sha != source.head_sha:
+        raise ContractError("semantic", "repository ref")
     # decode는 모르는 키를 버리므로 개인 기여·점수 같은 계약 밖 값이 성공으로 섞이지 않게 거절한다.
     unexpected = set(payload) - {item.name for item in fields(DeepRepoAnalysis)}
     if unexpected:
@@ -1111,8 +1118,6 @@ def parse_deep_analysis(
     if type(raw_areas) is not list:
         raise ContractError("schema", "notable_areas")
     base = decode(DeepRepoAnalysis, {**payload, "notable_areas": []})
-    if base.repository_id != source.repository_id or base.head_sha != source.head_sha:
-        raise ContractError("semantic", "repository ref")
     # 5개를 넘는 후보를 잘라 쓰면 모델이 고르지 않은 순서로 근거를 채택하게 된다.
     # 내용 판단이 아닌 출력 형식 위반이라 schema로 두어 공통 호출 계층의 1회 재시도를 받는다.
     if len(raw_areas) > 5:
@@ -1150,6 +1155,10 @@ def parse_deep_analysis(
             continue
         areas.append(area)
     if not areas:
+        # 채택할 관찰이 없고 형식 오류가 있으면 공통 gateway의 남은 재시도만 사용한다.
+        # 확인한 관찰이 있는 부분 성공과 semantic 거절만 있는 결과는 그대로 보존한다.
+        if any(item.stage == "schema" for item in rejected):
+            raise ContractError("schema", "notable areas")
         return _checked(DeepAnalysisResult(None, tuple(rejected)))
     checked = validate_deep_analysis(replace(base, notable_areas=tuple(areas)), source=source)
     return _checked(DeepAnalysisResult(checked.data, tuple(rejected)))
