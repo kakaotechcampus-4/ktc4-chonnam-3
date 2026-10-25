@@ -154,3 +154,246 @@ async def _claim(
         row.context_state, row.prepare_steps = state, _steps(0)
         row.last_error = None
         return False
+
+
+async def _snapshot(
+    sessions: Sessions,
+    user_id: UUID,
+    interview_id: UUID,
+    job_id: UUID,
+) -> tuple[c.PromptSpec, tuple[PreparedRepository, ...], Snapshot]:
+    async with sessions.begin() as db:
+        interview = await _owned(db, user_id, interview_id)
+        if (
+            interview is None
+            or interview.status != "preparing"
+            or (interview.context_state or {}).get("prepare_job_id") != str(job_id)
+        ):
+            raise SourcePreparationError("preparation_changed")
+        run = await db.get(AnalysisJob, interview.analysis_job_id)
+        posting = await db.get(JobPosting, interview.job_posting_id)
+        if (
+            run is None
+            or run.user_id != user_id
+            or run.job_type != "analysis_run"
+            or run.status not in {"succeeded", "partial"}
+            or run.job_posting_id != interview.job_posting_id
+            or posting is None
+            or posting.parse_status != "succeeded"
+        ):
+            raise SourcePreparationError("preparation_inputs_unavailable")
+        prompt = await load_active_prompt(db, "repo_deep")
+        await load_active_prompt(db, "director")
+        await load_active_prompt(db, "answer_analysis")
+        criteria = (
+            await db.scalars(select(ScoreCriterion).where(ScoreCriterion.is_active.is_(True)))
+        ).all()
+        if {row.score_key for row in criteria} != set(SCORE_KEYS) or any(
+            not row.rubric for row in criteria
+        ):
+            raise SourcePreparationError("score_criteria_unavailable")
+        frame = await db.scalar(
+            select(DomainQuestionFrame.id).where(
+                DomainQuestionFrame.is_active.is_(True),
+                DomainQuestionFrame.domain_category == (posting.domain_category or "etc"),
+            )
+        )
+        if frame is None:
+            raise SourcePreparationError("domain_frames_unavailable")
+        selected = (
+            await db.execute(
+                select(SessionRepository, Repository)
+                .join(Repository, Repository.id == SessionRepository.repository_id)
+                .where(SessionRepository.interview_session_id == interview_id)
+                .order_by(SessionRepository.display_order.nulls_last(), SessionRepository.id)
+                .with_for_update()
+            )
+        ).all()
+        if not 1 <= len(selected) <= 5:
+            raise SourcePreparationError("repository_selection_invalid")
+        candidates = (
+            await db.scalars(
+                select(AnalysisRepoCandidate).where(
+                    AnalysisRepoCandidate.analysis_job_id == run.id,
+                    AnalysisRepoCandidate.repository_id.in_([repo.id for _, repo in selected]),
+                    AnalysisRepoCandidate.filter_status == "eligible",
+                )
+            )
+        ).all()
+        analyses = (
+            await db.scalars(
+                select(RepoAnalysis).where(
+                    RepoAnalysis.repository_id.in_([repo.id for _, repo in selected])
+                )
+            )
+        ).all()
+        by_id, by_repo = (
+            {row.id: row for row in analyses},
+            {row.repository_id: row for row in candidates},
+        )
+        repositories: list[PreparedRepository] = []
+        snapshot: list[tuple[UUID, str, bool, UUID]] = []
+        for index, (selection, repo) in enumerate(selected):
+            candidate = by_repo.get(repo.id)
+            l1 = None if candidate is None else resolve_bound_analysis(candidate, by_id)
+            if repo.user_id != user_id or repo.is_private or not repo.is_accessible or l1 is None:
+                raise SourcePreparationError("bound_l1_unavailable")
+            shallow = c.decode(c.ShallowRepoAnalysis, l1.result)
+            if shallow.repository_id != str(repo.id) or shallow.head_sha != l1.head_sha:
+                raise SourcePreparationError("bound_l1_invalid")
+            if (
+                selection.snapshot_head_sha is not None
+                and selection.snapshot_head_sha != l1.head_sha
+            ):
+                raise SourcePreparationError("repository_snapshot_changed")
+            selection.snapshot_head_sha, selection.is_primary = l1.head_sha, index < 2
+            snapshot.append((repo.id, l1.head_sha, index < 2, l1.id))
+            if index >= 2:
+                continue
+            cached: c.DeepRepoAnalysis | None = None
+            invalid_cache = None
+            for row in analyses:
+                if (
+                    row.repository_id == repo.id
+                    and row.analysis_level == "l2"
+                    and row.head_sha == l1.head_sha
+                    and row.prompt_version == prompt.version
+                    and row.status == "succeeded"
+                ):
+                    try:
+                        checked = c.decode(c.DeepAnalysisResult, row.result)
+                        value = checked.analysis
+                        if (
+                            value is not None
+                            and value.repository_id == str(repo.id)
+                            and value.head_sha == l1.head_sha
+                            and 1 <= len(value.notable_areas) <= 5
+                            and len({area.path for area in value.notable_areas})
+                            == len(value.notable_areas)
+                            and all(area.scope == "entire file" for area in value.notable_areas)
+                            and tuple(
+                                c.decode(c.NotableArea, area) for area in row.notable_areas or ()
+                            )
+                            == value.notable_areas
+                        ):
+                            cached = value
+                    except c.ContractError:
+                        pass
+                    if cached is None:
+                        invalid_cache = (row.id, row.result, row.notable_areas)
+            repositories.append(
+                PreparedRepository(
+                    EvidenceScope(
+                        str(repo.id), repo.github_repo_id, repo.full_name, l1.head_sha, frozenset()
+                    ),
+                    shallow,
+                    cached,
+                    invalid_cache,
+                )
+            )
+        return prompt, tuple(repositories), tuple(snapshot)
+
+
+async def _unchanged(
+    db: AsyncSession,
+    user_id: UUID,
+    interview_id: UUID,
+    job_id: UUID,
+    snapshot: Snapshot,
+) -> InterviewSession | None:
+    row = await _owned(db, user_id, interview_id)
+    if (
+        row is None
+        or row.status != "preparing"
+        or (row.context_state or {}).get("prepare_job_id") != str(job_id)
+    ):
+        return None
+    selected = (
+        await db.execute(
+            select(SessionRepository, Repository)
+            .join(Repository, Repository.id == SessionRepository.repository_id)
+            .where(SessionRepository.interview_session_id == interview_id)
+            .order_by(SessionRepository.display_order.nulls_last(), SessionRepository.id)
+            .with_for_update()
+        )
+    ).all()
+    if tuple(
+        (repo.id, item.snapshot_head_sha, item.is_primary) for item, repo in selected
+    ) != tuple(item[:3] for item in snapshot) or any(
+        repo.user_id != user_id or repo.is_private or not repo.is_accessible for _, repo in selected
+    ):
+        return None
+    candidates = (
+        await db.scalars(
+            select(AnalysisRepoCandidate).where(
+                AnalysisRepoCandidate.analysis_job_id == row.analysis_job_id,
+                AnalysisRepoCandidate.filter_status == "eligible",
+            )
+        )
+    ).all()
+    analyses = (
+        await db.scalars(
+            select(RepoAnalysis).where(
+                RepoAnalysis.id.in_([item[3] for item in snapshot]),
+            )
+        )
+    ).all()
+    by_repo, by_id = (
+        {item.repository_id: item for item in candidates},
+        {item.id: item for item in analyses},
+    )
+    for repository_id, sha, _, analysis_id in snapshot:
+        candidate = by_repo.get(repository_id)
+        bound = None if candidate is None else resolve_bound_analysis(candidate, by_id)
+        if bound is None or bound.id != analysis_id or bound.head_sha != sha:
+            return None
+    return row
+
+
+async def _fail(
+    sessions: Sessions,
+    user_id: UUID,
+    interview_id: UUID,
+    job_id: UUID,
+    code: str,
+    step: str,
+) -> None:
+    async with sessions.begin() as db:
+        row = await _owned(db, user_id, interview_id)
+        if (
+            row is None
+            or row.status != "preparing"
+            or (row.context_state or {}).get("prepare_job_id") != str(job_id)
+        ):
+            return
+        _mark_failed(row, code, step)
+
+
+def _mark_failed(row: InterviewSession, code: str, step: str) -> None:
+    row.status, row.prepare_steps = "preparing_failed", _steps(STEPS.index(step), failed=True)
+    row.context_state = {
+        key: value for key, value in (row.context_state or {}).items() if key != "prepare_job_id"
+    }
+    row.last_error = dict(
+        reason="prep_failed",
+        code=code,
+        step=step,
+        recoverable=True,
+        occurredAt=datetime.now(UTC).isoformat(),
+    )
+
+
+async def _release_stale(
+    db: AsyncSession,
+    user_id: UUID,
+    interview_id: UUID,
+    job_id: UUID,
+    step: str,
+) -> None:
+    row = await _owned(db, user_id, interview_id)
+    if (
+        row is not None
+        and row.status == "preparing"
+        and (row.context_state or {}).get("prepare_job_id") == str(job_id)
+    ):
+        _mark_failed(row, "preparation_changed", step)
