@@ -234,3 +234,91 @@ async def start_director(
     except (asyncio.CancelledError, Exception) as error:
         await _close_claim(sessions, call_id, attempts, error)
         raise
+
+
+async def _replay(
+    db: AsyncSession,
+    interview: InterviewSession,
+    record: LLMCallRecord | None,
+    turn_no: int,
+    call_id: UUID,
+    *,
+    accepted: bool = False,
+) -> AnswerExecution:
+    current = await db.scalar(
+        select(InterviewTurn).where(
+            InterviewTurn.interview_session_id == interview.id,
+            InterviewTurn.turn_no == turn_no,
+        )
+    )
+    following = await db.scalar(
+        select(InterviewTurn.id).where(
+            InterviewTurn.interview_session_id == interview.id,
+            InterviewTurn.turn_no == turn_no + 1,
+        )
+    )
+    outcome = _outcome(record) if record is not None else None
+    director_record = await db.get(LLMCallRecord, uuid5(call_id, "director"))
+    if director_record is not None:
+        if (
+            director_record.interview_session_id != interview.id
+            or director_record.task_name != "director"
+        ):
+            raise AgentStateError("call_scope_mismatch")
+        if not _finished(director_record):
+            raise AgentStateError("call_in_progress")
+        outcome = _outcome(director_record)
+    return AnswerExecution(
+        call_id,
+        current.id if current else None,
+        following,
+        interview.status == "completed",
+        outcome.failure if outcome else None,
+        outcome.discard_reason if outcome else "answer_already_saved",
+        accepted,
+    )
+
+
+async def _evaluation_rows(
+    db: AsyncSession,
+    turn_id: UUID,
+    checked: c.ContractChecked[c.AnswerAnalysis],
+    evidence: tuple[c.Evidence, ...],
+) -> None:
+    analysis = checked.data
+    by_id = {item.evidence_id: item for item in evidence if item.evidence_id}
+    refs = set(analysis.technical_assessment.evidence_refs)
+    refs.update(ref for claim in analysis.claim_checks for ref in claim.evidence_refs)
+    linked = set(
+        await db.scalars(
+            select(TurnEvidence.evidence_id).where(
+                TurnEvidence.turn_id == turn_id,
+                TurnEvidence.usage == "evaluation_basis",
+            )
+        )
+    )
+    for ref in refs:
+        if UUID(ref) not in linked:
+            db.add(TurnEvidence(turn_id=turn_id, evidence_id=UUID(ref), usage="evaluation_basis"))
+    conflicts = {
+        (row.evidence_id, row.claim_text)
+        for row in await db.scalars(
+            select(EvidenceConflict).where(EvidenceConflict.turn_id == turn_id)
+        )
+    }
+    for claim in analysis.claim_checks:
+        if claim.status == "conflicting":
+            for ref in claim.evidence_refs:
+                if (UUID(ref), claim.claim_text) in conflicts:
+                    continue
+                db.add(
+                    EvidenceConflict(
+                        turn_id=turn_id,
+                        evidence_id=UUID(ref),
+                        source="answer_vs_code",
+                        claim_text=claim.claim_text,
+                        evidence_text=by_id[ref].content,
+                        verdict="unresolved",
+                    )
+                )
+                conflicts.add((UUID(ref), claim.claim_text))
