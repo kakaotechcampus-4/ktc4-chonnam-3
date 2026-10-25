@@ -1155,9 +1155,9 @@ def parse_deep_analysis(
             continue
         areas.append(area)
     if not areas:
-        # 채택할 관찰이 없고 형식 오류가 있으면 공통 gateway의 남은 재시도만 사용한다.
-        # 확인한 관찰이 있는 부분 성공과 semantic 거절만 있는 결과는 그대로 보존한다.
-        if any(item.stage == "schema" for item in rejected):
+        # 채택할 관찰이 없고 거절이 전부 형식 오류일 때 공통 gateway의 남은 재시도만 사용한다.
+        # semantic 거절이 섞이면 다시 평가하지 않고 부분 성공·거절 목록을 그대로 보존한다.
+        if rejected and all(item.stage == "schema" for item in rejected):
             raise ContractError("schema", "notable areas")
         return _checked(DeepAnalysisResult(None, tuple(rejected)))
     checked = validate_deep_analysis(replace(base, notable_areas=tuple(areas)), source=source)
