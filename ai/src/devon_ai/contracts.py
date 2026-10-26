@@ -1057,24 +1057,6 @@ class DeepRepoAnalysis(_Contract):
         _unique(cast(tuple[object, ...], self.confirmed_technologies), "confirmed technologies")
 
 
-def validate_deep_analysis(
-    candidate: DeepRepoAnalysis, *, source: DeepRepoInput
-) -> ContractChecked[DeepRepoAnalysis]:
-    _convert(DeepRepoAnalysis, candidate, "deep analysis", wire=False)
-    _convert(DeepRepoInput, source, "deep input", wire=False)
-    if candidate.repository_id != source.repository_id or candidate.head_sha != source.head_sha:
-        raise ContractError("semantic", "repository ref")
-    if not 1 <= len(candidate.notable_areas) <= 5:
-        raise ContractError("semantic", "notable area count")
-    _unique(tuple(area.path for area in candidate.notable_areas), "notable area paths")
-    source_by_path = {item.path: item for item in source.sources}
-    for area in candidate.notable_areas:
-        matched = source_by_path.get(area.path)
-        if matched is None or matched.read_scope != area.scope:
-            raise ContractError("semantic", "notable area source scope")
-    return _checked(candidate)
-
-
 @dataclass(frozen=True)
 class AreaFailure(_Contract):
     path: str | None
@@ -1162,6 +1144,24 @@ def parse_deep_analysis(
         return _checked(DeepAnalysisResult(None, tuple(rejected)))
     checked = validate_deep_analysis(replace(base, notable_areas=tuple(areas)), source=source)
     return _checked(DeepAnalysisResult(checked.data, tuple(rejected)))
+
+
+def validate_deep_analysis(
+    candidate: DeepRepoAnalysis, *, source: DeepRepoInput
+) -> ContractChecked[DeepRepoAnalysis]:
+    _convert(DeepRepoAnalysis, candidate, "deep analysis", wire=False)
+    _convert(DeepRepoInput, source, "deep input", wire=False)
+    if candidate.repository_id != source.repository_id or candidate.head_sha != source.head_sha:
+        raise ContractError("semantic", "repository ref")
+    if not 1 <= len(candidate.notable_areas) <= 5:
+        raise ContractError("semantic", "notable area count")
+    _unique(tuple(area.path for area in candidate.notable_areas), "notable area paths")
+    source_by_path = {item.path: item for item in source.sources}
+    for area in candidate.notable_areas:
+        matched = source_by_path.get(area.path)
+        if matched is None or matched.read_scope != area.scope:
+            raise ContractError("semantic", "notable area source scope")
+    return _checked(candidate)
 
 
 def _json_value(value: object) -> object:
