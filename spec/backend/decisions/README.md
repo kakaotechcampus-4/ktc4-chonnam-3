@@ -33,7 +33,8 @@
 ## Director 연결 기반의 게시 경계
 
 - [0008 Director 공통 보완의 게시 경계](0008-director-foundation-publication.md): Proposed.
-  기존 migration 이력을 보존하고 #82·#108과 단일 head를 구성한다. 두 선행 반영 전 Draft이며
+  기존 migration 이력을 보존하고 #82·#108·#127의 순차 반영마다 단일 head를 구성한다.
+  현재 최종 목표는 신규 `0005_director_foundation_merge`다. 두 선행 반영 전 Draft이며
   검사 subprocess 소스 경로 보완과 AI 통합 검증 기록의 원본 위치를 설명한다.
 
 ## 관련 AI 결정

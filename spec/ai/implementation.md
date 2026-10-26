@@ -249,6 +249,52 @@ revision 전체 집합·기존 자료·위험 downgrade 차단을 보존하도�
 두 선행 반영 후 그 시점의 실제 graph·기존 자료·전체 BE 회귀와 CI를 다시 확인해야 한다.
 이 검증은 외부 모델 품질·면접 완주·운영 DB 배포 확인을 포함하지 않는다.
 
+## 2026-10-27 — #127 순차 게시 graph의 누락 보완과 자료 보존 재검사
+
+### 실제 결함과 수정
+
+앞선 6개 출발점과 최종 PR 조합 검증은 #127까지 결합한 graph의 결과였다.
+develop → #82 → #108만 반영한 중간 snapshot에 두 head가 남는 문제를 놓쳤다.
+이전 실행 기록을 보존하고 순차 게시 단계 자체를 새 회귀 범위로 추가한다.
+
+- #108 `ef237c56`의 신규 `0004_analysis_storage_merge`가 저장·분석 이력을 먼저 합친다.
+  최종 #108 `d0704b97`에서도 해당 migration 원문은 같다.
+- #127 `78d39238`은 그 신규 합류와 기존 `0004_interview_foundation_merge`를 부모로 하는
+  DDL 없는 `0005_director_foundation_merge`를 추가한다. 기존 migration ID·부모·DDL은 보존한다.
+- 최종 head 검사와 기존 이력 검사를 유지하고, 실제 Script의 ID·부모 metadata로
+  develop·#82·#108·#127 네 snapshot의 head를 각각 확인한다. 선행 코드는 게시본에 복사하지 않는다.
+- [BE ADR 0008](../backend/decisions/0008-director-foundation-publication.md)의 새 절에
+  현재 목표 0005와 이전 최종 0004의 관계를 기록한다. Proposed 상태는 유지한다.
+
+### 이번 실행 결과
+
+Windows Python 3.12, `develop@d063d8d` 기준이다. 결합 migration source tree는
+`00996aa3ae9f572ff7c67275930c291e3bb36ee7`이며, 새 전용 PostgreSQL DB에서 합성 자료를 사용했다.
+아래 수치는 앞선 통합 검증 수치를 재사용한 것이 아니다.
+
+| 범위 | 검사 | 결과 |
+| --- | --- | --- |
+| 새 #108 + 기존 #127 결합, 신규 회귀 | 수정 전 graph 검사 | 2 failed·3 passed, 실제 두 head와 0005 부재 확인 |
+| 새 #108 + 보완 #127 결합 | `pytest tests/core/test_director_migration_graph.py -q` | 5 passed, 기존 Alembic 설정 경고 5개 |
+| 같은 결합의 최신 설정 검사 포함 | 설정 + graph pytest | 55 passed, 5 warnings |
+| 변경한 Python 두 파일 | Ruff·format | 통과, 2 files already formatted |
+| 최신 develop + #127 게시 범위 | 설정 pytest | 50 passed |
+| 같은 게시 범위 + 신규 graph 회귀 | graph pytest | 5 failed, 모두 선행 `0002_agent_storage` 부재 |
+| 실제 PostgreSQL 순차 게시 | 공고 → #82 merge → #108 merge → head | 각 게시 단계 단일 head, 최종 0005, 기존 모든 fixture 행 보존 |
+| 기존 branch의 두 적용 순서 | Agent → Director → Analysis, Analysis → Director → Agent → 신규 merge들 | 두 경로 모두 최종 0005, 모든 fixture 행 보존 |
+| 위 세 경로 각각 | 활성 분석 작업 3개 상태에서 `downgrade 0002_posting_versions` | 기존 분석 downgrade 차단, version 전체 집합과 모든 fixture 행 보존 |
+| 위 세 경로 각각 | 명시한 #108 merge로 downgrade → head 재적용 | 통과, sibling 기존 #127 merge 이력과 모든 fixture 행 보존 |
+| 검사 자원·원문 | 세 경로 후 base 정리, migration SHA-256 전후 대조 | 전용 DB public 테이블 0개로 복원, 원문 hash 동일 |
+
+fixture는 사용자·공고 원문 JSON·작업 steps·질문 Contract·호출 raw·후보 페이지 지표를 포함한다.
+전진·실패 rollback·merge-only 왕복에서 해당 테이블의 전체 행 JSON을 대조했다.
+위험 downgrade의 첫 probe는 저장 merge를 대상으로 삼아 분석 branch를 내리지 않았다.
+공통 조상으로 대상을 교정해 실제 분석 차단을 호출한 뒤 위 세 경로를 새로 실행했다.
+
+이 결과는 #82·새 #108을 로컬 결합한 검증이며, 미병합 선행을 포함하지 않는 단독 CI 통과가 아니다.
+#127은 develop base의 Draft를 유지한다. 선행 반영 후 실제 게시 순서와 최종 BE 회귀·CI를 다시
+확인해야 한다. 외부 모델·면접 완주·운영 DB 적용과 전체 BE pytest는 이번 검사에 포함하지 않았다.
+
 ## 2026-09-27 — task-04 L1 호출·재요청과 캐시 판정
 
 ### 기준과 변경

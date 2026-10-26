@@ -48,3 +48,23 @@ seed 오류 해결은 #131의 반영으로 확인하며, 이 PR의 완료 범위
 
 합류 revision의 되돌리기는 대상 revision을 명시한다. 여러 부모가 있는 지점의
 `downgrade -1`은 경로가 모호하므로 실행할 이전 revision과 그 자료 보존 조건을 먼저 확인한다.
+
+## 2026-10-27 순차 게시 단계의 추가 합류
+
+위 최종 합류만으로는 develop → #82 → #108 단계의 단일 head를 보장하지 못했다.
+당시 검증은 #127까지 모두 결합한 graph를 확인했고, #108 반영 직후의 두 head를 놓쳤다.
+이전 revision과 실행 기록은 그대로 보존하고 현재 합류 지점을 다음과 같이 보완한다.
+
+- #108은 DDL 없는 `0004_analysis_storage_merge`에서 `0003_agent_storage_merge`와
+  `0003_analysis_runs`를 연결한다. #108까지 반영한 시점도 단일 head여야 한다.
+- #127은 DDL 없는 `0005_director_foundation_merge`를 추가한다. 부모는 위 #108의
+  신규 합류와 기존 `0004_interview_foundation_merge`이며, 기존 ID·부모·DDL은 유지한다.
+- 현재 목표 head는 `0005_director_foundation_merge`다. 이전 절의 0004는 보존할 이력이고
+  최종 목표에 관한 설명은 이 절을 따른다. 제품 계약·테이블·자료 정책은 바꾸지 않는다.
+- 실제 revision metadata로 develop·#82·#108·#127의 네 snapshot을 각각 검사한다.
+  선행이 없는 게시본의 실패는 유지하며, 새 #108 합류까지 반영한 뒤 병합 전에 재검증한다.
+- merge만 되돌리는 대상과 분석 DDL까지 되돌리는 대상은 구분한다. 활성 분석 작업이 중복된
+  상태에서 `0002_posting_versions`로 내려가면 기존 #108 차단이 실행되고 자료·version 집합을
+  보존해야 한다. merge-only 왕복이 이 위험 downgrade 검증을 대신하지 않는다.
+
+새 실행 결과와 검사 한계의 원본은 [AI 구현 기록](../../ai/implementation.md)에 추가한다.
