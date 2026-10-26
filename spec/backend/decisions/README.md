@@ -30,6 +30,12 @@
 - [0007 Task 10 재수집 실패 보존과 README 축약 캐시](0007-task10-collection-retry-and-partial-cache.md): Proposed.
   확인한 필드만 저장하고 같은 run의 성공을 보존한다. 축약 partial은 동일 입력일 때만 재사용한다.
 
+## Director 연결 기반의 게시 경계
+
+- [0008 Director 공통 보완의 게시 경계](0008-director-foundation-publication.md): Proposed.
+  기존 migration 이력을 보존하고 #82·#108과 단일 head를 구성한다. 두 선행 반영 전 Draft이며
+  검사 subprocess 소스 경로 보완과 AI 통합 검증 기록의 원본 위치를 설명한다.
+
 ## 관련 AI 결정
 
 - [0011 Sprint 1 모델 선택](../../ai/decisions/0011-sprint1-model-selection.md): 2026-09-21 사용자 결정. Sprint 1 LLM 모델은 OpenAI `gpt-5.6-luna`다. 인증·SDK/client·호출 경로·버전 기록 방식은 AI-L01에서 계속 검토한다.
@@ -45,9 +51,3 @@
 - [0017 Sprint 1 추천 숫자 점수 보류](../../ai/decisions/0017-recommendation-score-deferral.md): 2026-09-22 사용자 결정. matchScore 필드는 null로 반환하고 기존 추천 표시·이유·상한·저장 위치를 유지한다. 선정 기준은 후속 0018을 따르며 실제 DB·응답 연결은 구현 시 검증한다.
 
 - [0018 기존안 일괄 유지와 질문·구현·후속 검토 분리](../../ai/decisions/0018-existing-baseline-bulk-resolution.md): 기존 기술 직접 비교·후보 순서에서 run 전체 최대 5개 추천을 채택한다. 기존 계약·저장·Worker·종료 흐름을 유지하며 상세 연결·실측은 구현 인계로 구분한다. 실제 문답과 연결 자료를 후속 내부 비교에 보관·재사용하고 최종 내부 비교 검증 뒤에도 보관한다. 별도의 자동 삭제 기한은 두지 않는다.
-
-## Director 연결 기반의 게시 경계
-
-- [0008 Director 공통 보완의 게시 경계](0008-director-foundation-publication.md): Proposed.
-  기존 migration 이력을 보존하고 #82·#108과 단일 head를 구성한다. 두 선행 반영 전 Draft이며
-  검사 subprocess 소스 경로 보완과 AI 통합 검증 기록의 원본 위치를 설명한다.
