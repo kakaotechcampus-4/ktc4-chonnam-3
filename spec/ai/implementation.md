@@ -82,6 +82,26 @@ AI 작업의 구현·수정 내역, 코드 위치, 실행 결과와 남은 작�
 - 통합에서 develop #77 기록과 각 PR의 고유 기록을 함께 보존했다. 이 수치를 독립 게시본의
   통과로 사용하지 않으며 원본 #107은 대체 PR 검증·상호 연결 후 병합 없이 닫는다.
 
+## 2026-10-26 — PR #102 참조 JD 입력과 대조 답변 보완
+
+- 기준은 리뷰 원본 `28e2663`이며 초기 설계·공개 계약·`AnswerAnalysis` 출력 필드는 변경하지 않았다.
+- `answer_analysis._referenced_jd`는 질문의 `jd_requirement_ids`와 Contract의 `jd_requirement`
+  basis 참조를 합쳐 해당 ID·원문·분류·source field·tech tags만 모델 입력으로 전달한다. 미참조 JD는
+  제외한다. 필수 원문 누락·중복 ID는 호출 전에 `answer_analysis_input_invalid`(semantic)로 거절한다.
+- `test_answer_analysis.py`에 7사례를 추가했다. Kafka/RabbitMQ 원문 변경이 실제 payload에 반영되고,
+  두 참조 경로 각각과 함께 쓸 때 원문 유실을 허용하지 않는지 검사한다. 공용 질문 helper는 변경하지 않았다.
+- 길고 틀린 답변에 실제로 "별도 갱신 없이도 캐시는 항상 최신 데이터를 보장합니다"라는 주장을 넣고,
+  분석의 `answer_quotes`도 그 구절을 인용하도록 맞췄다. 입력에 없는 주장을 비판하는 fixture를 제거했다.
+- 수정 전 새 회귀 7사례가 모두 실패함을 확인한 뒤 수정했다. 수정 후 직접 관련 33사례,
+  AI 전체 235사례, AI Ruff·format 45파일·mypy 11 source 모두 통과했다.
+- 실제 게시 원본 backend의 패키지 import·Director·공통 LLM·설정 경계 131사례가 통과했다.
+  실제 BE gateway와 모의 HTTP를 연결한 별도 5시나리오에서도 서로 다른 JD 원문 전달 2건과
+  필수 참조 누락의 HTTP 무호출 3건을 확인했다. 원문 전달 응답의 모델·prompt metadata도 보존됐다.
+- 기존 `backend/.venv`의 Python을 사용하고 각 worktree의 AI·BE 소스를 명시했다. 외부 API·실제 모델,
+  PostgreSQL 저장·면접 전체 흐름·분류 의미 품질은 이번 검증 범위가 아니다. 이전 실행 결과와 구분한다.
+- 기존 전용 계약 검사 환경에서 schema 2개·부분 OpenAPI·정상/오류 fixture 7개와 `git diff --check`도
+  통과했다. 부분 형식 검사를 전체 API 호환성 검증으로 확대하지 않는다.
+
 ## 2026-10-26 — PR #103 검토 결과의 검증 범위 설명 보완
 
 - 리뷰 원본 `742e5a2`의 문서 지적을 반영했다. 승인 `QuestionReview`의 문장·Contract 대조와
@@ -90,6 +110,55 @@ AI 작업의 구현·수정 내역, 코드 위치, 실행 결과와 남은 작�
   AI 전체 204사례, AI Ruff·format 40파일·mypy 11 source, BE import·Director·LLM·설정 경계
   131사례를 재실행해 모두 통과했다. 실제 검토기의 의미 품질·모델 호출·DB 저장은 검증하지 않았다.
 - 기존 전용 계약 검사 환경의 schema 2개·부분 OpenAPI·fixture 7개와 `git diff --check`도 통과했다.
+
+## 2026-10-06 — task-09 답변 분석 task 구현
+
+관련 작업: AI task-09([답변 분석](../../ai/docs/task-09-answer-analysis.md)). PR 번호는 생성 후 기록한다.
+
+### 기준과 변경
+
+- 기준은 origin/develop `ef1a48d`다. 기존 `AnswerAnalysis` 열 개 필드, `validate_analysis`, ADR 0014의 값·저장 위치를
+  그대로 쓰며 `contracts.py`, 새 enum, WS 이벤트, DB 컬럼, 의존성은 변경하지 않았다.
+- `ai/src/devon_ai/llm_tasks/answer_analysis.py`: `analyze_answer`를 추가했다. 모델 호출 전에 코드로
+  (1) 확정 질문(`ContractChecked[Question]`)과 `context.current_question_contract` 일치,
+  (2) `turn_id`와 `context.current_turn_id` 일치 및 이미 이력에 있는 Turn 거절,
+  (3) 빈 답변(초안·전송 오류) 거절 — 정상 제출된 "모르겠습니다"는 거절하지 않는다,
+  (4) 조회 허용 위치·Evidence의 repository/ref가 Context 고정 ref와 일치하는지를 검사한다.
+  잘못된 입력은 시도 없이 `answer_analysis_input_invalid`로 반환한다. 시도 소진은 `llm_failed`(budget)다.
+- 모델 출력은 열 개 최상위 필드만 허용하고(점수 같은 추가 필드는 schema 실패), `validate_analysis`를 통과한
+  `ContractChecked[AnswerAnalysis]`만 반환한다. 주입된 `ModelCall`이 validator를 건너뛰어도 같은 질문·답변으로
+  다시 검증하며 실패하면 `answer_analysis_invalid`다. 재시도 루프·Tool 실행은 없고 `verification_requests`는 후보다.
+- 모델 payload에서 Persona를 제외했다(평가 기준은 Persona별로 다르지 않다). `tool_results`와 `allowed_locations`는
+  BE가 권한을 확인해 선택 인자로 전달하며 근거 ID는 주입된 Evidence·ToolResult 항목만 등록한다.
+- `ai/prompts/answer-analysis-v1.md`는 검수 전 초안이며 런타임이 읽지 않는다. 운영 prompt 원본·등록은 BE다.
+- 테스트: `test_answer_analysis.py`(입력·호출 경계), `test_answer_analysis_cases.py`(대조 사례 1~4),
+  `test_answer_analysis_evidence_cases.py`(대조 사례 5~8), 공용 `conftest.py`. 조회·수정 특성 사례는 경계 테스트에 있다. 거절 사례는 의도한 의미 검증 사유로 실패함을 확인했다.
+
+### 실행 결과
+
+Windows, Python 3.12, 격리 worktree의 locked 환경에서 실행했다.
+
+| 작업 디렉터리 | 명령 | 결과 |
+| --- | --- | --- |
+| 루트 | `uv --directory ai sync --locked --python 3.12` | 통과 |
+| 루트 | `uv --directory ai run --locked ruff check .` / `ruff format --check .` | 통과 / 통과(44개 파일) |
+| 루트 | `uv --directory ai run --locked mypy` | 통과(소스 11개 파일) |
+| 루트 | `uv --directory ai run --locked pytest` | 228 passed(기준선 193 + 신규 35) |
+| 루트 | `uv --directory backend run --locked pytest tests/agents/test_ai_package_imports.py` | 1 passed |
+| 루트 | `python .claude/scripts/check_contracts.py` | 미실행(공통 계약 변경 없음) |
+
+### 한계와 후속 작업
+
+- 모든 모델 출력은 고정 fixture다. 실제 모델이 세 축을 올바르게 분리하는지, 유사하지만 무관한 코드를 지지
+  근거로 채택하지 않는지 같은 의미 품질은 검증하지 않았다(AI-L01). mock 통과는 모델 품질을 뜻하지 않는다.
+- 코드가 확인하는 것은 구조·인용 원문·등록 ID·허용 위치다. 필수 대조 사례 7(평가 불가 vs 설명 부족)과
+  1(충분·부분·불충분의 실제 판정)은 모델 판단이며 코드는 모순된 조합만 거절한다.
+- 대조 사례 8의 "최종 피드백 연결"은 이력 원문·분석 참조를 변경 없이 전달하는 데까지만 검증했다. 정정·후속
+  보완의 최종 피드백 입력 구성은 task 3 범위이며, 사용자 입력 복구·재제출·재평가(AI-L09)는 보류다.
+- BE 연동은 미실행이다. `backend/app/llm_tasks/answer_analysis.py`는 골격이며 prompt 로드, `answer_analysis`
+  PromptSpec 등록, 분석 저장 순서와 transaction, 종료 후 늦은 결과 차단은 BE 책임이다(AI-L12).
+  `tool_results`·`allowed_locations` 산출은 Controller가 맡는 제안이다.
+- `decode`는 중첩 객체의 계약 밖 필드를 버리는 기존 동작이며 이번에 바꾸지 않았다. 최상위 추가 필드만 거절한다.
 
 ## 2026-10-06 — 기여 정정 사례 테스트
 
