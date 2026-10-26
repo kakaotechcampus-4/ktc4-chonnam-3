@@ -725,3 +725,40 @@ BE 환경 준비는 캐시에 `lxml-stubs`가 없어 offline sync가 실패한 �
 실제 분류 품질은 검증하지 않았다. 로그는 `.claude/scratch/ai-pr-reviews-20261026/pr99-concurrent/`에
 보존한다. 이전 v1·로컬 v2 후보·팀원 원본의 검증 수치를 이번 보완본의 새 결과로 합치지 않는다.
 다른 PR과 새로 결합한 결과 및 실제 게시 head는 후속 게시·재검증에서 구분해 기록한다.
+
+## 2026-10-26 — 포트폴리오 문서 Claim 추출 (0029)
+
+### 기준과 변경
+
+- 작업 브랜치: `feature/doc-claims`, 기준 develop `fca606a`(#99 머지 후). AI-L22 중 AI 추출 모듈 범위.
+- `ai/src/devon_ai/llm_tasks/doc_claims.py`: `extract_claims`가 추출 텍스트의 비어 있지 않은 줄에 `L<순번>` ID를
+  붙여 한 번 호출하고 `{claims: [{claim_text, claim_type, tech_tags, line_id}]}`를 받는다. 요청별 줄 표로 만든
+  validator가 schema·semantic(없는 줄 ID)을 검사하고 줄 번호(`paragraph_no`)와 원문 줄을 복원한다. 실패하면
+  Claim 없이 실패 정보를 돌려준다. 원문이 비면 호출하지 않고, prompt·limits·입력 타입 오류는 호출 전에 거절한다.
+- `ai/prompts/doc-claims-v1.md`: 검수 전 prompt 초안. Claim 4종 정의, 뽑지 않는 것, 원문에 없는 기술·수치 추가 금지.
+- `ai/tests/llm_tasks/test_doc_claims.py`: 줄 번호 부여(빈 줄 제외·CRLF 분리·양 끝 공백 유지), 줄 번호·원문 복원과 태그
+  중복 제거, 빈 결과 성공, 없는 줄 ID 3종의 semantic 기록·무재시도, schema 위반 9종, provider 실패, 빈 문서
+  비호출, 입력 거절 3종(다른 task prompt, `doc_claims_v1`이 아닌 version, 문자열이 아닌 입력).
+
+### 실행 결과 (2026-10-26)
+
+환경: Windows, uv. `ai`에서 `ruff check .`·`ruff format --check .`·`mypy`(12개 파일) 통과, `pytest -q` 213 passed.
+`backend`에서 `tests/agents/test_ai_package_imports.py` 1 passed.
+
+실제 BE `call_model` + `httpx.MockTransport`(외부 호출 없음)로 확인했다. gateway가 보내는 schema는 `strict: true`이며
+모든 object 단계에서 `required`가 전체 속성과 같고 `additionalProperties: false`다.
+
+| 모델 응답 | claims | failure | attempt 오류 | HTTP 호출 |
+| --- | --- | --- | --- | --- |
+| 정상 Claim 2개 | 2개(줄 번호 1·2) | 없음 | 없음 | 1 |
+| 1개가 없는 줄 ID | 없음 | semantic | (semantic, llm_failed) | 1 |
+| 없는 `claim_type` | 없음 | schema | (schema, llm_failed) | 2 (gateway schema 재시도) |
+| `claims: []` | 없음 | 없음 | 없음 | 1 |
+
+### 검증 한계와 후속 작업
+
+- 실제 provider 호출과 추출 품질 평가는 미실행이다(API 키 없음). 실행 시 포트폴리오 표본·모델 버전·비용과
+  누락·과잉 추출·원문에 없는 내용 추가를 함께 기록한다.
+- BE 연결과 Director 사용은 범위 밖이다: `doc_extract` 단계 호출, BE adapter와 `document_claims` 저장,
+  `seed_prompt_versions.py`의 `doc_claims` 등록, `claim_type` CHECK 여부, `Context`의 Claim 전달과
+  `interview_turns.claim_ids` 기록(0029 영향 절).
