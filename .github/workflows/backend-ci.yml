@@ -1,0 +1,87 @@
+name: Backend CI
+# backend 변경 PR 에서 ruff · format · mypy · pytest 를 단계별로 실행한다.
+# secrets 를 쓰지 않고, GitHub · Wanted · LLM 은 호출하지 않는다(테스트는 mock).
+# ai/ 는 backend 의 editable path 의존성이라 함께 감시한다(backend/docs/deploy.md §6).
+
+on:
+  pull_request:
+    branches: [develop, release]
+    paths:
+      - 'backend/**'
+      - 'ai/**'
+      - '.github/workflows/backend-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: devon
+          POSTGRES_PASSWORD: devon
+          POSTGRES_DB: devon_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U devon -d devon_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # conftest 규칙: DB 이름에 _test 포함, Redis DB 는 13·14·15 중 하나.
+      TEST_DATABASE_URL: postgresql+asyncpg://devon:devon@127.0.0.1:5432/devon_test
+      TEST_POSTGRES_URL: postgresql+asyncpg://devon:devon@127.0.0.1:5432/devon_test
+      TEST_REDIS_URL: redis://127.0.0.1:6379/15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            backend/uv.lock
+            ai/uv.lock
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Enable pgcrypto
+        # docker-compose.yml 이 init-extensions.sql 로 하는 일을 서비스 컨테이너에 맞춘다.
+        run: PGPASSWORD=devon psql -h 127.0.0.1 -U devon -d devon_test -f scripts/init-extensions.sql
+
+      - name: Ruff check
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Mypy
+        run: uv run mypy app
+
+      - name: Pytest
+        run: uv run pytest -q
