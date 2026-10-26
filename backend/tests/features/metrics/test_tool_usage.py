@@ -38,12 +38,11 @@ async def test_ratio_counts_turns_not_evidences(db: AsyncSession) -> None:
     tool_b = await make_evidence(db, interview, repo, tool_name="get_commit")
     t1 = await make_turn(db, interview, 1)  # 사전 분석 근거만
     t2 = await make_turn(db, interview, 2)  # Tool 근거 2건 + 사전 근거 1건 → 1턴으로 센다
-    t3 = await make_turn(db, interview, 3)  # 근거 없음 → 분모 제외
+    await make_turn(db, interview, 3)  # 근거 없음 → 분모 제외
     await _link(db, t1, prep, "question_basis")
     await _link(db, t2, tool_a, "question_basis")
     await _link(db, t2, tool_b, "evaluation_basis")
     await _link(db, t2, prep, "evaluation_basis")
-    assert t3.id is not None
 
     usage = await queries.get_evidence_tool_usage(db)
 
@@ -78,3 +77,16 @@ async def test_ratio_period_filter(db: AsyncSession) -> None:
 
     assert recent_usage.ratio == 0.0
     assert old_usage.ratio == 1.0
+
+
+async def test_ratio_period_boundary(db: AsyncSession) -> None:
+    interview, repo = await _seed(db)
+    tool = await make_evidence(db, interview, repo, tool_name="read_file")
+    boundary = datetime.now(UTC) - timedelta(days=1)
+    turn = await make_turn(db, interview, 1)
+    turn.created_at = boundary
+    await _link(db, turn, tool, "question_basis")
+
+    # since 는 포함, until 은 미포함
+    assert (await queries.get_evidence_tool_usage(db, since=boundary)).turns_with_evidence == 1
+    assert (await queries.get_evidence_tool_usage(db, until=boundary)).turns_with_evidence == 0

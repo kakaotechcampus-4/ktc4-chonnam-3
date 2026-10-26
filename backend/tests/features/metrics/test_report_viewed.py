@@ -41,3 +41,13 @@ async def test_period_filter(db: AsyncSession) -> None:
     since = now - timedelta(days=1)
     assert await queries.count_report_viewed(db, since=since) == 1
     assert await queries.count_report_viewed(db, until=since) == 1
+
+
+async def test_period_boundary(db: AsyncSession) -> None:
+    boundary = datetime.now(UTC) - timedelta(days=1)
+    db.add(Event(event_name="report_viewed", created_at=boundary))
+    await db.flush()
+
+    # since 는 포함, until 은 미포함
+    assert await queries.count_report_viewed(db, since=boundary) == 1
+    assert await queries.count_report_viewed(db, until=boundary) == 0

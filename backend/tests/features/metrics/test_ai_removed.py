@@ -59,3 +59,15 @@ async def test_period_filter(db: AsyncSession) -> None:
 
     assert len(recent) == 1 and len(earlier) == 1
     assert recent[0].repository_id != earlier[0].repository_id
+
+
+async def test_period_boundary(db: AsyncSession) -> None:
+    interview, _ = await _sources(db, ["ai_removed"])
+    boundary = datetime.now(UTC) - timedelta(days=1)
+    (row,) = await _rows(db, interview.id)
+    row.created_at = boundary
+    await db.flush()
+
+    # since 는 포함, until 은 미포함
+    assert len(await queries.list_ai_removed_repositories(db, since=boundary)) == 1
+    assert await queries.list_ai_removed_repositories(db, until=boundary) == []
