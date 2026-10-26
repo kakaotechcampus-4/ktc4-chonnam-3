@@ -14,6 +14,8 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
+MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
+
 
 def migrate(connection, script, target, *, downgrade=False):
     def steps(heads, context):
@@ -47,7 +49,7 @@ async def test_applied_branch_keeps_legacy_postings_through_merge_round_trip(app
         poolclass=NullPool,
         connect_args={"server_settings": {"search_path": schema, "statement_timeout": "10000"}},
     )
-    script = ScriptDirectory(str(Path(__file__).resolve().parents[2] / "migrations"))
+    script = ScriptDirectory(str(MIGRATIONS))
     try:
         async with engine.begin() as db:
             await db.execute(text(f'CREATE SCHEMA "{schema}"'))
