@@ -71,6 +71,34 @@ async def test_next_question_after_answer(db: AsyncSession) -> None:
     assert (turn.turn_no, turn.depth, turn.parent_turn_no) == (2, 2, 1)
 
 
+async def test_question_saved_when_turn_unchanged_since_generation_start(
+    db: AsyncSession,
+) -> None:
+    interview, _ = await _setup(db, current_turn=1)
+    await make_turn(db, interview, 1, answered=True)
+
+    turn = await _ask(db, interview.id, expected_current_turn=1)
+
+    assert isinstance(turn, InterviewTurn)
+    assert turn.turn_no == 2
+
+
+async def test_question_rejected_when_other_request_advanced_turn(db: AsyncSession) -> None:
+    """생성하는 사이 다른 연결이 턴을 진행했다면, 이전 턴이 답변돼 있어도 저장하지 않는다."""
+    interview, _ = await _setup(db, current_turn=2)
+    await make_turn(db, interview, 1, answered=True)
+    await make_turn(db, interview, 2, answered=True)
+
+    # 이 요청은 current_turn=1 일 때 생성을 시작했다.
+    result = await _ask(db, interview.id, expected_current_turn=1)
+
+    assert isinstance(result, TurnRejected)
+    await db.refresh(interview)
+    assert interview.current_turn == 2
+    turns = (await db.scalars(select(InterviewTurn))).all()
+    assert len(turns) == 2
+
+
 @pytest.mark.parametrize(
     ("overrides", "last_answered", "reason"),
     [
