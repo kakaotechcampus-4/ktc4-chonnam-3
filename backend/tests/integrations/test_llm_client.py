@@ -455,6 +455,7 @@ async def test_late_response_after_swallowed_cancellation_is_a_timeout_not_succe
         result = await client.call_model(
             req,
             validate,
+            base_url="https://api.openai.com/v1",
             api_key=SecretStr("fixture-key"),
             http_client=http,
         )
