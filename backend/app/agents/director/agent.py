@@ -5,6 +5,7 @@ adapt validated service inputs once the AI contract is implemented.
 """
 
 from collections.abc import Mapping
+from dataclasses import replace
 from functools import partial
 
 import httpx
@@ -31,6 +32,18 @@ async def execute_director(
     """같은 두 시도 예산으로 목적·초안 생성과 독립 검토를 연결한다."""
     from devon_ai.agents.director import runtime
 
+    failure = budget.terminal_failure
+    if failure is not None:
+        return c.ModelResult(None, failure, ())
+    remaining = min(context.limits.remaining_calls, budget.remaining_attempts)
+    if remaining < 2:
+        return c.ModelResult(
+            None,
+            c.CallFailure("budget", "llm_failed", "Generation and review require two attempts."),
+            (),
+        )
+    # Context는 허용량 스냅샷이다. 실제 예산을 소유한 BE에서만 잔여량을 맞춘다.
+    context = replace(context, limits=replace(context.limits, remaining_calls=remaining))
     return await runtime.run_director(
         context,
         prompt=prompt,

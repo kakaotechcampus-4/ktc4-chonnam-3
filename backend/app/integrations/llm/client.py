@@ -40,6 +40,16 @@ class CallBudget:
     _terminal: CallFailure | None = field(default=None, init=False, repr=False)
     _retry_not_before: float = field(default=0.0, init=False, repr=False)
 
+    @property
+    def remaining_attempts(self) -> int:
+        """같은 작업의 호출자가 사전 검사할 잔여량이며 시도 예약을 뜻하지 않는다."""
+        return 0 if self._terminal is not None else max(0, 2 - self._used)
+
+    @property
+    def terminal_failure(self) -> CallFailure | None:
+        """이미 종료한 같은 작업의 실패를 재호출 없이 보존한다."""
+        return self._terminal
+
 
 class _CallFailed(Exception):
     def __init__(self, failure: CallFailure, retry_delay: float | None = 0.0) -> None:
