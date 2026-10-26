@@ -76,7 +76,7 @@ class Repository(Base, UUIDPrimaryKeyMixin, TimestampMixin):
 class RepoAnalysis(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     """repo LLM 분석 결과. L1 shallow / L2 deep.
 
-    UNIQUE 가 자연 멱등 키다 — 워커가 중복 실행돼도 ON CONFLICT DO NOTHING 으로 넘긴다.
+    UNIQUE가 캐시 키다. 실패는 같은 키로 재시도하되 저장된 성공은 늦은 실패로 덮지 않는다.
     model 은 UNIQUE 에 넣지 않는다 (docs/db-schema.md 주요 결정).
     """
 

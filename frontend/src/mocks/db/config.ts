@@ -44,6 +44,7 @@ export const SEED_PREPARING_FAILED_INTERVIEW_ID = 'a3d51c20-1009-4c00-9a00-00000
 export const SEED_IN_PROGRESS_INTERVIEW_ID = 'a3d51c20-1005-4c00-9a00-000000000005';
 /**
  * 진행 중 seed 면접 전용 run. SEED_RUN_ID를 쓰면 그 run에 진행 중 면접이 늘 있어
- * 새 면접 생성·다시 보기가 409 session_limit_exceeded로 막힌다. runs DB에는 없다.
+ * 새 면접 생성·다시 보기가 409 session_limit_exceeded로 막힌다.
+ * 완료 run으로 seed해 "레포 다시 선택하기"(/interview/repos/:runId)가 410 run_expired로 막히지 않게 한다.
  */
 export const SEED_IN_PROGRESS_RUN_ID = '5c7b9e10-0000-4000-8000-00000000cccc';
