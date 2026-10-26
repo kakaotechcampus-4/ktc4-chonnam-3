@@ -2,7 +2,9 @@ import { useState } from 'react';
 import type { DragEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { api } from '@/shared/api';
+import { api, BASE } from '@/shared/api';
+import Footer from '@/shared/components/Footer';
+import Header from '@/shared/components/Header';
 import { isApiError } from '@/types/api';
 import type { DocumentPreviewResponse } from '@/types/api';
 
@@ -29,15 +31,18 @@ const PORTFOLIO: FileFieldConfig = {
   maxBytes: 20 * MB,
 };
 
+// reason 이름은 BE(backend/app/shared/enums.py)를 따른다.
 const UPLOAD_ERROR: Record<string, string> = {
-  file_too_large: '파일 용량이 너무 커요.',
-  unsupported_media_type: '지원하지 않는 형식이에요.',
+  document_too_large: '파일 용량이 너무 커요.',
+  unsupported_document_type: '지원하지 않는 형식이에요.',
 };
 
 const RUN_ERROR: Record<string, string> = {
-  job_url_required: '공고 URL을 입력해주세요.',
+  posting_url_required: '공고 URL을 입력해주세요.',
   unsupported_site: '지원하지 않는 사이트예요.',
-  url_unreachable: '공고를 불러올 수 없어요.',
+  github_token_invalid: 'GitHub 연동이 만료됐어요. 다시 연동해주세요.',
+  document_extract_failed: '첨부한 포트폴리오를 읽지 못했어요. 다시 올리거나 빼고 진행해주세요.',
+  invalid_request: '첨부한 포트폴리오를 찾지 못했어요. 다시 올려주세요.',
 };
 
 function isHttpUrl(value: string) {
@@ -52,7 +57,8 @@ function validateFile(file: File, config: FileFieldConfig): string | null {
 }
 
 function messageFor(error: unknown, table: Record<string, string>, fallback: string) {
-  if (!isApiError(error)) return fallback;
+  // unknown_error는 프록시 HTML 같은 응답 원문이 message에 담겨 오므로 화면에 쓰지 않는다.
+  if (!isApiError(error) || error.error.reason === 'unknown_error') return fallback;
   return table[error.error.reason] ?? error.error.message;
 }
 
@@ -221,9 +227,7 @@ function Dropzone({
         </div>
       )}
 
-      {slot.dismissed && (
-        <p className="mt-1 text-xs text-muted">이 문서 없이 분석을 진행해요.</p>
-      )}
+      {slot.dismissed && <p className="mt-1 text-xs text-muted">이 문서 없이 분석을 진행해요.</p>}
     </div>
   );
 }
@@ -258,6 +262,8 @@ export default function JobInput() {
     },
   });
 
+  const githubTokenInvalid =
+    isApiError(startRun.error) && startRun.error.error.reason === 'github_token_invalid';
   const uploading = coverLetter.uploading || portfolio.uploading;
   // 추출 실패를 확인하지 않은 문서가 있으면 제출을 막는다.
   const pendingDecision = needsDecision(coverLetter.slot) || needsDecision(portfolio.slot);
@@ -278,6 +284,7 @@ export default function JobInput() {
 
   return (
     <div className="flex min-h-svh flex-col bg-paper">
+      <Header />
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-4 py-6">
         <p className="mb-2 text-sm text-muted">모의면접 · 1 / 3</p>
         <h1 className="mb-4 text-2xl font-bold text-ink">면접 보실 공고를 입력해주세요</h1>
@@ -298,7 +305,9 @@ export default function JobInput() {
             className="w-full rounded-card border border-line-soft px-4 py-3 text-sm text-ink outline-none focus:border-accent"
           />
           <p className={`mt-1 text-xs ${urlTouched && !urlValid ? 'text-error' : 'text-muted'}`}>
-            {urlTouched && !urlValid ? 'URL을 입력해보세요' : '채용 공고 페이지 주소를 붙여넣어주세요'}
+            {urlTouched && !urlValid
+              ? 'URL을 입력해보세요'
+              : '채용 공고 페이지 주소를 붙여넣어주세요'}
           </p>
 
           <div className="mt-4">
@@ -328,14 +337,30 @@ export default function JobInput() {
           >
             {startRun.isPending ? '분석을 시작하는 중…' : '분석 시작'}
           </button>
-          {submitError && <p className="mt-2 text-xs text-error">{submitError}</p>}
+          {submitError &&
+            (githubTokenInvalid ? (
+              // 홈의 재연동 배너와 같은 모양. 403이지만 전역 로그인 이동 대상이 아니다.
+              <div
+                role="alert"
+                className="mt-2 flex items-center justify-between rounded-card border border-error-soft bg-error-soft px-4 py-3 text-sm"
+              >
+                <span className="text-error">{submitError}</span>
+                <a
+                  href={`${BASE}/auth/github/link`}
+                  className="font-medium text-error hover:underline"
+                >
+                  GitHub 재연동
+                </a>
+              </div>
+            ) : (
+              <p role="alert" className="mt-2 text-xs text-error">
+                {submitError}
+              </p>
+            ))}
         </div>
       </main>
 
-      <footer className="flex items-center justify-between border-t border-line-soft px-8 py-4 text-xs text-muted">
-        <span>© 2026 DEVON</span>
-        <span>이용약관 · 개인정보처리방침</span>
-      </footer>
+      <Footer />
     </div>
   );
 }

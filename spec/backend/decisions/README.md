@@ -12,11 +12,23 @@
 
 팀 내부 결정만 기록한다. 계약·용어 영향이 있으면 spec/shared/decisions로 승격하고 이곳에는 링크를 둔다.
 
+## BE 내부 결정
+
+- [0006 Task 9 실패 상태 재사용](0006-task09-failure-records.md): NUL 원문을 수집 단계에서 거절하고 같은 URL의 미참조 실패 상태만 갱신한다. 성공 버전·기존 참조와 HTTP 재시도는 유지한다.
+- [0002 Task 9 저장 경계](0002-task09-persistence.md): 선행 인증·추출 구현에 의존하는 API·저장 Draft의 공고 버전 보존·7일 재확인·URL별 저장 잠금과 본문 중심 Preview를 정의한다. 전체 기능 완료를 뜻하지 않는다.
+
 ## 관련 공통 결정
 
 - [0002 로컬 정책 기준 채택](../../shared/decisions/0002-local-policy-baseline.md): 2026-09-22 사용자 결정. 포트폴리오 20MB와 공고 재사용 7일은 유지하며 면접 배분은 후속 0004로 대체한다. 실제 BE 연결·검증은 구현 작업으로 남긴다.
 - [0004 면접 질문 배분의 기존 기준 복원](../../shared/decisions/0004-flexible-persona-allocation-restoration.md): 2026-09-22 사용자 결정. 정상 9턴·첫 HR을 유지하고 기술 목표 6턴·최소 5턴, 도메인·HR 합산 최소 3턴과 개별 배분 비고정을 복원한다. DB·공개 API 구조는 유지하며 실제 횟수 제어는 구현·검증 대기다.
 - [0003 Sprint 1 세션 인증](../../shared/decisions/0003-sprint1-session-auth.md): 2026-09-22 사용자 결정. Redis `auth:sess:{sid}`·HttpOnly `devon_session`·14일 sliding 세션을 사용하고 JWT·refresh는 Sprint 2로 넘긴다. SQL `auth_sessions` 제외와 GitHub token의 암호화 DB 저장을 유지하며 실제 인증 연결은 구현·검증 대기다.
+
+## Task 10 내부 구현 결정
+
+- [0003 Task 10 후보 순위와 run별 L1 참조](0003-task10-ranking-and-analysis-reference.md): Proposed.
+  기존 순위 표시값, 검증된 기여도 입력, run별 분석 참조와 추천 갱신의 동시성 경계를 정리한다.
+- [0007 Task 10 재수집 실패 보존과 README 축약 캐시](0007-task10-collection-retry-and-partial-cache.md): Proposed.
+  확인한 필드만 저장하고 같은 run의 성공을 보존한다. 축약 partial은 동일 입력일 때만 재사용한다.
 
 ## 관련 AI 결정
 

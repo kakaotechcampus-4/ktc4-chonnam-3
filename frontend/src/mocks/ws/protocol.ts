@@ -14,9 +14,6 @@ import type {
 /** msw의 클라이언트 연결 객체. `send`만 쓰므로 최소 형태로 좁힌다. */
 export type Client = { send: (data: string) => void };
 
-/** 답변 길이 상한. 초과하면 `answer_too_long`. */
-export const ANSWER_MAX_LENGTH = 2000;
-
 /** 종료 직전 여유. 오류 메시지가 클라이언트에 닿을 시간을 준다. */
 export const CLOSE_GRACE_MS = 50;
 
@@ -52,16 +49,19 @@ export function wsError(
   return { type: 'error', ...wsLastError(reason, code, options) };
 }
 
-/** 클라이언트 메시지를 계약 타입으로 좁힌다. 모르는 모양이면 무시한다. */
+/** 클라이언트 텍스트 메시지를 계약 타입으로 좁힌다. 바이너리·모르는 모양이면 null이다. */
 export function parseClientMessage(data: unknown): WsClientMessage | null {
   if (typeof data !== 'string') return null;
   try {
     const parsed: unknown = JSON.parse(data);
     if (typeof parsed !== 'object' || parsed === null) return null;
-    const { type, turn, text } = parsed as { type?: unknown; turn?: unknown; text?: unknown };
-    if (type !== 'answer') return null;
-    if (typeof turn !== 'number' || typeof text !== 'string') return null;
-    return { type: 'answer', turn, text };
+    const { type, turn, mimeType } = parsed as Record<string, unknown>;
+    if (typeof turn !== 'number') return null;
+    if (type === 'answerStart' && typeof mimeType === 'string') {
+      return { type: 'answerStart', turn, mimeType };
+    }
+    if (type === 'answerEnd') return { type: 'answerEnd', turn };
+    return null;
   } catch {
     return null;
   }

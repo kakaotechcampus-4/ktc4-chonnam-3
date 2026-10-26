@@ -1,6 +1,7 @@
 import { useSearchParams } from 'react-router-dom';
 
 import { BASE } from '@/shared/api';
+import Footer from '@/shared/components/Footer';
 
 const ERROR_MESSAGES: Record<string, string> = {
   denied: 'GitHub 로그인이 취소됐어요. 다시 시도해주세요.',
@@ -77,11 +78,7 @@ export default function Login() {
         </div>
       </main>
 
-      <footer className="flex items-center border-t border-line-soft px-7 py-3">
-        <span className="text-[11px] text-muted">© 2026 DEVON</span>
-        <span className="flex-1" />
-        <span className="text-[11px] text-muted">이용약관 · 개인정보처리방침</span>
-      </footer>
+      <Footer />
     </div>
   );
 }

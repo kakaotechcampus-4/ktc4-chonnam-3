@@ -25,6 +25,15 @@ AI 작업의 구현·수정 내역, 코드 위치, 실행 결과와 남은 작�
 - 기존 전용 계약 검사 환경에서 schema 2개·부분 OpenAPI·정상/오류 fixture 7개와 `git diff --check`도
   통과했다. 부분 형식 검사를 전체 API 호환성 검증으로 확대하지 않는다.
 
+## 2026-10-26 — PR #103 검토 결과의 검증 범위 설명 보완
+
+- 리뷰 원본 `742e5a2`의 문서 지적을 반영했다. 승인 `QuestionReview`의 문장·Contract 대조와
+  `CandidateRecovery` 분류·사유 전달을 구분하고, 후자의 반환값 자체를 후보와 별도 대조하지 않음을 명시했다.
+- 제품 코드·계약·테스트는 바꾸지 않았다. 기존 Python 환경에서 이 worktree 소스를 명시해
+  AI 전체 204사례, AI Ruff·format 40파일·mypy 11 source, BE import·Director·LLM·설정 경계
+  131사례를 재실행해 모두 통과했다. 실제 검토기의 의미 품질·모델 호출·DB 저장은 검증하지 않았다.
+- 기존 전용 계약 검사 환경의 schema 2개·부분 OpenAPI·fixture 7개와 `git diff --check`도 통과했다.
+
 ## 2026-10-06 — task-09 답변 분석 task 구현
 
 관련 작업: AI task-09([답변 분석](../../ai/docs/task-09-answer-analysis.md)). PR 번호는 생성 후 기록한다.
@@ -73,6 +82,53 @@ Windows, Python 3.12, 격리 worktree의 locked 환경에서 실행했다.
   PromptSpec 등록, 분석 저장 순서와 transaction, 종료 후 늦은 결과 차단은 BE 책임이다(AI-L12).
   `tool_results`·`allowed_locations` 산출은 Controller가 맡는 제안이다.
 - `decode`는 중첩 객체의 계약 밖 필드를 버리는 기존 동작이며 이번에 바꾸지 않았다. 최상위 추가 필드만 거절한다.
+
+## 2026-10-06 — task-10 Director 후보 복구 분류 경계
+
+관련 작업: AI task-10 잔여([Director 질문 결정](../../ai/docs/task-10-director.md)). PR 번호는 생성 후 기록한다.
+
+### 기준과 변경
+
+- 기준은 origin/develop `ef1a48d`다. `contracts.py`, 기존 `CandidateRecovery` 필드, 공개 enum·WS 이벤트, DB, 의존성은
+  변경하지 않았다. 기존 오류 코드(`director_input_invalid`, `director_candidate_invalid`,
+  `director_review_failed`, `director_review_timeout`)와 `ModelResult[ContractChecked[Question]]` 형태를 유지했다.
+- `ai/src/devon_ai/agents/director/agent.py`: `QuestionReviewer`의 반환 타입을 `QuestionReview | CandidateRecovery`로
+  넓혔다. 기존 검토기는 그대로 호환된다. 검토기가 `CandidateRecovery`를 반환하면 후보는 반환하지 않고
+  `semantic` 실패로 변환하며 분류는 `error_code`(`director_candidate_rewrite`, `director_candidate_replan`,
+  `director_no_valid_candidate`)로만 전달한다. `candidate_recovery(failure)`는 실패에서 `CandidateRecovery`를 복원한다.
+- 분류는 실행 권한이 아니다. 생성 모델·검토기를 다시 호출하지 않고 시도 기록은 그대로 보존하며, 상한 소진이나
+  분류 결과로 검증 실패 질문·정상 `finish`를 내보내지 않는다. 형식이 맞지 않는 검토기 반환값(dict·문자열)은
+  기존대로 `director_review_failed`다.
+- 테스트(`test_director.py`에 4개 함수·11 케이스 추가): 세 분류의 실패 변환·무재호출·시도 기록, 목적이 바뀐 문장("수정 특성 확인"
+  목적에 "TTL은 몇 분인가요?")은 분류되어 전달되지 않고 정상 문장은 `ContractChecked`가 되는 대조, 비구조 반환,
+  다른 실패의 비분류.
+- 이번 범위에서 제외했다: 목적 자동 선정, ask/retrieve/finish 결정 생성, 재작성·재계획 실행(AI-L04). 허용 Persona와
+  남은 질문 수는 기존처럼 Controller 입력이며 배분 계산·10번째 질문 차단·finish 수용은 BE 책임이다.
+
+### 실행 결과
+
+Windows, Python 3.12, 격리 worktree의 locked 환경에서 실행했다.
+
+| 작업 디렉터리 | 명령 | 결과 |
+| --- | --- | --- |
+| 루트 | `uv --directory ai run --locked ruff check .` / `ruff format --check .` | 통과 / 통과 |
+| 루트 | `uv --directory ai run --locked mypy` | 통과(소스 11개 파일) |
+| 루트 | `uv --directory ai run --locked pytest` | 204 passed(기준선 193 + 신규 11) |
+| 루트 | `uv --directory backend run --locked pytest tests/agents/test_ai_package_imports.py tests/integrations/test_director_boundary.py` | 16 passed |
+| 루트 | `python .claude/scripts/check_contracts.py` | 미실행(공통 계약 변경 없음) |
+
+### 한계와 후속 작업
+
+- 분류 판단은 주입된 독립 검토기의 몫이다. 승인 결과(`QuestionReview`)는 후보의 문장·질문 계약과 일치하는지 검사한다.
+  복구 분류(`CandidateRecovery`)는 현재 검토 호출에서 반환된 분류·사유를 실패 결과로 전달하며, 반환값 자체가
+  해당 후보에 대한 판단인지 별도로 대조하지 않는다. 테스트의 검토기는 합성 대역이며 목적 일치·전제 타당성의
+  실제 판정 품질은 검증하지 않았다(AI-L01).
+- 코드로 결정적으로 막는 것은 기존 입력 검사(허용 Persona·참조·Contract 동일성)뿐이다. 이미 확인한 목적의 반복은
+  `HistoryTurn`이 목적을 갖지 않아 코드로 판정하지 않고 검토기 분류에 맡긴다.
+- BE 연동은 미실행이다. `backend/app/agents/director/agent.py`(#82)는 `QuestionReviewer`를 타입으로만 쓰므로 변경은
+  필요 없다. 새 `error_code`를 소비해 재작성·재계획·실패 안내를 결정하는 부분과 호출 상한은 BE·AI-L04·AI-L09
+  합의 대상이다. `spec/ai/contracts.md`는 변경하지 않았다.
+- Persona 배분 정책 충돌(공통 0004 vs #97·#82)은 이 변경과 무관하며 AI 코드는 배분을 하드코딩하지 않는다.
 
 ## 2026-09-27 — PR #67 JD 분류 계약 리뷰 보완
 
@@ -299,3 +355,23 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
   통과를 durable 저장 완료로 보지 않는다.
 - 분석 API(`backend/app/features/analysis/router.py`)가 골격이라 L1 결과 조회는 검증하지 않았다.
 - 프로젝트 요약의 `summary` 저장 필드는 AI-L03의 BE 합의 후 연결한다.
+
+## 2026-09-28 — jd_requirements 초안 정리 (불릿·상한 배분)
+
+- 구현: `backend/app/llm_tasks/jd_extract.py`. 원문 줄머리 목록 기호(`•`·`∘`·`-` 등)를 떼고 기호만 있는 줄은 버린다.
+  합계가 20개(`MAX_REQUIREMENTS`)를 넘으면 필수 요건을 먼저 담고, 남은 자리는 우대와 주요 업무가 한 줄씩 번갈아 나눈다.
+  이전에는 필수→우대→업무 순으로 채워 우대가 긴 공고에서 주요 업무가 잘렸다(341487은 업무 15개가 모두 빠짐).
+- 검증: `backend`에서 `uv run python -m pytest tests/llm_tasks` 20 passed(13 skipped), 변경 파일 대상 `ruff check`·`ruff format --check`·`mypy` 통과.
+  실제 원티드 공고 5건(359638·281356·229817·341487·380611)에서 필수 요건이 잘리지 않고 주요 업무가 남는 것을 확인했다.
+- 범위 밖: 회사가 자격요건 칸에 우대 문장("~이면 좋아요")을 넣은 경우의 재분류는 `jd_extract_v1`의
+  "Wanted 필드를 추측으로 변경 금지"(`spec/ai/contracts.md`)에 따라 하지 않는다. "[함께 할 업무예요]" 같은
+  섹션 제목 줄도 내용 판단이 필요해 거르지 않았다.
+
+## 2026-10-05 — #77 리뷰 반영 (내용 속 `*`·`-` 보존, 상한 경계)
+
+- 리뷰(동한님): 기호 뒤 `\s*` 때문에 `*nix`·`*.yaml`·`-40°C`의 `*`·`-`까지 지워져 원문 의미가 바뀜.
+  `•`·`∘` 같은 전용 기호는 그대로 떼고, `*`·`-`는 뒤에 공백이 오거나 기호만 있는 줄일 때만 떼도록 고쳤다.
+- 상한 정책은 유지하고 경계를 명시했다: 카테고리별 최소 개수 보장 없음. (필수 19, 우대 1, 업무 1) → (19, 1, 0),
+  필수 20개 이상이면 필수 앞 20개만 남는다. docstring과 `test_cap_boundaries`에 기록.
+- 검증: `backend`에서 `python -m pytest tests/llm_tasks/test_jd_extract.py tests/integrations` 155 passed,
+  변경 파일 대상 `ruff check`·`ruff format --check`·`mypy` 통과.

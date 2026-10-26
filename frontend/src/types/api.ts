@@ -14,7 +14,8 @@ export type StepKey =
   | 'match_score';
 export type PrepareStepKey = 'analyze_repo' | 'build_persona' | 'compose_question' | 'set_criteria';
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
-export type AnswerMode = 'text';
+/** Sprint 2부터 음성 면접만 남는다. spec/shared/decisions/0007 (Proposed) */
+export type AnswerMode = 'voice';
 export type Persona = 'tech_lead' | 'hr_manager' | 'domain_lead';
 export type ScoreKey =
   | 'project_understanding'
@@ -269,6 +270,10 @@ export type InterviewTurn = {
   persona: Persona;
   question: string;
   answer: string | null;
+  /** 몇 번째 메인 질문인지(1부터). spec/shared/decisions/0007 (Proposed) */
+  mainIndex: number;
+  /** 메인 질문이면 0, 꼬리질문이면 1부터. 0007 (Proposed) */
+  followUpDepth: number;
 };
 
 // status 가 preparing_failed 일 때만 값이 있다. WS error 이벤트와 필드 구성이 같다.
@@ -306,23 +311,25 @@ export type InterviewDetailResponse = {
 export type PrepareStepStatus = Exclude<StepStatus, 'skipped'>;
 
 /**
- * 1차 스프린트는 텍스트 전용이다(`answerMode: 'text'`).
- * 음성 전환(`answerStart` → 오디오 바이너리 → `answerEnd`, `transcript`)은 2차 범위다.
- *
- * `answer`는 현재 답변 가능한 `turn`과 함께 제출 버튼 클릭 시 1회 전송한다. 초안 저장은 없다.
- * `turn` 없이 보내면 서버가 "마지막 턴"으로 추정해야 하고, 재연결이 늦으면
- * 지난 턴 답변이 다음 질문에 붙는다. api-spec.md #18
+ * 음성 답변(0007 Proposed): answerStart → 오디오 바이너리 조각 → answerEnd.
+ * 메시지마다 `turn`을 싣는다. 없으면 서버가 "마지막 턴"으로 추정해야 하고, 재연결이 늦으면
+ * 지난 턴 답변이 다음 질문에 붙는다.
  *
  * 준비 실패 재시도는 WS 메시지가 아니라 `POST /interviews/{id}/prepare/retry` 다(0010 결정).
  */
-export type WsClientMessage = { type: 'answer'; turn: number; text: string };
+export type WsClientMessage =
+  | { type: 'answerStart'; turn: number; mimeType: string }
+  | { type: 'answerEnd'; turn: number };
 
 /**
  * WS 오류는 `GET /interviews/{id}`의 `lastError`와 같은 형태다.
  * 새로고침으로 WS 메시지를 놓쳐도 조회로 같은 정보를 복구할 수 있어야 하기 때문이다.
  * `reason` 값 목록과 화면 처리는 api-spec.md #18의 표를 따른다. 계약대로 union으로 고정하지 않는다.
  */
-export type WsErrorMessage = { type: 'error' } & InterviewLastError;
+/** details는 stt_failed의 cause(`empty_transcript`)처럼 원인 구분용이다(0007). */
+export type WsErrorMessage = { type: 'error' } & InterviewLastError & {
+  details?: Record<string, unknown>;
+};
 
 export type WsServerMessage =
   | { type: 'prepareStep'; key: PrepareStepKey; status: PrepareStepStatus }
@@ -331,7 +338,23 @@ export type WsServerMessage =
   | { type: 'answerReceived' }
   | { type: 'thinking' }
   | { type: 'evidenceCheck'; repository: string; file: string }
-  | { type: 'question'; persona: Persona; text: string; turn: number }
+  /**
+   * audioUrl은 질문 음성(TTS) 주소다. 없거나 재생에 실패하면 화면이 질문 텍스트를 보여 준다.
+   * 서버는 TTS 완료를 기다리지 않고 보낸다(0007).
+   */
+  | {
+      type: 'question';
+      persona: Persona;
+      text: string;
+      turn: number;
+      mainIndex: number;
+      followUpDepth: number;
+      audioUrl: string | null;
+    }
+  /** 표시 전용 임시 전사. STT가 스트리밍을 지원할 때만 오며 뒤 값이 앞 값을 대체한다. */
+  | { type: 'transcriptPartial'; turn: number; text: string }
+  /** 최종 전사. 서버가 저장해 평가에 쓰는 값이다. */
+  | { type: 'transcript'; turn: number; text: string }
   | { type: 'interviewEnd' }
   | WsErrorMessage;
 
