@@ -6,12 +6,27 @@
 docs/layer-rules.md 1절 / task-17
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import InterviewTurn
+from app.db.models import Evidence, InterviewTurn, TurnEvidence
+
+
+@dataclass(frozen=True)
+class ToolUsage:
+    """evidence tool 사용 비율. ratio 는 분모(turns_with_evidence)가 0 이면 None."""
+
+    turns_with_evidence: int
+    turns_with_tool: int
+
+    @property
+    def ratio(self) -> float | None:
+        if self.turns_with_evidence == 0:
+            return None
+        return self.turns_with_tool / self.turns_with_evidence
 
 
 async def get_average_depth(
@@ -29,3 +44,28 @@ async def get_average_depth(
         stmt = stmt.where(InterviewTurn.created_at < until)
     average = await db.scalar(stmt)
     return None if average is None else float(average)
+
+
+async def get_evidence_tool_usage(
+    db: AsyncSession, *, since: datetime | None = None, until: datetime | None = None
+) -> ToolUsage:
+    """근거가 연결된 턴 중 면접 중 Tool 호출 근거를 쓴 턴의 비율.
+
+    분모: turn_evidences 가 1건 이상인 서로 다른 턴 (usage 무관).
+    분자: 그 턴 중 evidences.tool_name 이 NULL 이 아닌 근거가 연결된 턴.
+    입력: 턴 생성 시각(created_at) 기간.
+    """
+    stmt = (
+        select(
+            func.count(func.distinct(TurnEvidence.turn_id)),
+            func.count(func.distinct(TurnEvidence.turn_id)).filter(Evidence.tool_name.is_not(None)),
+        )
+        .join(Evidence, Evidence.id == TurnEvidence.evidence_id)
+        .join(InterviewTurn, InterviewTurn.id == TurnEvidence.turn_id)
+    )
+    if since is not None:
+        stmt = stmt.where(InterviewTurn.created_at >= since)
+    if until is not None:
+        stmt = stmt.where(InterviewTurn.created_at < until)
+    total, with_tool = (await db.execute(stmt)).one()
+    return ToolUsage(turns_with_evidence=total, turns_with_tool=with_tool)
