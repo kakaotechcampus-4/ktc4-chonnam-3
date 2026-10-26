@@ -6,13 +6,24 @@
 docs/layer-rules.md 1절 / task-17
 """
 
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Evidence, InterviewTurn, TurnEvidence
+from app.db.models import (
+    Event,
+    Evidence,
+    InterviewTurn,
+    Repository,
+    SessionRepository,
+    TurnEvidence,
+)
+
+AI_REMOVED = "ai_removed"
+REPORT_VIEWED = "report_viewed"
 
 
 @dataclass(frozen=True)
@@ -27,6 +38,14 @@ class ToolUsage:
         if self.turns_with_evidence == 0:
             return None
         return self.turns_with_tool / self.turns_with_evidence
+
+
+@dataclass(frozen=True)
+class AiRemovedRepository:
+    interview_session_id: uuid.UUID
+    repository_id: uuid.UUID
+    full_name: str
+    created_at: datetime
 
 
 async def get_average_depth(
@@ -69,3 +88,41 @@ async def get_evidence_tool_usage(
         stmt = stmt.where(InterviewTurn.created_at < until)
     total, with_tool = (await db.execute(stmt)).one()
     return ToolUsage(turns_with_evidence=total, turns_with_tool=with_tool)
+
+
+async def list_ai_removed_repositories(
+    db: AsyncSession, *, since: datetime | None = None, until: datetime | None = None
+) -> list[AiRemovedRepository]:
+    """selection_source='ai_removed' 인 session_repositories 목록, 오래된 순.
+
+    입력: session_repositories 생성 시각(created_at) 기간. 출력: 없으면 빈 리스트.
+    """
+    stmt = (
+        select(
+            SessionRepository.interview_session_id,
+            SessionRepository.repository_id,
+            Repository.full_name,
+            SessionRepository.created_at,
+        )
+        .join(Repository, Repository.id == SessionRepository.repository_id)
+        .where(SessionRepository.selection_source == AI_REMOVED)
+        .order_by(SessionRepository.created_at, SessionRepository.id)
+    )
+    if since is not None:
+        stmt = stmt.where(SessionRepository.created_at >= since)
+    if until is not None:
+        stmt = stmt.where(SessionRepository.created_at < until)
+    rows = await db.execute(stmt)
+    return [AiRemovedRepository(*row) for row in rows.all()]
+
+
+async def count_report_viewed(
+    db: AsyncSession, *, since: datetime | None = None, until: datetime | None = None
+) -> int:
+    """report_viewed 이벤트 수. 입력: events.created_at 기간. 없으면 0."""
+    stmt = select(func.count()).select_from(Event).where(Event.event_name == REPORT_VIEWED)
+    if since is not None:
+        stmt = stmt.where(Event.created_at >= since)
+    if until is not None:
+        stmt = stmt.where(Event.created_at < until)
+    return await db.scalar(stmt) or 0
