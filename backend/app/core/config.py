@@ -95,10 +95,6 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:5173"
     log_level: LogLevel = "INFO"
 
-    # 분석 실행 상한은 문서 업로드 설정과 독립적으로 검증한다.
-    analysis_run_ttl_seconds: int = Field(default=7200, gt=0)
-    repo_candidate_limit: int = Field(default=10, gt=0)
-
     # ── DB / Redis ──
     database_url: str = Field(
         default="postgresql+asyncpg://devon:devon@localhost:5432/devon", repr=False
@@ -133,8 +129,10 @@ class Settings(BaseSettings):
     llm_max_retries: LLMInteger = Field(default=1, ge=1, le=1)
 
     # ── 정책 · 분석 ──
+    analysis_run_ttl_seconds: int = 7200
     max_upload_bytes_cover_letter: int = 10485760
     max_upload_bytes_portfolio: int = 20971520
+    repo_candidate_limit: int = 10
     repo_min_size_kb: int = 50
     jd_reuse_ttl_days: int = 7
     jd_requirement_limit: int = 20
@@ -192,6 +190,14 @@ class Settings(BaseSettings):
             persona, _, turns = pair.partition(":")
             quota[persona.strip()] = int(turns)
         return quota
+
+    @field_validator("analysis_run_ttl_seconds", "repo_candidate_limit")
+    @classmethod
+    def _positive_analysis_limit(cls, value: int) -> int:
+        # 문서 업로드 설정과 독립적으로 기존 분석 상한의 양수 조건을 유지한다.
+        if value <= 0:
+            raise ValueError("Analysis limits must be greater than zero")
+        return value
 
     @property
     def is_prod(self) -> bool:

@@ -18,10 +18,6 @@
 - [0004 면접 질문 배분의 기존 기준 복원](../../shared/decisions/0004-flexible-persona-allocation-restoration.md): 2026-09-22 사용자 결정. 정상 9턴·첫 HR을 유지하고 기술 목표 6턴·최소 5턴, 도메인·HR 합산 최소 3턴과 개별 배분 비고정을 복원한다. DB·공개 API 구조는 유지하며 실제 횟수 제어는 구현·검증 대기다.
 - [0003 Sprint 1 세션 인증](../../shared/decisions/0003-sprint1-session-auth.md): 2026-09-22 사용자 결정. Redis `auth:sess:{sid}`·HttpOnly `devon_session`·14일 sliding 세션을 사용하고 JWT·refresh는 Sprint 2로 넘긴다. SQL `auth_sessions` 제외와 GitHub token의 암호화 DB 저장을 유지하며 실제 인증 연결은 구현·검증 대기다.
 
-## Task 11 내부 구현 결정
-
-- [0004 Task 11 분석 실행과 복구](0004-task11-run-execution.md): 사용자 승인 범위의 Accepted 설계 선택. fingerprint 제약, DB claim과 큐 중복 방어, 7단계·후보 page·SSE의 저장 경계 및 실행 전 작업 복구. 선행 구현과 별도 후속 보완이 필요한 Draft의 상태·검증 결과는 [Task 11 구현 기록](../implementation-task-11.md)에서 관리한다.
-
 ## 관련 AI 결정
 
 - [0011 Sprint 1 모델 선택](../../ai/decisions/0011-sprint1-model-selection.md): 2026-09-21 사용자 결정. Sprint 1 LLM 모델은 OpenAI `gpt-5.6-luna`다. 인증·SDK/client·호출 경로·버전 기록 방식은 AI-L01에서 계속 검토한다.
@@ -37,3 +33,7 @@
 - [0017 Sprint 1 추천 숫자 점수 보류](../../ai/decisions/0017-recommendation-score-deferral.md): 2026-09-22 사용자 결정. matchScore 필드는 null로 반환하고 기존 추천 표시·이유·상한·저장 위치를 유지한다. 선정 기준은 후속 0018을 따르며 실제 DB·응답 연결은 구현 시 검증한다.
 
 - [0018 기존안 일괄 유지와 질문·구현·후속 검토 분리](../../ai/decisions/0018-existing-baseline-bulk-resolution.md): 기존 기술 직접 비교·후보 순서에서 run 전체 최대 5개 추천을 채택한다. 기존 계약·저장·Worker·종료 흐름을 유지하며 상세 연결·실측은 구현 인계로 구분한다. 실제 문답과 연결 자료를 후속 내부 비교에 보관·재사용하고 최종 내부 비교 검증 뒤에도 보관한다. 별도의 자동 삭제 기한은 두지 않는다.
+
+## Task 11 내부 구현 결정
+
+- [0004 Task 11 분석 실행과 복구](0004-task11-run-execution.md): 사용자 승인 범위의 Accepted 설계 선택. fingerprint 제약, DB claim과 큐 중복 방어, 7단계·후보 page·SSE의 저장 경계 및 실행 전 작업 복구. 선행 구현과 별도 후속 보완이 필요한 Draft의 상태·검증 결과는 [Task 11 구현 기록](../implementation-task-11.md)에서 관리한다.
