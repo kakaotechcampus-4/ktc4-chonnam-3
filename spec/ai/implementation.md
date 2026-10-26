@@ -223,6 +223,26 @@ DB 경로 검사의 코드 tree는 `afd5adf1ceb4f27e237e0836d6ffe233fa1ecd71`이
 처음 사용한 상대 `downgrade -1`은 합류 경로가 모호해 실패했다. 대상 revision을 명시하여
 다시 검사한 위 결과와 구분한다. 과거 리뷰어의 전체 pytest 수치를 이번 결과로 사용하지 않았다.
 
+### 최종 PR 조합의 추가 확인
+
+#81·#82·#108·#124·#125·#126·#127·#132를 최신 develop에 로컬 결합했다.
+검증 tree `742d924a39480a118607487c589f8901ecca10d7`에서 AI 전체 347 passed,
+BE의 저장·예산·gateway·설정·graph·분석 API/worker 집중 검사 423 passed·1 skipped였다.
+AI Ruff·format 57파일·mypy 13 source와 BE Ruff·format 331파일·mypy 158 source,
+부분 계약 2개·fixture 7개 및 단일 Alembic head를 확인했다. 검사 전후 Python 원문 hash는 같고
+실제 import 경로도 해당 결합 worktree의 AI·BE 소스였다. BE 전체 pytest 수치는 아니다.
+
+제외된 #108 migration 검사는 이름이 고정된 별도 DB를 요구했다. 전용 DB로 실행하니
+`alembic_version` 첫 행만 비교하는 기존 단일 가지 가정이 드러났다. #108에서 실패 전후
+revision 전체 집합·기존 자료·위험 downgrade 차단을 보존하도록 고친 뒤 같은 누적 코드의
+전용 PostgreSQL 검사 1 passed와 health 5 passed를 확인했다. analysis·documents·me·health
+등록도 함께 확인했고 전용 DB는 삭제했다. #108 자체 source는 #81이 없으면 import할 수 없으므로
+이 결과를 단독 완료로 보고하지 않는다. 최종 보완은 migration DDL을 바꾸지 않는다.
+
+#126 결합에서는 기존 `generate_question`과 새 `execute_director`를 모두 보존했다.
+두 함수는 각 게시본과 AST가 같음을 독립 대조했고, 공통 gateway의 주소·timeout·시도 기록도
+유지했다. 이 해소본은 로컬 검증에만 사용하며 선행 구현을 다른 게시본에 복사하지 않았다.
+
 ### 병합 조건
 
 #82·#108이 없는 게시본은 graph를 실행할 수 없으므로 develop base의 Draft로 검토한다.
