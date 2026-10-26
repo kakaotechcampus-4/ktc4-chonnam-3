@@ -90,6 +90,7 @@ async def generate(http, context, contract, review, *, budget=None, limits=None,
     model_call = partial(
         call_model,
         api_key=SecretStr("fixture-key"),
+        base_url="https://api.openai.com/v1",
         http_client=http,
         budget=budget if budget is not None else CallBudget(),
     )
