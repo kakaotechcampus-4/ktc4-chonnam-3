@@ -22,11 +22,13 @@ def elapsed(start: datetime | None, end: datetime) -> int | None:
 async def notify(
     ctx: dict[str, Any], run_id: UUID, payload: dict[str, object], states: dict[str, str]
 ) -> None:
+    # 설정 누락은 알림 장애가 아니라 worker 구성 오류로 드러낸다.
+    ttl = ctx["settings"].analysis_run_ttl_seconds
     try:
         async with ctx["redis"].pipeline(transaction=True) as pipe:
             # 문서 미첨부와 중도 실패의 skipped 상태도 종료 알림 전에 함께 반영한다.
             pipe.hset(f"run:{run_id}:steps", mapping=states)
-            pipe.expire(f"run:{run_id}:steps", ctx["settings"].analysis_run_ttl_seconds)
+            pipe.expire(f"run:{run_id}:steps", ttl)
             pipe.publish(f"run:{run_id}:events", json.dumps(payload))
             await pipe.execute()
     except Exception:

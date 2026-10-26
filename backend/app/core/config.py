@@ -95,6 +95,10 @@ class Settings(BaseSettings):
     frontend_origin: str = "http://localhost:5173"
     log_level: LogLevel = "INFO"
 
+    # 분석 실행 상한은 문서 업로드 설정과 독립적으로 검증한다.
+    analysis_run_ttl_seconds: int = Field(default=7200, gt=0)
+    repo_candidate_limit: int = Field(default=10, gt=0)
+
     # ── DB / Redis ──
     database_url: str = Field(
         default="postgresql+asyncpg://devon:devon@localhost:5432/devon", repr=False
@@ -129,10 +133,8 @@ class Settings(BaseSettings):
     llm_max_retries: LLMInteger = Field(default=1, ge=1, le=1)
 
     # ── 정책 · 분석 ──
-    analysis_run_ttl_seconds: int = Field(default=7200, gt=0)
     max_upload_bytes_cover_letter: int = 10485760
     max_upload_bytes_portfolio: int = 20971520
-    repo_candidate_limit: int = Field(default=10, gt=0)
     repo_min_size_kb: int = 50
     jd_reuse_ttl_days: int = 7
     jd_requirement_limit: int = 20

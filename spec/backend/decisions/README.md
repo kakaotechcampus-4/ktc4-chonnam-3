@@ -12,15 +12,15 @@
 
 팀 내부 결정만 기록한다. 계약·용어 영향이 있으면 spec/shared/decisions로 승격하고 이곳에는 링크를 둔다.
 
-## BE 구현 결정
-
-- [0004 Task 11 분석 실행과 복구](0004-task11-run-execution.md): 사용자 승인 범위의 Accepted 설계 선택. fingerprint 제약, DB claim과 큐 중복 방어, 7단계·후보 page·SSE의 저장 경계 및 실행 전 작업 복구. 선행 구현과 별도 후속 보완이 필요한 Draft의 상태·검증 결과는 [Task 11 구현 기록](../implementation-task-11.md)에서 관리한다.
-
 ## 관련 공통 결정
 
 - [0002 로컬 정책 기준 채택](../../shared/decisions/0002-local-policy-baseline.md): 2026-09-22 사용자 결정. 포트폴리오 20MB와 공고 재사용 7일은 유지하며 면접 배분은 후속 0004로 대체한다. 실제 BE 연결·검증은 구현 작업으로 남긴다.
 - [0004 면접 질문 배분의 기존 기준 복원](../../shared/decisions/0004-flexible-persona-allocation-restoration.md): 2026-09-22 사용자 결정. 정상 9턴·첫 HR을 유지하고 기술 목표 6턴·최소 5턴, 도메인·HR 합산 최소 3턴과 개별 배분 비고정을 복원한다. DB·공개 API 구조는 유지하며 실제 횟수 제어는 구현·검증 대기다.
 - [0003 Sprint 1 세션 인증](../../shared/decisions/0003-sprint1-session-auth.md): 2026-09-22 사용자 결정. Redis `auth:sess:{sid}`·HttpOnly `devon_session`·14일 sliding 세션을 사용하고 JWT·refresh는 Sprint 2로 넘긴다. SQL `auth_sessions` 제외와 GitHub token의 암호화 DB 저장을 유지하며 실제 인증 연결은 구현·검증 대기다.
+
+## Task 11 내부 구현 결정
+
+- [0004 Task 11 분석 실행과 복구](0004-task11-run-execution.md): 사용자 승인 범위의 Accepted 설계 선택. fingerprint 제약, DB claim과 큐 중복 방어, 7단계·후보 page·SSE의 저장 경계 및 실행 전 작업 복구. 선행 구현과 별도 후속 보완이 필요한 Draft의 상태·검증 결과는 [Task 11 구현 기록](../implementation-task-11.md)에서 관리한다.
 
 ## 관련 AI 결정
 
