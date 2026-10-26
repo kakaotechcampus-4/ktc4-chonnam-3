@@ -33,7 +33,8 @@
 - 신규 공개 조회를 위해 공통 client의 기존 호출 API·재시도·주소·metadata를 바꾸지 않는다.
   #82의 attempt_sink와 최신 develop의 base_url·시간 상한은 로컬 결합에서 함께 검증한다.
 
-단독 develop에는 선행 모듈·모델·gateway API와 Director 코어가 없어 Draft로 검토한다.
+원 게시본 단독에는 #82 저장·도구 모듈과 #125 Director 코어가 없어 Draft로 검토한다.
+#102·#114·#119의 최신 develop 병합 여부와 원 게시본의 단독 실행 제한을 구분한다.
 공개 API·패키지 의존성·DB 모델·main/worker/WS 등록은 변경하지 않는다.
 선행 반영 뒤 보류 Context·L2 보완을 연결하고 고정 SHA·원문·예산 전달을 통합 재검증한다.
 원문 수집은 지원 범위의 유한 읽기이며 parser·대형 파일 분할·모든 언어 품질 보장은 아니다.
