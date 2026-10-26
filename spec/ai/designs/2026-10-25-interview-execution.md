@@ -102,5 +102,5 @@ Redis snapshot이 없으면 DB에서 재구성하고 저장된 현재 `asked` �
 
 실제 적용 범위·선행 의존성·검증 결과는 관련 구현 PR과 단일 구현 기록에서 관리한다.
 
-[director-design]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/cd078cced56a202952058fedd7d7bb6dd2bde706/spec/ai/designs/2026-10-23-director-runtime.md
+[director-design]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/6bffcbf3f63f7a31d7dbd74801e9105276f56017/spec/ai/designs/2026-10-23-director-runtime.md
 [allocation]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/d063d8d55f4744c09897ff51ecb140c45732e591/spec/shared/decisions/0008-fixed-persona-allocation.md
