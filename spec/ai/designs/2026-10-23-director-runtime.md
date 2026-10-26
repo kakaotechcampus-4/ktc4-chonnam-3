@@ -92,7 +92,7 @@ vector·embedding·extension 미도입, Private repo·전역 코드 검색 금�
 준비 실행·worker 등록·WS·턴 상태 전이·리포트·음성은 이 설계의 게시 범위 밖이다.
 
 [allocation]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/d063d8d55f4744c09897ff51ecb140c45732e591/spec/shared/decisions/0008-fixed-persona-allocation.md
-[runtime-adr]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/70c1dbfca7e0e5e10960c56629481c9d5ff40114/spec/ai/decisions/0023-director-runtime.md
+[runtime-adr]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/23873ef40f202c48557c672881934fc080aa196c/spec/ai/decisions/0023-director-runtime.md
 [bridge-adr]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/e29c8f971fa87b32aace1bd5a3d6be1d43c88478/spec/ai/decisions/0025-director-bridge-publication.md
 [followups]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/133
 [followup-adr]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/5c10db62847dca28db820e5983580c33dc34bbc9/spec/ai/decisions/0027-unapplied-director-followups.md
