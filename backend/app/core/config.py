@@ -17,7 +17,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 AppEnv = Literal["local", "dev", "prod"]
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
 
-# PR #97의 공통 ADR 0007에 따라 정상 면접의 persona 배정과 총 턴을 고정한다.
+# 공통 ADR 0008 고정 배분 결정에 따라 정상 면접의 persona 배정과 총 턴을 고정한다.
 FIXED_PERSONA_TURN_QUOTA = {"tech_lead": 6, "domain_lead": 2, "hr_manager": 1}
 INTERVIEW_MAX_TURNS = 9
 

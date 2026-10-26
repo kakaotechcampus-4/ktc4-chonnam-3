@@ -38,7 +38,7 @@ DB·권한·GitHub I/O·구체 LLM client는 BE 책임이다. 질문이 생기�
 최초 호출 확보 이후 프로세스 강제 종료나 DB 자체 장애는 정리 transaction도 보장할 수 없다.
 준비/턴 worker 연결 시 실제 실행 종료를 확인한 복구가 필요하다. 시간만 보고 중복 LLM 호출을
 허용하는 임의 TTL이나 자동 재실행은 추가하지 않는다. 응답이 끝나지 않은 개별 시도의 원문·토큰은
-추측하지 않는다. 세부 연결 범위와 검증 결과는 [구현 기록](../implementation.md)에 둔다.
+추측하지 않는다. 세부 연결 범위와 검증 결과는 [Task 14 구현 기록](../implementation-task-14.md)에 둔다.
 
 새 migration은 현재 develop의 `0001_initial` 뒤에 추가한다. 다른 미병합 migration과 통합할 때
 실제 Alembic graph를 연결하고 기존 데이터 보존을 재검증한다. downgrade는 새 컬럼·호출 기록을
@@ -48,6 +48,7 @@ DB·권한·GitHub I/O·구체 LLM client는 BE 책임이다. 질문이 생기�
 
 - [AI/BE 계약](../../ai/contracts.md), [Task 14](../../../backend/docs/task-14-agents.md)
 - [작성 당시 질문 배분 결정 — 이력](../../shared/decisions/0004-flexible-persona-allocation-restoration.md)
-- 현행 배분은 [PR #97의 공통 ADR 0007](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/f2f1011af2aa72c7034948c2c71699cf25e47a18/spec/shared/decisions/0007-fixed-persona-allocation.md)의 고정 6/2/1을 따른다. 위 저장 설계 본문은 초기 기록으로 보존한다.
+- 현행 배분은 [공통 ADR 0008](../../shared/decisions/0008-fixed-persona-allocation.md)의 고정 6/2/1을 따른다.
+  [당시 PR #97의 공통 ADR 0007](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/f2f1011af2aa72c7034948c2c71699cf25e47a18/spec/shared/decisions/0007-fixed-persona-allocation.md)은 이력 링크이며 위 저장 설계 본문도 초기 기록으로 보존한다.
 
 기존 추론·질문 배분·공개 API 정책을 대체하지 않는다.
