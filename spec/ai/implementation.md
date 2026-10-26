@@ -143,6 +143,48 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
 - 기존 설계와 `testing.md`의 과거 기록을 이번 통합에서 일괄 재작성하지 않는다.
   이후 구현 현황과 실행 결과는 이 파일을 갱신한다.
 
+## 2026-10-25 — #127 seed 범위 제외와 공통 보완 재검증
+
+### 게시 범위와 원본 보존
+
+- 사용자가 seed 오류 수정을 #131에 맡기고 #127에서 제외하도록 요청했다.
+  #131을 병합하거나 수정하지 않고, `develop@dbd7f890`에서 남은 신규 변경만 구성했다.
+- 기존 #127의 `eaea0e4b`는 `backup/pr127-before-seed-review-20261025`와 원본 worktree에
+  보존했다. 제외한 seed 실행 코드·추가 테스트도 이 원본에서 확인할 수 있다.
+- `backend/scripts/seed_all.py`, `backend/tests/test_seed_all.py`는 develop과 동일하다.
+  #131의 질문 저장 변경 세 파일도 가져오지 않았다. 이 다섯 파일은 기준선과 내용이 같은지 검사했다.
+- 남은 구현은 DDL 없는 `0003_director_runtime` merge revision과 검사 subprocess의
+  현재 worktree BE·AI 소스 경로 지정이다. 공개 계약·seed 데이터·활성화 정책은 변경하지 않는다.
+- seed 제외와 선행 의존은 [BE ADR](../backend/decisions/0008-director-foundation-publication.md)에
+  기록한다. 이전 통합본의 seed 실행 결과를 이번 게시본의 검증 결과로 사용하지 않는다.
+
+### 실제 실행 결과
+
+기존 Windows Python 3.12.14 환경을 사용했다. 아래 단독 검사는 실제 게시용 worktree에서 실행했다.
+
+| 범위 | 검사 | 결과 |
+| --- | --- | --- |
+| 게시본 backend | `pytest tests/core/test_llm_config.py -q` | 46 passed |
+| 게시본 backend | `ruff check .`, `ruff format --check .`, `mypy app` | 통과, format 254파일·mypy 133파일 |
+| 게시본 backend | 전체 `pytest -q` | 실패, 기존 `tests/test_seed_all.py`의 삭제된 `dispose_engine` import로 수집 중단 |
+| 게시본 backend | `alembic heads` | 실패, #82의 `0002_agent_storage` parent 부재 |
+| 별도 로컬 결합 | 게시본 + #82 migration 한 파일, PostgreSQL 15.19 | 단일 head `0003_director_runtime` 확인 |
+| 같은 결합 환경 | 초기 revision → 기존 사용자 행 추가 → `upgrade head` | 통과, 기존 행·추가 테이블과 컬럼 확인 |
+| 같은 결합 환경 | `downgrade base` → `upgrade head` | 통과 |
+
+로컬 결합은 #82 `0e973f33`의 `0002_agent_storage.py` 한 파일만 사용했고 seed·#131 코드는
+결합하지 않았다. 새 전용 cluster·테스트 DB를 사용했으며 생성 DB 삭제·DB 목록 보존·서버 종료를
+확인했다. 첫 실행 보조 스크립트는 Windows 자식 프로세스의 pipe 대기로 중단됐고, 해당 전용 서버를
+종료한 뒤 파일 로그 방식과 새 cluster로 재실행했다. 위 PostgreSQL 결과는 재실행에서 확인했다.
+
+### 미완료와 병합 조건
+
+- seed import 오류는 #131의 별도 범위다. 이번 변경이 seed 실행을 해결했다고 보고하지 않는다.
+- #82가 없는 게시본은 migration graph를 해석할 수 없으므로 Draft로 유지한다.
+  선행 반영 후 실제 graph에서 merge 필요성을 다시 확인하고 PostgreSQL에서 재검증한다.
+- migration 한 파일의 결합 검증은 #82 전체 모델·서비스 통합이나 전체 pytest 통과가 아니다.
+  실제 면접 실행·외부 모델 호출·seed 활성화 검증은 이번 범위가 아니다.
+
 ## 2026-09-27 — task-04 L1 호출·재요청과 캐시 판정
 
 ### 기준과 변경
@@ -230,45 +272,3 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
   통과를 durable 저장 완료로 보지 않는다.
 - 분석 API(`backend/app/features/analysis/router.py`)가 골격이라 L1 결과 조회는 검증하지 않았다.
 - 프로젝트 요약의 `summary` 저장 필드는 AI-L03의 BE 합의 후 연결한다.
-
-## 2026-10-25 — #127 seed 범위 제외와 공통 보완 재검증
-
-### 게시 범위와 원본 보존
-
-- 사용자가 seed 오류 수정을 #131에 맡기고 #127에서 제외하도록 요청했다.
-  #131을 병합하거나 수정하지 않고, `develop@dbd7f890`에서 남은 신규 변경만 구성했다.
-- 기존 #127의 `eaea0e4b`는 `backup/pr127-before-seed-review-20261025`와 원본 worktree에
-  보존했다. 제외한 seed 실행 코드·추가 테스트도 이 원본에서 확인할 수 있다.
-- `backend/scripts/seed_all.py`, `backend/tests/test_seed_all.py`는 develop과 동일하다.
-  #131의 질문 저장 변경 세 파일도 가져오지 않았다. 이 다섯 파일은 기준선과 내용이 같은지 검사했다.
-- 남은 구현은 DDL 없는 `0003_director_runtime` merge revision과 검사 subprocess의
-  현재 worktree BE·AI 소스 경로 지정이다. 공개 계약·seed 데이터·활성화 정책은 변경하지 않는다.
-- seed 제외와 선행 의존은 [BE ADR](../backend/decisions/0002-director-foundation-publication.md)에
-  기록한다. 이전 통합본의 seed 실행 결과를 이번 게시본의 검증 결과로 사용하지 않는다.
-
-### 실제 실행 결과
-
-기존 Windows Python 3.12.14 환경을 사용했다. 아래 단독 검사는 실제 게시용 worktree에서 실행했다.
-
-| 범위 | 검사 | 결과 |
-| --- | --- | --- |
-| 게시본 backend | `pytest tests/core/test_llm_config.py -q` | 46 passed |
-| 게시본 backend | `ruff check .`, `ruff format --check .`, `mypy app` | 통과, format 254파일·mypy 133파일 |
-| 게시본 backend | 전체 `pytest -q` | 실패, 기존 `tests/test_seed_all.py`의 삭제된 `dispose_engine` import로 수집 중단 |
-| 게시본 backend | `alembic heads` | 실패, #82의 `0002_agent_storage` parent 부재 |
-| 별도 로컬 결합 | 게시본 + #82 migration 한 파일, PostgreSQL 15.19 | 단일 head `0003_director_runtime` 확인 |
-| 같은 결합 환경 | 초기 revision → 기존 사용자 행 추가 → `upgrade head` | 통과, 기존 행·추가 테이블과 컬럼 확인 |
-| 같은 결합 환경 | `downgrade base` → `upgrade head` | 통과 |
-
-로컬 결합은 #82 `0e973f33`의 `0002_agent_storage.py` 한 파일만 사용했고 seed·#131 코드는
-결합하지 않았다. 새 전용 cluster·테스트 DB를 사용했으며 생성 DB 삭제·DB 목록 보존·서버 종료를
-확인했다. 첫 실행 보조 스크립트는 Windows 자식 프로세스의 pipe 대기로 중단됐고, 해당 전용 서버를
-종료한 뒤 파일 로그 방식과 새 cluster로 재실행했다. 위 PostgreSQL 결과는 재실행에서 확인했다.
-
-### 미완료와 병합 조건
-
-- seed import 오류는 #131의 별도 범위다. 이번 변경이 seed 실행을 해결했다고 보고하지 않는다.
-- #82가 없는 게시본은 migration graph를 해석할 수 없으므로 Draft로 유지한다.
-  선행 반영 후 실제 graph에서 merge 필요성을 다시 확인하고 PostgreSQL에서 재검증한다.
-- migration 한 파일의 결합 검증은 #82 전체 모델·서비스 통합이나 전체 pytest 통과가 아니다.
-  실제 면접 실행·외부 모델 호출·seed 활성화 검증은 이번 범위가 아니다.
