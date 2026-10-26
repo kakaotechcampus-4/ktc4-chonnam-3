@@ -369,18 +369,19 @@ class _CancelSwallowingTransport(httpx.AsyncBaseTransport):
     async def handle_async_request(self, req: httpx.Request) -> httpx.Response:
         self.calls += 1
         try:
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(0.1)
         except asyncio.CancelledError:
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(0.1)
         return httpx.Response(200, json=response())
 
 
 @pytest.mark.asyncio
 async def test_late_response_after_swallowed_cancellation_is_a_timeout_not_success():
     transport = _CancelSwallowingTransport()
+    req = replace(request(), limits=replace(request().limits, timeout_seconds=0.05))
     async with httpx.AsyncClient(transport=transport) as http:
         result = await client.call_model(
-            request(),
+            req,
             validate,
             api_key=SecretStr("fixture-key"),
             http_client=http,
