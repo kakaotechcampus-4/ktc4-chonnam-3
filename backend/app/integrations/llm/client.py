@@ -207,7 +207,7 @@ async def _attempt[T](
     data: T | None = None
     retry_delay: float | None = 0.0
     try:
-        async with asyncio.timeout(request.limits.timeout_seconds):
+        async with asyncio.timeout(request.limits.timeout_seconds) as deadline:
             async with http.stream(
                 "POST",
                 # 프록시의 tenant/v1 경로를 보존한다. 절대 경로 결합은 앞 경로를 지운다.
@@ -259,6 +259,9 @@ async def _attempt[T](
                         )
                     buffer.extend(chunk)
                 raw = bytes(buffer).decode("utf-8", errors="replace")
+        # 취소를 삼키는 transport가 만료 후 늦게 응답해도 성공으로 처리하지 않는다.
+        if deadline.expired():
+            raise TimeoutError
         # 공급자 응답 봉투의 손상과 그 안에 담긴 모델 출력의 JSON 오류를 구분한다.
         try:
             decoded = _json(bytes(buffer))
