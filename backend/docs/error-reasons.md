@@ -67,7 +67,9 @@ GitHub가 만료·refresh 필드를 가진 유효한 토큰을 발급하면 `502
 > `github_token_invalid`는 DEVON 세션이 아니라 GitHub 연동 토큰이 무효·폐기된 상태다
 > (`github_accounts.token_status`가 `invalid`·`revoked`). long-lived 토큰 모델에 `expired` 상태는 없다. 화면은 로그인이 아니라 재연동으로 유도한다.
 > 2026-09-10 `token_invalid`에서 개명됐다. `frontend/docs/api-spec.md` #7·#8 및 변경 이력 참고.
-> 아래 `analysis_jobs.error_code`의 `token_invalid`는 API 표면이 아닌 내부 코드라 그대로 둔다.
+> 아래 `analysis_jobs.error_code`의 `token_invalid`는 HTTP 오류 reason과 다른 내부 코드다.
+> 분석 상태 조회의 `failureReason`에는 [공통 OpenAPI](../../spec/shared/contracts/openapi.yaml)에 따라
+> 내부 코드를 그대로 전달한다. `200` 상태 응답의 실패 사유를 HTTP `error.reason`과 혼동하지 않는다.
 
 ## 브라우저 OAuth callback 표시 코드
 

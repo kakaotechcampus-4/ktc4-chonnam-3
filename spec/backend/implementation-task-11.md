@@ -371,3 +371,31 @@ Python 3.12.14, 별도 게시 worktree와 계약 검증 worktree를 사용했다
 #100 설계 문서에 남은 #81·#100 참조는 기존 2개 PR 시점의 안내다. 파일·커밋을 유지하라는 요청에 따라 보존하고
 현행 세 PR 소유 관계는 각 PR 본문과 이 절에서 관리한다. 팀원 로컬 변경까지 확인했다는 의미는 아니다.
 원본 bundle·구성·로그는 `.claude/scratch/task11-three-pr-20261006/`와 별도 source·게시·계약 검증 worktree에 보존한다.
+
+## 2026-10-26 — PR #81 리뷰 보완과 최신 develop 결합 검증
+
+원본 head `67f2d85`를 백업하고 후속 커밋만 추가했다. 아래 결과는 `develop@d063d8d`와
+이번 #81 수정만 결합한 별도 worktree에서 새로 실행한 값이며, 10월 6일의 게시본 결과와 구분한다.
+
+- 분석 TTL·후보 수의 양수 검증을 별도 validator로 옮겨 기본값과 검증 동작을 유지했다.
+  문서 텍스트 상한 설정과 인접한 수정 및 BE 결정 색인의 삽입 위치를 분리해 현재 develop 충돌을 없앴다.
+- `notify()`는 Redis 호출 전에 필수 `ctx["settings"]`를 확인한다. 설정 누락 회귀가 수정 전 실패하고
+  수정 후 통과했다. Redis 장애가 이미 commit된 분석 상태를 뒤집지 않는 기존 검증도 보존했다.
+- `failureReason=token_invalid`와 HTTP `error.reason=github_token_invalid`는 기존 OpenAPI의 서로 다른
+  이름 공간이다. backend 오류 안내의 설명을 바로잡았으며 반환 코드·공개 스키마는 바꾸지 않았다.
+- [#128](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/128)은 이미 develop에 반영돼 실패 화면이
+  두 값을 같은 재연동 안내로 처리한다. 따라서 해당 FE 선행 조건은 충족됐다. FE API 문서의 표·SSE 예시
+  정합화는 실제 계약 원본을 검토할 별도 범위이며 이 PR에 FE 변경을 복사하지 않았다.
+
+| 대상 | 이번 실행 결과 |
+| --- | --- |
+| 원본 작업 worktree의 설정·알림 회귀 | 5 passed. 설정 누락 1개와 기존 상한의 0·음수 거절 4개 |
+| 최신 develop+#81의 BE 전체, 전용 PostgreSQL·Redis DB 13 | 1150 passed, skip 0 |
+| 같은 결합본 Ruff check·format·mypy app | 통과. format 287파일, mypy 143 source |
+| 기존 계약 전용 venv의 `check_contracts.py` | schema 2개·부분 OpenAPI·fixture 7개 통과 |
+| 현재 develop와의 실제 merge-tree | 충돌 없음. 문서 업로드 설정·기존 결정 항목 보존 |
+| 실제 GitHub·LLM·배포·전체 분석 API E2E | 미실행. 공통 모듈 검증을 #108의 실행 연결 완료로 확대하지 않음 |
+
+계약 검사를 처음 BE venv에서 실행했을 때는 jsonschema 부재로 미실행됐고, 기존 계약 전용 venv로
+다시 실행해 통과했다. 실제 run API·최종 worker 연결·`0003_analysis_runs`는 계속 #108 범위다.
+CI와 원격 PR 상태는 push 이후 별도로 확인하며, 과거 통합 수치를 이번 성공으로 사용하지 않는다.
