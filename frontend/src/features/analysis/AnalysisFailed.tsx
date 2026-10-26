@@ -100,6 +100,9 @@ export default function AnalysisFailed() {
     if (runStatus === 'running') navigate(`/interview/analyzing/${runId}`, options);
     if (runStatus === 'completed') navigate(`/interview/repos/${runId}`, options);
   }, [runStatus, runId, navigate, inputState]);
+  // 진행 화면에서 넘어오면 캐시의 running이 먼저 그려진다. 실패가 확인되기 전에는
+  // failureReason이 없어 기본 안내가 잠깐 보였다 바뀌므로, failed일 때만 안내를 그린다.
+  const failed = run?.status === 'failed';
   const failure = (failureReason && FAILURE[failureReason]) || DEFAULT_FAILURE;
   const stepStatus: Partial<Record<StepKey, StepStatus>> = Object.fromEntries(
     (run?.steps ?? []).map((s) => [s.key, s.status]),
@@ -120,12 +123,12 @@ export default function AnalysisFailed() {
             <h1 className="flex-1 text-base font-bold">GitHub 레포를 분석하지 못했어요</h1>
           </div>
 
-          {runQuery.isPending && (
+          {!failed && !runQuery.isError && (
             <p role="status" className="text-sm text-muted">
               불러오는 중...
             </p>
           )}
-          {runQuery.isError && !run && (
+          {runQuery.isError && !failed && (
             <RunLoadError
               error={runQuery.error}
               onRetry={() => void runQuery.refetch()}
@@ -133,7 +136,7 @@ export default function AnalysisFailed() {
             />
           )}
 
-          {run && (
+          {failed && (
             <div
               role="alert"
               className="rounded-card border border-error-soft bg-error-soft px-4 py-3 text-sm text-error"
@@ -142,7 +145,7 @@ export default function AnalysisFailed() {
             </div>
           )}
 
-          {run && (
+          {failed && (
             <ul className="flex flex-col gap-3">
               {STEP_GROUPS.map((group) => {
                 const status = groupStatus(group.keys, stepStatus);
@@ -180,7 +183,7 @@ export default function AnalysisFailed() {
             </ul>
           )}
 
-          {run && (
+          {failed && (
             <div className="flex gap-2">
               {failure.action === 'relink' && (
                 <a
