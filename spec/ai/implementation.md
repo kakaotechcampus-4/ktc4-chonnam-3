@@ -185,6 +185,50 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
 - migration 한 파일의 결합 검증은 #82 전체 모델·서비스 통합이나 전체 pytest 통과가 아니다.
   실제 면접 실행·외부 모델 호출·seed 활성화 검증은 이번 범위가 아니다.
 
+## 2026-10-27 — #127 기존 DB 이력 보존과 최종 합류 검증
+
+### 수정과 선행
+
+- `0003_director_runtime`과 #82·#108의 기존 revision ID·부모·DDL을 보존한다.
+  #82의 신규 `0003_agent_storage_merge`, 기존 Director merge, #108 분석 실행을
+  DDL 없는 `0004_interview_foundation_merge`에서 합친다.
+- 신규 graph 검사는 최종 head 하나와 저장·공고·분석·Director의 기존 이력을 확인한다.
+  선행 파일을 테스트에 복사하거나 가짜 revision으로 대체하지 않는다.
+- BE ADR은 기존 Task 9의 0002와 구분해 [0008](../backend/decisions/0008-director-foundation-publication.md)로
+  연결하고 색인에 추가했다. 원래 #127의 고유 실행 기록은 위에 보존하고 위치만 분리했다.
+- #131 반영 이후 seed import 수집 오류는 현재 실패 원인이 아니다. 당시 실패 기록과
+  최신 상태를 구분하며 seed 구현은 이번 게시본에 추가하지 않았다.
+- Director 분리 게시·통합 검증의 원본은 AI 기록에 유지한다. BE ADR은 이 기록을 참조하며
+  현황을 중복 작성하지 않는다. 이는 루트 CLAUDE 문서 원칙과 AI ADR 0020을 따른다.
+
+### 이번 실행 결과
+
+Windows Python 3.12, `develop@d063d8d` 기준이다. PostgreSQL은 새 전용 로컬 cluster를 사용했다.
+
+| 범위 | 검사 | 결과 |
+| --- | --- | --- |
+| 최신 develop + #127 | `pytest tests/core/test_llm_config.py -q` | 50 passed |
+| 같은 게시 범위 | Ruff·format·mypy app | 통과, format 279파일·mypy 136 source |
+| 같은 게시 범위 | `alembic heads`·신규 graph 검사 | 선행 #82 부재로 실패, `0002_agent_storage` 없음 |
+| 로컬 #81·#82·#108·#127 결합 | 설정 + 신규 graph pytest | 51 passed |
+| 같은 결합의 실제 PostgreSQL | 초기·공고·Agent·Agent merge·기존 Director merge·분석 실행의 6개 출발점 → head | 모두 단일 `0004_interview_foundation_merge`, 기존 사용자 행 보존 |
+| 같은 6개 DB | 명시한 출발 revision으로 downgrade → upgrade head | 모두 통과, 기존 사용자 행·호출 기록 테이블·분석 지표 컬럼 확인 |
+| 초기 출발 DB | `downgrade base` → `upgrade head` | 통과 |
+| 검증 자원 | 경로별 전용 DB 생성·삭제 | 6개 모두 정리 |
+
+DB 경로 검사의 코드 tree는 `afd5adf1ceb4f27e237e0836d6ffe233fa1ecd71`이다.
+이 로컬 결합에서 #108 main의 충돌은 문서 router와 분석 router 등록을 모두 보존해 해소했다.
+이는 #108의 원격 코드 수정이나 해당 PR 전체 검증 결과가 아니다.
+
+처음 사용한 상대 `downgrade -1`은 합류 경로가 모호해 실패했다. 대상 revision을 명시하여
+다시 검사한 위 결과와 구분한다. 과거 리뷰어의 전체 pytest 수치를 이번 결과로 사용하지 않았다.
+
+### 병합 조건
+
+#82·#108이 없는 게시본은 graph를 실행할 수 없으므로 develop base의 Draft로 검토한다.
+두 선행 반영 후 그 시점의 실제 graph·기존 자료·전체 BE 회귀와 CI를 다시 확인해야 한다.
+이 검증은 외부 모델 품질·면접 완주·운영 DB 배포 확인을 포함하지 않는다.
+
 ## 2026-09-27 — task-04 L1 호출·재요청과 캐시 판정
 
 ### 기준과 변경
