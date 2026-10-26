@@ -321,6 +321,139 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
 실제 모델의 자연어 평가 품질·답변 분석 생성·WS 전체 서비스 연결은 이번 검증에 포함하지 않았다.
 공통 계약 스크립트는 부분 형식 검사이며 전체 공개 API 호환성 검증을 대신하지 않는다.
 
+## 2026-10-26 — PR #97 기록 충돌 해소와 최신 develop 결합 검증
+
+- 기준은 #97 `0734b802c42878e6cd42c18eaec27c5782e9822a`와 develop
+  `633e8dee65bb85031730f30512b4d0a1e4003e86`이다. 두 변경을 결합한 별도 worktree에서 새로 실행했다.
+- 충돌은 문서 머리말 뒤에 각 작업이 기록을 추가한 위치가 겹쳐 발생했다. #97의 고유 기록을
+  기존 공통 절 사이로 재배치해 원문과 제목을 보존했다. 제품 코드·테스트·정책 의미는 바꾸지 않았다.
+- [후속 리뷰](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/97#issuecomment-6161811626)의
+  병합 요청을 확인했다. 실행 프롬프트·Director 보조 입력 검증·실제 면접 연결은 기존 후속 범위다.
+
+Windows / Python 3.12.14, 기존 준비 환경의 Python과 검증본의 명시적 AI·BE 소스 경로를 사용했다.
+
+| 검증 대상 | 실행 | 결과 |
+| --- | --- | --- |
+| 결합본 AI | 전체 pytest, cacheprovider 제외 | 254 passed |
+| 결합본 AI | Ruff check·format, mypy | 통과; format 46개·mypy 11개 파일 |
+| 결합본 루트 | hook·계약 스크립트 unittest | 17 passed, 1 skipped; Windows symlink 생성 불가 |
+| 결합본 루트 | hook 두 파일의 Ruff isolated 검사 | 통과 |
+| 결합본 BE | AI 패키지 import pytest | 1 passed; 검증본의 AI 소스 사용 |
+| 결합본 BE | Ruff check·format, mypy app | 통과; format 264개·mypy 133개 파일 |
+| 결합본 계약 | 전용 검사 환경의 check_contracts.py | schema 2개·부분 OpenAPI·fixture 7개 통과 |
+| 실제 AI hook | uv offline/no-sync, 오류 Write·정상 Edit | F401·T201 검출, 정상 파일 통과, 원문·AI lock 불변 |
+| 변경 문서·이력 | md 20개의 링크·앵커와 양쪽 기록 절 대조 | 상대 링크 287개·앵커 포함 19개 유효, 원본 절 누락 없음 |
+
+이 결과는 이번 결합본의 새 실행이며 이전 193개·별도 #82의 24개 결과를 재사용하지 않았다.
+실제 Claude UI 기동·Linux·외부 LLM·DB/WS 면접 전체 흐름은 이번에 실행하지 않았다.
+부분 계약·AI 단위 검사로 고정 배분의 서비스 적용 완료나 다른 PR의 병합 가능을 판단하지 않는다.
+
+## 2026-10-13 — PR #97 리뷰 대응과 면접 배분 구현 현황 재확인
+
+### 문서 번호와 최신 구현
+
+- 최신 `develop` `bbe01213d0bb791b64504f13fbe73ed4bb88d98b`에는 공통 ADR 0007인
+  `0007-voice-interview-contract.md`가 있어, 이번 고정 배분 결정은
+  [공통 ADR 0008](../shared/decisions/0008-fixed-persona-allocation.md)로 번호와 참조를 정리했다.
+  확인한 열린 PR 14개 중 #81이 0006을 사용하고 있으며, 공통 0008을 새로 사용하는 PR은 없었다.
+  아래 10월 6일의 번호 선택·구현 확인 기록은 당시 이력으로 보존한다.
+- [PR #82](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/82)의 최신 확인 head는
+  `0e973f3377553b13bbea419bfd662f968bf64b97`이다. 기존 `b262f29`와 달리 고정 6/2/1을
+  계산하는 `agent_context.allowed_personas`와 설정·이력 검증이 구현돼 있다. 첫 HR 이후에는
+  잔여 할당이 있는 기술·도메인만 허용하고, 도메인 할당이 남았는데 활성 프레임이 없으면
+  `domain_frames_unavailable`로 거절한다. 미분류 공고는 DB 값을 보존하며 활성 `etc` 프레임을 쓴다.
+- #82의 위 코드와 테스트는 이번 PR에 복사하지 않았다. 아래 검증은 #97의 문서·hook 검사와
+  #82의 기존 배분 함수 검사를 구분하며, #82 전체의 병합 가능이나 실제 면접 완료를 뜻하지 않는다.
+
+### 리뷰 대응과 남은 실행 연결
+
+- [기존 리뷰](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/97#issuecomment-6107262453)의
+  실행 프롬프트·Director 입력 검증 지적은 후속 구현 대상으로 유지한다. #97의 배분 변경 범위는
+  문서이며, 현재 AI Director는 허용 목록 밖 출력은 거절하지만 이후 HR·횟수 상한에 맞는
+  목록인지까지 검사하지 않는다. 프롬프트 문구 변경만으로 고정 배분이 보장되지는 않는다.
+- 후속 구현은 #82의 Controller를 재사용하고, 프롬프트에서 배분 계산과 후보 선택의 책임을
+  명확히 한다. Director의 보조 입력 검사에서는 이후 HR·이미 채운 할당과 함께
+  `persona_counts` 누락·질문 번호 불일치의 처리 기준을 맞춘다. 별도 배분 계산기를 복제하지 않는다.
+- FE mock의 6/1/2 예제, 실제 준비·턴 처리와의 연결, 중복·실패 시 질문 수 불변 및
+  9번째 **답변 처리 후** 정상 종료는 후속 통합 검증 범위다. #82의 9문항 저장 테스트는 답변을
+  fixture에서 직접 저장하므로 실제 답변 처리·WS 정상 종료를 검증한 것으로 취급하지 않는다.
+- #82의 기존 고정 커밋 링크는 당시 ADR 0007에 계속 접근할 수 있다. 이후 현행 정책 참조를
+  갱신할 때는 #97의 ADR 0008로 연결하며, 해당 PR의 실행 코드·이력은 이번에 수정하지 않는다.
+
+### 이번 수정의 검증
+
+Windows / Python 3.12, #97 게시 worktree와 최신 develop을 합친 별도 worktree에서 새로 실행했다.
+기존 준비 환경의 Python을 사용했고, AI·BE 연결 검사에는 검증할 worktree의 `PYTHONPATH`를 지정했다.
+
+| 검증 대상 | 명령 / 시나리오 | 결과 |
+| --- | --- | --- |
+| #97 루트 | `PYTHONUTF8=1`, `python -m unittest discover -s .claude/scripts/tests -v` | 17 passed, 1 skipped; Windows symlink 생성 불가 |
+| #97 루트 | hook 두 파일의 `ruff check --isolated` | 통과 |
+| #97 AI hook | 실제 uv·AI venv로 정상 Edit·오류 Write 실행 | F401·T201 검출, 정상 파일 통과, 소스·lock 불변 |
+| #97 `ai` | `python -m pytest -q -p no:cacheprovider`, Ruff·format·mypy | 193 passed; format 40개·mypy 11개 파일 통과 |
+| #97 `backend` | `python -m pytest tests/agents/test_ai_package_imports.py -q -p no:cacheprovider` | 1 passed |
+| #97·develop 통합본 | `.claude/scripts/check_contracts.py` | 각각 schema 2개·부분 OpenAPI·fixture 7개 통과 |
+| develop 통합본 | hook·계약 스크립트 unittest, 문서 링크·ADR 번호·본문 보존 | 17 passed, 1 skipped; 로컬 링크 284개, 번호 중복 없음, 기존 음성 ADR 보존 |
+| #97 문서 | 로컬 링크·다른 AI ADR 보존·`git diff --check` | 링크 279개 대상 존재, AI ADR 0007·0008 및 배분 정책 본문 보존, 공백 검사 통과 |
+| 별도 #82 `0e973f3` | `python -m pytest tests/agents/test_agent_context.py -q -p no:cacheprovider` | 24 passed; 정상 순서 28가지와 잘못된 횟수 검사 포함 |
+
+실제 Claude UI 기동·Linux·외부 LLM·DB/WS 면접 전체 흐름은 이번에 실행하지 않았다.
+#82의 DB 저장 회귀는 코드만 대조했으며 이번 24개 실행 결과에 포함하지 않았다.
+독립 검토에서도 추가 결함이 없었고, 이번 수정은 문서 번호·참조·현황 기록에 한정한다.
+
+## 2026-10-06 — 고정 질문 배분 문서와 AI 변경 파일 lint
+
+### 기준과 변경
+
+- `develop`의 `ef1a48d1531b43f382b69dee163419afb5709c6b`에서
+  `refactor/interview-policy-ai-lint` 브랜치를 분리했다. 미병합 PR의 코드는 가져오지 않았다.
+- [고정 배분 결정](../shared/decisions/0008-fixed-persona-allocation.md)(당시 공통 ADR 0007, 현재 0008)에 따라 정상 완료 면접을
+  기술 6회·도메인 2회·HR 1회로 정리했다. 첫 HR을 포함한 총 9문항이며, 이후 기술·도메인 순서는
+  허용 후보 안에서 선택한다. 마지막 답변 처리 후 종료한다.
+- **면접 배분 변경은 문서에만 반영했다.** 현행 기능·계약·과제·검증 기준과 결정 색인을 맞추고,
+  과거 ADR·초기 설계 본문은 보존하면서 현행 정책으로 연결했다.
+- 게시 전 열린 PR 13개를 대조해 #81이 공통 ADR 0006을 사용 중임을 확인했다.
+  번호 중복을 피하려고 이번 정책은 0007로 지정하고, 관련 문서의 참조를 함께 맞췄다.
+- [PR #28의 AI lint 보완 요청](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/28#discussion_r4053030543)에
+  맞춰 `.claude/scripts/lint_changed.py`의 AI 무조건 건너뛰기를 제거했다.
+  Claude `Edit`·`Write`의 AI Python 변경 파일을 `ai/`에서 로컬 Ruff로 검사하며,
+  `--offline`·`--no-sync`를 사용한다. 설치·자동 수정 없이 미준비 환경과 lint 실패를 안내한다.
+- `.claude/scripts/tests/test_hooks.py`에 AI 실행·오류 전달·정상 통과·시간 초과·환경 부재·경로 제외
+  회귀 검증을 추가했다. 사용 조건과 검사 범위는 [AI 테스트 안내](../../ai/docs/testing.md)에 기록했다.
+
+### 실행 결과
+
+Windows, Python 3.12의 별도 worktree에서 실행했다. 아래 결과는 이번 변경에서 새로 확인한 값이다.
+
+| 작업 디렉터리 | 명령 / 시나리오 | 결과 |
+| --- | --- | --- |
+| 루트 | 구현 전 AI hook 회귀 검증 | 기존 무조건 skip으로 4개 실패 확인 |
+| 루트 | `PYTHONUTF8=1`, BE Python으로 `-m unittest discover -s .claude/scripts/tests -v` | 17 passed, 1 skipped; Windows symlink 생성 불가 |
+| 루트 | `ruff check --isolated .claude/scripts/lint_changed.py .claude/scripts/tests/test_hooks.py` | 통과 |
+| 루트 | 실제 AI venv·uv로 hook에 `Edit`·`Write` JSON 전달 | 정상 파일 통과, 오류 파일의 F401·T201 검출; 소스·AI lock 불변 |
+| `ai` | `uv --offline run --locked ruff check .`, `ruff format --check .`, `mypy` | 통과; format 40개·mypy 11개 파일 |
+| `ai` | `uv --offline run --locked pytest -q -p no:cacheprovider` | 193 passed; 기존 구현 검증이며 새 고정 배분 구현 검증은 아님 |
+| `backend` | `uv --offline run --locked pytest -q -p no:cacheprovider tests/agents/test_ai_package_imports.py` | 1 passed; 현재 worktree의 AI 패키지 연결 확인 |
+| 루트 | 별도 검증 환경의 `.claude/scripts/check_contracts.py` | schema 2개·부분 OpenAPI·정상/오류 fixture 7개 통과 |
+| 루트 | 독립 코드·문서 검토, 변경 문서의 로컬 링크 278개와 `git diff --check` | 추가 결함 없음, 링크 대상 존재·공백 검사 통과; 면접 코드·프롬프트·fixture·설정·lock 변경 없음 |
+
+BE 환경 준비는 캐시에 `lxml-stubs`가 없어 offline sync가 실패한 뒤, 일반 `uv sync --locked`로
+완료했다. 이는 수동 검증 준비이며 hook은 의존성을 설치하지 않는다. hook 실검증에서는 실행할 Python을
+지정하고 자식 프로세스의 PATH에 uv를 추가했다. 실제 Claude UI에서 hook이 시작되는 단계와 Linux 실행은
+미실행이다. 공통 계약 검사는 부분 형식 검사이며 전체 API·DB·WS·모델 품질 검증을 뜻하지 않는다.
+
+### 면접 구현의 후속 반영
+
+- 확인한 [PR #82](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/82)의 head는
+  `b262f29e335c1115600fe6dc7b306d0ed231263b`이며 미병합 상태다. 기술 최소 5회·도메인/HR 합산 최소 3회,
+  첫 질문 이후 HR 허용이라는 유동 정책을 새 고정 배분과 맞춰야 한다. 도메인 프레임 부재 시 도메인을
+  제외하는 경로도 도메인 2회 보장과 함께 검토해야 한다.
+- `frontend/src/mocks/fixtures/interview.ts`의 기술 6회·도메인 1회·HR 2회 예제와 설명은 아직 유지된다.
+  `ai/prompts/director-question-v1.md`의 배분 문구도 후속 구현에서 Controller의 책임과 함께 정합성을 확인한다.
+- 면접 제어 코드·프롬프트·FE fixture·설정 예시는 이번에 수정하지 않았다. 후속 구현에서는 허용 후보 계산,
+  질문 확정·중복 처리, 9번째 답변 후 종료 및 도메인 준비 조건을 검증해야 한다.
+  이번 문서 정리만으로 #82 병합 가능이나 실제 고정 배분 적용 완료를 선언하지 않는다.
+
 ## PR #56의 현재 범위
 
 관련 PR: [AI task-01~03 기반 및 Director 기본 질문 생성 구현](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/56)
