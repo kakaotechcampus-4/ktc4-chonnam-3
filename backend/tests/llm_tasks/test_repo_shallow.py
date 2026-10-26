@@ -4,10 +4,11 @@ import json
 import uuid
 
 import httpx
+import pytest
 from devon_ai import contracts as c
 from pydantic import SecretStr
 
-from app.core.config import LLMSettings
+from app.core.config import LLMSettings, Settings
 from app.llm_tasks import repo_shallow
 
 SHA = "a" * 40
@@ -129,6 +130,46 @@ async def test_successful_batch_maps_each_repository_to_a_row() -> None:
     }
     assert rows[0]["result"]["project_role_summary"] == "캐시 기능을 제공하는 프로젝트"
     assert rows[1]["batch_position"] == 1
+
+
+@pytest.mark.parametrize(
+    ("proxy_url", "proxy_token", "expected_url", "expected_token"),
+    [
+        (None, None, "https://api.openai.com/v1/responses", "official-fixture"),
+        (
+            "https://proxy.example/tenant/v1",
+            "proxy-fixture",
+            "https://proxy.example/tenant/v1/responses",
+            "proxy-fixture",
+        ),
+    ],
+)
+async def test_l1_passes_resolved_connection_and_keeps_prompt_model(
+    proxy_url, proxy_token, expected_url, expected_token
+) -> None:
+    # 직접 연결 키가 함께 있어도 설정에서 선택한 프록시 주소·토큰 쌍을 전달해야 한다.
+    settings = Settings(
+        _env_file=None,
+        openai_api_key="official-fixture",
+        proxy_token=proxy_token,
+        chat_proxy_url=proxy_url,
+        openai_model=None,
+        llm_default_model="different-registration-default",
+        llm_timeout_seconds=1,
+        llm_max_output_tokens=512,
+        llm_max_input_bytes=65536,
+        llm_max_response_bytes=65536,
+    ).require_llm()
+    sent: list[httpx.Request] = []
+    async with httpx.AsyncClient(transport=_transport([_batch(_item(REPO_1))], sent)) as http:
+        run = await repo_shallow.analyze_repositories(
+            (_input(REPO_1),), prompt=PROMPT, settings=settings, http_client=http
+        )
+    assert run.result.succeeded
+    assert len(sent) == 1
+    assert str(sent[0].url) == expected_url
+    assert sent[0].headers["Authorization"] == f"Bearer {expected_token}"
+    assert json.loads(sent[0].content)["model"] == PROMPT.model
 
 
 async def test_schema_failed_repository_is_retried_once_and_stored_as_success() -> None:

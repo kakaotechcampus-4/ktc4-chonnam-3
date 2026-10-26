@@ -231,8 +231,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AnalyzingResponse'
+        '400':
+          description: invalid_request — page must be an integer greater than or equal to 1.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '401':
           $ref: '#/components/responses/Error'
+        '409':
+          description: not_ready when the run cannot provide candidates; candidate_page_failed when the requested page failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '410':
+          description: run_expired — the analysis run is no longer available.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /interviews:
     post:
       operationId: createInterview
@@ -719,6 +737,10 @@ components:
         failureReason:
           type: string
           nullable: true
+          description: >-
+            Internal analysis_jobs.error_code, such as token_invalid or
+            llm_parse_failed. This is not the HTTP error.reason namespace;
+            github_token_invalid remains the HTTP authentication error reason.
         estimatedSeconds:
           type: integer
           nullable: true
@@ -809,6 +831,17 @@ components:
           items:
             type: string
 
+    FailedRepository:
+      type: object
+      additionalProperties: false
+      required: [repositoryId, errorCode]
+      properties:
+        repositoryId:
+          type: string
+        errorCode:
+          type: string
+          description: Internal repository analysis error code, such as llm_parse_failed.
+
     AnalysisRunResultResponse:
       type: object
       required:
@@ -818,6 +851,9 @@ components:
         - jdRequirements
         - mentionedRepoCount
         - matchedRepoCount
+        - analyzedCount
+        - failedCount
+        - failedRepositories
         - repositories
       properties:
         runId:
@@ -836,6 +872,28 @@ components:
           type: integer
         matchedRepoCount:
           type: integer
+        analyzedCount:
+          type: integer
+          minimum: 0
+          description: >-
+            Count of succeeded or partial L1 snapshots bound to this run's
+            assigned batches. Includes repositories filtered from cards after
+            assignment. A partial repository is not selectable for interview.
+        failedCount:
+          type: integer
+          minimum: 0
+          description: >-
+            Count of failed L1 snapshots bound to this run's assigned batches,
+            including repositories filtered from cards after assignment.
+            Equals the number of failedRepositories entries.
+        failedRepositories:
+          type: array
+          description: >-
+            Failures among repositories eligible at batch assignment, including
+            those later filtered from cards. Exposes only repository identifiers
+            and error codes, without repository metadata or credentials.
+          items:
+            $ref: '#/components/schemas/FailedRepository'
         repositories:
           type: array
           items:

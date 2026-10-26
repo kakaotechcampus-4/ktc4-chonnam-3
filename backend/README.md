@@ -19,6 +19,7 @@ AI 원본은 [ai/src/devon_ai](../ai/src/devon_ai/)의 로컬 Python 패키지�
 | [deploy.md](docs/deploy.md)               | AWS 통합 배포(CloudFront) · 쿠키 · CI                 |
 | [api-spec.md](docs/api-spec.md)           | FE 계약 링크 + 합의된 변경                            |
 | [local-oauth.md](docs/local-oauth.md)     | 실제 GitHub 로그인 설정 · API/worker/FE 실행 · 격리 테스트 |
+| [llm-connection.md](docs/llm-connection.md) | LLM 환경 설정 · 프록시 연결 점검 · 프롬프트 버전 등록 |
 
 ## 기술 스택
 
@@ -54,6 +55,7 @@ uv run uvicorn app.main:app --reload --port 8000 --no-access-log
 | `uv sync`                                             | 의존성 설치       |
 | `uv run alembic upgrade head`                         | 마이그레이션      |
 | `uv run python -m scripts.seed_all`                   | 도메인 지식 시드 경계 — 로그인 실행에 불필요 |
+| `uv run python -m scripts.check_llm`                  | 실제 LLM 연결 점검 — 합성 입력 1건, API 사용량 발생 |
 | `uv run uvicorn app.main:app --reload --port 8000 --no-access-log` | API — OAuth query 로그 제외 |
 | `uv run arq app.workers.arq_app.WorkerSettings`       | 워커              |
 | `uv run ruff check . && uv run ruff format --check .` | 린트              |
