@@ -1,7 +1,7 @@
 """목적·질문을 함께 제안하고 별도 모델 시도로 검토하는 단일 Director 실행 경로."""
 
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 from typing import Protocol, cast
 
 from devon_ai import contracts as c
@@ -90,6 +90,32 @@ def _review_schema() -> dict[str, object]:
             "reason_summary": {"type": "string"},
         }
     )
+
+
+def _plan_object(raw: object, expected: set[str], name: str) -> dict[str, object]:
+    if type(raw) is not dict or set(raw) != expected:
+        raise c.ContractError("schema", name)
+    return cast(dict[str, object], raw)
+
+
+def _plan_question(raw: object) -> c.Question:
+    # 공통 decode의 부가 필드 무시 정책을 바꾸지 않고 새 planner의 중첩 출력만 엄격히 검사한다.
+    question = _plan_object(raw, {item.name for item in fields(c.Question)}, "Question")
+    contract = _plan_object(
+        question["question_contract"],
+        {item.name for item in fields(c.QuestionContract)},
+        "QuestionContract",
+    )
+    for name, expected in (
+        ("required_points", {item.name for item in fields(c.RequiredPoint)}),
+        ("basis_refs", {item.name for item in fields(c.BasisRef)}),
+    ):
+        entries = contract[name]
+        if type(entries) is not list:
+            raise c.ContractError("schema", name)
+        for item in entries:
+            _plan_object(item, expected, name)
+    return c.decode(c.Question, question)
 
 
 def _validate_candidate(
@@ -241,7 +267,7 @@ async def run_director(
     def validate_plan(raw: object) -> _Plan:
         if type(raw) is not dict or set(raw) != {"question", "intent", "reason_summary"}:
             raise c.ContractError("schema", "DirectorPlan")
-        candidate = _validate_candidate(c.decode(c.Question, raw["question"]), context, sources)
+        candidate = _validate_candidate(_plan_question(raw["question"]), context, sources)
         # 자유 텍스트인 의도·사유도 기존 결정 계약의 타입 검사로 검증한다.
         proposal = c.DirectorDecision(
             "ask",
@@ -310,7 +336,7 @@ async def run_director(
             c.CallFailure(
                 "semantic",
                 _RECOVERY_CODES[assessment.recovery],
-                assessment.reason_summary,
+                "Independent question review rejected.",
             ),
             attempts,
         )

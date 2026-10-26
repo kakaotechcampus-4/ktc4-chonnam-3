@@ -97,6 +97,7 @@ class Provider:
             2,
             10,
             10,
+            raw_output=json.dumps(output, ensure_ascii=False) if isinstance(output, dict) else None,
         )
         if isinstance(output, c.CallFailure):
             return c.ModelResult(None, output, (attempt,))
@@ -437,13 +438,105 @@ def test_document_instructions_remain_reference_data_in_both_operations():
     assert "reason_summary" not in provider.requests[1].payload
 
 
-def test_tool_failure_scope_and_valid_partial_items_reach_both_director_operations():
-    tool = c.ToolResult("tool_error", (), ("repo-1:cache.py",), ("다른 파일 조회 실패",), "timeout")
+@pytest.mark.parametrize("has_items", [False, True])
+def test_tool_failure_scope_and_valid_partial_items_reach_both_director_operations(has_items):
+    evidence = c.Evidence(
+        "ev-tool",
+        "repo-1",
+        REF,
+        "code",
+        "cache.py",
+        None,
+        "def cached(): return None",
+        "read_file",
+    )
+    items = (evidence,) if has_items else ()
+    tool = c.ToolResult(
+        "tool_error", items, ("repo-1:cache.py",), ("다른 파일 조회 실패",), "timeout"
+    )
     provider = Provider(plan(), review())
-    result = run(provider, later_context(), tool_results=(tool,))
+    result = run(provider, later_context(evidence=items), tool_results=(tool,))
     assert result.succeeded
     for request in provider.requests:
         assert request.payload["tool_results"] == [asdict(tool)]
+
+
+@pytest.mark.parametrize("registered", [False, True])
+def test_tool_items_require_context_registration_before_question_citation(registered):
+    evidence = c.Evidence(
+        "ev-tool",
+        "repo-1",
+        REF,
+        "code",
+        "cache.py",
+        None,
+        "def cached(): return None",
+        "read_file",
+    )
+    candidate = replace(
+        question(),
+        question_contract=replace(
+            question().question_contract,
+            basis_refs=(c.BasisRef("evidence", "ev-tool"),),
+        ),
+        evidence_refs=("ev-tool",),
+    )
+    provider = Provider(plan(candidate), review())
+    result = run(
+        provider,
+        later_context(evidence=(evidence,) if registered else ()),
+        tool_results=(c.ToolResult("found", (evidence,), ("repo-1:cache.py",), (), None),),
+    )
+    if registered:
+        assert result.succeeded
+        assert result.data.question.data.evidence_refs == ("ev-tool",)
+        assert len(provider.requests) == 2
+    else:
+        assert result.data is None
+        assert result.failure.stage == "semantic"
+        assert len(provider.requests) == 1
+
+
+@pytest.mark.parametrize("where", ["plan", "review"])
+def test_timeout_never_emits_an_unreviewed_question_or_retries_a_stage(where):
+    failure = c.CallFailure("timeout", "llm_timeout", "fixture timeout")
+    provider = Provider(failure) if where == "plan" else Provider(plan(), failure)
+    result = run(provider)
+    assert result.data is None
+    assert result.failure.stage == "timeout"
+    assert len(provider.requests) == (1 if where == "plan" else 2)
+    assert all(request.max_attempts == 1 for request in provider.requests)
+
+
+def test_review_rejection_keeps_model_reason_only_in_protected_attempt_metadata():
+    reason = "MODEL_REASON_FIXTURE_DO_NOT_EXPOSE"
+    provider = Provider(plan(), review(plan_valid=False, reason_summary=reason))
+    result = run(provider)
+    assert result.data is None
+    assert result.failure.error_code == "director_candidate_replan"
+    assert reason not in result.failure.reason_summary
+    assert reason not in repr(result.failure)
+    assert reason in result.attempts[-1].raw_output
+    assert reason not in repr(result.attempts[-1])
+
+
+@pytest.mark.parametrize("where", ["question", "contract", "required_point", "basis_ref"])
+def test_plan_nested_extra_fields_fail_before_independent_review(where):
+    output = plan()
+    contract = output["question"]["question_contract"]
+    contract["basis_refs"] = [{"kind": "job_posting", "id": "job-1"}]
+    target = {
+        "question": output["question"],
+        "contract": contract,
+        "required_point": contract["required_points"][0],
+        "basis_ref": contract["basis_refs"][0],
+    }[where]
+    target["unexpected"] = "must not be silently discarded"
+    provider = Provider(output, review())
+    result = run(provider, reference_texts={c.BasisRef("job_posting", "job-1"): "공고 원문"})
+    assert result.data is None
+    assert result.failure.stage == "schema"
+    assert len(provider.requests) == 1
 
 
 def test_unsolicited_plan_fields_do_not_bypass_the_strict_output_schema():
