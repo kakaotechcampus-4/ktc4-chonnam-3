@@ -360,6 +360,36 @@ async def test_wall_timeout_bounds_a_slow_provider_attempt():
     assert len(result.attempts) == 2
 
 
+class _CancelSwallowingTransport(httpx.AsyncBaseTransport):
+    """취소를 삼킨 뒤 timeout을 넘겨 정상 응답을 돌려주는 transport."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def handle_async_request(self, req: httpx.Request) -> httpx.Response:
+        self.calls += 1
+        try:
+            await asyncio.sleep(1.5)
+        except asyncio.CancelledError:
+            await asyncio.sleep(1.5)
+        return httpx.Response(200, json=response())
+
+
+@pytest.mark.asyncio
+async def test_late_response_after_swallowed_cancellation_is_a_timeout_not_success():
+    transport = _CancelSwallowingTransport()
+    async with httpx.AsyncClient(transport=transport) as http:
+        result = await client.call_model(
+            request(),
+            validate,
+            api_key=SecretStr("fixture-key"),
+            http_client=http,
+        )
+    assert result.data is None
+    assert result.failure.stage == "timeout" and result.failure.error_code == "llm_timeout"
+    assert len(result.attempts) == 2 and transport.calls == 2
+
+
 @pytest.mark.asyncio
 async def test_semantic_failure_remains_terminal_for_the_shared_operation():
     calls = 0
