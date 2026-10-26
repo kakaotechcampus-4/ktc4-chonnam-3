@@ -94,6 +94,95 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
 레포 분석과 JD 분석의 본체를 이 PR에서 완성한 것은 아니다. 위 기반을 소비하는 각 기능 구현과
 실제 서비스 연결은 해당 담당 작업에서 이어간다. Director도 준비된 목적의 질문 생성 경로까지다.
 
+## 2026-10-26 — PR #119 최신 develop 결합과 병합 준비 검증
+
+- 원본 #119 `93177862fd6bf4f2bcc1191f800b3ba341a115c8`와 develop
+  `fca606a979d3b1214e6a5cfd9244d2fa5e10f08e`를 결합한 별도 worktree에서 새로 실행했다.
+- #99의 `DomainPostingInput`과 #119의 L2 계약이 같은 위치에 추가돼 충돌했다. L2 정의의 위치만
+  조정하고 양쪽 클래스·함수의 AST를 원본과 대조해 보존했다. 검증 로직·공개 계약은 바꾸지 않았다.
+- 구현 기록도 #119의 고유 절만 재배치하고 기존 develop 기록은 보존했다. task-05와 저장소 분석
+  문서의 과거 미구현 안내는 현재 기록 참조로 바꿨다. #109의 기록 정책 변경은 포함하지 않는다.
+- #114는 이미 develop에 반영돼 이번 검증에서 별도 결합하지 않았다. 아래의 단독 실패·Draft
+  기록은 당시 결과다. #133의 미적용 patch·호출 기록 hook은 이번에 가져오거나 활성화하지 않았다.
+
+Windows / Python 3.12.14, 기존 준비 환경의 Python과 검증본의 명시적 AI·BE 소스 경로를 사용했다.
+
+| 검증 대상 | 실행 | 결과 |
+| --- | --- | --- |
+| 결합본 AI | 전체 pytest, cacheprovider 제외 | 309 passed |
+| 결합본 AI | Ruff check·format, mypy | 통과; format 52개·mypy 12개 파일 |
+| 결합본 BE | L2 실제 adapter→AI→gateway HTTP 대역·패키지 import | 19 passed; L2 18·import 1 |
+| 결합본 BE | Ruff check·format, mypy app | 통과; format 266개·mypy 133개 파일 |
+| 결합본 계약 | 전용 검사 환경의 check_contracts.py | schema 2개·부분 OpenAPI·fixture 7개 통과 |
+| 결합본 루트 | hook·계약 스크립트 unittest | 17 passed, 1 skipped; Windows symlink 생성 불가 |
+
+기존 세 리뷰의 모든 area가 schema인 경우의 복구·ref 우선 semantic 거절·직접/프록시 주소와 토큰 전달을 다시 검사했다.
+유효 area와 거절 목록 보존, 혼합/semantic 무재시도, timeout/provider/parse/schema를 합산한 총
+HTTP 2회 상한이 통과했다. 과거의 AI 224·별도 결합 309/163을 이번 실행 결과로 재사용하지 않았다.
+실제 모델·외부 GitHub·원문 수집·DB 저장·prepare·전체 면접 E2E는 이번에 실행하지 않았다.
+구조·참조 검증을 자유 서술의 사실성이나 실제 분석 의미 품질 검증으로 확대하지 않는다.
+
+## 2026-10-26 — PR #119 L2 검증·재시도와 호출 주소 리뷰 반영
+
+- 기준은 원본 `3f945d3`이며 원본 브랜치와 `backup/pr119-before-review-fix-20261026`을 보존했다.
+- `parse_deep_analysis`는 repository ID·SHA의 형식을 먼저 검사하고 입력 ref와 대조한다.
+  형식이 유효한 다른 ref는 빈 요약·잘못된 area 목록·추가 필드와 함께 와도 semantic 실패다.
+  ref 자체의 형식 오류는 schema 실패이며 다른 저장소의 결과를 복구 대상으로 사용하지 않는다.
+- 검증된 area가 하나라도 있으면 기존 부분 성공과 거절 목록을 보존한다. 검증된 area가 없고
+  거절이 전부 schema일 때 gateway에 schema 오류를 전달해 남은 재시도만 사용한다. semantic
+  거절이 섞이면 재호출하지 않는다. task 내부 재시도 loop나 새 gateway·기본 관찰을 만들지 않았다.
+- BE adapter는 `base_url=settings.llm_base_url`을 실제 호출에 전달한다. 직접/프록시 주소와 토큰
+  조합을 실제 adapter→AI→gateway와 HTTP 대역으로 검사한다. #114의 설정·gateway 본체는 복사하지 않았다.
+- #133의 미적용 `03-repo_deep.patch`에도 같은 주소 전달 행이 있으므로 이번 head를 반영해 해당
+  중복을 제거하고 exact base/result·manifest를 다시 검증해야 한다. 다른 후속 보완은 보존 대상이다.
+
+### 실행 결과와 범위
+
+아래 표는 최초 리뷰 반영본의 결과이며, 혼합 거절 추가 검토 후의 최종 결과는 다음 절에 구분한다.
+
+| 환경 | 실행 | 실제 결과 |
+| --- | --- | --- |
+| 원본 코드 + 새 회귀 | L2 AI / BE 테스트 | 5 failed·20 passed / 7 failed·7 passed로 두 검증 문제 재현 |
+| #114 결합 + 새 주소 검사, 수정 전 | 직접/프록시 2사례 | 둘 다 필수 `base_url` 누락으로 실패, 외부 요청 없음 |
+| 수정 게시본 AI | 전체 pytest·Ruff·format·mypy | 223 passed, format 41파일·type 11 source 모두 통과 |
+| 수정 게시본 BE | AI package import·Ruff·format | 1 passed, format 250파일·Ruff 통과 |
+| 수정 게시본 BE | L2 pytest·mypy app | 실패: L2 17사례 모두 #114의 `llm_base_url` 필드 부재. mypy 1파일 2오류·133 source로 선행 의존 확인 |
+| 최신 develop `2ff1acf` + #119 수정 + #114 `6135275` | AI 전체·BE L2/gateway/proxy 설정/import | 223 passed / 124 passed. L2 17사례 포함, raw·오류 기록·총 HTTP 2회·semantic 무재호출·직접/프록시 전달 확인 |
+| 같은 통합본 | AI·BE Ruff·format·mypy | 모두 통과. format 41/261파일, type 11/133 source |
+| 수정 게시본 루트 | 기존 전용 venv로 계약 검사 | schema 2개·부분 OpenAPI·fixture 7개 통과. 전체 API 호환성 검증은 아님 |
+
+검증 전후 AI·BE 실행 소스 해시는 동일하다. 실제 모델·GitHub·DB 저장·전체 서비스 E2E는 실행하지
+않았다. 테스트 통과를 언어·규모별 분석 의미 품질로 해석하지 않는다. 단독 실행은 #114 미병합으로
+제한되므로 Draft로 검토하고 필요한 선행을 반영한 최신 base에서 재검증해야 한다. 실행 로그는
+원본 저장소 `.claude/scratch/ai-pr-reviews-20261026/pr119-validation/`에 보존한다.
+
+### 추가 검토: 혼합 거절과 #133 후속 패치 동기화
+
+- 채택 area가 없고 schema·semantic 거절이 함께 있으면 전체 재시도가 semantic area도 다시
+  평가하는 것을 확인했다. AI 단위 1건·실제 gateway 대역 1건을 실패시킨 뒤, 거절이 전부 schema인
+  경우에만 재시도하도록 좁혔다. 빈 목록은 재시도하지 않으며 혼합 거절의 원문·거절 목록은 보존한다.
+- 최종 수정본은 AI 전체 224 passed, BE import 1 passed, AI/BE Ruff·format 통과(41/250파일),
+  AI mypy 11 source 통과다. BE L2 18사례와 mypy 1파일 2오류는 여전히 선행 #114 부재로 실패한다.
+- #114 통합본에서 AI 전체 224 passed, BE 관련 125 passed와 AI/BE Ruff·format·mypy를 재확인했다.
+  이 통합 경로에는 별도 #99 검증 자료도 추가돼 format 42/262파일·type 12/133 source다. L2의
+  호출 주소·gateway·기존 입력은 그대로이며, 실행 전후 소스 해시도 같다. 최초 결과와 로그를 덮어쓰지
+  않고 `pr119-validation-mixed/`에 별도 보존했다.
+- #133의 patch 3은 새 #119 adapter blob `6948791b`를 base로 재생성했다. 최종 result blob
+  `8ce0d810`은 그대로이며, 이미 반영한 `base_url`은 문맥 행으로 유지해 추가/삭제가 0행이다.
+  남은 후속은 공유 budget·즉시 시도 기록·수집 한계 전달이다. manifest의 patch 3 base·해시·선행
+  #119 head와 적용 안내만 갱신하고 원본 source/integration tree ID와 다른 3패치는 보존한다.
+- 4패치 모두 정확한 base hash·SHA-256·`git apply --check`·적용 후 기존 result blob 일치를
+  확인했다. 기존 patch 4의 합성 base는 객체 DB에 없으므로 보존 result에서 역적용해 복원하고
+  원래 base hash부터 대조했다. 기존 패치를 수정하거나 base 검사를 생략하지 않았다.
+- 별도 보존 실행 통합본에 새 L2 검증과 patch 3을 결합해 AI L2 31 passed, BE 23 passed를
+  확인했다. BE는 L2 18·기존 bridge 3·공유 예산/원문 한계/취소 시 기록 보존 probe 2사례다.
+  BE Ruff·format 293파일·mypy 141 source도 통과했다. 원본 gateway를 바꾸지 않았다.
+- 이 보존 실행 통합본의 gateway에는 아직 #114 단독에 없는 `attempt_sink` 보완이 있다.
+  따라서 위 실행 성공은 #133 자료만으로 일반 코드가 활성화되거나 #119+#114만으로 후속 patch 3의
+  실행 선행이 모두 충족됐다는 뜻이 아니다. 해당 gateway 보완의 실제 반영·통합 재검증은 후속이며
+  이번에 새 gateway 기능을 만들지 않았다. 정확한 적용 증거와 실행 로그는
+  `.claude/scratch/ai-pr-reviews-20261026/pr133-sync/`에 원본 백업과 함께 보존한다.
+
 ## 2026-09-27 — 최신 develop 통합
 
 ### 기준과 변경
@@ -230,64 +319,3 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
   통과를 durable 저장 완료로 보지 않는다.
 - 분석 API(`backend/app/features/analysis/router.py`)가 골격이라 L1 결과 조회는 검증하지 않았다.
 - 프로젝트 요약의 `summary` 저장 필드는 AI-L03의 BE 합의 후 연결한다.
-
-## 2026-10-26 — PR #119 L2 검증·재시도와 호출 주소 리뷰 반영
-
-- 기준은 원본 `3f945d3`이며 원본 브랜치와 `backup/pr119-before-review-fix-20261026`을 보존했다.
-- `parse_deep_analysis`는 repository ID·SHA의 형식을 먼저 검사하고 입력 ref와 대조한다.
-  형식이 유효한 다른 ref는 빈 요약·잘못된 area 목록·추가 필드와 함께 와도 semantic 실패다.
-  ref 자체의 형식 오류는 schema 실패이며 다른 저장소의 결과를 복구 대상으로 사용하지 않는다.
-- 검증된 area가 하나라도 있으면 기존 부분 성공과 거절 목록을 보존한다. 검증된 area가 없고
-  거절이 전부 schema일 때 gateway에 schema 오류를 전달해 남은 재시도만 사용한다. semantic
-  거절이 섞이면 재호출하지 않는다. task 내부 재시도 loop나 새 gateway·기본 관찰을 만들지 않았다.
-- BE adapter는 `base_url=settings.llm_base_url`을 실제 호출에 전달한다. 직접/프록시 주소와 토큰
-  조합을 실제 adapter→AI→gateway와 HTTP 대역으로 검사한다. #114의 설정·gateway 본체는 복사하지 않았다.
-- #133의 미적용 `03-repo_deep.patch`에도 같은 주소 전달 행이 있으므로 이번 head를 반영해 해당
-  중복을 제거하고 exact base/result·manifest를 다시 검증해야 한다. 다른 후속 보완은 보존 대상이다.
-
-### 실행 결과와 범위
-
-아래 표는 최초 리뷰 반영본의 결과이며, 혼합 거절 추가 검토 후의 최종 결과는 다음 절에 구분한다.
-
-| 환경 | 실행 | 실제 결과 |
-| --- | --- | --- |
-| 원본 코드 + 새 회귀 | L2 AI / BE 테스트 | 5 failed·20 passed / 7 failed·7 passed로 두 검증 문제 재현 |
-| #114 결합 + 새 주소 검사, 수정 전 | 직접/프록시 2사례 | 둘 다 필수 `base_url` 누락으로 실패, 외부 요청 없음 |
-| 수정 게시본 AI | 전체 pytest·Ruff·format·mypy | 223 passed, format 41파일·type 11 source 모두 통과 |
-| 수정 게시본 BE | AI package import·Ruff·format | 1 passed, format 250파일·Ruff 통과 |
-| 수정 게시본 BE | L2 pytest·mypy app | 실패: L2 17사례 모두 #114의 `llm_base_url` 필드 부재. mypy 1파일 2오류·133 source로 선행 의존 확인 |
-| 최신 develop `2ff1acf` + #119 수정 + #114 `6135275` | AI 전체·BE L2/gateway/proxy 설정/import | 223 passed / 124 passed. L2 17사례 포함, raw·오류 기록·총 HTTP 2회·semantic 무재호출·직접/프록시 전달 확인 |
-| 같은 통합본 | AI·BE Ruff·format·mypy | 모두 통과. format 41/261파일, type 11/133 source |
-| 수정 게시본 루트 | 기존 전용 venv로 계약 검사 | schema 2개·부분 OpenAPI·fixture 7개 통과. 전체 API 호환성 검증은 아님 |
-
-검증 전후 AI·BE 실행 소스 해시는 동일하다. 실제 모델·GitHub·DB 저장·전체 서비스 E2E는 실행하지
-않았다. 테스트 통과를 언어·규모별 분석 의미 품질로 해석하지 않는다. 단독 실행은 #114 미병합으로
-제한되므로 Draft로 검토하고 필요한 선행을 반영한 최신 base에서 재검증해야 한다. 실행 로그는
-원본 저장소 `.claude/scratch/ai-pr-reviews-20261026/pr119-validation/`에 보존한다.
-
-### 추가 검토: 혼합 거절과 #133 후속 패치 동기화
-
-- 채택 area가 없고 schema·semantic 거절이 함께 있으면 전체 재시도가 semantic area도 다시
-  평가하는 것을 확인했다. AI 단위 1건·실제 gateway 대역 1건을 실패시킨 뒤, 거절이 전부 schema인
-  경우에만 재시도하도록 좁혔다. 빈 목록은 재시도하지 않으며 혼합 거절의 원문·거절 목록은 보존한다.
-- 최종 수정본은 AI 전체 224 passed, BE import 1 passed, AI/BE Ruff·format 통과(41/250파일),
-  AI mypy 11 source 통과다. BE L2 18사례와 mypy 1파일 2오류는 여전히 선행 #114 부재로 실패한다.
-- #114 통합본에서 AI 전체 224 passed, BE 관련 125 passed와 AI/BE Ruff·format·mypy를 재확인했다.
-  이 통합 경로에는 별도 #99 검증 자료도 추가돼 format 42/262파일·type 12/133 source다. L2의
-  호출 주소·gateway·기존 입력은 그대로이며, 실행 전후 소스 해시도 같다. 최초 결과와 로그를 덮어쓰지
-  않고 `pr119-validation-mixed/`에 별도 보존했다.
-- #133의 patch 3은 새 #119 adapter blob `6948791b`를 base로 재생성했다. 최종 result blob
-  `8ce0d810`은 그대로이며, 이미 반영한 `base_url`은 문맥 행으로 유지해 추가/삭제가 0행이다.
-  남은 후속은 공유 budget·즉시 시도 기록·수집 한계 전달이다. manifest의 patch 3 base·해시·선행
-  #119 head와 적용 안내만 갱신하고 원본 source/integration tree ID와 다른 3패치는 보존한다.
-- 4패치 모두 정확한 base hash·SHA-256·`git apply --check`·적용 후 기존 result blob 일치를
-  확인했다. 기존 patch 4의 합성 base는 객체 DB에 없으므로 보존 result에서 역적용해 복원하고
-  원래 base hash부터 대조했다. 기존 패치를 수정하거나 base 검사를 생략하지 않았다.
-- 별도 보존 실행 통합본에 새 L2 검증과 patch 3을 결합해 AI L2 31 passed, BE 23 passed를
-  확인했다. BE는 L2 18·기존 bridge 3·공유 예산/원문 한계/취소 시 기록 보존 probe 2사례다.
-  BE Ruff·format 293파일·mypy 141 source도 통과했다. 원본 gateway를 바꾸지 않았다.
-- 이 보존 실행 통합본의 gateway에는 아직 #114 단독에 없는 `attempt_sink` 보완이 있다.
-  따라서 위 실행 성공은 #133 자료만으로 일반 코드가 활성화되거나 #119+#114만으로 후속 patch 3의
-  실행 선행이 모두 충족됐다는 뜻이 아니다. 해당 gateway 보완의 실제 반영·통합 재검증은 후속이며
-  이번에 새 gateway 기능을 만들지 않았다. 정확한 적용 증거와 실행 로그는
-  `.claude/scratch/ai-pr-reviews-20261026/pr133-sync/`에 원본 백업과 함께 보존한다.
