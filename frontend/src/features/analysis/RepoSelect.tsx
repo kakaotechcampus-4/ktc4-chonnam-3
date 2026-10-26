@@ -55,6 +55,10 @@ export default function RepoSelect() {
   const notReady = isApiError(resultQuery.error) && resultQuery.error.error.reason === 'not_ready';
   // 상태 확인 후에도 이동할 화면이 없으면(완료 직후 경합·조회 실패) 재시도 안내를 보인다.
   const [runChecked, setRunChecked] = useState(false);
+  // 새 409마다 run 상태를 다시 확인한다. 지금은 data가 없어 다시 시도가 error를 비우므로
+  // notReady가 false→true로 바뀌어 effect가 다시 돈다(TanStack Query fetchState). data가 있으면
+  // 재조회 중에도 error가 남아 notReady가 그대로이므로, 오류 시각을 의존성에 둔다.
+  const resultErrorAt = resultQuery.errorUpdatedAt;
   useEffect(() => {
     if (!notReady) return;
     void queryClient
@@ -70,7 +74,7 @@ export default function RepoSelect() {
         else setRunChecked(true);
       })
       .catch(() => setRunChecked(true));
-  }, [notReady, queryClient, runId, navigate, location.state]);
+  }, [notReady, resultErrorAt, queryClient, runId, navigate, location.state]);
   // 상태 확인 중에는 오류도 데이터도 없어 화면이 비지 않게 로딩으로 보인다.
   const checkingRun = notReady && !runChecked;
 

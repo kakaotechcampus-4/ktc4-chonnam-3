@@ -181,6 +181,26 @@ test('레포 목록 not_ready면 run 상태를 확인하는 동안 빈 화면 �
   await expect(page.getByRole('alert')).toBeVisible({ timeout: 10_000 });
 });
 
+test('레포 목록 not_ready에서 다시 시도한 뒤 또 not_ready여도 로딩에 멈추지 않는다', async ({
+  page,
+}) => {
+  // 결과는 계속 not_ready, run은 완료라 이동할 화면이 없다(완료 직후 경합).
+  await faults(page, [
+    { path: `/analysis-runs/${DONE_RUN}/result`, status: 409, reason: 'not_ready' },
+  ]);
+  await page.goto(`/interview/repos/${DONE_RUN}`);
+  await expect(page.getByRole('alert')).toBeVisible({ timeout: 10_000 });
+
+  const rechecked = page.waitForRequest((req) =>
+    new RegExp(`/analysis-runs/${DONE_RUN}$`).test(req.url()),
+  );
+  await page.getByRole('button', { name: '다시 시도' }).click();
+  // 새 409마다 run 상태를 다시 확인해야 안내로 돌아온다.
+  await rechecked;
+  await expect(page.getByRole('alert')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText('불러오는 중...')).toBeHidden();
+});
+
 test('실패하지 않은 run으로 실패 화면에 들어오면 진행·레포 선택 화면으로 보낸다', async ({
   page,
 }) => {
