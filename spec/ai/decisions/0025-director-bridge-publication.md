@@ -23,6 +23,16 @@
 
 ## 영향과 후속
 
+### 실제 예산의 사전 확인
+
+- BE CallBudget은 remaining_attempts와 terminal_failure를 읽기 전용으로 공개한다.
+  종료된 실패는 그대로 반환하고, Director는 Context 허용량과 실제 잔여량의 작은 값을 사용한다.
+  생성·독립 검토에 필요한 두 시도가 없으면 새 provider 요청을 만들지 않는다.
+- Context 숫자는 실제 호출 예산을 예약하지 않는다. 한 CallBudget은 동일 논리 작업만 소유하며
+  다른 job 또는 동시 Director 작업에 재사용하지 않는다. 공통 gateway의 최종 상한 검사는 유지한다.
+- 신규 공개 조회를 위해 공통 client의 기존 호출 API·재시도·주소·metadata를 바꾸지 않는다.
+  #82의 attempt_sink와 최신 develop의 base_url·시간 상한은 로컬 결합에서 함께 검증한다.
+
 단독 develop에는 선행 모듈·모델·gateway API와 Director 코어가 없어 Draft로 검토한다.
 공개 API·패키지 의존성·DB 모델·main/worker/WS 등록은 변경하지 않는다.
 선행 반영 뒤 보류 Context·L2 보완을 연결하고 고정 SHA·원문·예산 전달을 통합 재검증한다.
