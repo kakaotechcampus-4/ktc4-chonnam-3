@@ -104,6 +104,7 @@ export default function Analyzing() {
 
     // EventSource는 상태 코드를 읽지 못한다. 만료(410)·인증 실패·끊김을 GET 1회로 판단한다.
     // 닫지 않는다. 네트워크 끊김은 브라우저가 다시 연결하고, HTTP 오류 응답이면 이미 CLOSED다.
+    // data가 있으면 GET 실패는 아래 loadError에서 무시되므로 이 GET은 사실상 만료(410) 확인용이다.
     source.onerror = () => {
       void queryClient.refetchQueries({ queryKey: queryKeys.analysisRun(runId) });
     };
