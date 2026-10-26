@@ -69,6 +69,10 @@
 
 준비된 목적을 사용하는 [Director 기본 생성 경로](designs/2026-09-23-director-question-path.md)는 모델 출력에서 question_contract를 제외하고 입력 원본을 코드로 결합한다. 이 경로의 evidence_refs·jd_requirement_ids는 Context에 등록되었으면서 준비 계약 basis_refs의 같은 kind에 포함된 ID만 선택할 수 있다. 모델 원시 schema v2의 다섯 필드와 최종 Question의 기존 여섯 필드를 구분하며, 독립 검토가 정확한 문장·원본 계약에 결합되었는지도 검사한다.
 
+위 규칙은 호출자가 Contract를 준비하는 `generate_question`의 Accepted 경계다.
+Contract까지 planner가 생성하는 별도 `run_director`는 [후속 Proposed 설계](designs/2026-10-23-director-runtime.md#기존-생성-경로와-부분-대체-제안)에서 검토한다.
+신규 경로의 출력 Contract를 기존 생성기의 schema에 섞지 않으며, 부분 대체 채택 전 기존 경로의 승인을 바꾸지 않는다.
+
 ### Question Contract 저장 형식
 
 [0014 결정](decisions/0014-minimal-change-revision.md)에 따라 기존 다섯 필드를 해당 질문의 `interview_turns.question_contract` JSONB에 저장한다. 별도 기준 테이블이나 JSON 안의 필수 `schema_version` 필드는 추가하지 않는다.
@@ -150,6 +154,11 @@
 
 `retrieve`는 사용자 질문 Turn을 증가시키지 않는다. 결과를 반영한 후 유효한 ask 또는 허용 종료로 수렴해야 한다. 반복 budget 소진 시 질문을 검증 없이 발행하지 않는다. 내부 세 값의 채택으로 `context/AI.md`의 대문자 행동명이나 공개 WS enum을 추가하지 않는다.
 
+[후속 Proposed 실행 흐름](designs/2026-10-23-director-runtime.md#답변-분석과-조회-판단)은
+T3 결과 기반 규칙 함수로 조회를 고르고 Controller가 턴당 첫 허용 요청 1개만 실행하는 제안이다.
+미조회 요청은 한계로 보존하고, 필요한 보강 T3의 실패·예산 소진 뒤 T4나 정상 완료로 진행하지 않는다.
+기존 `retrieve` 값 자체를 새 모델 호출이나 무제한 조회의 승인으로 해석하지 않는다.
+
 [0008 결정](decisions/0008-ai-candidate-policy.md)은 전제·목적이 유효한 표현 오류는 재작성 후보, 거짓·stale·반복 전제나 목적은 재계획 후보, 공급된 제약에서 안전한 질문을 만들 수 없으면 유효 후보 없음으로 구분한다. 0008 자체는 내부 enum이나 추가 호출·정상 종료·사용자 복구·service 상태를 승인하지 않는다. 위 내부 enum의 후속 채택은 0014 범위에 한한다.
 
 ## Evidence와 ToolResult
@@ -216,8 +225,10 @@ raw output·model·prompt_version·schema_version·input/output tokens·latency�
 
 ## 계약 검토 완료 조건
 
-Director의 후속 입력·출력 경계는 [질문 결정과 AI·BE 입력 설계](designs/2026-10-23-director-runtime.md)를 따른다.
-`run_director`는 목적·질문 생성과 독립 검토에 공유 예산 총 2회를 사용하고,
+Director의 후속 입력·출력 경계는 [질문 결정과 AI·BE 입력 설계](designs/2026-10-23-director-runtime.md)의 Proposed 검토 대상이다.
+`run_director`는 목적·질문 생성 1회와 독립 검토 1회에 공유 예산 총 2회를 사용하며 각 요청은 `max_attempts=1`이다.
+이 신규 경로는 검토 시도를 확보하기 위해 단계별 자동 재시도를 제한하며, 실패 후 질문을 확정하지 않는다.
+다른 task와 기존 생성 경로의 공통 gateway 재시도 규칙은 유지한다.
 검증한 결정·질문과 실제 생성 시도 metadata를 구분해 반환한다.
 현재 질문과 과거 문답은 답변 분석 입력에서 구분한다. 최초·보강 T3는 같은 2회 예산,
 후속 T4는 별도 예산이며 기존 flat `analysis`/`decision`과 공개 wire 구조를 유지한다.
