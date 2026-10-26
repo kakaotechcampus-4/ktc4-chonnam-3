@@ -2,16 +2,18 @@
 
 - 상태: Proposed — 실행 연결의 설계 검토 대상이며 구현·검증 완료를 뜻하지 않는다.
 - 날짜: 2026-10-25
-- 선행 입력 설계: [Director 질문 결정과 AI·BE 입력 계약 PR #124](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/124)
-- 정책 참조: [고정 배분 PR #97](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/97), [세션 인증 0003](../../shared/decisions/0003-sprint1-session-auth.md)
+- 선행 입력 설계: [Director 질문 결정과 AI·BE 입력 계약 제안][director-design] — 미병합 #124의 Proposed 문서이며 현행 승인 계약으로 간주하지 않는다.
+- 정책 참조: [공통 ADR 0008 고정 배분][allocation], [세션 인증 0003](../../shared/decisions/0003-sprint1-session-auth.md)
 - 공개 계약 원본: [공통 계약 안내](../../shared/contracts/README.md), [WS #18](../../../frontend/docs/api-spec.md)
 
 ## 범위와 책임
 
-이 문서는 #124가 별도 연결로 남긴 준비·턴 저장·상태 전이·worker·WS의 실행 경계를 정의한다.
-목적·Question Contract 생성, 독립 검토와 입력 구조는 #124를 참조하며 다시 정의하지 않는다.
+이 문서는 [선행 입력 설계 제안][director-design]이 별도 연결로 남긴 준비·턴 저장·상태 전이·worker·WS의 실행 경계를 정의한다.
+목적·Question Contract 생성, 독립 검토와 입력 구조는 해당 Proposed 설계를 참조하며 다시 정의하지 않는다.
 기존 REST·WS 필드, flat `analysis`/`decision`, 첫 HR·기술 6/도메인 2/HR 1 정책을 유지한다.
 선행 정책·구현의 develop 병합 여부와 이 설계의 검토 상태는 별개다.
+정책의 원본은 이미 병합된 공통 ADR 0008이다. #124의 검토·병합 후에는 입력 설계 참조를
+같은 디렉터리의 `2026-10-23-director-runtime.md`로 연결하고 그때의 채택 범위를 확인한다.
 
 Controller는 권한·상태·현재 턴·고정 입력·예산과 DB 확정을 책임진다.
 AI 결과는 저장 전에 다시 검증하며 모델이 상태 전이나 정상 종료를 자율 확정하지 않는다.
@@ -28,7 +30,7 @@ PostgreSQL은 원문·질문·답변·분석·호출 기록의 원본이고 Redi
 3. 필요한 활성 prompt·도메인 프레임·평가 기준을 확인한다. 자료 부재를 일반 질문이나
    임의 기준으로 채우지 않으며, 비활성 seed를 실행 과정에서 자동 활성화하지 않는다.
 4. 같은 레포·SHA·prompt의 유효 L2를 재사용하되 질문 근거에 필요한 실제 원문을 다시 확보한다.
-   새 L2가 필요하면 #124의 실제 tree 기반 선정·유한 수집 경계를 따르고 미확인 범위를 전달한다.
+   새 L2가 필요하면 [선행 입력 설계 제안][director-design]의 실제 tree 기반 선정·유한 수집 경계를 검토하고 미확인 범위를 전달한다.
 5. 검증한 원문·레포·SHA·위치를 Evidence에 저장한다. AI 요약을 읽은 원문으로 대체하지 않는다.
    준비 중 확보한 근거와 답변 후 Tool로 조회한 근거의 출처를 구분한다.
 6. 첫 HR 질문의 생성·검토·저장이 끝난 뒤에만 `in_progress`로 전이한다.
@@ -56,13 +58,13 @@ PostgreSQL은 원문·질문·답변·분석·호출 기록의 원본이고 Redi
 
 ## 예산과 실패 확정
 
-#124의 논리 작업별 예산을 서비스 호출 전 구분하고 하위 호출까지 같은 객체로 전달한다.
+[선행 입력 설계 제안][director-design]의 논리 작업별 예산을 서비스 호출 전 구분하고 하위 호출까지 같은 객체로 전달한다.
 
 | 작업 | 공유 범위 | 소진·실패 시 실행 경계 |
 | --- | --- | --- |
 | L2 | 파일 선정과 분석이 같은 총 2회 예산을 사용 | 검증한 분석 없이 준비 성공으로 확정하지 않는다 |
 | T3 | 최초 분석과 보강 분석이 같은 총 2회 예산을 사용 | 필요한 분석 실패 후 다음 질문·정상 완료를 실행하지 않는다 |
-| T4 | 질문 생성과 독립 검토가 별도 총 2회 예산을 사용 | 거절·소진 후 무검토 질문이나 추가 생성을 실행하지 않는다 |
+| T4 | T3와 별도 예산이며 질문 생성 1회·독립 검토 1회를 합쳐 총 2회 사용 | 각 요청은 `max_attempts=1`, 단계별 자동 재시도 없이 실패·거절·소진 시 질문을 확정하지 않는다 |
 
 전송 재시도·재연결·worker 재전달은 위 예산을 초기화해 같은 모델 작업을 재시작하는 사유가 아니다.
 오류·취소·입력 변경을 정상 결과와 구분해 저장하고, 확정하지 못한 결과를 질문 횟수에 더하지 않는다.
@@ -99,3 +101,6 @@ Redis snapshot이 없으면 DB에서 재구성하고 저장된 현재 `asked` �
 - Report 생성·음성·평가 품질 검증은 별도 범위다. 이 설계는 공개 오류 필드나 복구 API를 추가하지 않는다.
 
 실제 적용 범위·선행 의존성·검증 결과는 관련 구현 PR과 단일 구현 기록에서 관리한다.
+
+[director-design]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/cd078cced56a202952058fedd7d7bb6dd2bde706/spec/ai/designs/2026-10-23-director-runtime.md
+[allocation]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/d063d8d55f4744c09897ff51ecb140c45732e591/spec/shared/decisions/0008-fixed-persona-allocation.md
