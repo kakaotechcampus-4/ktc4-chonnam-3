@@ -63,9 +63,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_unhandled_exception_middleware(application)
     application.add_middleware(SessionCookieMiddleware, settings=settings)
     application.add_middleware(RequestIdMiddleware)
+    application.include_router(analysis_router, prefix=settings.api_prefix)
     application.include_router(auth_router, prefix=settings.api_prefix)
     application.include_router(me_router, prefix=settings.api_prefix)
-    application.include_router(analysis_router, prefix=settings.api_prefix)
 
     @application.get(f"{settings.api_prefix}/health", tags=["ops"])
     async def health() -> dict[str, str]:

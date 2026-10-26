@@ -70,6 +70,13 @@ async def test_analysis_migration_preserves_jobs_and_scopes_active_uniqueness():
             user_ids,
         )
 
+    async def versions():
+        # 다른 migration 가지가 함께 적용됐어도 전체 이력의 보존을 확인한다.
+        return {
+            row["version_num"]
+            for row in await connection.fetch("SELECT version_num FROM alembic_version")
+        }
+
     try:
         await connection.executemany(
             "INSERT INTO users (id,name) VALUES ($1,'Task11 migration fixture')",
@@ -125,11 +132,13 @@ async def test_analysis_migration_preserves_jobs_and_scopes_active_uniqueness():
             started_at,
         )
         before = await jobs()
+        versions_before = await versions()
+        assert AFTER in versions_before
         result = await migrate("downgrade", BEFORE)
         assert result.returncode != 0
         assert "Finish concurrent analysis runs" in result.stderr
         assert await jobs() == before
-        assert await connection.fetchval("SELECT version_num FROM alembic_version") == AFTER
+        assert await versions() == versions_before
         page = await connection.fetchrow(
             "SELECT started_at,duration_ms,queue_wait_ms "
             "FROM analysis_repo_candidate_pages WHERE id=$1",
@@ -147,7 +156,9 @@ async def test_analysis_migration_preserves_jobs_and_scopes_active_uniqueness():
         result = await migrate("downgrade", BEFORE)
         assert result.returncode == 0, result.stderr
         assert len(await jobs()) == count
-        assert await connection.fetchval("SELECT version_num FROM alembic_version") == BEFORE
+        versions_after = await versions()
+        assert BEFORE in versions_after
+        assert AFTER not in versions_after
         assert (
             await connection.fetchval(
                 "SELECT count(*) FROM information_schema.columns "
