@@ -28,6 +28,7 @@ async def generate_question(
     model_call = partial(
         call_model,
         api_key=settings.openai_api_key,
+        base_url=settings.llm_base_url,
         budget=budget,
         http_client=http_client,
         attempt_sink=attempt_sink,

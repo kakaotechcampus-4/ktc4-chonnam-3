@@ -9,7 +9,7 @@ import pytest
 from devon_ai import contracts as c
 
 from app.agents.director import agent
-from app.core.config import LLMSettings
+from app.core.config import LLMSettings, Settings
 from app.integrations.llm.client import CallBudget
 
 
@@ -95,6 +95,35 @@ def provider(outputs, sent):
         return response(next(replies))
 
     return httpx.MockTransport(handle)
+
+
+@pytest.mark.parametrize("proxy", [False, True], ids=["direct", "proxy"])
+async def test_settings_destination_and_token_reach_director_http_request(inputs, proxy):
+    settings = Settings(
+        _env_file=None,
+        openai_api_key="direct-fixture-key",
+        proxy_token="proxy-fixture-key" if proxy else None,
+        chat_proxy_url="https://proxy.example/tenant/v1/" if proxy else None,
+        llm_default_model="settings-default-model",
+        llm_timeout_seconds=1,
+        llm_max_output_tokens=512,
+        llm_max_input_bytes=65536,
+        llm_max_response_bytes=65536,
+    ).require_llm()
+    sent = []
+    async with httpx.AsyncClient(transport=provider([question_text()], sent)) as http:
+        result = await agent.generate_question(**{**inputs, "settings": settings}, http_client=http)
+
+    assert result.succeeded and len(sent) == 1
+    expected_url = (
+        "https://proxy.example/tenant/v1/responses"
+        if proxy
+        else "https://api.openai.com/v1/responses"
+    )
+    expected_key = "proxy-fixture-key" if proxy else "direct-fixture-key"
+    assert str(sent[0].url) == expected_url
+    assert sent[0].headers["authorization"] == f"Bearer {expected_key}"
+    assert json.loads(sent[0].content)["model"] == "prompt-model"
 
 
 async def test_prompt_model_limits_and_attempt_metadata_survive_adapter(inputs):
