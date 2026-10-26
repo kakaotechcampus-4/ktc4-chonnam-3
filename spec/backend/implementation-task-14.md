@@ -86,3 +86,39 @@
 - call ID는 같은 논리 요청 재전달에만 재사용한다. 강제 프로세스 종료·DB 장애 뒤 미완료 호출 복구는 worker가
   실제 실행 종료를 확인한 뒤 처리해야 하며 완료되지 않은 원문·토큰을 추측하지 않는다.
 
+### 2026-10-27 리뷰 후속 검증
+
+원본 `0e973f3`과 기존 migration을 보존하고 후속 커밋으로 수정했다. 위 과거 검증과 선행 조건은
+당시의 기록이며, 아래 결과는 `develop@d063d8d`에 이번 게시본을 결합한 별도 worktree에서 새로 확인했다.
+Task 14 고유 절은 이 파일로 이동하고 공용 `implementation.md`의 다른 기록은 그대로 보존했다.
+
+- Director adapter가 검증된 `settings.llm_base_url`을 공통 gateway에 전달한다. direct/proxy 두 경우의
+  실제 adapter→AI Director→gateway 경로를 HTTP mock으로 검증하며 URL·인증 토큰·prompt 모델을 구분한다.
+  수정 전 두 경우 모두 필수 `base_url` 누락으로 실패했고 수정 후 통과했다.
+- `0002_agent_storage`의 ID·부모·DDL은 변경하지 않았다. 신규 DDL 없는
+  `0003_agent_storage_merge`가 `0002_agent_storage`와 `0002_posting_versions`를 합친다.
+  두 부모 각각이 이미 적용된 DB에서 기존 공고 자료를 보존하며 전진·합류 해제·재적용을 검증했다.
+  합류 해제는 부모 DDL을 되돌리는 동작과 구분한다. 배포 DB의 실제 적용 이력은 확인하지 않았다.
+- 현행 고정 6/2/1 근거는 공통 ADR 0008로 연결하며 당시 ADR 0007 링크는 이력으로 남겼다.
+  gateway의 기존 `base_url`, deadline 처리와 `attempt_sink`를 모두 보존했다.
+
+| 검사 시점·대상 | 검증 | 결과 |
+| --- | --- | --- |
+| 2026-10-26, 최신 develop 결합본 BE | 전체 `pytest -q -p no:cacheprovider -ra` | 1291 passed, skip 0, 663.20초 |
+| 같은 결합본 AI | 전체 `pytest -q -p no:cacheprovider` | 309 passed |
+| 같은 결합본 BE | Ruff check·format·mypy app | 통과, format 294개·mypy 141개 파일 |
+| 같은 결합본 루트, 기존 계약 전용 venv | `check_contracts.py` | schema 2개·부분 OpenAPI·fixture 7개 통과 |
+| 2026-10-27, 최종 코드 재확인 | 실제 PostgreSQL migration 3건·adapter·revision graph | 22 passed, 3.47초 |
+| 최종 게시 head와 `develop@d063d8d` | merge-tree·기존 migration 보존 | 충돌 없음, 원본 migration 변경 없음 |
+| 실제 외부 서비스·운영 환경 | GitHub·LLM·자동 면접 E2E·운영 seed·배포 | 미실행 |
+
+전용 PostgreSQL `127.0.0.1:56526/task10_test_pr82_test`와 Redis `127.0.0.1:64526/13`만 사용했다.
+migration 검사는 매번 독립 임시 schema를 만들고 제거했다. BE venv의 첫 계약 검사는 `jsonschema`
+부재로 미실행됐으며, 기존 계약 전용 venv에서 다시 실행해 통과했다. 최종 재확인에서 import 경로도
+결합 worktree의 adapter·gateway·AI 계약을 가리키는지 확인했다. 원격 CI는 push 후 별도 확인한다.
+
+위 단일 head 결과는 현재 develop와 #82의 조합에 한정한다. #108·#127 등 후속 migration은 기존 ID와
+부모를 보존한 추가 합류 revision으로 연결하고 실제 최종 graph·기존 자료·왕복을 다시 검증해야 한다.
+준비 worker·턴 처리·정상 종료·실제 reviewer 공급은 위 후속 범위를 유지하며 이번 통과 수치로 완료를
+대신하지 않는다. 공개 REST·WS·AI 계약은 바꾸지 않았다.
+

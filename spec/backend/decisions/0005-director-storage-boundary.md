@@ -52,3 +52,7 @@ DB·권한·GitHub I/O·구체 LLM client는 BE 책임이다. 질문이 생기�
   [당시 PR #97의 공통 ADR 0007](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/f2f1011af2aa72c7034948c2c71699cf25e47a18/spec/shared/decisions/0007-fixed-persona-allocation.md)은 이력 링크이며 위 저장 설계 본문도 초기 기록으로 보존한다.
 
 기존 추론·질문 배분·공개 API 정책을 대체하지 않는다.
+
+2026-10-27 후속: 기존 `0002_agent_storage`의 ID·부모·DDL을 보존하고, DDL 없는
+`0003_agent_storage_merge`로 현재 develop의 `0002_posting_versions`와 합류한다.
+두 가지의 기적용 상태에서 기존 자료 보존과 합류 왕복을 검증했으며 세부 결과는 Task 14 기록에 둔다.
