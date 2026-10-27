@@ -312,6 +312,34 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
 새 PR의 실제 원격 범위를 확인한 뒤 #134와 상호 연결하고 기존 PR만 닫는다. 원본 브랜치는 삭제하거나
 재작성하지 않는다. seed·#131, 다른 선행 PR, 기존 미완료 범위는 이번 분할로 변경하지 않는다.
 
+## 2026-10-28 — #124 후속 검토의 미실행 조회 범위 보존
+
+- #124의 [새 리뷰](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/124#issuecomment-6447685428)에 대응하는
+  실행 보완은 #135에 둔다. #124는 계약 문단 위치만 정리하며 선행 service를 복사하지 않는다.
+- 기존 정상 경로에는 이미 나머지 요청을 한 라운드 제한으로 실행하지 않았다는 공통 이유가 있었다.
+  이번에는 생략한 허용 요청마다 repo·고정 SHA·path와 턴당 1개 제한 사유를 기록한다.
+- 실제 I/O는 첫 요청 하나만 실행한다. 해당 실행의 status·items·searched_scope·error_code는 유지하고,
+  생략 범위는 ToolResult.limitations와 저장 요약에 더해 보강 T3·후속 T4에 전달한다.
+  조회 시작·취소·도구 오류·보강 실패·다음 질문 확정 뒤에도 이 설명을 보존한다.
+- 기존 생성기의 `agent.py`를 유지하는 #126의 별도 `runtime_adapter.py`에서 신규 실행자를 import한다.
+  새 API·DB 필드·테이블·조회 loop나 예산 초기화는 추가하지 않는다.
+
+| 구성 | 이번에 직접 실행한 검사 | 결과 |
+| --- | --- | --- |
+| 수정 전 service와 신규 다중 요청 회귀 | 정상 미발견·도구 오류·보강 실패·취소 | 4 failed, 모두 생략 path 누락 재현 |
+| develop `09a6f77` + #125 `23873ef` + #126 실행 연결 + #135 + 로컬 Context 후속 | PostgreSQL service·Context 한계·조회 상한 | 23 passed, skip 0, 최종 별도 adapter 연결 후 99.36초 |
+| 같은 최종 로컬 결합 | Mypy app·변경한 Python 4파일 Ruff·format | 152 source 및 4파일 통과 |
+| #135 단독 게시 소스 | BE Ruff·format·조회 상한 | 통과, format 257파일·3 passed |
+| 같은 단독 게시 소스 | Mypy app | 선행 없는 원래 base 기준 1파일 15오류, 134 source |
+
+로컬 Context 보완은 #133 patch01·02의 정확한 base/result blob과 SHA를 확인해 적용했다.
+다른 미적용 패치나 선행 코드는 게시본에 복사하지 않았다. 최종 별도 adapter는 #126 후속 수정본을 사용했다.
+게시본과 로컬 결합의 service·신규 회귀 bytes는 같으며 기존 service 테스트·도우미의 AST도 보존했다.
+기록의 공용 파일 끝 충돌은 기존 실행 기록 내용을 보존한 배치와 이미 병합된 고정 배분 안내만 정리했다.
+최신 develop과 게시 head의 실제 merge-tree는 충돌이 없다. 필요한 #125·#126과 Context 후속의 일반 코드
+반영 및 실제 게시본 재검증 전에는 단독 실행 완료로 보지 않는다. 위 검사는 새 집중 검사이며 이전
+전체 BE·AI 결과나 실제 외부 모델·GitHub·배포·전체 WS 검증 수치를 재사용하지 않는다.
+
 ## 2026-09-28 — task-04 L1 BE adapter
 
 ### 기준과 변경
