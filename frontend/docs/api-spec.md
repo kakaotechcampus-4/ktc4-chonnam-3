@@ -641,6 +641,8 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 
 마이페이지(1a) 면접 이력 테이블 — `status === 'completed'`만 표시. 행 클릭 시 리포트(5c-v2)로 이동. 페이지네이션은 이 쿼리로 처리.
 
+[공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md)(Proposed, BE 검토 대기)는 이 목록에 `completed`와 시작 후 중단된 `abandoned`(`startedAt` 있음)를 포함하고, `total`은 목록 행 수, `averageScore`는 completed 기준으로 두는 것을 제안한다. 현재 BE 구현은 completed만 내려준다. 중단된 행의 표시는 [마이페이지 명세](../../spec/frontend/features/mypage.md)를 따른다.
+
 **Failure**
 
 공통 인증 에러 참고.
@@ -1230,6 +1232,8 @@ Redis 로그인 세션 인증은 핸드셰이크 시 1회 검증한다. 연결 �
 
 `abandoned`는 명시적 이탈 확인 또는 레포 재선택으로 새 면접을 만들 때만 설정한다([0010 결정](../../spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md)). 연결 끊김·재연결 실패·로그인 세션 만료만으로 면접 상태를 바꾸지 않는다.
 
+이탈·레포 재선택을 서버에 알리는 방법은 [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md)(Proposed)가 REST `POST /interviews/{id}/abandon`으로 제안한다. WS 메시지·전용 close code는 추가하지 않는다. abandon 시 서버가 그 면접의 열린 연결을 닫으면, FE는 기존 `onclose` 처리대로 `GET /interviews/{id}`의 `abandoned`를 확인하고 재연결하지 않는다.
+
 클라이언트 → 서버
 
 ```json
@@ -1484,7 +1488,7 @@ Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시�
 
 원본 면접 세션의 `runId`·레포 조합을 복사해 새 세션을 만든다.
 
-허용 상태는 FE의 기존 `original_not_completed` 설명과 BE 명세의 `completed`·`abandoned` 허용이 다르며 OpenAPI는 409만 정의한다. 이번 문서 정리에서는 세부 조건을 임의 확정하지 않는다([report의 계약 차이](../../spec/frontend/features/report.md#계약-차이와-구현-범위)).
+허용 상태는 FE 제안으로 `completed`와 시작 후 중단된 `abandoned`(`startedAt` 있음)다([공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md), Proposed). BE 명세의 `completed`·`abandoned` 전체 허용과 다르며 [#121](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/121) 1-2에서 BE 확인을 기다린다. 그 외 상태는 `409 original_not_completed`다([report의 계약 차이](../../spec/frontend/features/report.md#계약-차이와-구현-범위)).
 
 **Request**
 
@@ -1505,7 +1509,7 @@ Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시�
 
 **UI states**
 
-5c-v2 `재도전` 버튼 클릭 시 호출. 성공 시 `interviews` 캐시 무효화 후 `/interview/iv_002/prepare`(5a2-v2)로 이동.
+5c-v2 `재도전` 버튼 클릭 시 호출. 성공 시 `interviews` 캐시 무효화 후 `/interview/iv_002/prepare`(5a2-v2)로 이동. 0009(Proposed)가 Accepted 되면 마이페이지 중단된 면접 행의 `다시 도전하기`에서도 같은 방식으로 호출한다.
 
 **Failure**
 

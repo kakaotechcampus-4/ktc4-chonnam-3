@@ -11,7 +11,7 @@
 ### 계약 차이와 구현 범위
 
 - 이의 제기는 기존 결정대로 Sprint 1 API 제공·호출 대상이 아니다. 다만 OpenAPI와 FE 타입·mock에는 `/interviews/{id}/feedback-disagreements` 계약이 남아 있고, 아래 과거안의 `/reports/{id}`와 식별자도 다르다. 이번 문서 정리에서 API를 삭제하거나 Sprint 1 기능으로 되살리지 않으며 계약 파일의 잔존 내용은 후속 정합화 대상으로 남긴다. 아래 Sprint 2 예시를 현행 호출 지시로 사용하지 않는다.
-- 재도전 허용 상태는 이 문서의 `original_not_completed` 설명과 BE 명세의 `completed` 또는 `abandoned` 허용이 다르다. OpenAPI는 409 응답만 정의하므로 세부 조건을 이번 문서 정리에서 임의 확정하지 않는다. 기존 동작·필드 유지 상태로 차이를 표시한다.
+- 재도전 허용 상태는 FE 제안으로 `completed`와 시작 후 중단된 `abandoned`(`startedAt` 있음)를 허용한다([공통 0009](../../shared/decisions/0009-interview-abandon-transition.md), Proposed). BE 명세의 `completed`·`abandoned` 전체 허용과 다르며 [#121](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/121) 1-2에서 BE 확인을 기다린다. abandoned 면접은 리포트가 없어 재도전 진입점은 [마이페이지](mypage.md)의 중단된 면접 행이다.
 - 리포트 일반 통신 오류의 화면 예외는 [task-11](../../../frontend/docs/task-11-report.md)에 기록한 수정 보류를 유지한다. 문서 수정으로 해당 코드가 고쳐진 것은 아니다.
 
 | 화면 | 코드 | 구성 |
@@ -101,7 +101,7 @@
 
 | 코드 | reason | 처리 |
 | --- | --- | --- |
-| 409 | `original_not_completed` | 원본이 완료 상태가 아님 |
+| 409 | `original_not_completed` | 원본이 `completed`도, 시작 후 중단된 `abandoned`도 아님(0009 Proposed) |
 | 409 | `repository_unavailable` | 원본 레포가 삭제·private 전환됨 |
 | 409 | `session_limit_exceeded` | 동시 세션 상한 |
 | 410 | `run_expired` | 분석 결과 만료. 처음부터 다시 |
