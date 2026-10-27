@@ -45,3 +45,7 @@
 - [0017 Sprint 1 추천 숫자 점수 보류](../../ai/decisions/0017-recommendation-score-deferral.md): 2026-09-22 사용자 결정. matchScore 필드는 null로 반환하고 기존 추천 표시·이유·상한·저장 위치를 유지한다. 선정 기준은 후속 0018을 따르며 실제 DB·응답 연결은 구현 시 검증한다.
 
 - [0018 기존안 일괄 유지와 질문·구현·후속 검토 분리](../../ai/decisions/0018-existing-baseline-bulk-resolution.md): 기존 기술 직접 비교·후보 순서에서 run 전체 최대 5개 추천을 채택한다. 기존 계약·저장·Worker·종료 흐름을 유지하며 상세 연결·실측은 구현 인계로 구분한다. 실제 문답과 연결 자료를 후속 내부 비교에 보관·재사용하고 최종 내부 비교 검증 뒤에도 보관한다. 별도의 자동 삭제 기한은 두지 않는다.
+
+## Task 11 내부 구현 결정
+
+- [0004 Task 11 분석 실행과 복구](0004-task11-run-execution.md): 사용자 승인 범위의 Accepted 설계 선택. fingerprint 제약, DB claim과 큐 중복 방어, 7단계·후보 page·SSE의 저장 경계 및 실행 전 작업 복구. 선행 구현과 별도 후속 보완이 필요한 Draft의 상태·검증 결과는 [Task 11 구현 기록](../implementation-task-11.md)에서 관리한다.

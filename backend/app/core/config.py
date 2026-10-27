@@ -234,6 +234,14 @@ class Settings(BaseSettings):
             quota[persona.strip()] = int(turns)
         return quota
 
+    @field_validator("analysis_run_ttl_seconds", "repo_candidate_limit")
+    @classmethod
+    def _positive_analysis_limit(cls, value: int) -> int:
+        # 문서 업로드 설정과 독립적으로 기존 분석 상한의 양수 조건을 유지한다.
+        if value <= 0:
+            raise ValueError("Analysis limits must be greater than zero")
+        return value
+
     @property
     def is_prod(self) -> bool:
         """prod 환경 여부. 쿠키 secure 강제나 문서 노출 차단 판단에 쓴다."""
