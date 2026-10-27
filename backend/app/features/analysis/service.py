@@ -91,6 +91,7 @@ async def create_run(
         )
         if identity is not None:
             await db.commit()
+            # DB 접수가 끝났으므로 큐 등록 실패도 202다. queued run은 reaper가 재등록한다.
             await enqueue_analysis(redis, identity)
             return identity
         existing = await db.scalar(
@@ -120,7 +121,8 @@ async def get_status(
 async def get_result(
     db: AsyncSession, user_id: UUID, run_id: UUID, settings: Settings
 ) -> AnalysisRunResultResponse:
-    run = await owned_run(db, run_id, user_id, settings.analysis_run_ttl_seconds, lock=True)
+    # 카드·집계를 읽는 동안 작성을 막되, 같은 결과를 읽는 요청끼리는 병행한다.
+    run = await owned_run(db, run_id, user_id, settings.analysis_run_ttl_seconds, lock="share")
     if run.status not in {"succeeded", "partial"} or run.job_posting_id is None:
         raise AppError(Reason.NOT_READY)
     posting = await db.get(JobPosting, run.job_posting_id)
@@ -184,7 +186,7 @@ async def get_result(
 async def get_candidates(
     db: AsyncSession, user_id: UUID, run_id: UUID, page: int, settings: Settings, redis: ArqRedis
 ) -> CandidatesResponse | AnalyzingResponse:
-    run = await owned_run(db, run_id, user_id, settings.analysis_run_ttl_seconds, lock=True)
+    run = await owned_run(db, run_id, user_id, settings.analysis_run_ttl_seconds, lock="update")
     if run.status in {"queued", "running"}:
         await db.commit()
         return AnalyzingResponse()

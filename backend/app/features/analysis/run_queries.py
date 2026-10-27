@@ -1,6 +1,7 @@
 """분석 API의 소유권·페이지 배정 쿼리. commit은 service 책임이다."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import select
@@ -12,7 +13,12 @@ from app.shared.enums import Reason
 
 
 async def owned_run(
-    db: AsyncSession, run_id: UUID, user_id: UUID, ttl_seconds: int, *, lock: bool = False
+    db: AsyncSession,
+    run_id: UUID,
+    user_id: UUID,
+    ttl_seconds: int,
+    *,
+    lock: Literal["update", "share"] | None = None,
 ) -> AnalysisJob:
     statement = (
         select(AnalysisJob)
@@ -24,7 +30,7 @@ async def owned_run(
         .execution_options(populate_existing=True)
     )
     if lock:
-        statement = statement.with_for_update()
+        statement = statement.with_for_update(read=lock == "share")
     run = await db.scalar(statement)
     # 존재 여부를 다른 사용자에게 노출하지 않는다. 만료는 조회 제한이며 자료 삭제가 아니다.
     if run is None or run.created_at + timedelta(seconds=ttl_seconds) <= datetime.now(UTC):
