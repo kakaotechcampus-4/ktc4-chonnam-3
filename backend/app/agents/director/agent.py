@@ -1,4 +1,4 @@
-"""검증된 기존 질문 생성과 신규 Director 실행을 BE 호출 설정에 연결한다."""
+"""검증된 계약 입력과 BE 호출 설정을 AI Director에 연결한다."""
 
 from collections.abc import Mapping
 from dataclasses import replace
