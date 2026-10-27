@@ -59,7 +59,7 @@ Task 11은 [공통 구현 #81](https://github.com/kakaotechcampus-4/ktc4-chonnam
 | `uv run python -m scripts.seed_all`                   | 도메인 지식 시드 경계 — 로그인 실행에 불필요 |
 | `uv run python -m scripts.check_llm`                  | 실제 LLM 연결 점검 — 합성 입력 1건, API 사용량 발생 |
 | `uv run uvicorn app.main:app --reload --port 8000 --no-access-log` | API — OAuth query 로그 제외 |
-| `uv run arq app.workers.arq_app.WorkerSettings`       | 초기 저장소 수집만 등록하는 기존 설정 |
+| `uv run arq app.workers.arq_app.WorkerSettings`       | 현재 develop 워커 |
 | `uv run arq app.workers.analysis_app.WorkerSettings` | Task 11·선행 구현 반영 후 분석 워커 |
 | `uv run ruff check . && uv run ruff format --check .` | 린트              |
 | `uv run mypy app`                                     | 타입 체크         |

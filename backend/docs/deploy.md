@@ -210,7 +210,7 @@ GitHub · Wanted · LLM 은 CI 에서 실제 호출하지 않고 mock 한다.
 DB 이름에 `_test`를 포함하고 Redis DB는 13·14·15 중 테스트 전용 번호를 지정한다. 필요한 환경변수가
 없으면 해당 통합 테스트는 skip된다. SQL TRUNCATE·Redis FLUSHDB 대상에 개발·운영 데이터를 지정하지 않는다.
 위험 downgrade 검사는 별도 `task11_migration_test` DB를 만들고 `TASK11_MIGRATION_URL`로 지정한다.
-Backend CI도 이 DB를 생성해 전체 version 보존·위험 rollback 차단·안전 downgrade·재적용을 실행하며,
+별도 Analysis migration CI도 이 DB를 생성해 전체 version 보존·위험 rollback 차단·안전 downgrade·재적용을 실행하며,
 공유 API 테스트 DB를 downgrade 대상으로 사용하지 않는다.
 
 CODEOWNERS 의 [팀 자유 영역] 이 팀 자체 CI 추가를 명시적으로 허용한다. 운영 3파일

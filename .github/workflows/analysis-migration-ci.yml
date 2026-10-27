@@ -1,0 +1,65 @@
+name: Analysis migration CI
+
+on:
+  pull_request:
+    branches: [develop, release]
+    paths:
+      - 'backend/**'
+      - 'ai/**'
+      - '.github/workflows/analysis-migration-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: analysis-migration-ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  analysis-migration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: devon
+          POSTGRES_PASSWORD: devon
+          POSTGRES_DB: task11_migration_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U devon -d task11_migration_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # API 테스트 DB와 분리해 위험 downgrade가 다른 테스트의 스키마를 바꾸지 않게 한다.
+      TASK11_MIGRATION_URL: postgresql+asyncpg://devon:devon@127.0.0.1:5432/task11_migration_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            backend/uv.lock
+            ai/uv.lock
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Enable pgcrypto in the dedicated database
+        env:
+          PGPASSWORD: devon
+        run: psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U devon -d task11_migration_test -f scripts/init-extensions.sql
+
+      - name: Verify safe analysis migration and downgrade
+        run: uv run pytest -q tests/test_analysis_migration.py
