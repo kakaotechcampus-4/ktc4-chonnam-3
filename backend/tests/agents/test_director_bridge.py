@@ -1,5 +1,6 @@
 """공급자 HTTP만 대체하고 질문 복원과 AI 어댑터의 실제 호출 예산을 확인한다."""
 
+import asyncio
 import json
 from dataclasses import asdict, replace
 
@@ -175,3 +176,54 @@ def test_restored_question_uses_the_original_stored_contract():
     turn.question_contract = {"invalid": True}
     with pytest.raises(AgentStateError, match="question_contract_invalid"):
         restored_question(turn, context())
+
+
+@pytest.mark.parametrize("phase", ["plan", "review"])
+async def test_director_cancellation_preserves_only_completed_attempts(phase):
+    # 실제 task 취소가 gateway를 통과하고 완료된 plan 원문만 남는지 확인한다.
+    entered, finished = asyncio.Event(), asyncio.Event()
+    operations, attempts = [], []
+    candidate = question()
+
+    async def provider(request):
+        body = json.loads(request.content)
+        payload = json.loads(body["input"][0]["content"][0]["text"])
+        operation = payload["operation"]
+        operations.append(operation)
+        if operation == phase:
+            entered.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                finished.set()
+        return response(
+            dict(question=asdict(candidate), intent="역할 확인", reason_summary="자기소개")
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as http:
+        task = asyncio.create_task(
+            execute_director(
+                context(),
+                prompt=c.PromptSpec("director", "fixture", "fixture-model", "fixture"),
+                settings=settings(),
+                budget=CallBudget(),
+                http_client=http,
+                attempt_sink=attempts,
+            )
+        )
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=2)
+        finally:
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        assert not http.is_closed
+    assert finished.is_set()
+    assert operations == (["plan"] if phase == "plan" else ["plan", "review"])
+    if phase == "plan":
+        assert attempts == []
+    else:
+        assert len(attempts) == 1 and attempts[0].attempt == 1
+        assert json.loads(attempts[0].raw_output)["question"] == json.loads(
+            json.dumps(asdict(candidate))
+        )
