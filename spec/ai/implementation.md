@@ -193,6 +193,25 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
   (`backend/app/llm_tasks/repo_shallow.py`)와 `repo_analyze`의 저장 매핑·캐시 조회 구현은 이번 범위
   밖이며 후속 작업이다. L0-b 입력 수집은 BE PR #45 범위다.
 
+## 2026-10-28 — PR #126 기존 어댑터 보존과 수집 한계 지침
+
+- 원본 `68c088f`를 `backup/pr126-before-review-fix-20261028`에 보존하고 소규모 후속으로
+  이미 develop에 병합된 기존 `generate_question`을 복구했다. 신규 `execute_director`와 함께
+  두 함수의 원문 AST, base_url·공유 예산·attempt_sink·취소 전파를 확인했다.
+- `repo-deep-runtime-v1.md`는 입력 `source_limitations`의 미확인 범위를 확인한 것처럼
+  설명하지 않고 관찰·결과의 한계에 반영하도록 명시한다. 이 지침은 모델 응답을 코드로 강제하는
+  보장이 아니다. 수집 메타데이터의 별도 보존과 모델 출력의 한계를 구분한다.
+- 최신 develop `09a6f77`, 이번 변경과 미병합 #125 `23873ef` runtime을 별도 로컬 사본에서
+  결합했다. 기존·신규 adapter, gateway, 예산, 원문 수집 집중 검사는 103 passed, skip 0이었다.
+  생성·검토 각각에서 실제 task를 취소하는 새 2사례는 취소 전파와 완료된 plan 기록만 보존함을
+  확인한다. AI runtime은 38 passed, BE mypy 150 source·Ruff·format 311파일이 통과했다.
+- 게시본에는 #125 runtime을 복사하지 않는다. 최신 develop 결합에서 #125를 제외하면
+  runtime import와 파생 Any 반환의 mypy 2오류가 남는다. 이전 d063d8d 기준 CI의 11오류와
+  이번 결과를 구분한다. #125 반영 후 실제 게시본을 다시 검사하기 전에는 Draft다.
+- #133 patch03은 아직 일반 Python에 적용하지 않은 자료다. #136의 수집 한계가 실제 모델 입력에
+  전달되는 실행 연결은 해당 일반 코드 반영 후 다시 검증한다. 이번에 실제 모델·외부 GitHub,
+  PostgreSQL 전체 검사·면접 완주·운영 배포는 실행하지 않았다.
+
 ## 2026-10-27 — PR #126 실제 예산 경계와 선행 결합 검증
 
 - #126 원본 `e29c8f9`를 `backup/pr126-before-budget-review-20261026`에 보존하고 후속만 추가했다.
