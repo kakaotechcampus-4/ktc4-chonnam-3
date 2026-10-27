@@ -140,6 +140,8 @@ paths:
       description: >-
         documentId is optional. When omitted, the doc_extract step is reported as
         skipped rather than failed.
+        postingUrl is required. If it is omitted, null, or blank, the server
+        returns 400 with reason posting_url_required.
       requestBody:
         required: true
         content:
