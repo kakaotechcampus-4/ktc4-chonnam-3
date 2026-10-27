@@ -12,7 +12,7 @@ from devon_ai import contracts as c
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.agents.director.agent import execute_director
+from app.agents.director.runtime_adapter import execute_director
 from app.agents.director.tools import EvidenceLimits, EvidenceScope, read_files
 from app.core.config import LLMSettings, get_settings
 from app.db.models import (
