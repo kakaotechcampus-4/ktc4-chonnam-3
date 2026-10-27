@@ -606,6 +606,14 @@ async def _retrieve(
     assert context.current_turn_id is not None
     request = decision.data.tool_requests[0]
     requested = f"{request.repository_id}@{request.git_ref}: " + ", ".join(request.allowed_paths)
+    # 미실행 요청은 실제 조회 결과와 구분해 범위와 상한 사유를 보존한다.
+    unexecuted = tuple(
+        f"미조회: {item.repository_id}@{item.git_ref}: "
+        + ", ".join(item.allowed_paths)
+        + "; 이유: 턴당 1개 조회 제한"
+        for item in decision.data.tool_requests[1:]
+    )
+    unexecuted_summary = "; 한계: " + "; ".join(unexecuted) if unexecuted else ""
 
     async def remember(summary: str) -> None:
         async with sessions.begin() as db:
@@ -614,7 +622,7 @@ async def _retrieve(
             if turn is not None:
                 turn.decision = asdict(replace(decision.data, reason_summary=summary))
 
-    await remember("근거 조회 요청; 실제 확인 아직 없음; 요청: " + requested)
+    await remember("근거 조회 요청; 실제 확인 아직 없음; 요청: " + requested + unexecuted_summary)
     limits = evidence_limits
     if limits is None:
         config = get_settings()
@@ -639,7 +647,9 @@ async def _retrieve(
         else:
             result = await execute(http_client)
     except asyncio.CancelledError:
-        await remember("근거 조회 중단; 완료된 확인 범위 없음; 요청: " + requested)
+        await remember(
+            "근거 조회 중단; 완료된 확인 범위 없음; 요청: " + requested + unexecuted_summary
+        )
         raise
     async with sessions.begin() as db:
         stored = await store_evidence(
@@ -655,15 +665,13 @@ async def _retrieve(
                 )
                 .values(retrieved_for_turn=context.turn_no)
             )
-    result = replace(result, items=stored)
+    result = replace(result, items=stored, limitations=result.limitations + unexecuted)
     summary = "근거 조회 " + result.status + "; 실제 확인: " + ", ".join(result.searched_scope)
     summary += "; 요청: " + requested
     if result.error_code:
         summary += "; 오류: " + result.error_code
     if result.limitations:
         summary += "; 한계: " + "; ".join(result.limitations)
-    if len(decision.data.tool_requests) > 1:
-        summary += "; 한 라운드 제한으로 나머지 요청은 실행하지 않음"
     await remember(summary)
     if stored and on_evidence_check is not None:
         await on_evidence_check(stored)
