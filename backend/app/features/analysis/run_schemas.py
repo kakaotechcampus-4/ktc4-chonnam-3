@@ -1,8 +1,9 @@
 """Task 11 요청·응답. 카드 정의는 선행 Task 10 스키마를 재사용한다."""
 
 import uuid
+from typing import Literal
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from app.features.analysis.schemas import RepositoryCard
 from app.features.analysis.status_schemas import AnalysisRunResponse as AnalysisRunResponse
@@ -51,5 +52,8 @@ class CandidatesResponse(CamelResponse):
 
 
 class AnalyzingResponse(CamelResponse):
-    status: str = "analyzing"
+    # 응답에 항상 나오는 기본 필드를 출력 스키마에서도 필수로 표시한다.
+    model_config = ConfigDict(json_schema_serialization_defaults_required=True)
+
+    status: Literal["analyzing"] = "analyzing"
     retry_after: int = 3

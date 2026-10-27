@@ -69,6 +69,22 @@ def test_candidate_errors_and_page_validation_are_documented() -> None:
     assert page["schema"] == {"type": "integer", "minimum": 1}
 
 
+def test_analyzing_response_schema_requires_both_wire_fields() -> None:
+    generated = schemas.AnalyzingResponse.model_json_schema(mode="serialization")
+
+    assert set(generated.get("required", [])) == {"status", "retryAfter"}
+    assert generated["properties"]["status"]["const"] == "analyzing"
+    assert schemas.AnalyzingResponse().model_dump(mode="json") == {
+        "status": "analyzing",
+        "retryAfter": 3,
+    }
+
+
+def test_analyzing_response_rejects_other_statuses() -> None:
+    with pytest.raises(ValidationError):
+        schemas.AnalyzingResponse(status="succeeded")
+
+
 def test_result_serialization_matches_openapi_required_fields() -> None:
     result = schemas.AnalysisRunResultResponse.model_validate(_result_payload())
     payload = result.model_dump(mode="json")
