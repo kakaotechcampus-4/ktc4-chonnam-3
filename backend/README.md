@@ -65,6 +65,8 @@ Task 11은 [공통 구현 #81](https://github.com/kakaotechcampus-4/ktc4-chonnam
 | `uv run mypy app`                                     | 타입 체크         |
 | `uv run pytest`                                       | 테스트 — 격리 `TEST_DATABASE_URL`·`TEST_REDIS_URL` 필요 |
 
+#108 반영 후 실제 분석 실행에는 `analysis_app.WorkerSettings`를 사용한다. 표의 `arq_app`은 병합 전 develop의 초기 수집 전용 설정이다.
+
 통합 테스트는 PostgreSQL DB 이름에 `_test`가 포함되어야 하며 Redis DB는 13·14·15 중 테스트 전용 번호를 명시해야 한다. fixture가 해당 DB 테이블과 Redis DB를 비우므로 개발·운영 데이터를 지정하지 않는다. 환경변수가 없으면 관련 통합 테스트는 skip된다. 자세한 명령은 [검증 절차](docs/local-oauth.md#검증)를 따른다.
 
 ## 폴더 구조
