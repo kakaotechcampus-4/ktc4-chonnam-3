@@ -38,7 +38,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    command: ["arq", "app.workers.arq_app.WorkerSettings"]
+    command: ["arq", "app.workers.analysis_app.WorkerSettings"]
     depends_on:
       migrate:
         condition: service_completed_successfully
