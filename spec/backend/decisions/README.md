@@ -2,6 +2,11 @@
 상태: Proposed → Accepted → Superseded. 날짜·검토자·관련 PR을 실제 확인 후 기록한다.
 원본 기록은 삭제하지 않는다. README에는 현재 유효한 핵심 결정 5~10개를 목표로 연결하되 개수를 채우려고 결정을 만들지 않는다.
 
+## BE 내부 구현 결정
+
+- [0005 Director 호출·저장과 고정 코드 Evidence 경계](0005-director-storage-boundary.md):
+  Proposed. 짧은 DB transaction, 호출 기록, 고정 SHA 근거의 검증·저장 경계를 정의한다.
+
 ## 작성 형식
 - 제목 / 상태 / 날짜 / 관련 PR / 검토자
 - 맥락: 해결할 문제

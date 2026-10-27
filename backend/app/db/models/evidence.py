@@ -15,6 +15,7 @@ from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
     Index,
+    Integer,
     SmallInteger,
     String,
     Text,
@@ -40,6 +41,13 @@ class Evidence(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
     __tablename__ = "evidences"
     __table_args__ = (
         CheckConstraint(check_in("source_type", EVIDENCE_SOURCE_TYPES), name="source"),
+        CheckConstraint(
+            "(start_line IS NULL AND end_line IS NULL) OR "
+            "(start_line IS NOT NULL AND end_line IS NOT NULL "
+            "AND start_line > 0 AND end_line >= start_line "
+            "AND path IS NOT NULL AND metadata_key IS NULL)",
+            name="line_range",
+        ),
         Index("ix_evidences_session_id", "interview_session_id"),
     )
 
@@ -53,7 +61,12 @@ class Evidence(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
     # commit SHA. 이게 없으면 나중에 같은 내용을 다시 꺼낼 수 없다.
     git_ref: Mapped[str] = mapped_column(String(40), nullable=False)
     path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     snippet: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 실제 파일 위치가 있는 경우에만 쌍으로 저장한다. metadata에는 줄 번호가 없다.
+    start_line: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end_line: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # NULL 이면 L2 사전분석 부산물, 값이 있으면 면접 중 Tool 호출로 가져온 근거.
     tool_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
     retrieved_for_turn: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)

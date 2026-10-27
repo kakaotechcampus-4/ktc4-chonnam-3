@@ -6,6 +6,9 @@ task-01 — 한쪽만 바꾸면 기본값이 조용히 갈라지므로 테스트
 import re
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from app.core.config import Settings
 
 ENV_EXAMPLE = Path(__file__).resolve().parents[1] / ".env.example"
@@ -74,6 +77,69 @@ def test_persona_turn_quota_parses_env_string() -> None:
     settings = Settings(_env_file=None, persona_turn_quota="tech_lead:6,domain_lead:2,hr_manager:1")
 
     assert settings.persona_turn_quota == {"tech_lead": 6, "domain_lead": 2, "hr_manager": 1}
+
+
+@pytest.mark.parametrize(
+    "quota",
+    [
+        {"tech_lead": 5, "domain_lead": 3, "hr_manager": 1},
+        {"tech_lead": 6, "domain_lead": 1, "hr_manager": 2},
+        {"tech_lead": 6, "domain_lead": 2},
+        {"tech_lead": 6, "domain_lead": 2, "hr_manager": 1, "extra": 0},
+    ],
+    ids=["shifted-tech-count", "shifted-domain-count", "missing-role", "extra-role"],
+)
+def test_persona_turn_quota_rejects_non_fixed_allocation(quota: dict[str, int]) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, persona_turn_quota=quota)
+
+
+@pytest.mark.parametrize("turns", [True, 1.0, "1"], ids=["boolean", "float", "string"])
+def test_persona_turn_quota_rejects_non_integer_mapping_counts(turns: object) -> None:
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            persona_turn_quota={"tech_lead": 6, "domain_lead": 2, "hr_manager": turns},
+        )
+
+
+@pytest.mark.parametrize(
+    "quota",
+    [
+        "tech_lead:5,domain_lead:3,hr_manager:1",
+        "tech_lead:6,domain_lead:2,hr_manager:1,hr_manager:1",
+        "tech_lead:6,domain_lead:2,hr_manager:1,",
+        "tech_lead:6,domain_lead:2,hr_manager:true",
+        "tech_lead:6,domain_lead:2,hr_manager:1.0",
+        "tech_lead:6,domain_lead:2,hr_manager",
+    ],
+    ids=["wrong-counts", "duplicate-role", "empty-pair", "boolean", "float", "missing-count"],
+)
+def test_persona_turn_quota_rejects_invalid_env_strings(
+    monkeypatch: pytest.MonkeyPatch, quota: str
+) -> None:
+    monkeypatch.setenv("PERSONA_TURN_QUOTA", quota)
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
+
+
+def test_interview_allocation_loads_fixed_values_from_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PERSONA_TURN_QUOTA", " hr_manager:1, tech_lead:6, domain_lead:2 ")
+    monkeypatch.setenv("INTERVIEW_MAX_TURNS", "9")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.persona_turn_quota == {"tech_lead": 6, "domain_lead": 2, "hr_manager": 1}
+    assert settings.interview_max_turns == 9
+
+
+@pytest.mark.parametrize("turns", [8, 10, True, 9.0, "9.0", "10"])
+def test_interview_max_turns_rejects_non_fixed_or_coerced_values(turns: object) -> None:
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None, interview_max_turns=turns)
 
 
 def test_persona_turn_quota_sums_to_max_turns() -> None:
