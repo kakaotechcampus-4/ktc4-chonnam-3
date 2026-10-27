@@ -1509,7 +1509,7 @@ Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시�
 
 **UI states**
 
-5c-v2 `재도전` 버튼 클릭 시 호출. 성공 시 `interviews` 캐시 무효화 후 `/interview/iv_002/prepare`(5a2-v2)로 이동. 0009(Proposed)가 Accepted 되면 마이페이지 중단된 면접 행의 `다시 도전하기`에서도 같은 방식으로 호출한다.
+5c-v2 `재도전` 버튼 클릭 시 호출. 성공 시 `interviews` 캐시 무효화 후 `/interview/iv_002/prepare`(5a2-v2)로 이동. FE는 마이페이지 중단된 면접 행의 `다시 도전하기`에서도 같은 방식으로 호출한다(FE 결정, BE 계약 대기 — 0009).
 
 **Failure**
 
