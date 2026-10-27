@@ -195,7 +195,7 @@ server: {
 
 ## 6. CI
 
-`.github/workflows/backend-ci.yml` 을 **새로 추가**한다.
+`.github/workflows/backend-ci.yml`은 아래 검사를 실행하는 기존 CI다.
 
 ```yaml
 on:
@@ -242,6 +242,6 @@ GitHub 토큰은 `BYTEA` + AES-GCM 으로 암호화해 저장한다 (`app/core/c
 | 항목 | 내용 |
 |---|---|
 | 인증 앱 운영 검증 | 저장소 compose는 `app.main:app`을 실행한다. 운영 환경값·migration·OAuth·재연동·로그아웃 실검증은 배포 시 확인 |
-| Worker 운영 검증 | `initial_sync` worker 구성과 실제 큐 소비·실패 복구를 검증하며 미등록 분석·면접 작업은 별도 구현 |
+| Worker 운영 검증 | `initial_sync`·`analysis_run`·`candidate_page_analyze`·`analysis_reaper`의 실제 큐 소비와 실패 복구는 배포 시 확인하며 면접 작업 등록은 후속 구현·통합 범위 |
 | CDN·로드밸런서 | CloudFront·ALB·ECS 검토안은 현재 Caddy compose의 구현 완료 범위가 아님 |
 | 배포 완료 기준 | deploy workflow·health 점검과 실제 서비스 기능 검증을 구분하며 운영 환경의 실행 결과를 별도 확인 |
