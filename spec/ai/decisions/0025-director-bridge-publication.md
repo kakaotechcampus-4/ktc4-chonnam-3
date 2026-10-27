@@ -23,6 +23,17 @@
 
 ## 영향과 후속
 
+### 2026-10-28 기존 생성 경로와 신규 실행 모듈의 분리
+
+- 결정 3은 2026-10-23 원 게시본의 선행 부재를 기록한다. #82가 develop에 반영된 뒤에는
+  `backend/app/agents/director/agent.py`를 최신 develop의 `generate_question` 원문으로 유지한다.
+- 신규 `execute_director`는 같은 디렉터리의 `runtime_adapter.py`로 분리하고 테스트와 실제
+  소비자인 #135의 import를 새 경로로 맞춘다. 두 경로를 합치는 wrapper나 중복 구현은 만들지 않는다.
+- 이유는 기존 service의 입력 Contract 경로를 보존하면서 신규 생성·독립 검토의 책임과
+  파일 동시 수정 범위를 구분하기 위해서다. 공개 wire 계약과 두 함수의 실행 규칙은 바꾸지 않는다.
+- #125 runtime은 미병합 선행으로 남긴다. #133의 미적용 패치는 옛 exact base를 전제하므로
+  최신 모듈 배치에 강제 적용하지 않고 일반 코드 반영 전에 실제 대상·필요성을 다시 검토한다.
+
 ### 실제 예산의 사전 확인
 
 - BE CallBudget은 remaining_attempts와 terminal_failure를 읽기 전용으로 공개한다.
