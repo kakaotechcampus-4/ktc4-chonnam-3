@@ -159,6 +159,17 @@ T3 결과 기반 규칙 함수로 조회를 고르고 Controller가 턴당 첫 �
 미조회 요청은 한계로 보존하고, 필요한 보강 T3의 실패·예산 소진 뒤 T4나 정상 완료로 진행하지 않는다.
 기존 `retrieve` 값 자체를 새 모델 호출이나 무제한 조회의 승인으로 해석하지 않는다.
 
+### Director 후속 실행 경로
+
+Director의 후속 입력·출력 경계는 [질문 결정과 AI·BE 입력 설계](designs/2026-10-23-director-runtime.md)의 Proposed 검토 대상이다.
+`run_director`는 목적·질문 생성 1회와 독립 검토 1회에 공유 예산 총 2회를 사용하며 각 요청은 `max_attempts=1`이다.
+이 신규 경로는 검토 시도를 확보하기 위해 단계별 자동 재시도를 제한하며, 실패 후 질문을 확정하지 않는다.
+다른 task와 기존 생성 경로의 공통 gateway 재시도 규칙은 유지한다.
+검증한 결정·질문과 실제 생성 시도 metadata를 구분해 반환한다.
+현재 질문과 과거 문답은 답변 분석 입력에서 구분한다. 최초·보강 T3는 같은 2회 예산,
+후속 T4는 별도 예산이며 기존 flat `analysis`/`decision`과 공개 wire 구조를 유지한다.
+제한 조회 판단은 허용 repo·SHA·path를 확인한 요청을 반환하고 실제 I/O·저장은 Controller가 맡는다.
+
 [0008 결정](decisions/0008-ai-candidate-policy.md)은 전제·목적이 유효한 표현 오류는 재작성 후보, 거짓·stale·반복 전제나 목적은 재계획 후보, 공급된 제약에서 안전한 질문을 만들 수 없으면 유효 후보 없음으로 구분한다. 0008 자체는 내부 enum이나 추가 호출·정상 종료·사용자 복구·service 상태를 승인하지 않는다. 위 내부 enum의 후속 채택은 0014 범위에 한한다.
 
 ## Evidence와 ToolResult
@@ -224,14 +235,5 @@ raw output·model·prompt_version·schema_version·input/output tokens·latency�
 - Question Contract와 분석·판단의 위 채택 범위는 0014를 따른다. 미채택 상세 평가·근거 표현·model metadata 저장과 새 공개 필드는 AI·BE/FE 검토 대상이다.
 
 ## 계약 검토 완료 조건
-
-Director의 후속 입력·출력 경계는 [질문 결정과 AI·BE 입력 설계](designs/2026-10-23-director-runtime.md)의 Proposed 검토 대상이다.
-`run_director`는 목적·질문 생성 1회와 독립 검토 1회에 공유 예산 총 2회를 사용하며 각 요청은 `max_attempts=1`이다.
-이 신규 경로는 검토 시도를 확보하기 위해 단계별 자동 재시도를 제한하며, 실패 후 질문을 확정하지 않는다.
-다른 task와 기존 생성 경로의 공통 gateway 재시도 규칙은 유지한다.
-검증한 결정·질문과 실제 생성 시도 metadata를 구분해 반환한다.
-현재 질문과 과거 문답은 답변 분석 입력에서 구분한다. 최초·보강 T3는 같은 2회 예산,
-후속 T4는 별도 예산이며 기존 flat `analysis`/`decision`과 공개 wire 구조를 유지한다.
-제한 조회 판단은 허용 repo·SHA·path를 확인한 요청을 반환하고 실제 I/O·저장은 Controller가 맡는다.
 
 각 task의 성공·실패·경계 fixture, 변환 담당, durable 저장 위치, schema version, 허용 null·enum·상한, 실패 코드가 정해져야 한다. 실제 모델 schema 적합성은 별도 평가하며 mock 통과로 대체하지 않는다. 검토자는 [기준 결정](decisions/0001-ai-baseline.md)과 관련 후속 결정에 채택한 범위와 근거를 남긴다.
