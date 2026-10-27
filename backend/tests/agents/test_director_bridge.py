@@ -8,7 +8,7 @@ import httpx
 import pytest
 from devon_ai import contracts as c
 
-from app.agents.director.agent import execute_director
+from app.agents.director.runtime_adapter import execute_director
 from app.core.config import Settings
 from app.db.models import InterviewTurn
 from app.features.interview.agent_context import AgentStateError
