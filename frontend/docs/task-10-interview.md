@@ -49,7 +49,7 @@ Sprint 2 대상이라 이번에 만들지 않는 것: 마이크·스피커 점�
 - [ ] `npm run build` 통과
 - [ ] `npm run lint` 통과
 
-## 후속 — abandoned 전환 (선행: [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md) Accepted, BE `POST /interviews/{id}/abandon` 구현)
+## 후속 — abandoned 전환 ([공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md), 선행: BE `POST /interviews/{id}/abandon` 구현)
 
 - 이탈 확인 모달 확인 시 `POST /interviews/{id}/abandon` 호출 후 `/home`. 요청이 실패해도 홈으로 이동하고, `409 already_completed`면 `GET /interviews/{id}`로 다시 확인해 `completed`일 때만 리포트로 이동(`preparing`도 이 reason)
 - [레포 다시 선택하기] 두 곳(준비 실패 화면, 진행 중 `repo_unreachable`)에서 기존 면접 id를 레포 선택 화면에 전달

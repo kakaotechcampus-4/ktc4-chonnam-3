@@ -21,7 +21,7 @@ API 원본 구분은 [공통 계약 안내](../contracts/README.md)와 병합된
 - [0007 음성 전용 면접 전환 — WS·REST 계약 변경](0007-voice-interview-contract.md) — Proposed, 2026-10-05. Sprint 2부터 답변은 음성만 받고 질문 음성은 `question-audio` URL로 전달한다. 꼬리질문 포함 9턴과 `totalTurns` 기존 의미를 유지하며 BE·AI 검토 대기.
 - [0005 JD 분류 category 통일](0005-jd-category-unification.md) — Proposed, 2026-09-27. DB·AI·API 모두 `category`(`required`/`preferred`/`responsibility`)로 통일하고 `requirement_type`·`unknown`과 변환 레이어를 폐기한다. 구동한 검토 대기.
 - [0003 Sprint 1 세션 인증 유지와 JWT의 Sprint 2 이관](0003-sprint1-session-auth.md) — Accepted, 2026-09-22. 기존 Redis·`devon_session`·14일 sliding 세션을 채택한다. JWT·갱신은 Sprint 2로 이관하며 실제 인증 구현·검증은 남는다.
-- [0009 면접 abandoned 전환 방법 — 나가기·레포 재선택](0009-interview-abandon-transition.md) — Proposed, 2026-10-26. `POST /interviews/{id}/abandon`(204·404·409 `already_completed`)으로 나가기와 레포 재선택의 기존 면접을 전환하고, 재도전은 `completed`와 시작 후 중단된 `abandoned`만 허용한다. BE 검토 대기(#143·#121).
+- [0009 면접 abandoned 전환 방법 — 나가기·레포 재선택](0009-interview-abandon-transition.md) — Accepted, 2026-10-26. `POST /interviews/{id}/abandon`(204·404·409 `already_completed`)으로 나가기와 레포 재선택의 기존 면접을 전환하고, 재도전은 `completed`와 시작 후 중단된 `abandoned`만 허용한다. 계약은 `openapi.yaml`에 반영했고 실제 BE·FE 구현은 남는다.
 - [0008 정상 면접의 Persona 배분을 6/2/1로 고정](0008-fixed-persona-allocation.md) — Accepted, 2026-10-06. 첫 HR을 포함해 기술 6회·도메인 2회·HR 1회로 고정하며 이후 기술·도메인 순서는 자율이다. 이번 반영은 문서에 한정한다.
 - [0002 로컬 기준의 업로드 용량·공고 재사용·면접 배분 채택](0002-local-policy-baseline.md) — Partially Superseded, 2026-09-22. 포트폴리오 20MB와 공고 재사용 7일은 유지하며 면접 배분은 0004를 거쳐 0008을 따른다. 실제 구현 상태와 정책 확정은 구분한다.
 

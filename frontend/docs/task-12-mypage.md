@@ -29,7 +29,7 @@
 - [ ] `npm run build` 통과
 - [ ] `npm run lint` 통과
 
-## 후속 — 중단된 면접 행 (선행: [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md) Accepted, BE `GET /me/interviews`의 abandoned 포함)
+## 후속 — 중단된 면접 행 ([공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md), 선행: BE `GET /me/interviews`의 abandoned 포함·재도전 조건 구현)
 
 - `completed`와 `startedAt`이 있는 `abandoned`를 표시
 - abandoned 행: 일시 `startedAt`, 점수 자리 "중단됨", `리포트 보기` 대신 `다시 도전하기`(`POST /interviews/{id}/retry`)
