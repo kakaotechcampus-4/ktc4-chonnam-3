@@ -736,3 +736,109 @@ async def test_director_updates_context_snapshot_without_losing_prepare_state(
         assert snapshot["director"]["turn_no"] == 1
         assert snapshot["director"]["phase"] == "awaiting_answer"
         assert snapshot["director"]["decision"]["next_step"] == "ask"
+
+
+@pytest.mark.parametrize("outcome", ["not_found", "tool_error", "enrichment_failure", "canceled"])
+async def test_unexecuted_lookup_scopes_survive_models_storage_and_interruption(
+    agent_sessions, agent_seed, monkeypatch, outcome
+):
+    from app.db.models import RepoAnalysis
+    from app.features.interview import director_service
+
+    await seed_turns(agent_sessions, agent_seed)
+    paths = ("src/main.py", "src/other.py", "src/final.py")
+    async with agent_sessions.begin() as db:
+        for row in await db.scalars(select(RepoAnalysis)):
+            row.notable_areas = [{"path": path, "reason": "fixture"} for path in paths]
+    requests = tuple(
+        c.VerificationRequest(
+            "팀원 담당입니다",
+            "역할 구현 확인",
+            str(agent_seed["repo_id"]),
+            agent_seed["sha"],
+            (path,),
+        )
+        for path in paths
+    )
+    original = replace(analysis(), needs_verification=True, verification_requests=requests)
+    status = "tool_error" if outcome == "tool_error" else "not_found"
+    actual = c.ToolResult(
+        status,
+        (),
+        (paths[0],),
+        ("첫 조회 공급자 오류",) if status == "tool_error" else (),
+        "fixture_error" if status == "tool_error" else None,
+    )
+    entered = asyncio.Event()
+    executed, sent = [], []
+
+    async def read(request, **kwargs):
+        executed.append((request, kwargs["paths"]))
+        entered.set()
+        if outcome == "canceled":
+            await asyncio.Event().wait()
+        return actual
+
+    monkeypatch.setattr(director_service, "read_files", read)
+
+    async def handle(request):
+        body = json.loads(request.content)
+        payload = json.loads(body["input"][0]["content"][0]["text"])
+        sent.append(payload)
+        if "answer" in payload:
+            if not payload["tool_results"]:
+                return response(asdict(original))
+            return response(
+                {"invalid": True} if outcome == "enrichment_failure" else asdict(analysis())
+            )
+        return response(plan("tech_lead") if payload["operation"] == "plan" else approved_review())
+
+    call_id = uuid4()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        task = asyncio.create_task(
+            director_service.process_answer(
+                agent_sessions,
+                user_id=agent_seed["owner"],
+                interview_id=agent_seed["interview_id"],
+                turn_no=1,
+                text="팀원 담당입니다",
+                call_id=call_id,
+                settings=settings(),
+                http_client=http,
+            )
+        )
+        if outcome == "canceled":
+            await asyncio.wait_for(entered.wait(), 5)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        else:
+            result = await task
+            if outcome == "enrichment_failure":
+                assert result.failure is not None and result.next_turn_id is None
+                assert not result.completed
+            else:
+                assert result.failure is None and result.next_turn_id is not None
+    assert executed == [(requests[0], requests[0].allowed_paths)]
+    async with agent_sessions() as db:
+        turn = await db.scalar(select(InterviewTurn).where(InterviewTurn.turn_no == 1))
+        assert turn.analysis == json.loads(json.dumps(asdict(original)))
+        summary = turn.decision["reason_summary"]
+        for path in paths[1:]:
+            assert path in summary
+        assert str(agent_seed["repo_id"]) in summary and agent_seed["sha"] in summary
+        assert "턴당 1개 조회 제한" in summary
+        if outcome == "canceled":
+            assert "중단" in summary
+            assert (await db.get(LLMCallRecord, call_id)).discard_reason == "canceled"
+        elif outcome == "enrichment_failure":
+            assert "보강 분석 미완료" in summary
+    for payload in sent:
+        for tool in payload.get("tool_results", []):
+            assert tool["status"] == actual.status
+            assert tool["items"] == [] and tool["searched_scope"] == [paths[0]]
+            assert tool["error_code"] == actual.error_code
+            limitations = "; ".join(tool["limitations"])
+            for path in paths[1:]:
+                assert path in limitations
+            assert "턴당 1개 조회 제한" in limitations
