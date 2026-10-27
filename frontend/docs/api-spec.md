@@ -168,12 +168,13 @@ Redis 조회 장애는 세션 만료·유실과 구분한다. 정상 인증이�
 | 16 | POST | `/interviews` | fetch |
 | 17 | GET | `/interviews/{id}` | fetch |
 | 23 | POST | `/interviews/{id}/prepare/retry` | fetch |
+| 24 | POST | `/interviews/{id}/abandon` | fetch |
 | 18 | GET *(Upgrade)* | `/ws/interviews/{sessionId}` | WebSocket |
 | 19 | GET | `/interviews/{id}/report` | fetch |
 | 20 | POST | `/interviews/{id}/retry` | fetch |
 | 21 | POST | `/interviews/{id}/feedback-disagreements` | 계약 잔존, Sprint 1 제공·호출 제외 |
 
-참조 번호는 총 23개다(기존 22개 + 준비 재시도 #23). #3은 Sprint 2 예약이고 #21은 계약이 잔존하지만 Sprint 1 제공·호출 대상에서 제외하므로 이 숫자를 실제 제공 API 수로 해석하지 않는다. 번호는 아래 "최종 엔드포인트 목록"·`shared/queryKeys.ts` 참조 번호와 같다. 22번은 `analysis-runs` 계열끼리 묶어 읽도록 15번 뒤에 배치했고, 23번은 준비 화면 흐름을 따라 17번 뒤에 두었다.
+참조 번호는 총 24개다(기존 22개 + 준비 재시도 #23 + 면접 중단 #24). #3은 Sprint 2 예약이고 #21은 계약이 잔존하지만 Sprint 1 제공·호출 대상에서 제외하므로 이 숫자를 실제 제공 API 수로 해석하지 않는다. 번호는 아래 "최종 엔드포인트 목록"·`shared/queryKeys.ts` 참조 번호와 같다. 22번은 `analysis-runs` 계열끼리 묶어 읽도록 15번 뒤에 배치했고, 23·24번은 준비·진행 화면 흐름을 따라 17번 뒤에 두었다.
 
 > 브라우저 이동 경로는 `shared/api.ts`에 넣지 않는다. `<a href>` 또는 `window.location`으로 처리한다.
 > 
@@ -639,9 +640,7 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 
 **UI states**
 
-마이페이지(1a) 면접 이력 테이블 — `status === 'completed'`만 표시. 행 클릭 시 리포트(5c-v2)로 이동. 페이지네이션은 이 쿼리로 처리.
-
-[공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md)(Proposed, BE 검토 대기)는 이 목록에 `completed`와 시작 후 중단된 `abandoned`(`startedAt` 있음)를 포함하고, `total`은 목록 행 수, `averageScore`는 completed 기준으로 두는 것을 제안한다. 현재 BE 구현은 completed만 내려준다. 중단된 행의 표시는 [마이페이지 명세](../../spec/frontend/features/mypage.md)를 따른다.
+마이페이지(1a) 면접 이력 테이블 — [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md)에 따라 `completed`와 시작 후 중단된 `abandoned`(`startedAt` 있음)가 온다. `total`은 목록 행 수, `averageScore`는 completed 기준이다. completed 행 클릭 시 리포트(5c-v2)로 이동하고, 중단된 행의 표시는 [마이페이지 명세](../../spec/frontend/features/mypage.md)를 따른다. 페이지네이션은 이 쿼리로 처리.
 
 **Failure**
 
@@ -1213,6 +1212,36 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 
 ---
 
+## 24. POST /interviews/{id}/abandon
+
+면접을 `abandoned`로 바꾼다. 이탈 확인 모달의 나가기와, 레포 재선택으로 같은 run에 새 면접을 만들기 전 기존 면접 정리에 쓴다([공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md)).
+
+이탈 모달은 재연결 중에도 누를 수 있어 WS 메시지가 아니라 REST로 보낸다. 허용 상태는 `in_progress`와 `preparing_failed`이며, 준비 실패 자체를 `abandoned`로 바꾸지는 않는다.
+
+**Request**
+
+없음.
+
+**Response**
+
+`204 No Content`
+
+이미 `abandoned`면 다시 불러도 `204`다. 중단 뒤에는 상태가 바뀌지 않고, 서버는 그 면접의 열린 WS를 닫는다(전용 close code 없음).
+
+**UI states**
+
+- 5b-v2 이탈 확인 모달 확인 → 호출 → `/home`. 요청이 실패해도 홈으로 이동한다.
+- 레포 재선택: 레포 선택 화면의 [면접 시작]에서 기존 면접 id로 호출한 뒤 `POST /interviews`(#16)를 보낸다.
+
+**Failure**
+
+| 코드 | reason | 화면 처리 |
+| --- | --- | --- |
+| 404 | `not_found` | 없거나 남의 면접. 나가기는 그대로 홈 이동 |
+| 409 | `already_completed` | 이미 완료된 면접. 리포트(5c-v2)로 이동 |
+
+---
+
 ## 18. GET (Upgrade) /ws/interviews/{sessionId}
 
 5a2-v2에서 연결하고 5b-v2까지 유지한다.
@@ -1232,7 +1261,7 @@ Redis 로그인 세션 인증은 핸드셰이크 시 1회 검증한다. 연결 �
 
 `abandoned`는 명시적 이탈 확인 또는 레포 재선택으로 새 면접을 만들 때만 설정한다([0010 결정](../../spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md)). 연결 끊김·재연결 실패·로그인 세션 만료만으로 면접 상태를 바꾸지 않는다.
 
-이탈·레포 재선택을 서버에 알리는 방법은 [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md)(Proposed)가 REST `POST /interviews/{id}/abandon`으로 제안한다. WS 메시지·전용 close code는 추가하지 않는다. abandon 시 서버가 그 면접의 열린 연결을 닫으면, FE는 기존 `onclose` 처리대로 `GET /interviews/{id}`의 `abandoned`를 확인하고 재연결하지 않는다.
+이탈·레포 재선택은 [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md)에 따라 REST `POST /interviews/{id}/abandon`(#24)으로 서버에 알린다. WS 메시지·전용 close code는 추가하지 않는다. abandon 시 서버가 그 면접의 열린 연결을 닫으면, FE는 기존 `onclose` 처리대로 `GET /interviews/{id}`의 `abandoned`를 확인하고 재연결하지 않는다.
 
 클라이언트 → 서버
 
@@ -1488,7 +1517,7 @@ Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시�
 
 원본 면접 세션의 `runId`·레포 조합을 복사해 새 세션을 만든다.
 
-허용 상태는 FE 제안으로 `completed`와 시작 후 중단된 `abandoned`(`startedAt` 있음)다([공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md), Proposed). BE 명세의 `completed`·`abandoned` 전체 허용과 다르며 [#121](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/121) 1-2에서 BE 확인을 기다린다. 그 외 상태는 `409 original_not_completed`다([report의 계약 차이](../../spec/frontend/features/report.md#계약-차이와-구현-범위)).
+허용 상태는 `completed`와 시작 후 중단된 `abandoned`(`startedAt` 있음)다([공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md)). 그 외 상태는 `409 original_not_completed`다.
 
 **Request**
 
@@ -1509,7 +1538,7 @@ Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시�
 
 **UI states**
 
-5c-v2 `재도전` 버튼 클릭 시 호출. 성공 시 `interviews` 캐시 무효화 후 `/interview/iv_002/prepare`(5a2-v2)로 이동. FE는 마이페이지 중단된 면접 행의 `다시 도전하기`에서도 같은 방식으로 호출한다(FE 결정, BE 계약 대기 — 0009).
+5c-v2 `재도전` 버튼 클릭 시 호출. 성공 시 `interviews` 캐시 무효화 후 `/interview/iv_002/prepare`(5a2-v2)로 이동. 마이페이지 중단된 면접 행의 `다시 도전하기`에서도 같은 방식으로 호출한다.
 
 **Failure**
 
@@ -1629,8 +1658,9 @@ Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagr
 | 21 | POST | `/interviews/{id}/feedback-disagreements` | 계약 잔존, Sprint 1 제공·호출 제외 | `devon_session` |
 | 22 | GET | `/analysis-runs/{runId}/candidates` | fetch | `devon_session` |
 | 23 | POST | `/interviews/{id}/prepare/retry` | fetch | `devon_session` |
+| 24 | POST | `/interviews/{id}/abandon` | fetch | `devon_session` |
 
-참조 번호는 총 23개다(기존 22개 + 준비 재시도 #23). #3은 Sprint 2 예약이고 #21은 계약이 잔존하지만 Sprint 1 제공·호출 대상에서 제외한다. 이 숫자는 실제 제공 API 수나 구현 완료 수가 아니다.
+참조 번호는 총 24개다(기존 22개 + 준비 재시도 #23 + 면접 중단 #24). #3은 Sprint 2 예약이고 #21은 계약이 잔존하지만 Sprint 1 제공·호출 대상에서 제외한다. 이 숫자는 실제 제공 API 수나 구현 완료 수가 아니다.
 
 `shared/api.ts`에 넣지 않는 것: 1, 2, 7, 8(브라우저 이동 또는 프론트 무관). 3은 Sprint 2 예약이므로 Sprint 1에서는 호출하지 않는다.
 
@@ -1773,3 +1803,4 @@ Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagr
 | 2026-09-23 | WS `answer`에 **`turn` 추가** — `spec/ai/decisions/0010:30` 반영. 불일치 시 `answer_stale_turn` 신설 |
 | 2026-09-17 | #19의 **`202 Accepted`를 Failure → Response로 이동** (생성 중은 실패가 아님), `error.retryAfter`와 본문 최상위 `retryAfter`의 위치 차이 명시 |
 | 2026-09-22 | [공통 0003](../../spec/shared/decisions/0003-sprint1-session-auth.md): Sprint 1은 기존 Redis·HttpOnly `devon_session`·14일 sliding 세션으로 확정. JWT·refresh 및 #3은 Sprint 2로 이관. 기존 번호와 과거안은 보존하며 실제 인증 구현·검증은 후속 작업으로 구분 |
+| 2026-10-28 | **#24 `POST /interviews/{id}/abandon` 추가**, #10 `/me/interviews`에 시작 후 중단된 `abandoned` 포함, #20 재도전 허용을 `completed`와 시작 후 중단으로 확정 — [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md) |

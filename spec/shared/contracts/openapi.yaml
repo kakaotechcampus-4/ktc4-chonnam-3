@@ -77,6 +77,11 @@ paths:
     get:
       operationId: listInterviews
       summary: My interview history
+      description: >-
+        Lists completed interviews and abandoned interviews that had started
+        (startedAt is not null). Interviews abandoned before the first question are
+        not listed. total counts the listed rows; averageScore averages completed
+        interviews only. See spec/shared/decisions/0009-interview-abandon-transition.md.
       parameters:
         - name: page
           in: query
@@ -326,6 +331,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiError'
+  /interviews/{id}/abandon:
+    post:
+      operationId: abandonInterview
+      summary: Abandon an interview on explicit exit or repository reselection
+      description: >-
+        Allowed for interviews in in_progress or preparing_failed. Calling it again on
+        an abandoned interview returns 204. After abandonment the interview does not
+        change status, results of work that overlapped the call are not stored, and the
+        server closes any open WebSocket for the interview without a dedicated close
+        code. See spec/shared/decisions/0009-interview-abandon-transition.md.
+      parameters:
+        - $ref: '#/components/parameters/InterviewId'
+      responses:
+        '204':
+          description: Interview is abandoned
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: not_found when the interview does not exist or belongs to another user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: >-
+            already_completed when the interview is completed or in another state that
+            cannot be abandoned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /interviews/{id}/report:
     get:
       operationId: getInterviewReport
@@ -353,6 +389,10 @@ paths:
     post:
       operationId: retryInterview
       summary: Create a new session copying the original run and repositories
+      description: >-
+        Allowed when the original interview is completed, or abandoned after it had
+        started (startedAt is not null). See
+        spec/shared/decisions/0009-interview-abandon-transition.md.
       parameters:
         - $ref: '#/components/parameters/InterviewId'
       responses:
@@ -365,7 +405,13 @@ paths:
         '401':
           $ref: '#/components/responses/Error'
         '409':
-          $ref: '#/components/responses/Error'
+          description: >-
+            original_not_completed when the original is neither completed nor abandoned
+            after starting, repository_unavailable, or session_limit_exceeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '410':
           $ref: '#/components/responses/Error'
   /interviews/{id}/feedback-disagreements:
