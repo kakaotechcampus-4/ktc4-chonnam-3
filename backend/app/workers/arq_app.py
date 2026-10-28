@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.core.config import get_settings
 from app.core.crypto import TokenCipher
 from app.workers.tasks.initial_sync import initial_sync
+from app.workers.tasks.report_generate import report_generate
 
 
 async def startup(ctx: dict[str, Any]) -> None:
@@ -26,7 +27,7 @@ async def shutdown(ctx: dict[str, Any]) -> None:
 
 
 class WorkerSettings:
-    functions = [initial_sync]
+    functions = [initial_sync, report_generate]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
