@@ -115,4 +115,4 @@ L2의 `notable_areas`가 없거나 path가 해당 분석의 고정 SHA에서 확
 - 추천 검증은 기술 정보 없음·일치 없음의 정상 미추천, 기존 후보 순서의 run 전체 0~5개 추천, 여러 page의 합산 상한, 요구사항 문장 근거 없는 ID 제외, 경력 충족 단정 방지와 사용자 선택 보존을 포함한다. 문서 채택만으로 실제 추천·저장 연결을 완료로 판정하지 않는다.
 - 실제 모델 품질 평가는 단위 테스트와 구분하고 model, prompt version, 데이터셋 version, token, latency를 함께 기록한다.
 
-현재 AI 원본은 `ai/src/devon_ai/`의 docstring 중심 skeleton이며 실제 분석 함수는 없다. `ai/tests/`와 BE의 설치 연결 smoke test는 패키지 구조를 검사할 뿐 L1/L2 동작을 검증하지 않는다. 파일의 설명을 이미 존재하는 callable 또는 분석 성공 근거로 인용하지 않는다.
+AI 소스 원본은 `ai/src/devon_ai/`다. 현재 구현·검증 범위와 남은 연결은 [AI 구현 기록](../implementation.md)에서 확인한다. 패키지 연결 smoke test와 기능별 분석 검증을 구분하며, 파일 설명이나 mock 통과만으로 실제 모델 품질·서비스 연결 완료를 판단하지 않는다.

@@ -39,7 +39,7 @@
 | `interview_id`, `current_turn_id` | 서버가 식별한 현재 면접과 Turn; 첫 질문 전 Turn ID는 없음 |
 | `turn_no`, `total_turns` | 현재 질문 번호와 FIX 상한 9 |
 | `persona_counts` | 이미 확정·제시된 질문의 Persona별 횟수 |
-| `allowed_personas` | [공통 0004](../shared/decisions/0004-flexible-persona-allocation-restoration.md)에 따라 남은 턴으로 기술 최소 5턴·도메인과 HR 합산 최소 3턴을 충족할 수 있는 후보; 기술 목표는 6턴이며 첫 질문은 HR로 제한하고 Controller가 계산 |
+| `allowed_personas` | [공통 0008](../shared/decisions/0008-fixed-persona-allocation.md)에 따라 Controller가 확정·제시한 질문 수와 남은 할당으로 계산한 후보; 첫 질문은 HR, 이후에는 기술 6회·도메인 2회·HR 1회의 할당을 넘지 않고 정상 9턴 완주가 가능한 기술·도메인 Persona만 허용하며 순서는 고정하지 않음 |
 | `jd_requirements` | 저장된 ID, 원문, category, source field, tech_tags |
 | `repositories` | 선택 repo ID, 고정 ref, primary 여부, 성공 분석과 분석 범위 |
 | `history` | 질문·Persona·제출 답변·판정·참조 ID; 사실과 요약 구분 |
@@ -184,8 +184,9 @@ tool_error만으로 확보 근거를 버리거나 사용자 감점·Director 전
 | `director_v1` | 유효한 다음 질문 또는 bounded Tool 요청 | Persona·9턴·권한·반복·전제 제약 | 기존 LLM 방향 유지 |
 | `report_v1` | 종합·Persona 피드백과 실제 문답 근거 | 미관찰 인정, 원문 불변, 확정한 공개 점수 구조 유지·미검수 세부 채점 기준의 임의 생성 금지 | 기존 LLM 방향 유지 |
 | `profile_summary_v1` | 기존 개인 역할의 자연어 요약; 언어·유형 통계는 별도 확정 집계 | 기존 자료의 역할 근거·사용자 진술과 확인 사실 구분, 통계 변경 금지 | 0019에 따라 역할 요약의 LLM 사용 복원, job·version 목록 유지 |
+| `domain_category_v2` | 공고 1건의 도메인 category 7종 중 하나와 근거 문단 ID(`etc`는 `null`) | category enum, non-etc의 ID는 이번 요청의 문단 ID여야 함(위반은 semantic 실패, 무재시도); 코드가 ID로 원문 복원; 실패는 `etc` | [0022](decisions/0022-domain-category-llm.md)·[0028](decisions/0028-domain-category-evidence-id.md)에 따라 LLM 호출, 공고당 1회. v1 prompt는 이력 |
 
-위 일곱 version 이름은 기존 FIX 목록이며 삭제하지 않는다. [0006 결정](decisions/0006-task-llm-usage-policy.md)의 Wanted 규칙 변환·프로필 통계 집계 비호출은 유지하되, 개인 역할의 자연어 요약은 [0019](decisions/0019-sprint1-profile-role-summary-restoration.md)에 따라 LLM으로 생성한다. version row만으로 호출 범위를 확대하지 않으며 deterministic 변환 version·출처 기록은 BE와 맞춘다. prompt version을 변환 version으로 재정의하거나 비호출 결과를 모델 실행 결과로 기록하지 않는다. 기존 role_summary·roleSummary 필드와 저장 구조를 유지하며 상세 입력·검증·연결은 구현 작업이다.
+기존 일곱 version 이름은 FIX 목록이며 삭제하지 않는다. `domain_category_v1`은 [0022](decisions/0022-domain-category-llm.md)로 추가했고 [0028](decisions/0028-domain-category-evidence-id.md)에서 `domain_category_v2`로 바꿨다. [0006 결정](decisions/0006-task-llm-usage-policy.md)의 Wanted 규칙 변환·프로필 통계 집계 비호출은 유지하되, 개인 역할의 자연어 요약은 [0019](decisions/0019-sprint1-profile-role-summary-restoration.md)에 따라 LLM으로 생성한다. version row만으로 호출 범위를 확대하지 않으며 deterministic 변환 version·출처 기록은 BE와 맞춘다. prompt version을 변환 version으로 재정의하거나 비호출 결과를 모델 실행 결과로 기록하지 않는다. 기존 role_summary·roleSummary 필드와 저장 구조를 유지하며 상세 입력·검증·연결은 구현 작업이다.
 
 L1의 생성 요약은 0006에 따라 프로젝트의 기능·역할을 설명하며 README·commit 수로 개인 기여를 추정하지 않는다. `role_summary`는 오래된 task 주석의 필드명으로, 유지·변경과 실제 저장/API 매핑은 BE와 합의한다. 기존 개인 역할 필드를 프로젝트 요약으로 임의 재해석하지 않으며, 근거 없는 개인 기여 값은 빈칸을 추측으로 채우지 않고 미확인으로 다룬다.
 
@@ -206,6 +207,13 @@ JSON 객체·배열의 깊이는 루트 container 1부터 최대 64로 제한하
 `ModelResult.attempts`는 이번 `call_model` 실행에서 발생한 기록만 반환한다. 같은 `CallBudget`의 첫 결과가 `[1]`이면 다음 호출분은 `[2]`이며, 실제 호출 없는 예산 소진·종료 결과는 빈 tuple이다. attempt 번호와 총 2회 상한은 공유 작업 전체에서 유지한다. 저장자는 각 결과를 수집하고, 전송 실패로 같은 결과를 다시 저장하는 경우의 멱등성은 저장 계층에서 별도로 처리한다.
 
 raw output·model·prompt_version·schema_version·input/output tokens·latency·attempt·error를 필요한 범위에서 보존한다. [0018의 자료 선택](decisions/0018-existing-baseline-bulk-resolution.md#ai-l18-후속-내부-비교-검증-자료)에 따라 실제 문답·연결 분석·리포트·실패 기록은 필요한 팀 검수자의 후속 내부 비교 검증에도 보관·재사용한다. 최종 내부 비교 검증 뒤에도 보관하며 별도의 자동 삭제 기한은 두지 않는다. task별 영구 저장 위치·마스킹·실제 권한·복사본 및 파생 자료 관리는 구현에서 확인한다. 공개 로그에 원문을 출력하는 것으로 저장 요구사항을 대신하지 않는다.
+
+## 면접 실행 서비스의 후속 경계
+
+[면접 준비·답변·전송 실행 설계](designs/2026-10-25-interview-execution.md)는 Proposed 후속 설계다.
+준비 claim, 답변 commit 이후 전송, 분석 후 상태 전이와 WS 인계의 Controller 책임을 정의한다.
+기존 내부 입력 계약과 공개 wire를 대체하지 않으며, 선행 구현의 병합이나 전체 실행 완료를 뜻하지 않는다.
+준비 이벤트·실패 단계 재개·명시적 이탈 통지의 기존 요구와 보류 상태는 해당 설계의 한계를 함께 따른다.
 
 ## public 변환과 합의 경계
 

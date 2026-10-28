@@ -47,6 +47,7 @@ async def analyze_repositories(
     model_call = partial(
         call_model,
         api_key=settings.openai_api_key,
+        base_url=settings.llm_base_url,
         http_client=http_client,
         budget=CallBudget(),
     )

@@ -148,7 +148,11 @@ async def test_partial_schema_failure_preserves_valid_repos_and_shares_total_bud
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
         call = partial(
-            call_model, api_key=SecretStr("fixture-key"), http_client=http, budget=CallBudget()
+            call_model,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
+            budget=CallBudget(),
         )
         first = await call(request(inputs), validator(inputs))
         assert first.succeeded
@@ -187,7 +191,11 @@ async def test_retryable_transport_failure_leaves_no_extra_batch_retry_budget():
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
         call = partial(
-            call_model, api_key=SecretStr("fixture-key"), http_client=http, budget=CallBudget()
+            call_model,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
+            budget=CallBudget(),
         )
         result = await call(request(inputs), validator(inputs))
         assert result.succeeded and len(result.attempts) == 2

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import type { DragEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api, BASE } from '@/shared/api';
 import Footer from '@/shared/components/Footer';
 import Header from '@/shared/components/Header';
 import { isApiError } from '@/types/api';
 import type { DocumentPreviewResponse } from '@/types/api';
+import { postingUrlFrom, type AnalysisInputState } from '@/features/analysis/steps';
 
 const MB = 1024 * 1024;
 
@@ -234,7 +235,9 @@ function Dropzone({
 
 export default function JobInput() {
   const navigate = useNavigate();
-  const [jobUrl, setJobUrl] = useState('');
+  const location = useLocation();
+  // 분석 실패 화면의 다시 시도는 이전 공고 URL을 state로 넘긴다.
+  const [jobUrl, setJobUrl] = useState(() => postingUrlFrom(location.state));
   const [urlTouched, setUrlTouched] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -245,15 +248,20 @@ export default function JobInput() {
 
   const startRun = useMutation({
     mutationFn: api.createAnalysisRun,
-    onSuccess: ({ runId }) => navigate(`/interview/analyzing/${runId}`),
-    onError: (error) => {
+    onSuccess: ({ runId }, { postingUrl }) =>
+      navigate(`/interview/analyzing/${runId}`, {
+        state: { postingUrl } satisfies AnalysisInputState,
+      }),
+    onError: (error, { postingUrl }) => {
       // 중복 요청은 공통 오류의 error.details.runId로 기존 분석을 안내한다.
       if (
         isApiError(error) &&
         error.error.reason === 'run_in_progress' &&
         typeof error.error.details?.runId === 'string'
       ) {
-        navigate(`/interview/analyzing/${error.error.details.runId}`);
+        navigate(`/interview/analyzing/${error.error.details.runId}`, {
+          state: { postingUrl } satisfies AnalysisInputState,
+        });
         return;
       }
       setSubmitError(

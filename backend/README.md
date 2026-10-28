@@ -19,11 +19,12 @@ AI 원본은 [ai/src/devon_ai](../ai/src/devon_ai/)의 로컬 Python 패키지�
 | [deploy.md](docs/deploy.md)               | AWS 통합 배포(CloudFront) · 쿠키 · CI                 |
 | [api-spec.md](docs/api-spec.md)           | FE 계약 링크 + 합의된 변경                            |
 | [local-oauth.md](docs/local-oauth.md)     | 실제 GitHub 로그인 설정 · API/worker/FE 실행 · 격리 테스트 |
+| [llm-connection.md](docs/llm-connection.md) | LLM 환경 설정 · 프록시 연결 점검 · 프롬프트 버전 등록 |
 
 ## 기술 스택
 
 - FastAPI + Python 3.12
-- PostgreSQL 15 (asyncpg + SQLAlchemy 2.0 async, Alembic)
+- PostgreSQL 15 이상 (asyncpg + SQLAlchemy 2.0 async, Alembic). 분석 중복 제약의 `NULLS NOT DISTINCT`가 필요하다.
 - Redis 7 (세션 · 락 · SSE pub/sub)
 - ARQ (비동기 큐)
 - uv (의존성) / ruff · mypy / pytest
@@ -42,7 +43,11 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000 --no-access-log
 ```
 
-별도 터미널에서 `uv run arq app.workers.arq_app.WorkerSettings`를 실행한다. `frontend/.env.local`에는 `VITE_USE_MSW=false`를 설정하고 `frontend/`에서 `npm ci`, `npm run dev`를 실행한다. 브라우저는 `http://localhost:5173`으로 접속한다. OAuth App에 등록할 콜백은 로그인·재연동 공통 `http://localhost:5173/auth/github/callback` 하나다. Vite가 내부 `/api/auth/github/callback`으로 전달하며 코드 교환의 `redirect_uri`도 공개 주소를 유지한다.
+별도 터미널에서 `uv run arq app.workers.analysis_app.WorkerSettings`를 실행한다. 기존 `initial_sync`와 분석 run·후보 페이지·복구 작업을 함께 등록한다. LLM 분석 전에는 [연결 설정과 활성 프롬프트 등록](docs/llm-connection.md)을 완료한다. `frontend/.env.local`에는 `VITE_USE_MSW=false`를 설정하고 `frontend/`에서 `npm ci`, `npm run dev`를 실행한다. 브라우저는 `http://localhost:5173`으로 접속한다. OAuth App에 등록할 콜백은 로그인·재연동 공통 `http://localhost:5173/auth/github/callback` 하나다. Vite가 내부 `/api/auth/github/callback`으로 전달하며 코드 교환의 `redirect_uri`도 공개 주소를 유지한다.
+
+Task 11은 [공통 구현 #81](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/81), [명세·설계 #100](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/100), [명세 대응 구현 #108](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/108)으로 나눈다. #81은 상태·알림·큐 복구·실행 공통 처리, #108는 API·최종 워커 연결·마이그레이션·통합 테스트를 담는다. 세 PR과 선행 구현·SSE 후속 보완을 반영한 환경은 `uv run arq app.workers.analysis_app.WorkerSettings`를 사용한다. #81만으로는 새 API·워커가 추가되지 않으며 #100에는 실행 코드가 없다. 적용 조건은 [Task 11 구현 기록](../spec/backend/implementation-task-11.md)의 마지막 절을 따른다.
+
+Task 11은 [공통 구현 #81](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/81), [명세·설계 #100](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/100), [명세 대응 구현 #108](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/108)으로 나눈다. #81은 상태·알림·큐 복구·실행 공통 처리, #108는 API·최종 워커 연결·마이그레이션·통합 테스트를 담는다. 세 PR과 선행 구현·SSE 후속 보완을 반영한 환경은 `uv run arq app.workers.analysis_app.WorkerSettings`를 사용한다. #81만으로는 새 API·워커가 추가되지 않으며 #100에는 실행 코드가 없다. 적용 조건은 [Task 11 구현 기록](../spec/backend/implementation-task-11.md)의 마지막 절을 따른다.
 
 로그인·재연동 요청 scope는 `read:user`뿐이다. OAuth App의 **Expire user access tokens는 OFF**로 유지하고 `offline_access`를 요청하지 않는다. DEVON 세션은 Redis에 14일 sliding으로 저장하고 GitHub 장기 토큰은 별도로 AES-GCM 암호화해 PostgreSQL에 저장한다.
 
@@ -54,11 +59,15 @@ uv run uvicorn app.main:app --reload --port 8000 --no-access-log
 | `uv sync`                                             | 의존성 설치       |
 | `uv run alembic upgrade head`                         | 마이그레이션      |
 | `uv run python -m scripts.seed_all`                   | 도메인 지식 시드 경계 — 로그인 실행에 불필요 |
+| `uv run python -m scripts.check_llm`                  | 실제 LLM 연결 점검 — 합성 입력 1건, API 사용량 발생 |
 | `uv run uvicorn app.main:app --reload --port 8000 --no-access-log` | API — OAuth query 로그 제외 |
-| `uv run arq app.workers.arq_app.WorkerSettings`       | 워커              |
+| `uv run arq app.workers.arq_app.WorkerSettings`       | 현재 develop 워커 |
+| `uv run arq app.workers.analysis_app.WorkerSettings` | Task 11·선행 구현 반영 후 분석 워커 |
 | `uv run ruff check . && uv run ruff format --check .` | 린트              |
 | `uv run mypy app`                                     | 타입 체크         |
 | `uv run pytest`                                       | 테스트 — 격리 `TEST_DATABASE_URL`·`TEST_REDIS_URL` 필요 |
+
+#108 반영 후 실제 분석 실행에는 `analysis_app.WorkerSettings`를 사용한다. 표의 `arq_app`은 병합 전 develop의 초기 수집 전용 설정이다.
 
 통합 테스트는 PostgreSQL DB 이름에 `_test`가 포함되어야 하며 Redis DB는 13·14·15 중 테스트 전용 번호를 명시해야 한다. fixture가 해당 DB 테이블과 Redis DB를 비우므로 개발·운영 데이터를 지정하지 않는다. 환경변수가 없으면 관련 통합 테스트는 skip된다. 자세한 명령은 [검증 절차](docs/local-oauth.md#검증)를 따른다.
 
@@ -109,7 +118,7 @@ WebSocket · SSE · 브라우저 이동 경로는 OpenAPI 로 표현할 수 없�
 [`frontend/docs/api-spec.md`](../frontend/docs/api-spec.md) 가 원본이다
 (범위는 [`spec/shared/contracts/README.md`](../spec/shared/contracts/README.md) 참고).
 응답 필드·enum은 OpenAPI를 기준으로 구현하고 [`frontend/src/types/api.ts`](../frontend/src/types/api.ts)도 이에 맞춘다.
-`tests/contract/`는 현재 자리만 마련되어 있으며 응답 키 집합·required/nullable/enum을 대조하는 테스트는 구현 대기다.
+#108의 `tests/contract/test_analysis_api_contract.py`는 결과 요약·실패 원소·후보 오류 응답을 BE 스키마와 OpenAPI에서 검증한다. 이 테스트 파일은 공통 구현 #81에 포함하지 않으며 #80 카드 스키마와 #100 명세 반영이 필요하다. 전체 API의 계약 검증을 대체하지 않는다.
 
 - 에러 봉투와 reason 목록 → [`docs/error-reasons.md`](docs/error-reasons.md)
 - Redis 키 → [`docs/redis-keys.md`](docs/redis-keys.md)

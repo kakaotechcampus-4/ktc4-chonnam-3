@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import replace
+from functools import partial
 
 import httpx
 import pytest
@@ -68,6 +69,27 @@ def response(text: str = '{"value": 7}', **changes: object) -> dict[str, object]
 
 
 @pytest.mark.asyncio
+async def test_missing_base_url_rejects_proxy_token_before_http():
+    sent = []
+
+    def transport(req):
+        sent.append(req)
+        return httpx.Response(200, json=response())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        # partial 생성은 필수 인수 누락을 검사하지 않으므로 실제 호출까지 확인한다.
+        model_call = partial(
+            client.call_model,
+            api_key=SecretStr("proxy-fixture"),
+            http_client=http,
+        )
+        with pytest.raises(TypeError, match="base_url"):
+            await model_call(request(), validate)
+
+    assert sent == []
+
+
+@pytest.mark.asyncio
 async def test_validated_result_records_actual_model_and_injects_only_task_input():
     sent = []
 
@@ -80,6 +102,7 @@ async def test_validated_result_records_actual_model_and_injects_only_task_input
             request(),
             validate,
             api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
             http_client=http,
         )
     assert result.succeeded and result.data == 7 and result.failure is None
@@ -108,6 +131,33 @@ async def test_validated_result_records_actual_model_and_injects_only_task_input
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("suffix", ["", "/"])
+async def test_proxy_keeps_base_path_and_uses_the_same_connection_on_retry(suffix):
+    sent = []
+
+    def transport(req):
+        sent.append(req)
+        if len(sent) == 1:
+            return httpx.Response(503, headers={"Retry-After": "0"})
+        return httpx.Response(200, json=response())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        result = await client.call_model(
+            request(),
+            validate,
+            api_key=SecretStr("proxy-fixture"),
+            base_url="https://proxy.example/tenant/v1" + suffix,
+            http_client=http,
+        )
+
+    assert result.succeeded and len(sent) == 2
+    for req in sent:
+        assert str(req.url) == "https://proxy.example/tenant/v1/responses"
+        assert req.headers["Authorization"] == "Bearer proxy-fixture"
+        assert json.loads(req.content)["model"] == "configured-model"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("first_failure", ["timeout", "provider", "parse", "schema"])
 async def test_retryable_failure_uses_exactly_one_retry(first_failure):
     calls = 0
@@ -130,6 +180,7 @@ async def test_retryable_failure_uses_exactly_one_retry(first_failure):
             request(),
             validate,
             api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
             http_client=http,
         )
     assert result.data == 7 and result.succeeded and calls == 2
@@ -152,6 +203,7 @@ async def test_semantic_failure_is_terminal_and_does_not_become_empty_success(ca
             request(),
             validate,
             api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
             http_client=http,
         )
     assert calls == 1 and not result.succeeded and result.data is None
@@ -175,6 +227,7 @@ async def test_bad_json_is_never_repaired_and_exhausts_at_two_calls(text):
             request(),
             validate,
             api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
             http_client=http,
         )
     assert calls == 2 and result.failure.stage == "parse" and result.data is None
@@ -193,6 +246,7 @@ async def test_missing_usage_is_unknown_not_zero():
             request(),
             validate,
             api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
             http_client=http,
         )
     assert result.data == 7
@@ -229,6 +283,7 @@ async def test_refusal_and_incomplete_response_cannot_pass_as_valid_json():
                 request(),
                 validate,
                 api_key=SecretStr("fixture-key"),
+                base_url="https://api.openai.com/v1",
                 http_client=http,
             )
         assert result.data is None and result.failure.stage == expected_stage
@@ -244,7 +299,11 @@ async def test_input_limit_rejects_before_any_provider_request():
     ) as http:
         req = replace(request(), limits=replace(request().limits, max_input_bytes=10))
         result = await client.call_model(
-            req, validate, api_key=SecretStr("fixture-key"), http_client=http
+            req,
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
         )
     assert result.failure.stage == "budget" and result.attempts == ()
 
@@ -263,7 +322,11 @@ async def test_response_size_limit_stops_reading_and_does_not_retry():
     ) as http:
         req = replace(request(), limits=replace(request().limits, max_response_bytes=10))
         result = await client.call_model(
-            req, validate, api_key=SecretStr("fixture-key"), http_client=http
+            req,
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
         )
     assert result.failure.stage == "budget" and len(result.attempts) == 1
 
@@ -283,6 +346,7 @@ async def test_shared_batch_budget_prevents_retry_multiplication_across_calls():
             request(),
             validate,
             api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
             http_client=http,
             budget=budget,
         )
@@ -290,6 +354,7 @@ async def test_shared_batch_budget_prevents_retry_multiplication_across_calls():
             request(),
             validate,
             api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
             http_client=http,
             budget=budget,
         )
@@ -297,6 +362,7 @@ async def test_shared_batch_budget_prevents_retry_multiplication_across_calls():
             request(),
             validate,
             api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
             http_client=http,
             budget=budget,
         )
@@ -319,7 +385,11 @@ async def test_cancellation_is_propagated_without_retry():
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
         with pytest.raises(asyncio.CancelledError):
             await client.call_model(
-                request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+                request(),
+                validate,
+                api_key=SecretStr("fixture-key"),
+                base_url="https://api.openai.com/v1",
+                http_client=http,
             )
     assert calls == 1
 
@@ -336,6 +406,7 @@ async def test_invalid_actual_model_is_a_provider_failure(model):
             request(),
             validate,
             api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
             http_client=http,
         )
     assert result.data is None and result.failure.stage == "provider"
@@ -354,10 +425,43 @@ async def test_wall_timeout_bounds_a_slow_provider_attempt():
             req,
             validate,
             api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
             http_client=http,
         )
     assert result.failure.stage == "timeout" and result.failure.error_code == "llm_timeout"
     assert len(result.attempts) == 2
+
+
+class _CancelSwallowingTransport(httpx.AsyncBaseTransport):
+    """취소를 삼킨 뒤 timeout을 넘겨 정상 응답을 돌려주는 transport."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def handle_async_request(self, req: httpx.Request) -> httpx.Response:
+        self.calls += 1
+        try:
+            await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            await asyncio.sleep(0.1)
+        return httpx.Response(200, json=response())
+
+
+@pytest.mark.asyncio
+async def test_late_response_after_swallowed_cancellation_is_a_timeout_not_success():
+    transport = _CancelSwallowingTransport()
+    req = replace(request(), limits=replace(request().limits, timeout_seconds=0.05))
+    async with httpx.AsyncClient(transport=transport) as http:
+        result = await client.call_model(
+            req,
+            validate,
+            base_url="https://api.openai.com/v1",
+            api_key=SecretStr("fixture-key"),
+            http_client=http,
+        )
+    assert result.data is None
+    assert result.failure.stage == "timeout" and result.failure.error_code == "llm_timeout"
+    assert len(result.attempts) == 2 and transport.calls == 2
 
 
 @pytest.mark.asyncio
@@ -375,6 +479,7 @@ async def test_semantic_failure_remains_terminal_for_the_shared_operation():
             request(),
             validate,
             api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
             http_client=http,
             budget=budget,
         )
@@ -382,6 +487,7 @@ async def test_semantic_failure_remains_terminal_for_the_shared_operation():
             request(),
             validate,
             api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
             http_client=http,
             budget=budget,
         )
@@ -401,6 +507,7 @@ async def test_invalid_input_json_is_rejected_without_a_provider_call():
             req,
             validate,
             api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
             http_client=http,
         )
     assert result.failure.stage == "schema" and result.attempts == ()
@@ -421,6 +528,7 @@ async def test_deep_json_is_a_typed_parse_failure(envelope):
             req,
             validate,
             api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
             http_client=http,
         )
     assert result.failure.stage == ("provider" if envelope else "parse")
@@ -454,7 +562,11 @@ async def test_decoder_recursion_error_is_always_a_typed_failure(monkeypatch, en
         transport=httpx.MockTransport(lambda req: httpx.Response(200, json=response()))
     ) as http:
         result = await client.call_model(
-            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+            request(),
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
         )
     assert result.failure.stage == ("provider" if envelope_failure else "parse")
     assert len(result.attempts) == 2
@@ -476,7 +588,11 @@ async def test_large_http_error_keeps_provider_classification_and_closes_stream(
         transport=httpx.MockTransport(lambda req: httpx.Response(502, stream=ErrorPage()))
     ) as http:
         result = await client.call_model(
-            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+            request(),
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
         )
     assert result.failure.stage == "provider"
     assert len(result.attempts) == len(closed) == 2
@@ -494,10 +610,20 @@ async def test_permanent_http_errors_are_terminal_for_the_shared_budget(status):
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
         first = await client.call_model(
-            request(), validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+            request(),
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
+            budget=budget,
         )
         second = await client.call_model(
-            request(), validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+            request(),
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
+            budget=budget,
         )
     assert first.failure.stage == "provider" and first.failure == second.failure
     assert len(first.attempts) == len(calls) == 1 and second.attempts == ()
@@ -528,7 +654,11 @@ async def test_quota_errors_do_not_retry_or_sleep(monkeypatch, field, code):
         )
     ) as http:
         result = await client.call_model(
-            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+            request(),
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
         )
     assert result.failure.stage == "provider" and len(result.attempts) == 1
 
@@ -557,7 +687,11 @@ async def test_retry_after_is_respected_before_a_single_retry(monkeypatch, statu
     monkeypatch.setattr(client.asyncio, "sleep", sleep)
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
         result = await client.call_model(
-            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+            request(),
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
         )
     assert result.succeeded and len(result.attempts) == 2
     assert [event[0] for event in events] == ["request", "sleep", "request"]
@@ -577,7 +711,11 @@ async def test_retry_after_above_wait_limit_is_not_shortened(monkeypatch, retry_
         )
     ) as http:
         result = await client.call_model(
-            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+            request(),
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
         )
     assert result.failure.stage == "provider" and len(result.attempts) == 1
 
@@ -598,7 +736,11 @@ async def test_temporary_rate_limit_without_valid_hint_uses_bounded_backoff(
         transport=httpx.MockTransport(lambda req: httpx.Response(429, headers=headers))
     ) as http:
         result = await client.call_model(
-            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+            request(),
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
         )
     assert result.failure.stage == "provider" and len(result.attempts) == 2
     assert len(delays) == 1 and 0 < delays[0] <= request().limits.timeout_seconds
@@ -621,6 +763,7 @@ async def test_cancellation_during_retry_wait_does_not_start_another_attempt(mon
                 request(),
                 validate,
                 api_key=SecretStr("fixture-key"),
+                base_url="https://api.openai.com/v1",
                 http_client=http,
                 budget=budget,
             )
@@ -642,7 +785,11 @@ async def test_malformed_error_code_is_a_provider_failure_not_a_programming_erro
         )
     ) as http:
         result = await client.call_model(
-            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+            request(),
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
         )
     assert result.failure.stage == "provider" and len(result.attempts) == 2
 
@@ -662,6 +809,7 @@ async def test_no_retry_wait_when_request_attempt_limit_is_one(monkeypatch):
             replace(request(), max_attempts=1),
             validate,
             api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
             http_client=http,
         )
     assert result.failure.stage == "provider" and len(result.attempts) == 1
@@ -691,15 +839,30 @@ async def test_shared_budget_preserves_only_the_remaining_retry_wait(
     limited = replace(request(), max_attempts=1)
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
         first = await client.call_model(
-            limited, validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+            limited,
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
+            budget=budget,
         )
         assert first.failure.stage == "provider" and waits == []
         clock[0] += elapsed
         second = await client.call_model(
-            limited, validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+            limited,
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
+            budget=budget,
         )
         third = await client.call_model(
-            limited, validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+            limited,
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
+            budget=budget,
         )
     assert second.succeeded and calls[1] >= 100.5
     assert waits == ([] if expected_wait is None else [pytest.approx(expected_wait)])
@@ -735,12 +898,18 @@ async def test_cancelled_retry_wait_is_preserved_when_the_budget_is_reused(monke
                 request(),
                 validate,
                 api_key=SecretStr("fixture-key"),
+                base_url="https://api.openai.com/v1",
                 http_client=http,
                 budget=budget,
             )
         assert calls == [100.0]
         result = await client.call_model(
-            request(), validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+            request(),
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
+            budget=budget,
         )
     assert result.succeeded and [item.attempt for item in result.attempts] == [2]
     assert waits == [pytest.approx(0.5), pytest.approx(0.3)]
@@ -766,14 +935,29 @@ async def test_shared_retry_wait_above_the_new_request_limit_is_terminal(monkeyp
     shorter = replace(limited, limits=replace(limited.limits, timeout_seconds=0.1))
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
         first = await client.call_model(
-            limited, validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+            limited,
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
+            budget=budget,
         )
         clock[0] += 0.2
         second = await client.call_model(
-            shorter, validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+            shorter,
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
+            budget=budget,
         )
         third = await client.call_model(
-            limited, validate, api_key=SecretStr("fixture-key"), http_client=http, budget=budget
+            limited,
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
+            budget=budget,
         )
     assert first.failure.stage == second.failure.stage == "provider"
     assert second.failure == third.failure
@@ -791,7 +975,11 @@ async def test_permanent_http_error_is_classified_without_reading_its_body():
         transport=httpx.MockTransport(lambda req: httpx.Response(401, stream=Unreadable()))
     ) as http:
         result = await client.call_model(
-            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+            request(),
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
         )
     assert result.failure.stage == "provider" and len(result.attempts) == 1
     assert result.attempts[0].raw_output is None
@@ -817,7 +1005,11 @@ async def test_server_wait_limit_survives_an_unreadable_429_body(monkeypatch, re
     monkeypatch.setattr(client.asyncio, "sleep", forbidden_sleep)
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
         result = await client.call_model(
-            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+            request(),
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
         )
     assert len(calls) == 1 and result.failure.stage == "provider"
 
@@ -842,7 +1034,11 @@ async def test_valid_retry_after_survives_an_unreadable_429_body(monkeypatch):
     monkeypatch.setattr(client.asyncio, "sleep", sleep)
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
         result = await client.call_model(
-            request(), validate, api_key=SecretStr("fixture-key"), http_client=http
+            request(),
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
         )
     assert result.failure.stage == "provider"
     assert events == [("request", 0), ("sleep", 0.5), ("request", 0)]

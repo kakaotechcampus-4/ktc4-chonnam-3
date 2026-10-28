@@ -536,3 +536,88 @@ def test_only_checked_analysis_is_forwarded_as_interpretation(context, contract)
     provider = Provider(model_output(question))
     rejected = generate(context, contract, provider, answer_analysis=analysis)
     assert rejected.failure.stage == "schema" and provider.requests == []
+
+
+RECOVERY_CODES = {
+    "rewrite": "director_candidate_rewrite",
+    "replan": "director_candidate_replan",
+    "no_valid_candidate": "director_no_valid_candidate",
+}
+
+
+@pytest.mark.parametrize("recovery", list(RECOVERY_CODES))
+def test_reviewer_recovery_is_a_failure_without_data_or_extra_calls(context, contract, recovery):
+    provider = Provider(model_output(candidate(contract)))
+    reviews = []
+
+    async def review(request, question):
+        reviews.append(question)
+        return c.CandidateRecovery(recovery, "검토 결과 요약")
+
+    result = generate(context, contract, provider, review=review)
+    assert result.data is None and not result.succeeded
+    assert result.failure.stage == "semantic"
+    assert result.failure.error_code == RECOVERY_CODES[recovery]
+    assert agent.candidate_recovery(result.failure) == c.CandidateRecovery(
+        recovery, "검토 결과 요약"
+    )
+    # 분류는 실행 권한이 아니므로 생성 모델과 검토기를 다시 호출하지 않는다.
+    assert len(provider.requests) == 1 and len(reviews) == 1
+    assert result.attempts == (metadata(),)
+
+
+def test_purpose_changed_sentence_is_classified_not_delivered(context, contract):
+    contract = c.QuestionContract(
+        "수정 특성 확인",
+        (c.RequiredPoint("write_pattern", "수정 특성"),),
+        (),
+        (),
+        "수정 특성 보완",
+    )
+    reviewed = []
+
+    async def review(request, question):
+        # 합성 독립 검토: 준비된 목적(수정 특성)을 묻는 문장만 승인하고 목적이 바뀐 문장은 분류한다.
+        reviewed.append(question.text)
+        if "수정" in question.text:
+            return c.QuestionReview(question.text, request_contract(request))
+        return c.CandidateRecovery("rewrite", "준비된 목적과 다른 항목을 묻는다")
+
+    def request_contract(request):
+        return c.decode(
+            c.QuestionContract, json.loads(json.dumps(request.payload["question_contract"]))
+        )
+
+    normal = candidate(
+        contract, text="데이터는 얼마나 자주, 어떻게 수정되나요?", topic_code="write"
+    )
+    changed = candidate(contract, text="TTL은 몇 분인가요?", topic_code="ttl")
+    ok = generate(context, contract, Provider(model_output(normal)), review=review)
+    bad = generate(context, contract, Provider(model_output(changed)), review=review)
+    assert ok.succeeded and ok.data.data.text == normal.text
+    assert bad.data is None and bad.failure.error_code == "director_candidate_rewrite"
+    assert reviewed == [normal.text, changed.text]
+
+
+@pytest.mark.parametrize(
+    "returned", [{"recovery": "rewrite", "reason_summary": "dict"}, "rewrite", 1]
+)
+def test_unstructured_reviewer_recovery_is_a_review_failure(context, contract, returned):
+    async def review(*args):
+        return returned
+
+    result = generate(context, contract, Provider(model_output(candidate(contract))), review=review)
+    assert result.data is None and result.failure.error_code == "director_review_failed"
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        c.CallFailure("semantic", "director_review_failed", "x"),
+        c.CallFailure("timeout", "director_review_timeout", "x"),
+        c.CallFailure("semantic", "director_candidate_invalid", "x"),
+        c.CallFailure("provider", "llm_failed", "x"),
+    ],
+)
+def test_other_failures_are_not_reported_as_recovery(failure):
+    assert agent.candidate_recovery(failure) is None

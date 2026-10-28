@@ -15,17 +15,50 @@ FE 정적 파일과 API를 제공하며 공개 `/auth/github/*`에는 내부 `/a
                                                 /api/*  -> api:8000
                                                 /auth/github/* -> api:8000/api/auth/github/*
                                                 api     -> app.main:app
-                                                worker  -> ARQ initial_sync
+                                                worker  -> ARQ initial_sync / analysis_run / candidate_page_analyze / analysis_reaper
                                                 migrate / db / redis
 ```
 
-`.env.deploy`를 준비한 뒤 저장소 루트에서 `docker compose -f compose.deploy.yaml up -d --build`로
+아래 LLM·활성 프롬프트 준비를 마친 뒤 저장소 루트에서 `docker compose -f compose.deploy.yaml up -d --build`로
 시작한다. 새 DB 또는 migration 호환성을 확인한 DB를 사용한다. 이전 `0002`·`0003` OAuth migration이
 적용된 volume은 이력·스키마부터 확인하며, 시작 오류를 피하려고 데이터를 삭제하거나 임의 stamp하지 않는다.
 
-API는 `app.main:app --no-access-log`, worker는 `arq app.workers.arq_app.WorkerSettings`로 실행한다.
-현재 worker에는 로그인 후 public 저장소 목록을 수집하는 `initial_sync`만 등록되어 있다.
-AI 분석·면접 준비 작업까지 실행된다는 뜻은 아니며 큐 소비를 위해 worker가 계속 실행되어야 한다.
+API는 `app.main:app --no-access-log`, worker는 `arq app.workers.analysis_app.WorkerSettings`로 실행한다.
+이 설정은 기존 `initial_sync`를 유지하고 `analysis_run`, `candidate_page_analyze`와 시작 시·30초 주기의
+`analysis_reaper`를 등록한다. 면접 준비 작업은 후속 구현·통합 범위이며 여기서 완료를 보장하지 않는다.
+분석 접수는 DB commit 후 202를 반환한다. 일시적인 큐 등록 실패는 queued run을 reaper가 재등록하지만,
+worker 미실행이나 Redis 장애가 지속되는 동안에는 복구되지 않으므로 API health만으로 실행을 판단하지 않는다.
+
+분석 migration은 `NULLS NOT DISTINCT` 제약을 사용하므로 PostgreSQL 15 이상이 필요하다.
+새 migration이 적용된 DB에는 이전 `initial_sync` 코드의 `ON CONFLICT` 조건이 맞지 않으므로,
+구 API·worker를 계속 실행하는 혼합 버전을 피한다. migration 성공 후 같은 릴리스의 API·worker를 시작한다.
+
+### 분석 실행 전 LLM·프롬프트 준비
+
+`.env.deploy`에는 직접 연결 시 `OPENAI_API_KEY`, 프록시 사용 시 `PROXY_TOKEN`과 `CHAT_PROXY_URL`을
+함께 지정한다. 프록시 두 값 중 하나만 있으면 호출 전에 거절한다. 두 연결 모두 `LLM_TIMEOUT_SECONDS`,
+`LLM_MAX_OUTPUT_TOKENS`, `LLM_MAX_INPUT_BYTES`, `LLM_MAX_RESPONSE_BYTES`가 필수다.
+비밀값을 저장소에 올리지 않으며, 바꾼 환경값은 컨테이너를 재생성해 적용한다.
+
+`scripts.seed_all`은 도메인 지식만 넣으며 `prompt_versions`를 등록하지 않는다. 실제 L1 분석 전에는
+운영 대상 DB의 `repo_shallow` 활성 버전·모델·본문을 확인한다. 등록이 필요하면 검수된 UTF-8 파일과
+새 version을 준비해 [프롬프트 등록 절차](llm-connection.md#앱에서-사용할-프롬프트-등록)를 따른다.
+환경의 모델명을 바꿔도 이미 등록된 DB prompt의 모델은 바뀌지 않는다.
+
+최초 배포는 이미지 build와 migration을 마친 뒤 API·worker에 트래픽을 열기 전에 등록한다.
+아래는 저장소 루트에서 실행할 등록 예시이며, 파일 경로·version·대상 `.env.deploy`를 확인하고 사용한다.
+이미 같은 검수본이 활성화돼 있으면 재등록할 필요가 없다. 진단용 prompt를 운영용으로 대신 쓰지 않는다.
+
+```text
+docker compose -f compose.deploy.yaml build api worker migrate
+docker compose -f compose.deploy.yaml up -d --wait db redis
+docker compose -f compose.deploy.yaml run --rm --no-deps migrate
+docker compose -f compose.deploy.yaml run --rm --no-deps -v /absolute/path/reviewed-prompt.md:/tmp/reviewed-prompt.md:ro worker python -m scripts.register_prompt --task repo_shallow --version reviewed_l1_v1 --template /tmp/reviewed-prompt.md
+```
+
+등록과 활성 전환은 한 transaction이며, 기존 version의 모델·본문을 덮어쓰지 않는다. 등록 로그의
+task·version·model을 확인하고 같은 DB의 활성 row가 맞는지 확인한다. 일반 health와 합성 입력 연결 점검의
+성공은 활성 prompt·실제 분석·SSE까지 검증한 결과가 아니므로 배포 후 분석 접수부터 완료까지 따로 확인한다.
 
 별도 `app.deploy_check:app`은 `/api/health`만 제공하는 점검 앱으로 남아 있으며 현재 compose의
 실행 대상은 아니다. `ops/deploy.sh`의 health 성공은 GitHub 로그인·세션·worker까지 검증한 결과가
@@ -158,11 +191,11 @@ server: {
 
 실제 API를 사용할 때는 `frontend/.env.local`의 `VITE_USE_MSW=false`가 필요하다. API는
 `uv run uvicorn app.main:app --reload --port 8000 --no-access-log`, worker는 별도 터미널에서
-`uv run arq app.workers.arq_app.WorkerSettings`로 시작한다. 자세한 절차는 [로컬 OAuth 안내](local-oauth.md)를 따른다.
+`uv run arq app.workers.analysis_app.WorkerSettings`로 시작한다. 자세한 절차는 [로컬 OAuth 안내](local-oauth.md)를 따른다.
 
 ## 6. CI
 
-`.github/workflows/backend-ci.yml` 을 **새로 추가**한다.
+`.github/workflows/backend-ci.yml`은 아래 검사를 실행하는 기존 CI다.
 
 ```yaml
 on:
@@ -176,6 +209,9 @@ GitHub · Wanted · LLM 은 CI 에서 실제 호출하지 않고 mock 한다.
 통합 테스트는 격리된 `TEST_DATABASE_URL`·`TEST_REDIS_URL`을 사용하며 앱 접속값으로 대체하지 않는다.
 DB 이름에 `_test`를 포함하고 Redis DB는 13·14·15 중 테스트 전용 번호를 지정한다. 필요한 환경변수가
 없으면 해당 통합 테스트는 skip된다. SQL TRUNCATE·Redis FLUSHDB 대상에 개발·운영 데이터를 지정하지 않는다.
+위험 downgrade 검사는 별도 `task11_migration_test` DB를 만들고 `TASK11_MIGRATION_URL`로 지정한다.
+별도 Analysis migration CI도 이 DB를 생성해 전체 version 보존·위험 rollback 차단·안전 downgrade·재적용을 실행하며,
+공유 API 테스트 DB를 downgrade 대상으로 사용하지 않는다.
 
 CODEOWNERS 의 [팀 자유 영역] 이 팀 자체 CI 추가를 명시적으로 허용한다. 운영 3파일
 (`assign-mentor` / `notify-discord` / `convention-check`)과 `CODEOWNERS` 만 건드리지 않으면 된다.
@@ -206,6 +242,6 @@ GitHub 토큰은 `BYTEA` + AES-GCM 으로 암호화해 저장한다 (`app/core/c
 | 항목 | 내용 |
 |---|---|
 | 인증 앱 운영 검증 | 저장소 compose는 `app.main:app`을 실행한다. 운영 환경값·migration·OAuth·재연동·로그아웃 실검증은 배포 시 확인 |
-| Worker 운영 검증 | `initial_sync` worker 구성과 실제 큐 소비·실패 복구를 검증하며 미등록 분석·면접 작업은 별도 구현 |
+| Worker 운영 검증 | `initial_sync`·`analysis_run`·`candidate_page_analyze`·`analysis_reaper`의 실제 큐 소비와 실패 복구는 배포 시 확인하며 면접 작업 등록은 후속 구현·통합 범위 |
 | CDN·로드밸런서 | CloudFront·ALB·ECS 검토안은 현재 Caddy compose의 구현 완료 범위가 아님 |
 | 배포 완료 기준 | deploy workflow·health 점검과 실제 서비스 기능 검증을 구분하며 운영 환경의 실행 결과를 별도 확인 |

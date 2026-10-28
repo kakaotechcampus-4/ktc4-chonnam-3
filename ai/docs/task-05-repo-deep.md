@@ -1,6 +1,6 @@
 # task-05 - L2 저장소 정밀 분석
 
-> 상태: 구현 가이드. `repo_deep` runtime과 L2 callable은 아직 구현되지 않았다.
+> 상태: 구현 가이드. 현재 구현·검증 범위와 남은 연결은 [AI 구현 기록](../../spec/ai/implementation.md)에서 확인한다.
 > 선행: [전체 순서](pipeline.md), [task-02 내부 계약](task-02-contracts.md), [task-03 LLM 경계](task-03-llm-boundary.md), [task-04 L1 분석](task-04-repo-shallow.md)
 
 ## 목표
@@ -32,7 +32,7 @@ BE가 선택한 primary 저장소의 고정 SHA와 허용 원문만 사용해 L2
 - [backend/app/llm_tasks/repo_deep.py](../../backend/app/llm_tasks/repo_deep.py): prompt/provider/저장 orchestration을 맡는 BE adapter다.
 - [backend/app/features/analysis/pipeline/deep_analysis.py](../../backend/app/features/analysis/pipeline/deep_analysis.py): 선택·primary 범위 확인, 고정 ref 입력과 L2 저장을 소유한다.
 - [backend/app/features/interview/prepare.py](../../backend/app/features/interview/prepare.py): 검증된 L2 결과의 준비 상태와 pre-analysis evidence 전개를 소유한다.
-- `ai/tests/llm_tasks/test_repo_deep.py` (추가 예정, 현재 없음): 고정 ref, path, 분석 범위와 부분 결과 fixture를 둔다.
+- `ai/tests/llm_tasks/test_repo_deep.py`: 고정 ref, path, 분석 범위와 부분 결과 fixture를 둔다.
 
 ## 작업
 

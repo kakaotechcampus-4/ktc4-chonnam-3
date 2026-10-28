@@ -36,7 +36,8 @@ async def enqueue_initial_sync(db: AsyncSession, redis: ArqRedis, user_id: UUID)
         )
         .on_conflict_do_nothing(
             index_elements=["user_id", "job_type"],
-            index_where=text("status IN ('queued', 'running')"),
+            # Task 11 migration이 분리한 non-analysis 활성 인덱스와 조건을 맞춘다.
+            index_where=text("status IN ('queued', 'running') AND job_type <> 'analysis_run'"),
         )
         .returning(AnalysisJob.id)
     )
