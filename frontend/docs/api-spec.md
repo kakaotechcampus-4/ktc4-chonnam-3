@@ -635,6 +635,7 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 | `total` `page` `size` | number | ❌ |
 
 `startedAt`은 첫 질문 시각이므로 `preparing` 상태에서는 `null`이다.
+정렬은 `completedAt`(없으면 `startedAt`) 최신순이다.
 `averageScore`는 완료 면접의 `totalScore` 평균이며 페이지와 무관하게 전체 기준이다.
 기록 0건이면 `interviews: []`, `total: 0`, `averageScore: null`.
 
@@ -1231,6 +1232,7 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 **UI states**
 
 - 5b-v2 이탈 확인 모달 확인 → 호출 → `/home`. 요청이 실패해도 홈으로 이동한다.
+- `409 already_completed`는 `preparing`(다른 탭의 [다시 시도])에도 온다. 받으면 `GET /interviews/{id}`(#17)로 다시 확인해 `completed`일 때만 리포트로 이동한다. 그 밖의 상태면 나가기는 홈으로, 레포 재선택은 조회한 `status`의 화면으로 이동한다.
 - 레포 재선택: 레포 선택 화면의 [면접 시작]에서 기존 면접 id로 호출한 뒤 `POST /interviews`(#16)를 보낸다.
 
 **Failure**
@@ -1238,7 +1240,7 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 | 코드 | reason | 화면 처리 |
 | --- | --- | --- |
 | 404 | `not_found` | 없거나 남의 면접. 나가기는 그대로 홈 이동 |
-| 409 | `already_completed` | 이미 완료된 면접. 리포트(5c-v2)로 이동 |
+| 409 | `already_completed` | 완료 또는 `preparing` 등 중단할 수 없는 상태. 재조회해 `completed`일 때만 리포트(5c-v2)로 이동 |
 
 ---
 
@@ -1803,4 +1805,4 @@ Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagr
 | 2026-09-23 | WS `answer`에 **`turn` 추가** — `spec/ai/decisions/0010:30` 반영. 불일치 시 `answer_stale_turn` 신설 |
 | 2026-09-17 | #19의 **`202 Accepted`를 Failure → Response로 이동** (생성 중은 실패가 아님), `error.retryAfter`와 본문 최상위 `retryAfter`의 위치 차이 명시 |
 | 2026-09-22 | [공통 0003](../../spec/shared/decisions/0003-sprint1-session-auth.md): Sprint 1은 기존 Redis·HttpOnly `devon_session`·14일 sliding 세션으로 확정. JWT·refresh 및 #3은 Sprint 2로 이관. 기존 번호와 과거안은 보존하며 실제 인증 구현·검증은 후속 작업으로 구분 |
-| 2026-10-28 | **#24 `POST /interviews/{id}/abandon` 추가**, #10 `/me/interviews`에 시작 후 중단된 `abandoned` 포함, #20 재도전 허용을 `completed`와 시작 후 중단으로 확정 — [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md) |
+| 2026-10-28 | **#24 `POST /interviews/{id}/abandon` 추가**, #10 `/me/interviews`에 시작 후 중단된 `abandoned` 포함, #20 재도전 허용을 `completed`와 시작 후 중단으로 확정, #10 정렬 기준 명시 — [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md) |

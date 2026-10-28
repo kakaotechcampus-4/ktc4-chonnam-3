@@ -1,11 +1,11 @@
 # 0009 면접 abandoned 전환 방법 — 나가기·레포 재선택
 
 - 상태: Accepted
-- 날짜: 2026-10-26 (제안), 승인일: (BE 승인 시 기입)
+- 날짜: 2026-10-26 (제안), 승인일: 2026-10-28
 - 작성: 진영 (FE)
-- 검토자: BE — (승인자 기입) ([#143](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/143))
+- 검토자: BE — 송유석 ([#143](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/143))
 - 관련 이슈: [#143](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/143)(전환 방법), [#121](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/121) 1-2(재도전 허용 상태)
-- 관련 PR: [#147](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/147)(제안·FE 명세), (이 PR 번호 기입)(openapi 반영·확정)
+- 관련 PR: [#147](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/147)(제안·FE 명세), [#148](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/148)(openapi 반영·확정)
 
 ## 맥락
 
@@ -56,7 +56,7 @@
 - 계약 반영: `openapi.yaml`(abandon 엔드포인트, `/me/interviews`·재도전 허용 설명), [migration.md](../contracts/migration.md) "명시적 이탈 통지"(FIX), `frontend/docs/api-spec.md` #10·#18·#20과 FE 명세.
 - BE 문서 갱신(BE 담당): `spec/backend/features/interview.md`(허용 상태·재도전 조건), `backend/docs/pipeline.md` 4.2(전환 경로, `abandoned_at_turn` 기준 컬럼), `backend/docs/error-reasons.md`(`already_completed`).
 - 구현: BE abandon 엔드포인트·엇갈린 결과 무시·WS 닫기·`/me/interviews`·재도전 조건, FE 이탈 모달·레포 재선택 호출·`RepoSelect` 이동·마이페이지 행.
-- 공개 enum·DB 컬럼은 바꾸지 않는다. `abandoned_at_turn`은 DB 모델의 `current_turn`을 쓸지 BE가 확정한다(`pipeline.md`는 `turn_count`로 적혀 있다).
+- 공개 enum·DB 컬럼은 바꾸지 않는다. `abandoned_at_turn`은 `current_turn`으로 확정했다(BE 승인, 2026-10-28). 질문이 나간 턴 수이며 답변 대기 중인 현재 질문을 포함한다. `pipeline.md`의 `turn_count` 표기는 BE에서 갱신한다.
 - 범위 밖: heartbeat·timeout 기반 자동 판정(Sprint 2), 중단된 면접의 답변 기록 보기·부분 리포트.
 
 ## 대체 관계

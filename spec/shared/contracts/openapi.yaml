@@ -80,8 +80,10 @@ paths:
       description: >-
         Lists completed interviews and abandoned interviews that had started
         (startedAt is not null). Interviews abandoned before the first question are
-        not listed. total counts the listed rows; averageScore averages completed
-        interviews only. See spec/shared/decisions/0009-interview-abandon-transition.md.
+        not listed. startedAt is set when the first question is saved. Rows are ordered
+        by coalesce(completedAt, startedAt) descending, then id descending. total counts
+        the listed rows; averageScore averages completed interviews only. See
+        spec/shared/decisions/0009-interview-abandon-transition.md.
       parameters:
         - name: page
           in: query
