@@ -89,6 +89,12 @@ MESSAGE_BY_REASON: dict[Reason, str] = {
 #   token_invalid 처럼 글자가 같은 값이 있어도 의미와 쓰임이 다르다.
 ANALYSIS_JOB_ERROR_CODES = frozenset(
     {
+        "internal_error",
+        "run_expired",
+        "repo_unreachable",
+        "no_readme",
+        "input_too_large",
+        "not_a_job_posting",
         "no_public_repo",
         "rate_limited",
         "token_invalid",

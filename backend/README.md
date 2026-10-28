@@ -24,7 +24,7 @@ AI 원본은 [ai/src/devon_ai](../ai/src/devon_ai/)의 로컬 Python 패키지�
 ## 기술 스택
 
 - FastAPI + Python 3.12
-- PostgreSQL 15 (asyncpg + SQLAlchemy 2.0 async, Alembic)
+- PostgreSQL 15 이상 (asyncpg + SQLAlchemy 2.0 async, Alembic). 분석 중복 제약의 `NULLS NOT DISTINCT`가 필요하다.
 - Redis 7 (세션 · 락 · SSE pub/sub)
 - ARQ (비동기 큐)
 - uv (의존성) / ruff · mypy / pytest
@@ -43,7 +43,9 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --port 8000 --no-access-log
 ```
 
-별도 터미널에서 `uv run arq app.workers.arq_app.WorkerSettings`를 실행한다. `frontend/.env.local`에는 `VITE_USE_MSW=false`를 설정하고 `frontend/`에서 `npm ci`, `npm run dev`를 실행한다. 브라우저는 `http://localhost:5173`으로 접속한다. OAuth App에 등록할 콜백은 로그인·재연동 공통 `http://localhost:5173/auth/github/callback` 하나다. Vite가 내부 `/api/auth/github/callback`으로 전달하며 코드 교환의 `redirect_uri`도 공개 주소를 유지한다.
+별도 터미널에서 `uv run arq app.workers.analysis_app.WorkerSettings`를 실행한다. 기존 `initial_sync`와 분석 run·후보 페이지·복구 작업을 함께 등록한다. LLM 분석 전에는 [연결 설정과 활성 프롬프트 등록](docs/llm-connection.md)을 완료한다. `frontend/.env.local`에는 `VITE_USE_MSW=false`를 설정하고 `frontend/`에서 `npm ci`, `npm run dev`를 실행한다. 브라우저는 `http://localhost:5173`으로 접속한다. OAuth App에 등록할 콜백은 로그인·재연동 공통 `http://localhost:5173/auth/github/callback` 하나다. Vite가 내부 `/api/auth/github/callback`으로 전달하며 코드 교환의 `redirect_uri`도 공개 주소를 유지한다.
+
+Task 11은 [공통 구현 #81](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/81), [명세·설계 #100](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/100), [명세 대응 구현 #108](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/108)으로 나눈다. #81은 상태·알림·큐 복구·실행 공통 처리, #108는 API·최종 워커 연결·마이그레이션·통합 테스트를 담는다. 세 PR과 선행 구현·SSE 후속 보완을 반영한 환경은 `uv run arq app.workers.analysis_app.WorkerSettings`를 사용한다. #81만으로는 새 API·워커가 추가되지 않으며 #100에는 실행 코드가 없다. 적용 조건은 [Task 11 구현 기록](../spec/backend/implementation-task-11.md)의 마지막 절을 따른다.
 
 Task 11은 [공통 구현 #81](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/81), [명세·설계 #100](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/100), [명세 대응 구현 #108](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/108)으로 나눈다. #81은 상태·알림·큐 복구·실행 공통 처리, #108는 API·최종 워커 연결·마이그레이션·통합 테스트를 담는다. 세 PR과 선행 구현·SSE 후속 보완을 반영한 환경은 `uv run arq app.workers.analysis_app.WorkerSettings`를 사용한다. #81만으로는 새 API·워커가 추가되지 않으며 #100에는 실행 코드가 없다. 적용 조건은 [Task 11 구현 기록](../spec/backend/implementation-task-11.md)의 마지막 절을 따른다.
 
@@ -64,6 +66,8 @@ Task 11은 [공통 구현 #81](https://github.com/kakaotechcampus-4/ktc4-chonnam
 | `uv run ruff check . && uv run ruff format --check .` | 린트              |
 | `uv run mypy app`                                     | 타입 체크         |
 | `uv run pytest`                                       | 테스트 — 격리 `TEST_DATABASE_URL`·`TEST_REDIS_URL` 필요 |
+
+#108 반영 후 실제 분석 실행에는 `analysis_app.WorkerSettings`를 사용한다. 표의 `arq_app`은 병합 전 develop의 초기 수집 전용 설정이다.
 
 통합 테스트는 PostgreSQL DB 이름에 `_test`가 포함되어야 하며 Redis DB는 13·14·15 중 테스트 전용 번호를 명시해야 한다. fixture가 해당 DB 테이블과 Redis DB를 비우므로 개발·운영 데이터를 지정하지 않는다. 환경변수가 없으면 관련 통합 테스트는 skip된다. 자세한 명령은 [검증 절차](docs/local-oauth.md#검증)를 따른다.
 
