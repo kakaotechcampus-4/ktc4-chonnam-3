@@ -17,6 +17,7 @@ import uuid
 from datetime import UTC, datetime
 
 from arq.connections import ArqRedis
+from pydantic import ValidationError
 from redis.exceptions import RedisError
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -143,12 +144,19 @@ async def get_interview(
             for t in turns
         ],
         # openapi: preparing_failed 일 때만 내려준다.
-        last_error=(
-            InterviewLastError.model_validate(interview.last_error)
-            if interview.status == "preparing_failed" and interview.last_error
-            else None
-        ),
+        last_error=_last_error(interview) if interview.status == "preparing_failed" else None,
     )
+
+
+def _last_error(interview: InterviewSession) -> InterviewLastError | None:
+    """저장된 JSONB 모양이 어긋나도 GET 전체를 500으로 만들지 않고 lastError 만 비운다."""
+    if not interview.last_error:
+        return None
+    try:
+        return InterviewLastError.model_validate(interview.last_error)
+    except ValidationError:
+        logger.error("interview_last_error_invalid", interview_id=str(interview.id))
+        return None
 
 
 async def retry_interview(

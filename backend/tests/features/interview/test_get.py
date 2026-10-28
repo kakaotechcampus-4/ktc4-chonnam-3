@@ -125,3 +125,26 @@ async def test_preparing_failed_last_error(db, redis, created) -> None:
 
     assert detail.last_error is not None
     assert detail.last_error.model_dump(mode="json") == _LAST_ERROR
+
+
+@pytest.mark.parametrize(
+    "broken",
+    [
+        {**_LAST_ERROR, "message": "extra"},
+        {k: v for k, v in _LAST_ERROR.items() if k != "occurredAt"},
+        {**_LAST_ERROR, "step": "repo_analyze"},
+    ],
+    ids=["extra_key", "missing_occurred_at", "unknown_step"],
+)
+async def test_malformed_last_error_does_not_break_get(db, redis, created, broken) -> None:
+    run, interview_id, _ = created
+    interview = await db.get(InterviewSession, interview_id)
+    assert interview is not None
+    interview.status = "preparing_failed"
+    interview.last_error = broken
+    await db.commit()
+
+    detail = await _get(db, redis, run, interview_id)
+
+    assert detail.status == "preparing_failed"
+    assert detail.last_error is None
