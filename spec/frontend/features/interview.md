@@ -105,8 +105,8 @@ Sprint 2부터 면접은 음성만 남는다. 그 선행 작업으로 면접 준
 
 아래 FE 동작은 확정이다. 다만 이 동작이 쓰는 API가 아직 계약에 없어, 현재 구현의 이탈 모달은 소켓을 닫고 홈으로 이동만 하며 면접은 서버에서 `in_progress`로 남는다. 0009의 API가 합의되면 아래대로 구현한다.
 
-- 나가기: 이탈 모달 확인 → `POST /interviews/{id}/abandon` → `/home`. 요청이 실패해도 홈으로 이동한다. `409 already_completed`면 리포트로 이동한다.
-- 레포 재선택(준비 실패·진행 중 `repo_unreachable` 모두): [레포 다시 선택하기]는 기존 면접 id를 넘기며 레포 선택 화면으로 이동만 한다. 레포 선택 화면의 [면접 시작]에서 기존 면접 abandon → `POST /interviews` 순서로 보낸다. abandon만 성공하고 생성이 실패하면 레포 선택 화면에 머문다.
+- 나가기: 이탈 모달 확인 → `POST /interviews/{id}/abandon` → `/home`. 요청이 실패해도 홈으로 이동한다. `409 already_completed`면 `GET /interviews/{id}`로 다시 확인해 `completed`일 때만 리포트로 이동한다. 이 reason은 `preparing`(다른 탭의 [다시 시도])에도 온다.
+- 레포 재선택(준비 실패·진행 중 `repo_unreachable` 모두): [레포 다시 선택하기]는 기존 면접 id를 넘기며 레포 선택 화면으로 이동만 한다. 레포 선택 화면의 [면접 시작]에서 기존 면접 abandon → `POST /interviews` 순서로 보낸다. abandon만 성공하고 생성이 실패하면 레포 선택 화면에 머문다. 생성이 `410 run_expired`면 다시 눌러도 같으므로 공고 입력부터 다시 시작하도록 안내한다. abandon이 `409 already_completed`면 나가기와 같이 다시 확인하고, `completed`가 아니면 조회한 `status`의 화면으로 이동한다.
 - 면접 생성 후 준비 화면 이동은 `replace`로 해, 뒤로 가기로 같은 run의 레포 선택 화면에 돌아오지 않게 한다.
 - abandon 시 서버가 열린 WS를 닫는다. FE는 기존 `onclose` 처리대로 `GET /interviews/{id}`로 확인하고 `abandoned`면 재연결하지 않는다.
 
