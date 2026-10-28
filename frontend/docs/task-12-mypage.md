@@ -29,6 +29,21 @@
 - [ ] `npm run build` 통과
 - [ ] `npm run lint` 통과
 
+## 후속 — 중단된 면접 행 (선행: [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md) Accepted, BE `GET /me/interviews`의 abandoned 포함)
+
+- `completed`와 `startedAt`이 있는 `abandoned`를 표시
+- abandoned 행: 일시 `startedAt`, 점수 자리 "중단됨", `리포트 보기` 대신 `다시 도전하기`(`POST /interviews/{id}/retry`)
+- 재도전 실패 안내는 리포트의 reason별 문구를 공용으로 써서 행 아래에 표시
+- 헤더를 `완료 {totalCount}회`로 표기
+- MSW: `/me/interviews`에 시작 후 중단·준비 중 중단 면접 fixture
+
+### 완료 조건
+
+- [ ] 중단된 면접 행 표시 (준비 단계에서 버린 면접은 제외)
+- [ ] `다시 도전하기` 성공 시 준비 화면 이동, 실패 reason별 안내
+- [ ] 헤더 `완료 {totalCount}회`
+- [ ] MSW fixture와 Playwright 시나리오
+
 ## 커밋
 
 ```
