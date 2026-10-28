@@ -3,11 +3,13 @@
 spec/backend/features/interview.md "준비 실패" / task-13
 """
 
+import logging
 import uuid
 from typing import Any
 
 import pytest
 from redis.exceptions import RedisError
+from sqlalchemy.exc import OperationalError
 
 from app.core.errors import AppError
 from app.db.models import InterviewSession
@@ -103,3 +105,31 @@ async def test_retry_enqueue_failure_restores_failed(db, failed) -> None:
         await _retry(db, DownRedis(), run, interview_id)
     assert exc.value.reason == Reason.INTERNAL_ERROR
     assert await _status(db, interview_id) == "preparing_failed"
+
+
+async def test_retry_enqueue_failure_restore_failure_is_logged(
+    db, failed, monkeypatch, caplog
+) -> None:
+    """복구 UPDATE 까지 실패해도 로그를 남기고 500 으로 응답한다."""
+    run, _, interview_id = failed
+
+    class DownRedis:
+        async def enqueue_job(self, *_: Any) -> None:
+            raise RedisError("down")
+
+    original = db.execute
+    calls = 0
+
+    async def flaky_execute(*args: Any, **kwargs: Any) -> Any:
+        nonlocal calls
+        calls += 1
+        if calls > 1:  # 1번째는 소유 조회, 2번째가 복구 UPDATE
+            raise OperationalError("update", {}, Exception("db down"))
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(db, "execute", flaky_execute)
+    caplog.set_level(logging.ERROR)
+    with pytest.raises(AppError) as exc:
+        await _retry(db, DownRedis(), run, interview_id)
+    assert exc.value.reason == Reason.INTERNAL_ERROR
+    assert "interview_prepare_retry_rollback_failed" in caplog.text

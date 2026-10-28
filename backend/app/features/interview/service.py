@@ -240,12 +240,15 @@ async def retry_prepare(
         await redis.enqueue_job("interview_prep", str(interview_id))
     except RedisError:
         # job 없는 preparing 이 남으면 재시도도 새 면접도 막히므로 실패 상태로 되돌린다.
-        await db.execute(
-            update(InterviewSession)
-            .where(InterviewSession.id == interview_id)
-            .values(status="preparing_failed")
-        )
-        await db.commit()
+        try:
+            await db.execute(
+                update(InterviewSession)
+                .where(InterviewSession.id == interview_id)
+                .values(status="preparing_failed")
+            )
+            await db.commit()
+        except SQLAlchemyError:
+            logger.error("interview_prepare_retry_rollback_failed", interview_id=str(interview_id))
         raise AppError(Reason.INTERNAL_ERROR) from None
 
 
