@@ -295,6 +295,38 @@ fixture는 사용자·공고 원문 JSON·작업 steps·질문 Contract·호출 
 #127은 develop base의 Draft를 유지한다. 선행 반영 후 실제 게시 순서와 최종 BE 회귀·CI를 다시
 확인해야 한다. 외부 모델·면접 완주·운영 DB 적용과 전체 BE pytest는 이번 검사에 포함하지 않았다.
 
+## 2026-10-28 — #127 선행 병합 후 이력 보존과 검증 기록 정리
+
+- 기준 develop은 `4e511a992d7954fa310146bcba2f2d4c6358fb69`다. #82와 #108은 모두 반영됐고,
+  현재 develop+#127의 실제 graph는 `0005_director_foundation_merge` 단일 head다.
+  10월28일11:20 KST 리뷰의 #108 미병합 조건은 같은 날16:15 병합 이후 해소됐다.
+- 원본 #127 `d580863`을 `backup/pr127-before-review-fix-20261028`에 보존했다.
+  이번 보완은 설명·검증 기록만 정리하며 기존 migration 파일 전체의 Git blob을 유지한다.
+- 같은 부모를 가진 `0003_director_runtime`은 기존 경로의 이력을 보존한다. 실제 개발자·공유·운영 DB의
+  전수 적용 이력은 확인하지 못했으므로 적용된 DB가 없다고 단정하지 않는다. 부모에서만 제거하면
+  별도 head가 남고 파일까지 없애면 그 revision을 가리키는 DB의 이력 해석을 깨뜨릴 수 있다.
+- [BE ADR0008](../backend/decisions/0008-director-foundation-publication.md)은 Proposed·날짜 이력,
+  기존 ID·부모·DDL 보존 이유, 현재 합류 관계와 rollback 보호 조건을 유지했다.
+  검증 실수의 반복 서술은 줄이고 상세 실행 결과는 이 기록을 원본으로 삼는다.
+
+| 구성 | 이번에 직접 실행한 검사 | 결과 |
+| --- | --- | --- |
+| 최신 develop+#127 | 설정·실제 Script graph pytest | 55 passed, skip0, 34.67초, 기존 Alembic 경고5개 |
+| 같은 구성 | BE Ruff·format·Mypy app | 통과, format330파일·156 source |
+| 같은 구성 | 부분 계약 검사 | schema2개·fixture7개 통과. 전체 API 호환성 검증은 아님 |
+| 전용 PostgreSQL15.19 | 순차 게시·Agent→Director→Analysis·역순의 세 경로 | 모두0005, 기존 fixture 전체 행 보존 |
+| 위 세 경로 각각 | 중복 active 분석이 있는 위험 downgrade | 기존 guard로 차단, 자료와 version 전체 집합 보존 |
+| 위 세 경로 각각 | 명시0004_analysis_storage_merge로 downgrade→head | 기존 sibling 이력과 fixture 행 보존 |
+| 같은 전용 DB | base→head 재적용 후 base 정리 | 통과, 마지막 public 테이블0개·migration 원문 hash 동일 |
+
+DB fixture는 사용자·공고 원문 JSON·분석 steps·질문 Contract·호출 raw·페이지 지표를 포함한다.
+수치와 DB 결과는 이번 최신 develop 결합에서 새로 실행했으며 이전 전체1438/347 결과를 재사용하지 않았다.
+리뷰에서 보고한 설정 검사 간헐 실패는 이번55개 실행에서 재현되지 않았다. 최초 실패명·traceback이 없어
+원인이나 해결 여부를 확정하지 않으며 재실행 통과를 오류 수정으로 보고하지 않는다.
+최신 base의 원격 CI는 게시 후 별도로 확인하고 통과 전에는 Draft 해제나 병합 가능 상태로 단정하지 않는다.
+전체BE·AI·외부 모델·운영 DB·배포·면접 완주 검증은 이번 집중·합성 자료 검사의 범위 밖이다.
+이전 절의 seed 오류·선행 부재·예전 목표 head는 당시 기준의 기록으로 보존한다.
+
 ## 2026-09-27 — task-04 L1 호출·재요청과 캐시 판정
 
 ### 기준과 변경
