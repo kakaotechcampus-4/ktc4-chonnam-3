@@ -748,6 +748,51 @@ HTTP 2회 상한이 통과했다. 과거의 AI 224·별도 결합 309/163을 이
   (`backend/app/llm_tasks/repo_shallow.py`)와 `repo_analyze`의 저장 매핑·캐시 조회 구현은 이번 범위
   밖이며 후속 작업이다. L0-b 입력 수집은 BE PR #45 범위다.
 
+## 2026-10-28 — PR #126 기존 어댑터 보존과 수집 한계 지침
+
+- 원본 `68c088f`를 `backup/pr126-before-review-fix-20261028`에 보존했다. 기존 `agent.py`는
+  develop `09a6f77` 원문으로 유지하고 신규 `execute_director`는 `runtime_adapter.py`로
+  분리했다. 기존 함수는 전체 파일 blob, 신규 함수는 원문 AST가 같다. 신규 두 테스트의 import와
+  패키지 import 검사를 갱신하고 실제 소비자인 #135의 import 경로를 함께 조정한다.
+- `repo-deep-runtime-v1.md`는 입력 `source_limitations`의 미확인 범위를 확인한 것처럼
+  설명하지 않고 관찰·결과의 한계에 반영하도록 명시한다. 이 지침은 모델 응답을 코드로 강제하는
+  보장이 아니다. 수집 메타데이터의 별도 보존과 모델 출력의 한계를 구분한다.
+- 최신 develop `09a6f77`, 이번 변경과 미병합 #125 `23873ef` runtime을 별도 로컬 사본에서
+  결합했다. 기존·신규 adapter, gateway, 예산, 원문 수집·패키지 집중 검사는 104 passed, skip 0이었다.
+  생성·검토 각각에서 실제 task를 취소하는 새 2사례는 취소 전파와 완료된 plan 기록만 보존함을
+  확인한다. AI runtime은 38 passed, BE mypy 151 source·Ruff·format 312파일이 통과했다.
+- 게시본에는 #125 runtime을 복사하지 않는다. 최신 develop 결합에서 #125를 제외하면
+  runtime import와 파생 Any 반환의 mypy 2오류가 남는다. 이전 d063d8d 기준 CI의 11오류와
+  이번 결과를 구분한다. #125 반영 후 실제 게시본을 다시 검사하기 전에는 Draft다.
+- 최신 develop와 최종 게시 head의 merge-tree는 충돌 없이 병합된다. 대형 develop merge commit을
+  게시하지 않고 소규모 후속만 추가했으며 신규 구현·검증·문서 커밋은 각각 추가+삭제 300줄 이하다.
+- #133 patch03은 아직 일반 Python에 적용하지 않은 자료다. #136의 수집 한계가 실제 모델 입력에
+  전달되는 실행 연결은 해당 일반 코드 반영 후 다시 검증한다. 이번에 실제 모델·외부 GitHub,
+  PostgreSQL 전체 검사·면접 완주·운영 배포는 실행하지 않았다.
+
+## 2026-10-27 — PR #126 실제 예산 경계와 선행 결합 검증
+
+- #126 원본 `e29c8f9`를 `backup/pr126-before-budget-review-20261026`에 보존하고 후속만 추가했다.
+  게시본에는 미병합 #82의 저장·도구 구현과 #125 코어를 복사하지 않는다.
+- CallBudget의 읽기 전용 remaining_attempts·terminal_failure를 통해 BE가 실제 잔여량과
+  종료 상태를 확인한다. Context와 실제 예산 중 작은 값을 전달하며 두 시도가 없으면
+  plan 요청 전에 중단한다. 조회는 예약이 아니므로 한 예산을 다른 작업·동시 실행과 공유하지 않는다.
+- 실제 gateway를 먼저 소모하는 새 회귀에서 수정 전 2 failed·2 passed를 재현했다.
+  수정 후 새 예산·gateway 회귀 77건과 게시본 단독의 설정·gateway 회귀 79건이 통과했다.
+- 게시본 단독 전체 pytest는 #125 runtime 2건·dispose_engine 1건의 수집 오류이고,
+  mypy는 선행 모듈·API 부재 19오류다. Ruff·format 259파일은 통과했다.
+- 별도 로컬 환경에 develop `d063d8d`, #82 `c38d655`, 수정 #125 `23873ef`와 #126을 결합했다.
+  새 예산·기존/새 adapter·gateway 경계 95 passed, AI 전체 347 passed, AI Ruff·format 57파일·
+  mypy 13 source와 BE mypy 143 source가 통과했다. BE 전체는 전용 PostgreSQL·Redis에서
+  새로 실행해 1,302 passed, 0 skipped(676.97초)였다. BE Ruff·format 299파일도 통과했다.
+- 결합 adapter의 generate_question은 #82, execute_director는 #126 원문과 AST가 같다.
+  공통 gateway의 기존 정의는 develop+#82 결합본과 동일하며 예산 조회 속성 두 개만 추가했다.
+  base_url·deadline·attempt_sink와 #97 고정 배분을 보존한다. 준비 상한의 env 블록은
+  면접 정책 끝의 동시 수정과 분리했다. adapter는 선행 #82와 합쳐 두 함수를 모두 보존해야 한다.
+- 이 결과는 결합본의 새 검사이며 게시본 단독 성공이 아니다. 직접 선행 #82·#125와 명세를
+  반영하고 최종 호출 경로를 다시 검사하기 전에는 Draft다. 준비·worker·WS 활성화, 면접 완주,
+  실제 모델 품질·외부 GitHub는 이번 검증에 포함하지 않았다.
+
 ## 2026-09-28 — task-04 L1 BE adapter
 
 ### 기준과 변경
