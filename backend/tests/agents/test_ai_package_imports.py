@@ -4,7 +4,6 @@ from pathlib import Path
 BOUNDARY_MODULES = (
     "app.agents.contracts",
     "app.agents.director.agent",
-    "app.agents.director.runtime_adapter",
     "app.agents.director.tools",
     "app.llm_tasks.repo_shallow",
     "app.llm_tasks.repo_deep",

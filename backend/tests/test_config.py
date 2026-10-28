@@ -58,9 +58,7 @@ def test_env_example_defaults_match_settings() -> None:
         if value
         and key not in UNMAPPED_KEYS
         and key.lower() in Settings.model_fields
-        # 환경변수의 JSON/배분·숫자 형식을 실제 Settings와 같은 경계에서 해석한다.
-        and getattr(Settings(_env_file=None, **{key.lower(): value}), key.lower())
-        != getattr(settings, key.lower())
+        and str(getattr(settings, key.lower())).lower() != value.lower()
     }
 
     assert not diff, f"(.env.example, Settings) 기본값 불일치: {diff}"
