@@ -314,6 +314,7 @@ fixture는 사용자·공고 원문 JSON·작업 steps·질문 Contract·호출 
 | 최신 develop+#127 | 설정·실제 Script graph pytest | 55 passed, skip0, 34.67초, 기존 Alembic 경고5개 |
 | 같은 구성 | BE Ruff·format·Mypy app | 통과, format330파일·156 source |
 | 같은 구성 | 부분 계약 검사 | schema2개·fixture7개 통과. 전체 API 호환성 검증은 아님 |
+| 별도 전용 DB와 격리 schema | 기존 위험 downgrade 회귀·두 선행 적용 순서 회귀 | 3 passed, skip0, 53.27초 |
 | 전용 PostgreSQL15.19 | 순차 게시·Agent→Director→Analysis·역순의 세 경로 | 모두0005, 기존 fixture 전체 행 보존 |
 | 위 세 경로 각각 | 중복 active 분석이 있는 위험 downgrade | 기존 guard로 차단, 자료와 version 전체 집합 보존 |
 | 위 세 경로 각각 | 명시0004_analysis_storage_merge로 downgrade→head | 기존 sibling 이력과 fixture 행 보존 |
