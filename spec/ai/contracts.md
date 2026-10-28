@@ -208,6 +208,13 @@ JSON 객체·배열의 깊이는 루트 container 1부터 최대 64로 제한하
 
 raw output·model·prompt_version·schema_version·input/output tokens·latency·attempt·error를 필요한 범위에서 보존한다. [0018의 자료 선택](decisions/0018-existing-baseline-bulk-resolution.md#ai-l18-후속-내부-비교-검증-자료)에 따라 실제 문답·연결 분석·리포트·실패 기록은 필요한 팀 검수자의 후속 내부 비교 검증에도 보관·재사용한다. 최종 내부 비교 검증 뒤에도 보관하며 별도의 자동 삭제 기한은 두지 않는다. task별 영구 저장 위치·마스킹·실제 권한·복사본 및 파생 자료 관리는 구현에서 확인한다. 공개 로그에 원문을 출력하는 것으로 저장 요구사항을 대신하지 않는다.
 
+## 면접 실행 서비스의 후속 경계
+
+[면접 준비·답변·전송 실행 설계](designs/2026-10-25-interview-execution.md)는 Proposed 후속 설계다.
+준비 claim, 답변 commit 이후 전송, 분석 후 상태 전이와 WS 인계의 Controller 책임을 정의한다.
+기존 내부 입력 계약과 공개 wire를 대체하지 않으며, 선행 구현의 병합이나 전체 실행 완료를 뜻하지 않는다.
+준비 이벤트·실패 단계 재개·명시적 이탈 통지의 기존 요구와 보류 상태는 해당 설계의 한계를 함께 따른다.
+
 ## public 변환과 합의 경계
 
 - FE 면접 명세의 `question` payload는 `persona`, `text`, `turn`을 사용한다. 이는 소비자 측 문서의 요구이며 공통 WS payload schema와 검수해 확정할 부분이다. 내부 Question 전체를 그대로 직렬화하지 않는다.
