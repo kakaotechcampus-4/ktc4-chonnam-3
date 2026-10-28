@@ -281,6 +281,97 @@ Windows, Python 3.12, 격리 worktree의 locked 환경에서 확인했다.
 모델 경계는 mock provider로 검증했다. 실제 모델 품질·외부 Wanted API·전체 서비스 연결을
 이번 실행에서 새로 검증한 것은 아니다. 공통 계약 검사는 부분 형식 검사다.
 
+## 2026-10-26 — PR #125 리뷰 보완과 독립·최신 결합 검증
+
+- 기준은 #125 원본 `70c1dbf`, 최신 결합 기준은 develop `d063d8d`다. 원본 head를
+  `backup/pr125-before-review-20261026`에 보존하고 후속 커밋만 추가했다.
+- 총 2회·생성/독립 검토 각 1회와 실패·거절 후 중단을 유지한다. 검토의 자유 텍스트 사유는
+  일반 CallFailure에서 고정 요약으로 바꾸고 보호된 attempt.raw_output에는 그대로 보존한다.
+- 새 planner의 question·contract·required point·basis ref 부가 필드는 호출 경계에서 거절한다.
+  공통 decode의 기존 동작, 기존 generate_question, 공개 wire·DB·의존성은 바꾸지 않았다.
+- 수정 전 신규 회귀에서 실패 사유 복사 1건과 중첩 부가 필드 4건이 실패했다. 보완 후 runtime
+  38건이 통과하며 유효한 부분 Tool item·Context 등록 필요·단계 timeout 중단도 함께 검사한다.
+- 원 게시본은 AI Ruff·format 43파일 통과, mypy는 기존 #103의 `_RECOVERY_CODES` 부재 1오류,
+  전체 pytest는 `candidate_recovery` import 수집 오류 1건이다. 선행을 복사해 숨기지 않는다.
+- 별도 최신 develop + 이 코어 3파일 결합본은 AI 전체 347 passed, Ruff·format 55파일·mypy
+  13 source가 통과했다. 기존 Python 3.12 환경에 해당 worktree의 ai/src를 명시했다.
+- 이번 347건은 새로 실행한 결합 결과이며 게시본 단독의 성공이 아니다. 실제 모델·원격 GitHub,
+  DB·WS·worker·면접 완주·자연어 검토 품질·비용은 미실행이다.
+- 10월 23일의 분리 게시 원문은 아래에 그대로 보존한다. 파일 끝의 공통 추가 충돌을 피하려
+  #50 기록 앞에 재배치했으며 다른 PR의 기록을 복사·삭제하지 않았다.
+
+## 2026-10-23 — Director 신규 변경의 분리 게시 검증
+
+### 기준과 게시 범위
+
+- 최신 원격 develop `bbe01213`에서 코어·연결 기반·BE 공통 보완·명세의 별도 게시 브랜치를 구성했다.
+- 미병합 선행 #82/#102/#103/#107/#114/#119/#120을 결합했던 원본 통합 worktree는 보존했다.
+  원본 tree는 `c8f2cb5d`, 선행 결합 기준 tree는 `a4d7c1bf`다. 해당 원본의 신규 차이는
+  36파일 +6025/-58이며 아래 게시본의 최종 diff와는 다르다.
+- 선행 구현·기존 테스트·패키지 의존성은 게시본에 복사하지 않는다. 모든 PR base는 develop이다.
+  코어·연결·공통은 필요한 선행 구현이 없어 단독 검증이 제한되며 Draft로 검토한다.
+- 코어는 `ai/.../director/runtime.py`·prompt·테스트를 원형으로 보존한다.
+  연결 기반은 새 adapter·원문/과거 분석 복원·실제 tree 수집과 소비하는 8개 설정을 게시한다.
+  공통은 seed CLI 수명·migration head 연결·검사 subprocess의 worktree 고정만 보완한다.
+- 실제 계약/설계는 별도 명세 PR에, 결정은 0023·별도 연결 PR의 0025·BE 공통 ADR에 둔다.
+  이 기록은 세 구현 PR의 결과를 모으는 한 곳이며 각 PR에 같은 현황을 복제하지 않는다.
+
+### 게시본 단독 실행
+
+기존 환경의 Python 3.12와 설치된 도구를 사용했다. 각 worktree의 backend 및 ai/src를
+PYTHONPATH로 명시했으며 새 패키지 설치나 실제 모델·GitHub 호출은 하지 않았다.
+
+| 작업 디렉터리 | 명령·범위 | 실제 결과 |
+| --- | --- | --- |
+| 코어 ai | ruff check / ruff format --check | 통과, format 43파일 |
+| 코어 ai | mypy | 실패 1건: #103의 `_RECOVERY_CODES` 부재 |
+| 코어 ai | pytest | 수집 실패 1건: #103의 `candidate_recovery` import 불가 |
+| 연결 backend | pytest tests/test_config.py tests/core/test_director_limits.py | 10 passed |
+| 연결 backend | 수집기·어댑터 런타임 pytest | 수집 실패: 미게시 코어·선행 모듈 부재 |
+| 연결 backend | ruff check app tests / ruff format --check app tests | 통과 |
+| 연결 backend | mypy app | 실패 19건: 코어 및 #82/#102/#114/#119 입력·모델·API 부재 |
+| 공통 backend | seed 및 LLM 설정 pytest | 49 passed |
+| 공통 backend | ruff check / format / mypy app | 통과, format 254파일·mypy 133파일 |
+| 공통 backend | alembic heads | 실패: #82의 `0002_agent_storage` parent 부재 |
+| 명세 루트 | .claude/scripts/check_contracts.py | 2 schemas·partial OpenAPI·7 fixtures 통과 |
+
+공통 seed 검증은 주입 세션을 그대로 쓰는 경로와 CLI 자체 연결의 성공·실패 정리를 확인한다.
+연결 검증에는 원래 수집기의 구조 상한 1사례·binary/timeout 부분 실패 2사례를 그대로 옮겼고,
+실제 provider 경계의 어댑터·호출 예산·저장 질문 복원 3사례를 추가했다.
+
+### 게시 코드와 선행 구현의 별도 로컬 결합 실행
+
+아래 결합은 무시된 검증 디렉터리에서만 수행했으며 PR diff에는 선행 코드가 없다.
+준비 실행·worker·Director 서비스·WS 활성화도 이 결합에 추가하지 않았다.
+
+| 결합 범위 | 실제 실행 결과 |
+| --- | --- |
+| 코어 게시본 + #103 agent.py 한 파일 | 신규 28 passed, AI 전체 221 passed, mypy 12파일 통과 |
+| 연결 게시본 + 선행 tree + 코어 3파일 | 관련 36 passed, mypy app 140파일 통과 |
+| 네 게시 범주 + 선행 tree | AI 전체 295 passed, BE 관련 6파일 89 passed |
+| 위 결합의 모듈 위치 | 9개 실행 모듈이 모두 해당 overlay에서 로드됨을 확인 |
+| 공통 게시본 + #82 migration 한 파일 | 실제 PostgreSQL 새 DB에서 upgrade head 통과 |
+| 같은 PostgreSQL DB의 seed CLI 2회 | 평가 기준6·도메인 frame21, 중복 없음·비활성 유지 |
+| 같은 PostgreSQL DB | downgrade base 통과, 생성 DB만 삭제·전용 PostgreSQL 종료 확인 |
+
+DB 검사는 SQLite로 대체하지 않았다. 기존 DB·schema·table 목록이 전후 일치하며
+추가로 사용한 16086 포트도 해제했다. 원문·모델 provider는 mock으로 검증했다.
+위 수치는 이번 게시본으로 새로 실행한 결과이며 원본 통합본의 BE 1302건을 재사용하지 않았다.
+계약 검사는 부분 형식 검사이며 runtime·TypeScript·전체 API 호환성 검증이 아니다.
+
+### 보존한 후속과 미검증 범위
+
+- `agent_context.py` 현재 질문·한계 전달 보완 및 `repo_deep.py` 예산·한계 전달 보완은
+  선행 구현에 붙는 후속이므로 원본 패치로 보존한다. 선행 반영 뒤 연결·재검증해야 한다.
+- 이 보완을 요구하는 `load_answer_context`·반환형, 기존 `generate_question`의 base_url 수정,
+  L2 한계 전달 및 Context 서비스 통합 검증도 보류한다. 우회 함수·복제 구현은 만들지 않는다.
+- 준비 실행·ARQ 등록·WS·턴 저장/상태 제어·앱 활성화와 전용 테스트, WS ADR0024는 원본에 남긴다.
+  BE 실행 전용 3개 상한·quota 예제와 이에 해당하는 테스트·통합 문서 구간도 게시 범위에서 뺀다.
+- 공개 OpenAPI·FE·WS wire, 패키지/lockfile, DB 모델은 변경하지 않는다.
+  운영 prompt 검수·활성화, 실제 모델 의미 품질·지연·비용, 다언어·대형 파일 전반은 미검증이다.
+- 원본·게시·보류·게시용 테스트/문서 조정의 대응표와 패치는 원본 저장소의
+  `.claude/scratch/director-publish-20261023`에 보존한다. 선행 병합·보류 보완 후 다시 검증한다.
+
 ## 2026-09-27 — PR #50 계약 검증 재검토 반영
 
 관련 PR: [AI 내부 계약과 순수 검증 경계 #50](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/50).
