@@ -199,9 +199,11 @@ async def retry_prepare(
     """preparing_failed 면접을 preparing 으로 되돌리고 interview_prep 을 다시 넣는다.
 
     실패 단계부터 이어 하기는 worker 가 prepare_steps 를 보고 한다. 면접·선택 repo 는 유지.
-    명세에 거절 응답이 없는 두 경우는 prep_failed 로 둔다 (PR 에서 명세 반영 여부 확인):
-    - lastError.recoverable=false: 다시 해도 같은 이유로 실패한다 (FE 도 재선택만 보여준다).
-    - 실패 뒤 같은 run 에 새 면접이 활성화됨: run 당 활성 1개 index 위반.
+    명세에 거절 응답이 없는 두 경우 (#121 1-4):
+    - lastError.recoverable=false: prep_failed. 다시 해도 같은 이유로 실패한다
+      (FE 도 재선택만 보여준다).
+    - 실패 뒤 같은 run 에 새 면접이 활성화됨(run 당 활성 1개 index 위반): session_limit_exceeded.
+      prep_failed 면 FE 가 GET 을 다시 불러 재시도 버튼이 반복되므로 reason 을 나눈다.
     """
     row = await queries.get_owned_interview(db, user_id=user_id, interview_id=interview_id)
     if row is None:
@@ -228,7 +230,7 @@ async def retry_prepare(
     except IntegrityError as exc:
         await db.rollback()
         if _ACTIVE_PER_RUN_INDEX in str(exc.orig):
-            raise AppError(Reason.PREP_FAILED) from None
+            raise AppError(Reason.SESSION_LIMIT_EXCEEDED) from None
         raise
     if updated is None:
         raise AppError(Reason.PREP_IN_PROGRESS)

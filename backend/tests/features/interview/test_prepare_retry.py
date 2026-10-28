@@ -80,7 +80,7 @@ async def test_retry_blocked_by_newer_active_interview(db, redis, failed) -> Non
     )
     with pytest.raises(AppError) as exc:
         await _retry(db, redis, run, interview_id)
-    assert exc.value.reason == Reason.PREP_FAILED
+    assert exc.value.reason == Reason.SESSION_LIMIT_EXCEEDED
     assert await _status(db, interview_id) == "preparing_failed"
 
 
