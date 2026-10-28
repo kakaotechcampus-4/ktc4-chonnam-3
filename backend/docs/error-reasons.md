@@ -49,8 +49,10 @@ OAuth와 분석·면접 등 모든 기능은 같은 레지스트리를 사용한
 | 면접 준비 | `prep_failed` | 409 |
 | 면접 준비 | `repo_unreachable` | 409 |
 | 면접 준비 재시도 | `prep_in_progress` | 409 |
+| 면접 준비 재시도 | `session_limit_exceeded` | 409 |
 | 면접 준비 재시도 | `session_expired` | 410 |
 | 면접 조회 | `not_found` | 404 |
+| 재시도 | `not_found` | 404 |
 | 재시도 | `original_not_completed` | 409 |
 | 재시도 | `repository_unavailable` | 409 |
 | 리포트 | `report_unavailable` | 409 |

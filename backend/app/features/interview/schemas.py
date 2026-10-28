@@ -1,12 +1,14 @@
-"""면접 요청/응답 스키마의 구현 예정 경계.
+"""면접 요청/응답 스키마. 필드는 공통 OpenAPI 와 맞춘다.
+재도전(/{id}/retry)은 CreateInterviewResponse 를 재사용하고, 준비 재시도는 본문이 없다.
 DB·API 상태는 preparing / preparing_failed / in_progress / completed / abandoned다.
-공개 필드·enum은 공통 OpenAPI에 맞춰 구현·검증한다.
 
 docs/pipeline.md 4.5절 / task-04
 """
 
 import uuid
+from datetime import datetime
 
+from app.shared.enums import AnswerMode, InterviewStatus, Persona, PrepareStepKey
 from app.shared.schema import CamelModel, CamelResponse
 
 
@@ -28,3 +30,43 @@ class CreateInterviewResponse(CamelResponse):
 
     session_id: str
     interview_id: uuid.UUID
+
+
+class InterviewTurn(CamelResponse):
+    """openapi InterviewTurn."""
+
+    turn: int
+    persona: Persona
+    question: str
+    answer: str | None
+
+
+class InterviewLastError(CamelResponse):
+    """openapi InterviewLastError. DB last_error JSONB 가 이 모양(camelCase)으로 저장된다."""
+
+    reason: str
+    code: str
+    step: PrepareStepKey | None
+    recoverable: bool
+    occurred_at: datetime
+
+
+class InterviewDetailResponse(CamelResponse):
+    """openapi InterviewDetailResponse. 200.
+
+    prepareSteps 는 BE 명세엔 있으나 openapi 에 없어 넣지 않는다 (FE 는 WS 로 받는다).
+    """
+
+    id: uuid.UUID
+    session_id: str
+    run_id: uuid.UUID
+    status: InterviewStatus
+    answer_mode: AnswerMode
+    position: str
+    company_name: str | None
+    repository_names: list[str]
+    current_turn: int
+    total_turns: int
+    remaining_seconds: int
+    turns: list[InterviewTurn]
+    last_error: InterviewLastError | None
