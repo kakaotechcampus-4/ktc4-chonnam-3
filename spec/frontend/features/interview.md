@@ -68,11 +68,11 @@ Sprint 2부터 면접은 음성만 남는다. 그 선행 작업으로 면접 준
 
 면접 준비 실패
   ├─ [다시 시도]            → POST /interviews/{id}/prepare/retry → 5a2-v2 (실패 단계부터 재실행)
-  └─ [레포 다시 선택하기]    → 5a-v2 (기존 면접 id 전달) → [면접 시작] → 기존 면접 abandon → 새 면접 생성 (FE 결정, BE 계약 대기 — 0009)
+  └─ [레포 다시 선택하기]    → 5a-v2 (기존 면접 id 전달) → [면접 시작] → 기존 면접 abandon → 새 면접 생성
 
 5b-v2  면접 진행 (WS 유지)
   ├─ interviewEnd → 5c-v2 리포트
-  ├─ [이탈 확인 모달에서 확인] → POST /interviews/{id}/abandon → /home (FE 결정, BE 계약 대기 — 0009. 현재는 홈 이동만)
+  ├─ [이탈 확인 모달에서 확인] → POST /interviews/{id}/abandon → /home
   └─ onclose      → GET /interviews/{id} → 세션 확인 + turns 복구 → WS 재연결 (인증 만료·유실은 /login)
 ```
 
@@ -101,9 +101,9 @@ Sprint 2부터 면접은 음성만 남는다. 그 선행 작업으로 면접 준
 
 명시적으로 나간 뒤에도 이미 저장한 답변 원문은 보존한다. 마지막 턴이 미답변일 때만 `answer: null`이며, 답변 저장 후 분석·질문 생성 중 나간 경우 저장된 답변을 지우지 않는다.
 
-### abandoned 전환 방법 (FE 결정 — API는 [공통 0009](../../shared/decisions/0009-interview-abandon-transition.md) BE 검토 대기)
+### abandoned 전환 방법
 
-아래 FE 동작은 확정이다. 다만 이 동작이 쓰는 API가 아직 계약에 없어, 현재 구현의 이탈 모달은 소켓을 닫고 홈으로 이동만 하며 면접은 서버에서 `in_progress`로 남는다. 0009의 API가 합의되면 아래대로 구현한다.
+[공통 0009](../../shared/decisions/0009-interview-abandon-transition.md)에 따라 위 두 이벤트를 `POST /interviews/{id}/abandon`으로 서버에 알린다.
 
 - 나가기: 이탈 모달 확인 → `POST /interviews/{id}/abandon` → `/home`. 요청이 실패해도 홈으로 이동한다. `409 already_completed`면 `GET /interviews/{id}`로 다시 확인해 `completed`일 때만 리포트로 이동한다. 이 reason은 `preparing`(다른 탭의 [다시 시도])에도 온다.
 - 레포 재선택(준비 실패·진행 중 `repo_unreachable` 모두): [레포 다시 선택하기]는 기존 면접 id를 넘기며 레포 선택 화면으로 이동만 한다. 레포 선택 화면의 [면접 시작]에서 기존 면접 abandon → `POST /interviews` 순서로 보낸다. abandon만 성공하고 생성이 실패하면 레포 선택 화면에 머문다. 생성이 `410 run_expired`면 다시 눌러도 같으므로 공고 입력부터 다시 시작하도록 안내한다. abandon이 `409 already_completed`면 나가기와 같이 다시 확인하고, `completed`가 아니면 조회한 `status`의 화면으로 이동한다.
@@ -117,7 +117,7 @@ Sprint 2부터 면접은 음성만 남는다. 그 선행 작업으로 면접 준
 | 17 | `GET /interviews/{id}` | 5a2-v2, 5b-v2, 면접 준비 실패 | `['interview', id]` |
 | 18 | `GET (Upgrade) /ws/interviews/{sessionId}` | 5a2-v2, 5b-v2 | — |
 | — | `POST /interviews/{id}/prepare/retry` | 면접 준비 실패 | — |
-| — | `POST /interviews/{id}/abandon` (BE 계약 대기, [0009](../../shared/decisions/0009-interview-abandon-transition.md)) | 5b-v2 이탈 모달, 레포 재선택 | — |
+| — | `POST /interviews/{id}/abandon` | 5b-v2 이탈 모달, 레포 재선택 | — |
 
 `GET /interviews/{id}` 응답에 `answerMode: "text"`가 포함된다. Sprint 1은 이 값을 항상 `text`로 취급한다. 준비 화면의 장치 점검은 이 값으로 분기하지 않는다. Sprint 2에 텍스트 면접을 없애면서 이 필드를 어떻게 정리할지는 공통 계약 결정으로 따로 남긴다.
 
