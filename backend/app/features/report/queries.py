@@ -4,20 +4,26 @@ docs/layer-rules.md 1절 / task-16
 """
 
 import uuid
+from collections.abc import Mapping, Sequence
+from datetime import datetime
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
+    Evidence,
     InterviewReport,
     InterviewSession,
     InterviewTurn,
+    JdRequirement,
     JobPosting,
     ReportDisagreement,
     ReportScore,
     Repository,
     ScoreCriterion,
     SessionRepository,
+    TurnEvidence,
 )
 
 
@@ -94,3 +100,69 @@ async def list_repository_names(db: AsyncSession, *, interview_id: uuid.UUID) ->
         .order_by(SessionRepository.display_order)
     )
     return list(rows)
+
+
+async def list_answered_turns(db: AsyncSession, *, interview_id: uuid.UUID) -> list[InterviewTurn]:
+    """답변 완료 턴을 turn_no 순으로. 리포트 입력의 문답 원본이다."""
+    rows = await db.scalars(
+        select(InterviewTurn)
+        .where(
+            InterviewTurn.interview_session_id == interview_id,
+            InterviewTurn.status == "answered",
+        )
+        .order_by(InterviewTurn.turn_no)
+    )
+    return list(rows)
+
+
+async def list_turn_evidences(
+    db: AsyncSession, *, interview_id: uuid.UUID
+) -> dict[uuid.UUID, list[tuple[str, Evidence]]]:
+    """턴별 (usage, 근거). 입력: interviewId. 출력: turn_id -> 연결된 근거 목록."""
+    rows = await db.execute(
+        select(TurnEvidence.turn_id, TurnEvidence.usage, Evidence)
+        .join(Evidence, Evidence.id == TurnEvidence.evidence_id)
+        .join(InterviewTurn, InterviewTurn.id == TurnEvidence.turn_id)
+        .where(InterviewTurn.interview_session_id == interview_id)
+        .order_by(InterviewTurn.turn_no, Evidence.created_at)
+    )
+    out: dict[uuid.UUID, list[tuple[str, Evidence]]] = {}
+    for turn_id, usage, evidence in rows:
+        out.setdefault(turn_id, []).append((usage, evidence))
+    return out
+
+
+async def list_requirements(db: AsyncSession, *, posting_id: uuid.UUID) -> list[JdRequirement]:
+    """공고 요구사항을 display_order 순으로. coverage 계산의 분모다."""
+    rows = await db.scalars(
+        select(JdRequirement)
+        .where(JdRequirement.job_posting_id == posting_id)
+        .order_by(JdRequirement.display_order)
+    )
+    return list(rows)
+
+
+async def insert_report(
+    db: AsyncSession,
+    *,
+    interview_id: uuid.UUID,
+    values: Mapping[str, object],
+    scores: Sequence[Mapping[str, object]],
+    generated_at: datetime,
+) -> bool:
+    """리포트와 점수를 한 번에 저장한다. 같은 면접의 리포트가 이미 있으면 False.
+
+    interview_session_id UNIQUE 충돌은 건너뛰어 재실행·동시 실행이 중복 행을 만들지 않는다.
+    호출자의 transaction 안에서 실행하므로 점수 INSERT 실패 시 리포트도 함께 롤백된다.
+    """
+    report_id = await db.scalar(
+        insert(InterviewReport)
+        .values(interview_session_id=interview_id, generated_at=generated_at, **values)
+        .on_conflict_do_nothing(index_elements=[InterviewReport.interview_session_id])
+        .returning(InterviewReport.id)
+    )
+    if report_id is None:
+        return False
+    db.add_all(ReportScore(report_id=report_id, **row) for row in scores)
+    await db.flush()
+    return True
