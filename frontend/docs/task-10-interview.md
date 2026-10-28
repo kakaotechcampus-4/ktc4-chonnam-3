@@ -49,6 +49,21 @@ Sprint 2 대상이라 이번에 만들지 않는 것: 마이크·스피커 점�
 - [ ] `npm run build` 통과
 - [ ] `npm run lint` 통과
 
+## 후속 — abandoned 전환 ([공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md), 선행: BE `POST /interviews/{id}/abandon` 구현)
+
+- 이탈 확인 모달 확인 시 `POST /interviews/{id}/abandon` 호출 후 `/home`. 요청이 실패해도 홈으로 이동하고, `409 already_completed`면 `GET /interviews/{id}`로 다시 확인해 `completed`일 때만 리포트로 이동(`preparing`도 이 reason)
+- [레포 다시 선택하기] 두 곳(준비 실패 화면, 진행 중 `repo_unreachable`)에서 기존 면접 id를 레포 선택 화면에 전달
+- 레포 선택 [면접 시작]에서 기존 면접 id가 있으면 abandon → `POST /interviews` 순서로 호출. abandon만 성공하고 생성이 실패하면 레포 선택 화면에 머묾. 생성이 `410 run_expired`면 공고 입력부터 다시 안내(기존 안내 유지). abandon이 `409 already_completed`면 다시 확인해 `completed`는 리포트, 그 밖은 조회한 `status`의 화면으로 이동
+- 면접 생성 후 준비 화면 이동을 `replace`로 변경
+- MSW: abandon 핸들러(204·404·409), abandon 후 열린 WS 종료
+
+### 완료 조건
+
+- [ ] 이탈 모달의 abandon 호출과 실패·`already_completed` 처리(재조회 후 `completed`만 리포트)
+- [ ] 레포 재선택의 기존 면접 id 전달과 abandon → 생성 순서
+- [ ] 면접 생성 후 이동 `replace` (뒤로 가기로 같은 run의 레포 선택 화면에 돌아오지 않음)
+- [ ] MSW 핸들러와 Playwright 시나리오
+
 ## 커밋
 
 ```

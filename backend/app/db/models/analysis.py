@@ -54,14 +54,25 @@ class AnalysisJob(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     __table_args__ = (
         CheckConstraint(check_in("job_type", JOB_TYPES), name="job_type"),
         CheckConstraint(check_in("status", JOB_STATUSES), name="status"),
-        # 사용자·job_type 당 살아 있는 job 1개. 락 키에 job_type 이 들어가는 이유와 같다 —
-        # M1 initial_sync 와 M2 analysis_run 이 겹쳐도 정상 흐름을 막지 않는다.
+        # 분석은 입력별로 중복을 막고, 초기 수집 등 기존 작업의 사용자 제한은 유지한다.
         Index(
             "uq_analysis_jobs_active_user_job_type",
             "user_id",
             "job_type",
             unique=True,
-            postgresql_where=text(check_in("status", ACTIVE_JOB_STATUSES)),
+            postgresql_where=text(
+                check_in("status", ACTIVE_JOB_STATUSES) + " AND job_type <> 'analysis_run'"
+            ),
+        ),
+        Index(
+            "uq_analysis_jobs_active_fingerprint",
+            "user_id",
+            "fingerprint",
+            unique=True,
+            postgresql_nulls_not_distinct=True,
+            postgresql_where=text(
+                check_in("status", ACTIVE_JOB_STATUSES) + " AND job_type = 'analysis_run'"
+            ),
         ),
         Index("ix_analysis_jobs_user_id_created_at", "user_id", "created_at"),
         Index("ix_analysis_jobs_fingerprint", "fingerprint"),
@@ -153,7 +164,11 @@ class AnalysisRepoCandidatePage(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
     page_no: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="pending")
     requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # page 행이 실행 기록의 원본이다. requested_at이 page 작업의 queued_at에 해당한다.
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    queue_wait_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_code: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 

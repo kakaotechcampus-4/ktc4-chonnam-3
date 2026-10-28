@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
 import Footer from '@/shared/components/Footer';
-import { STEP_GROUPS, groupStatus } from '@/features/analysis/steps';
-import type { RunStatus, StepKey, StepStatus } from '@/types/api';
+import RunLoadError from '@/features/analysis/RunLoadError';
+import { STEP_GROUPS, groupStatus, postingUrlFrom } from '@/features/analysis/steps';
+import { isApiError, type RunStatus, type StepKey, type StepStatus } from '@/types/api';
 
 type StepMap = Record<StepKey, StepStatus>;
 
@@ -48,9 +49,13 @@ function mergeSteps(...snapshots: Partial<StepMap>[]): StepMap {
 export default function Analyzing() {
   const { runId = '' } = useParams<{ runId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
 
   const [sseSteps, setSseSteps] = useState<Partial<StepMap>>({});
   const [sseStatus, setSseStatus] = useState<RunStatus | null>(null);
+  // 다시 시도를 누르면 닫힌 SSE도 새로 연다.
+  const [sseAttempt, setSseAttempt] = useState(0);
 
   // 같은 화면에서 runId만 A → B로 바뀌면 컴포넌트가 재사용돼 A의 SSE 상태가 남는다.
   // effect에서 비우면 한 번은 A의 completed로 렌더돼 B가 잘못 이동하므로 렌더 중에 비운다.
@@ -97,12 +102,15 @@ export default function Analyzing() {
       }
     };
 
+    // EventSource는 상태 코드를 읽지 못한다. 만료(410)·인증 실패·끊김을 GET 1회로 판단한다.
+    // 닫지 않는다. 네트워크 끊김은 브라우저가 다시 연결하고, HTTP 오류 응답이면 이미 CLOSED다.
+    // data가 있으면 GET 실패는 아래 loadError에서 무시되므로 이 GET은 사실상 만료(410) 확인용이다.
     source.onerror = () => {
-      source.close();
+      void queryClient.refetchQueries({ queryKey: queryKeys.analysisRun(runId) });
     };
 
     return () => source.close();
-  }, [runId]);
+  }, [runId, queryClient, sseAttempt]);
 
   const steps: StepMap = mergeSteps(
     Object.fromEntries((runQuery.data?.steps ?? []).map((s) => [s.key, s.status])),
@@ -111,11 +119,19 @@ export default function Analyzing() {
   const runStatus: RunStatus = sseStatus ?? runQuery.data?.status ?? 'running';
   const hasFailedStep = Object.values(steps).some((status) => status === 'failed');
 
+  // 끝난 진행 화면을 기록에 남기면 뒤로 가기가 곧바로 다음 화면으로 되돌아온다.
+  const inputState = location.state;
   useEffect(() => {
     if (!runId) return;
-    if (runStatus === 'completed') navigate(`/interview/repos/${runId}`);
-    if (runStatus === 'failed') navigate(`/interview/failed/${runId}`);
-  }, [runStatus, runId, navigate]);
+    const options = { replace: true, state: inputState };
+    if (runStatus === 'completed') navigate(`/interview/repos/${runId}`, options);
+    if (runStatus === 'failed') navigate(`/interview/failed/${runId}`, options);
+  }, [runStatus, runId, navigate, inputState]);
+
+  // 첫 조회 실패면 data가 없어 폴링도 멈춘다. 안내 없이 스피너만 남지 않게 한다.
+  // 이미 받은 data가 있으면 폴링 한 번 실패는 무시한다. 만료(410)는 data가 있어도 알린다.
+  const expired = isApiError(runQuery.error) && runQuery.error.error.reason === 'run_expired';
+  const loadError = runQuery.isError && !sseStatus && (!runQuery.data || expired);
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
@@ -126,7 +142,7 @@ export default function Analyzing() {
           <p className="text-[11px] font-bold text-accent">모의면접 · 분석 중</p>
 
           <div className="flex items-center gap-3">
-            {hasFailedStep ? (
+            {hasFailedStep || loadError ? (
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-error-soft text-sm font-bold text-error">
                 !
               </span>
@@ -176,6 +192,17 @@ export default function Analyzing() {
               );
             })}
           </ul>
+
+          {loadError && (
+            <RunLoadError
+              error={runQuery.error}
+              onRetry={() => {
+                setSseAttempt((n) => n + 1);
+                void runQuery.refetch();
+              }}
+              postingUrl={postingUrlFrom(location.state)}
+            />
+          )}
         </div>
       </main>
 

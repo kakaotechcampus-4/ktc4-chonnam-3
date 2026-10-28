@@ -8,7 +8,7 @@
 
 WebSocket으로 AI 면접관과 텍스트 면접을 진행한다. 준비 단계와 진행 단계가 같은 WS 연결을 공유한다.
 
-[공통 0004](../../shared/decisions/0004-flexible-persona-allocation-restoration.md)에 따라 정상 완료는 9턴이며 첫 질문은 HR이다. 기술 질문은 목표 6턴·최소 5턴, 도메인·HR 질문은 첫 HR을 포함해 합산 최소 3턴이다. 도메인·HR의 개별 배분과 첫 질문 이후의 순서는 고정하지 않으며 HR을 다시 선택할 수 있다. 역할 배분 로직의 구현 완료를 뜻하지 않는다.
+[공통 0008](../../shared/decisions/0008-fixed-persona-allocation.md)에 따라 정상 완료 9턴은 기술 6회·도메인 2회·HR 1회이며 첫 질문이 유일한 HR 질문이다. 이후 기술·도메인 순서는 고정하지 않으며 FE는 서버가 전달한 Persona를 표시한다. 9번째 답변 처리 후 종료하고, 이탈·실패로 중단된 면접에는 정상 배분을 강제하지 않는다. 이번 반영은 문서에 한정하며 실제 제어·mock 정합성·검증 상태는 [AI 구현 기록](../../ai/implementation.md)을 따른다.
 
 | 화면 | 코드 | 구성 |
 | --- | --- | --- |
@@ -68,11 +68,11 @@ Sprint 2부터 면접은 음성만 남는다. 그 선행 작업으로 면접 준
 
 면접 준비 실패
   ├─ [다시 시도]            → POST /interviews/{id}/prepare/retry → 5a2-v2 (실패 단계부터 재실행)
-  └─ [레포 다시 선택하기]    → 5a-v2 (새 세션 생성, 기존 세션은 abandoned)
+  └─ [레포 다시 선택하기]    → 5a-v2 (기존 면접 id 전달) → [면접 시작] → 기존 면접 abandon → 새 면접 생성
 
 5b-v2  면접 진행 (WS 유지)
   ├─ interviewEnd → 5c-v2 리포트
-  ├─ [이탈 확인 모달에서 확인] → 명시적 이탈, status='abandoned'
+  ├─ [이탈 확인 모달에서 확인] → POST /interviews/{id}/abandon → /home
   └─ onclose      → GET /interviews/{id} → 세션 확인 + turns 복구 → WS 재연결 (인증 만료·유실은 /login)
 ```
 
@@ -101,6 +101,15 @@ Sprint 2부터 면접은 음성만 남는다. 그 선행 작업으로 면접 준
 
 명시적으로 나간 뒤에도 이미 저장한 답변 원문은 보존한다. 마지막 턴이 미답변일 때만 `answer: null`이며, 답변 저장 후 분석·질문 생성 중 나간 경우 저장된 답변을 지우지 않는다.
 
+### abandoned 전환 방법
+
+[공통 0009](../../shared/decisions/0009-interview-abandon-transition.md)에 따라 위 두 이벤트를 `POST /interviews/{id}/abandon`으로 서버에 알린다.
+
+- 나가기: 이탈 모달 확인 → `POST /interviews/{id}/abandon` → `/home`. 요청이 실패해도 홈으로 이동한다. `409 already_completed`면 `GET /interviews/{id}`로 다시 확인해 `completed`일 때만 리포트로 이동한다. 이 reason은 `preparing`(다른 탭의 [다시 시도])에도 온다.
+- 레포 재선택(준비 실패·진행 중 `repo_unreachable` 모두): [레포 다시 선택하기]는 기존 면접 id를 넘기며 레포 선택 화면으로 이동만 한다. 레포 선택 화면의 [면접 시작]에서 기존 면접 abandon → `POST /interviews` 순서로 보낸다. abandon만 성공하고 생성이 실패하면 레포 선택 화면에 머문다. 생성이 `410 run_expired`면 다시 눌러도 같으므로 공고 입력부터 다시 시작하도록 안내한다. abandon이 `409 already_completed`면 나가기와 같이 다시 확인하고, `completed`가 아니면 조회한 `status`의 화면으로 이동한다.
+- 면접 생성 후 준비 화면 이동은 `replace`로 해, 뒤로 가기로 같은 run의 레포 선택 화면에 돌아오지 않게 한다.
+- abandon 시 서버가 열린 WS를 닫는다. FE는 기존 `onclose` 처리대로 `GET /interviews/{id}`로 확인하고 `abandoned`면 재연결하지 않는다.
+
 ## API 연동
 
 | # | 엔드포인트 | 화면 | queryKey |
@@ -108,6 +117,7 @@ Sprint 2부터 면접은 음성만 남는다. 그 선행 작업으로 면접 준
 | 17 | `GET /interviews/{id}` | 5a2-v2, 5b-v2, 면접 준비 실패 | `['interview', id]` |
 | 18 | `GET (Upgrade) /ws/interviews/{sessionId}` | 5a2-v2, 5b-v2 | — |
 | — | `POST /interviews/{id}/prepare/retry` | 면접 준비 실패 | — |
+| — | `POST /interviews/{id}/abandon` | 5b-v2 이탈 모달, 레포 재선택 | — |
 
 `GET /interviews/{id}` 응답에 `answerMode: "text"`가 포함된다. Sprint 1은 이 값을 항상 `text`로 취급한다. 준비 화면의 장치 점검은 이 값으로 분기하지 않는다. Sprint 2에 텍스트 면접을 없애면서 이 필드를 어떻게 정리할지는 공통 계약 결정으로 따로 남긴다.
 
@@ -261,6 +271,8 @@ Sprint 1의 `question` 수신은 질문 전달 완료를 뜻하며 `questionEnd`
 
 ## 검증 시나리오 (Sprint 1)
 
+- 정상 완료 mock과 수신 문답의 배분이 첫 HR을 포함해 기술 6회·도메인 2회·HR 1회인지 확인하고, 첫 질문 이후 기술·도메인의 서로 다른 순서를 그대로 표시한다.
+- 9번째 질문 수신만으로 완료하지 않고 답변 처리 뒤 `interviewEnd`에서 종료하며, 이탈·실패 기록에는 정상 완료 배분을 강제하지 않는다.
 - 준비 4단계 체크리스트 실시간 갱신
 - 준비 실패 → 면접 준비 실패 화면 전환, 실패 단계만 ✕ 표시
 - `reason`·`recoverable`에 맞는 안내와 액션 표시; `question_failed`에서 FE·재연결의 추가 LLM 재시도 없음

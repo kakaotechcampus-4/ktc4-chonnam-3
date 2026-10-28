@@ -30,7 +30,7 @@ import {
   resultRepositories,
 } from '../fixtures/analysis';
 import { jdCompanyName, jdPosition, jdRequirements } from '../fixtures/jd';
-import { errorResponse, path, type Res } from '../http';
+import { errorResponse, path, pickScenario, type Res } from '../http';
 import { BASE } from '@/shared/api';
 
 /** 계약에 SSE payload 정의가 없어 api-spec.md #13 을 따른다. progress 는 아래 주석 참고. */
@@ -186,9 +186,10 @@ export const analysisHandlers = [
     });
   }),
 
+  /** `msw.result = all-failed`면 모든 레포를 실패로 내려 선택할 레포가 없는 화면을 본다. */
   http.get<RunParams, never, Res<AnalysisResultResponse>>(
     path('/analysis-runs/:runId/result'),
-    async ({ params }) => {
+    async ({ params, request }) => {
       const run = getRun(String(params.runId));
       if (!run) {
         return errorResponse(410, 'run_expired', '분석 요청을 찾을 수 없어요.');
@@ -205,7 +206,15 @@ export const analysisHandlers = [
         jdRequirements,
         mentionedRepoCount,
         matchedRepoCount,
-        repositories: resultRepositories,
+        repositories:
+          pickScenario(request, 'result', 'default') === 'all-failed'
+            ? resultRepositories.map((repo) => ({
+                ...repo,
+                status: 'failed' as const,
+                errorCode: 'llm_failed',
+                recommended: false,
+              }))
+            : resultRepositories,
       });
     },
   ),

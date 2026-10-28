@@ -22,11 +22,18 @@
 
 ### 면접 이력 카드
 
-헤더: `총 {totalCount}회` · `평균 점수 {averageScore}점`
+헤더: `완료 {totalCount}회` · `평균 점수 {averageScore}점`
 
 행 컬럼: 일시 · 공고(회사명 + 직무) · 사용 레포(태그) · 점수(`{totalScore}`/100) · `리포트 보기 →`
 
-`status === 'completed'`만 표시한다.
+`completed`와 시작 후 중단된 `abandoned`를 표시한다. 중단된 면접의 행 구성은 아래를 따른다.
+
+#### 중단된 면접 행 ([공통 0009](../../shared/decisions/0009-interview-abandon-transition.md))
+
+- 표시 대상: `completed`와 `startedAt`이 있는 `abandoned`. 준비 단계에서 버린 면접은 기록할 내용이 없어 표시하지 않는다.
+- abandoned 행: 일시는 `startedAt`, 점수 자리는 "중단됨", 버튼은 `리포트 보기` 대신 `다시 도전하기`(`POST /interviews/{id}/retry`). 리포트가 없어 `리포트 보기`는 두지 않는다.
+- 헤더: `totalCount`·`averageScore`는 completed 기준이므로 `완료 {totalCount}회`로 표기해 목록 행 수와 혼동하지 않게 한다.
+- 재도전 실패 안내는 [리포트 명세](report.md#post-interviewsidretry)의 reason별 처리를 행 아래에 보인다.
 
 ### 하단
 
@@ -41,6 +48,7 @@
 
 마이페이지
   ├─ 면접 이력 행 [리포트 보기] → 5c-v2 리포트
+  ├─ 중단된 면접 행 [다시 도전하기] → POST /interviews/{id}/retry → 201 → /interview/{newId}/prepare
   ├─ [로그아웃] → 확인 모달
   │      ├─ 확인 → POST /auth/logout → clear() → /login
   │      └─ 취소 → 모달 닫힘
@@ -53,6 +61,7 @@
 | --- | --- | --- |
 | 6 | `GET /me/profile` | `['profile']` |
 | 10 | `GET /me/interviews` | `['interviews', { page }]` |
+| 20 | `POST /interviews/{id}/retry` (중단된 면접 행) | — |
 | 4 | `POST /auth/logout` | — |
 
 `/me/profile`은 마이페이지 전용으로 새로 만든 엔드포인트다.
@@ -94,6 +103,8 @@
 | `id` | `리포트 보기` 링크 대상 |
 
 `total`·`averageScore`는 페이지와 무관한 전체 기준값이다.
+
+중단된 면접 행은 `startedAt`을 일시로, `status`로 "중단됨"과 `다시 도전하기`를 결정하며 `id`는 재도전 대상이다. 이때 `total`은 목록 행 수, `averageScore`는 completed 기준이다.
 
 ### 미구현 — 협의 대기
 
