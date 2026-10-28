@@ -60,11 +60,12 @@ export const queryClient = new QueryClient({
     queries: {
       retry: (failureCount, error) => {
         // 세션 종료 중이거나 인증·권한 오류이면 자동 재시도로 보호 API를 다시 호출하지 않는다.
+        // 410(run_expired 등)은 다시 불러도 같은 결과라 재시도하지 않는다.
         if (leavingSession) return false;
         if (
           isApiError(error) &&
           'status' in error &&
-          (error.status === 401 || error.status === 403)
+          (error.status === 401 || error.status === 403 || error.status === 410)
         ) {
           return false;
         }

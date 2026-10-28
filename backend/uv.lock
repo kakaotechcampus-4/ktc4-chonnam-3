@@ -350,6 +350,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "anyio" },
     { name = "arq" },
     { name = "asyncpg" },
     { name = "cryptography" },
@@ -382,6 +383,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic" },
+    { name = "anyio" },
     { name = "arq" },
     { name = "asyncpg" },
     { name = "cryptography", specifier = ">=50.0.1" },

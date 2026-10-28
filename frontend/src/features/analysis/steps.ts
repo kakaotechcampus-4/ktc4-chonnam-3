@@ -20,3 +20,14 @@ export function groupStatus(
   if (keys.some((key) => steps[key] === 'running')) return 'running';
   return 'pending';
 }
+
+/**
+ * 분석 화면 사이에 넘기는 router state. 실패 후 다시 시도할 때 공고 입력 화면에 URL을 채운다.
+ * 첨부 파일은 File 객체라 넘기지 않는다. 다시 첨부해야 한다.
+ */
+export type AnalysisInputState = { postingUrl: string };
+
+export function postingUrlFrom(state: unknown): string {
+  const value = (state as Partial<AnalysisInputState> | null)?.postingUrl;
+  return typeof value === 'string' ? value : '';
+}

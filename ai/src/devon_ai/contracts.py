@@ -1,7 +1,7 @@
 """AI 내부 후보·검증 계약과 공급자에 종속되지 않는 모델 호출 계약."""
 
 from collections.abc import Awaitable, Callable
-from dataclasses import MISSING, dataclass, field, fields, is_dataclass
+from dataclasses import MISSING, dataclass, field, fields, is_dataclass, replace
 from math import isfinite
 from re import fullmatch
 from types import UnionType
@@ -1057,6 +1057,95 @@ class DeepRepoAnalysis(_Contract):
         _unique(cast(tuple[object, ...], self.confirmed_technologies), "confirmed technologies")
 
 
+@dataclass(frozen=True)
+class AreaFailure(_Contract):
+    path: str | None
+    stage: FailureStage
+    reason_summary: str
+
+
+@dataclass(frozen=True)
+class DeepAnalysisResult(_Contract):
+    """analysis가 None이면 검증된 notable area가 없어 L2 준비 근거로 쓸 수 없다.
+
+    채택한 area 중 limitations가 있는 항목은 제한 관찰, 없는 항목은 사용 가능 관찰이다.
+    """
+
+    analysis: DeepRepoAnalysis | None
+    rejected_areas: tuple[AreaFailure, ...]
+
+
+def parse_deep_analysis(
+    payload: object, *, source: DeepRepoInput
+) -> ContractChecked[DeepAnalysisResult]:
+    """notable area를 하나씩 검증해 무효 area가 확인된 area까지 지우지 않게 한다.
+
+    area 밖의 필드 오류와 다른 ref 결과는 전체 실패다. 무효 area는 고치거나 채우지 않고 분리한다.
+    """
+    _convert(DeepRepoInput, source, "deep input", wire=False)
+    if type(payload) is not dict:
+        raise ContractError("schema", "deep analysis")
+    # 형식이 올바른 다른 저장소 응답은 내용의 schema 오류와 관계없이 재호출하지 않는다.
+    repository_id, head_sha = payload.get("repository_id"), payload.get("head_sha")
+    _text(repository_id, "repository_id")
+    _text(head_sha, "head_sha")
+    _sha(cast(str, head_sha))
+    if repository_id != source.repository_id or head_sha != source.head_sha:
+        raise ContractError("semantic", "repository ref")
+    # decode는 모르는 키를 버리므로 개인 기여·점수 같은 계약 밖 값이 성공으로 섞이지 않게 거절한다.
+    unexpected = set(payload) - {item.name for item in fields(DeepRepoAnalysis)}
+    if unexpected:
+        raise ContractError("schema", min(unexpected))
+    raw_areas = payload.get("notable_areas")
+    if type(raw_areas) is not list:
+        raise ContractError("schema", "notable_areas")
+    base = decode(DeepRepoAnalysis, {**payload, "notable_areas": []})
+    # 5개를 넘는 후보를 잘라 쓰면 모델이 고르지 않은 순서로 근거를 채택하게 된다.
+    # 내용 판단이 아닌 출력 형식 위반이라 schema로 두어 공통 호출 계층의 1회 재시도를 받는다.
+    if len(raw_areas) > 5:
+        raise ContractError("schema", "notable area count")
+
+    paths = [
+        item.get("path")
+        if type(item) is dict and type(item.get("path")) is str and item["path"].strip()
+        else None
+        for item in raw_areas
+    ]
+    source_by_path = {item.path: item for item in source.sources}
+    area_keys = {item.name for item in fields(NotableArea)}
+    areas: list[NotableArea] = []
+    rejected: list[AreaFailure] = []
+    for item, path in zip(raw_areas, paths, strict=True):
+        try:
+            extra = set(item) - area_keys if type(item) is dict else set()
+            if extra:
+                # 줄 번호·함수 위치는 읽은 범위로 확인할 수 없는 근거라 받지 않는다.
+                raise ContractError("schema", min(extra))
+            area = decode(NotableArea, item)
+            if paths.count(area.path) > 1:
+                raise ContractError("semantic", "duplicate path")
+            matched = source_by_path.get(area.path)
+            if matched is None:
+                raise ContractError("semantic", "unread source")
+            if matched.read_scope != area.scope:
+                raise ContractError("semantic", "read scope mismatch")
+            # 디렉터리 목록만으로는 파일 동작을 확인할 수 없어 한계 없는 관찰을 받지 않는다.
+            if matched.kind == "directory" and not area.limitations:
+                raise ContractError("semantic", "directory limitations missing")
+        except ContractError as error:
+            rejected.append(AreaFailure(path, error.stage, f"invalid field: {error.field}"))
+            continue
+        areas.append(area)
+    if not areas:
+        # 채택할 관찰이 없고 거절이 전부 형식 오류일 때 공통 gateway의 남은 재시도만 사용한다.
+        # semantic 거절이 섞이면 다시 평가하지 않고 부분 성공·거절 목록을 그대로 보존한다.
+        if rejected and all(item.stage == "schema" for item in rejected):
+            raise ContractError("schema", "notable areas")
+        return _checked(DeepAnalysisResult(None, tuple(rejected)))
+    checked = validate_deep_analysis(replace(base, notable_areas=tuple(areas)), source=source)
+    return _checked(DeepAnalysisResult(checked.data, tuple(rejected)))
+
+
 def validate_deep_analysis(
     candidate: DeepRepoAnalysis, *, source: DeepRepoInput
 ) -> ContractChecked[DeepRepoAnalysis]:
@@ -1073,6 +1162,17 @@ def validate_deep_analysis(
         if matched is None or matched.read_scope != area.scope:
             raise ContractError("semantic", "notable area source scope")
     return _checked(candidate)
+
+
+@dataclass(frozen=True)
+class DomainPostingInput(_Contract):
+    """도메인 category 판정 입력(0022). 회사명·`industry_name`은 필드로 두지 않아 넣을 수 없다."""
+
+    position: str | None
+    intro: str | None
+    main_tasks: tuple[str, ...]
+    requirements: tuple[str, ...]
+    preferred_points: tuple[str, ...]
 
 
 def _json_value(value: object) -> object:
