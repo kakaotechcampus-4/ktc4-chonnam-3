@@ -36,7 +36,7 @@ Sprint 2부터 면접은 음성만 남는다. 그 선행 작업으로 면접 준
 | 영역 | 소스 |
 | --- | --- |
 | 체크리스트 | `prepareStep` — `completed` / `failed` / `pending` |
-| 실패 배너 | `error` — 제목·본문은 `reason`별 문구, 하단에 `code` · `occurredAt` |
+| 실패 배너 | `error` — 제목·본문은 `reason`별 문구. `code` · `occurredAt`은 노출하지 않는다 |
 | 1차 액션 | `다시 시도` → `POST /interviews/{id}/prepare/retry` |
 | 2차 액션 | `레포 다시 선택하기` → 5a-v2 |
 | 하단 안내 | 고객센터 안내 문구 + "선택한 레포와 공고는 저장되어 있어요" — 고객센터 페이지 추가 전까지는 링크 없이 텍스트 (mypage.md:33과 동일). 페이지가 생기면 `Link`로 연결 |
@@ -230,7 +230,7 @@ Sprint 1의 `question` 수신은 질문 전달 완료를 뜻하며 `questionEnd`
 
 `recoverable: false`면 서버가 WS 연결을 닫는다. 오류 안내나 연결 종료만으로 DB 상태를 `completed` 또는 `abandoned`로 바꾸지 않는다. 정상 완료는 9번째 답변 처리 완료, `abandoned`는 명시적 나가기 확인·레포 재선택에 따른다. 오류 전달·종료 요청·실패 기록 복원의 실제 연결은 구현·검증 대상이다.
 
-`code`는 화면에 그대로 노출하는 표시용 식별자다. `occurredAt`과 함께 배너 하단에 표기한다.
+`code`·`occurredAt`은 화면에 노출하지 않는다. 사용자에게 의미 없는 영문 코드와 ISO 시각이 안내 문구 앞에 붙어 어색하기 때문이다. 배너는 `reason`별 문구만 보인다.
 `step`은 준비 단계 오류일 때만 값이 있고, 진행 중 오류에서는 `null`이다.
 
 ### 타이머

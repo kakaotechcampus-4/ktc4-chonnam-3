@@ -31,7 +31,7 @@ export type FaultRule = {
   message?: string;
   retryAfter?: number;
   details?: Record<string, unknown>;
-  /** WebSocket 오류 전용. 배너에 노출하는 표시용 식별자. api-spec.md #18 */
+  /** WebSocket 오류 전용. 오류 식별자(화면에는 노출하지 않음). api-spec.md #18 */
   code?: string;
   /** WebSocket 오류 전용. `false`면 서버가 세션을 닫는다. 생략하면 `true`. */
   recoverable?: boolean;

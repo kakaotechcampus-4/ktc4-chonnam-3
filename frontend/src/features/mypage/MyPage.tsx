@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 
 import { api } from '@/shared/api';
@@ -7,6 +7,8 @@ import { queryKeys } from '@/shared/queryKeys';
 import { clearSessionQueries } from '@/shared/queryClient';
 import Header from '@/shared/components/Header';
 import Footer from '@/shared/components/Footer';
+import { RESTART_REASONS, RETRY_ERROR } from '@/features/interview/retryErrors';
+import { isApiError } from '@/types/api';
 
 const PAGE_SIZE = 10;
 
@@ -21,6 +23,7 @@ function formatDate(value: string | null) {
 
 export default function MyPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [logoutOpen, setLogoutOpen] = useState(false);
 
@@ -45,10 +48,22 @@ export default function MyPage() {
     },
   });
 
+  // 중단된 면접 행의 다시 도전하기. 리포트의 재도전과 같은 API·실패 문구를 쓴다(공통 0009).
+  const retryMutation = useMutation({
+    mutationFn: (id: string) => api.retryInterview(id),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.interviewsAll });
+      navigate(`/interview/${data.interviewId}/prepare`);
+    },
+  });
+  const retryReason = isApiError(retryMutation.error) ? retryMutation.error.error.reason : null;
+  const failedRetryId = retryMutation.isError ? retryMutation.variables : null;
+
   const profile = profileQuery.data;
   const interviewList = interviewsQuery.data;
-  const completedInterviews = (interviewList?.interviews ?? []).filter(
-    (item) => item.status === 'completed',
+  // 목록은 completed와 시작 후 중단된 abandoned다. 계약 밖 상태가 섞여 와도 그리지 않는다.
+  const historyRows = (interviewList?.interviews ?? []).filter(
+    (item) => item.status === 'completed' || item.status === 'abandoned',
   );
   // 조회가 실패하면 data가 비어 totalPages가 1로 떨어진다. 마지막 성공값으로 페이지 이동을 남긴다.
   const [lastTotalPages, setLastTotalPages] = useState(1);
@@ -131,7 +146,7 @@ export default function MyPage() {
 
         <section className="mt-4 rounded-lg border border-accent/10 bg-surface px-5 pb-2 pt-5">
           <h2 className="text-sm font-bold text-ink">
-            면접 이력{profile && ` · 총 ${profile.interviewSummary.totalCount}회`}
+            면접 이력{profile && ` · 완료 ${profile.interviewSummary.totalCount}회`}
           </h2>
 
           {interviewsQuery.isLoading && <p className="mt-6 text-sm text-muted">불러오는 중...</p>}
@@ -144,48 +159,87 @@ export default function MyPage() {
             </div>
           )}
 
-          {interviewList && completedInterviews.length === 0 && (
-            <p className="mt-6 text-sm text-muted">아직 완료된 면접이 없어요.</p>
+          {interviewList && historyRows.length === 0 && (
+            <p className="mt-6 text-sm text-muted">아직 면접 이력이 없어요.</p>
           )}
 
-          {completedInterviews.length > 0 && (
+          {historyRows.length > 0 && (
             <ul className="mt-6 divide-y divide-line-soft text-xs text-ink">
-              {completedInterviews.map((item) => (
-                <li key={item.id} className="flex items-center justify-between gap-4 py-2">
-                  <div className="min-w-0 shrink-0">
-                    <p className="font-bold">
-                      {item.companyName} · {item.position}
-                    </p>
-                    <p className="mt-1 text-[10.5px] text-muted">
-                      {formatDate(item.completedAt)} · {item.techStack.join('/')} ·{' '}
-                      {item.careerLevel}
-                    </p>
-                  </div>
-                  <div className="flex flex-1 flex-wrap gap-2">
-                    {item.repositoryNames.map((name) => (
-                      <span
-                        key={name}
-                        className="rounded-full bg-accent-soft px-2 py-1 text-[10.5px] text-ink"
-                      >
-                        {name}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    <span className="font-bold">
-                      {item.totalScore}
-                      <span className="font-normal text-muted">/100</span>
-                    </span>
-                    <button
-                      type="button"
-                      className="text-accent hover:underline"
-                      onClick={() => navigate(`/interview/${item.id}/report`)}
-                    >
-                      리포트 보기 →
-                    </button>
-                  </div>
-                </li>
-              ))}
+              {historyRows.map((item) => {
+                // 중단된 면접은 리포트가 없다. 일시는 시작 시각, 점수 자리는 "중단됨"이다.
+                const abandoned = item.status === 'abandoned';
+                return (
+                  <li key={item.id} className="py-2">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="min-w-0 shrink-0">
+                        <p className="font-bold">
+                          {item.companyName} · {item.position}
+                        </p>
+                        <p className="mt-1 text-[10.5px] text-muted">
+                          {formatDate(abandoned ? item.startedAt : item.completedAt)} ·{' '}
+                          {item.techStack.join('/')} · {item.careerLevel}
+                        </p>
+                      </div>
+                      <div className="flex flex-1 flex-wrap gap-2">
+                        {item.repositoryNames.map((name) => (
+                          <span
+                            key={name}
+                            className="rounded-full bg-accent-soft px-2 py-1 text-[10.5px] text-ink"
+                          >
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        {abandoned ? (
+                          <>
+                            <span className="font-bold text-muted">중단됨</span>
+                            <button
+                              type="button"
+                              className="text-accent hover:underline disabled:opacity-50"
+                              disabled={retryMutation.isPending}
+                              onClick={() => retryMutation.mutate(item.id)}
+                            >
+                              다시 도전하기 →
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-bold">
+                              {item.totalScore}
+                              <span className="font-normal text-muted">/100</span>
+                            </span>
+                            <button
+                              type="button"
+                              className="text-accent hover:underline"
+                              onClick={() => navigate(`/interview/${item.id}/report`)}
+                            >
+                              리포트 보기 →
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {failedRetryId === item.id && (
+                      <div className="mt-2 flex items-center justify-end gap-3">
+                        <p role="alert" className="text-[11px] text-error">
+                          {(retryReason && RETRY_ERROR[retryReason]) ??
+                            '새 면접을 준비하지 못했어요. 잠시 후 다시 시도해주세요.'}
+                        </p>
+                        {retryReason && RESTART_REASONS.has(retryReason) && (
+                          <button
+                            type="button"
+                            onClick={() => navigate('/interview/new')}
+                            className="rounded-md border border-line px-3 py-1 text-[11px]"
+                          >
+                            공고 입력부터 다시
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
 

@@ -128,7 +128,33 @@ const allInterviews: InterviewListResponse['interviews'] = [
     startedAt: '2026-09-12T20:11:00Z',
     completedAt: null,
   },
+  {
+    // 준비 단계에서 버린 면접. 첫 질문 전이라 startedAt이 없고 목록에서 빠진다.
+    id: 'a3d51c20-1006-4c00-9a00-000000000006',
+    position: 'Backend Developer',
+    companyName: '테스트 기업',
+    techStack: ['Python', 'FastAPI'],
+    careerLevel: '신입',
+    repositoryNames: ['payment-service'],
+    status: 'abandoned',
+    totalScore: null,
+    startedAt: null,
+    completedAt: null,
+  },
 ];
+
+/**
+ * `/me/interviews` 대상: completed와 시작 후 중단된 abandoned(공통 0009).
+ * 정렬은 coalesce(completedAt, startedAt) 최신순이다.
+ */
+const listedInterviews = allInterviews
+  .filter(
+    (item) =>
+      item.status === 'completed' || (item.status === 'abandoned' && item.startedAt !== null),
+  )
+  .sort((a, b) =>
+    (b.completedAt ?? b.startedAt ?? '').localeCompare(a.completedAt ?? a.startedAt ?? ''),
+  );
 
 /** 완료 면접 점수의 평균. 마이페이지 프로필과 면접 목록이 같은 값을 봐야 한다. */
 const averageScore =
@@ -157,7 +183,7 @@ export const meProfile: MeProfileResponse = {
     publicRepoCount: 9,
   },
   interviewSummary: {
-    totalCount: allInterviews.length,
+    totalCount: allInterviews.filter((item) => item.status === 'completed').length,
     averageScore,
   },
 };
@@ -165,8 +191,8 @@ export const meProfile: MeProfileResponse = {
 export function interviewPage(page: number, size: number): InterviewListResponse {
   const start = (page - 1) * size;
   return {
-    interviews: allInterviews.slice(start, start + size),
-    total: allInterviews.length,
+    interviews: listedInterviews.slice(start, start + size),
+    total: listedInterviews.length,
     averageScore,
     page,
     size,

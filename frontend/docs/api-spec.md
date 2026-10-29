@@ -1209,6 +1209,7 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 | --- | --- | --- |
 | 409 | `prep_in_progress` | 이미 재실행 중. 배너 없이 진행 화면 유지 |
 | 409 | `prep_failed` | `preparing_failed` 상태가 아님. `GET /interviews/{id}`로 상태 재확인 |
+| 409 | `session_limit_exceeded` | 같은 run에 다른 활성 면접이 있음. 그 면접을 끝내거나 나간 뒤 다시 시도하도록 안내 |
 | 410 | `session_expired` | 재시도 버튼을 내리고 `레포 다시 선택하기`만 남긴다 |
 
 ---
@@ -1351,7 +1352,7 @@ Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시�
 
 `recoverable: false`면 서버가 WS 연결을 닫는다. 오류 안내나 연결 종료만으로 DB 상태를 `completed` 또는 `abandoned`로 바꾸지 않는다. 정상 완료는 9번째 답변 처리 완료, `abandoned`는 명시적 나가기 확인·레포 재선택에 따른다. 오류 전달·종료 요청·실패 기록 복원의 실제 연결은 구현·검증 대상이다.
 
-`code`는 화면에 그대로 노출하는 표시용 식별자로, `occurredAt`과 함께 배너 하단에 표기한다. `step`은 준비 단계 오류일 때만 값이 있고 진행 중 오류에서는 `null`이다.
+`code`는 오류 식별자다. 화면에는 `code`·`occurredAt`을 노출하지 않고 `reason`별 문구만 보인다. `step`은 준비 단계 오류일 때만 값이 있고 진행 중 오류에서는 `null`이다.
 
 `repo_unreachable`의 "레포 재선택"은 `GET /interviews/{id}`의 `runId`로 5a-v2에 진입한다.
 
@@ -1546,8 +1547,11 @@ Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시�
 
 | 코드 | reason |
 | --- | --- |
+| 404 | `not_found` |
 | 409 | `original_not_completed` · `repository_unavailable` · `session_limit_exceeded` |
 | 410 | `run_expired` |
+
+`not_found`는 원본 면접이 없거나 남의 면접인 경우다(`GET /interviews/{id}`와 같은 규칙).
 
 `repository_unavailable`은 원본 레포가 삭제·private 전환된 경우다.
 
@@ -1803,6 +1807,7 @@ Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagr
 | 2026-09-17 | #13 SSE에 **구독 전 `GET /analysis-runs/{runId}` 스냅샷 호출 명시** — 스트림은 구독 시점 이후 델타만 전달하므로 새로고침 시 이전 `step` 이벤트를 복구할 수 없다 |
 | 2026-09-23 | **준비 재시도를 WS `prepareRetry` → `POST /interviews/{id}/prepare/retry`(#23)로 이동** — `spec/ai/decisions/0010:32`(Accepted, 2026-09-15) 반영. 거절 reason `prep_in_progress`(409)·`session_expired`(410) 신설, 성공은 `204` |
 | 2026-09-23 | WS `answer`에 **`turn` 추가** — `spec/ai/decisions/0010:30` 반영. 불일치 시 `answer_stale_turn` 신설 |
+| 2026-10-29 | #23 준비 재시도에 `409 session_limit_exceeded`, #20 재도전에 `404 not_found` 추가 — BE 구현 동작을 계약에 반영 |
 | 2026-09-17 | #19의 **`202 Accepted`를 Failure → Response로 이동** (생성 중은 실패가 아님), `error.retryAfter`와 본문 최상위 `retryAfter`의 위치 차이 명시 |
 | 2026-09-22 | [공통 0003](../../spec/shared/decisions/0003-sprint1-session-auth.md): Sprint 1은 기존 Redis·HttpOnly `devon_session`·14일 sliding 세션으로 확정. JWT·refresh 및 #3은 Sprint 2로 이관. 기존 번호와 과거안은 보존하며 실제 인증 구현·검증은 후속 작업으로 구분 |
 | 2026-10-28 | **#24 `POST /interviews/{id}/abandon` 추가**, #10 `/me/interviews`에 시작 후 중단된 `abandoned` 포함, #20 재도전 허용을 `completed`와 시작 후 중단으로 확정, #10 정렬 기준 명시 — [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md) |
