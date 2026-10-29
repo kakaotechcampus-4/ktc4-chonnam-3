@@ -107,6 +107,8 @@ async def _structure(
         # regular_blob이 같은 부모 tree를 다시 요청하지 않도록 검증한 목록을 공유한다.
         reader.trees[sha] = valid
         if observed >= settings.director_prepare_max_entries:
+            if queue:
+                limitations.append("구조 항목 상한으로 일부 디렉터리는 확인하지 못했습니다.")
             break
     return tuple(files), limitations
 
