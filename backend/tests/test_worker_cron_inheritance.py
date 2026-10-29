@@ -46,3 +46,14 @@ def test_empty_parent_keeps_the_existing_analysis_schedule(configured_parent):
         assert worker.cron_jobs[0].coroutine is analysis_reaper
         assert worker.cron_jobs[0].second == {0, 30}
         assert worker.cron_jobs[0].run_at_startup is True
+
+
+def test_parent_without_optional_cron_setting_preserves_arq_default(monkeypatch):
+    try:
+        with monkeypatch.context() as patch:
+            patch.delattr(arq_app.WorkerSettings, "cron_jobs", raising=False)
+            worker = importlib.reload(analysis_app).WorkerSettings
+            assert len(worker.cron_jobs) == 1
+            assert worker.cron_jobs[0].coroutine is analysis_reaper
+    finally:
+        importlib.reload(analysis_app)
