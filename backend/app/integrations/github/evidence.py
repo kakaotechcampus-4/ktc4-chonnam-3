@@ -46,7 +46,24 @@ class EvidenceReader:
         max_response_bytes: int,
         max_total_bytes: int,
         timeout_seconds: float,
+        public_app_auth: tuple[str, SecretStr] | None = None,
     ) -> None:
+        if public_app_auth is not None:
+            if (
+                type(public_app_auth) is not tuple
+                or len(public_app_auth) != 2
+                or type(public_app_auth[0]) is not str
+                or not isinstance(public_app_auth[1], SecretStr)
+            ):
+                raise EvidenceReadError("github_credentials_invalid")
+            client_id, client_secret = public_app_auth
+            if ":" in client_id or any(
+                not value
+                or value != value.strip()
+                or any(ord(character) < 32 or ord(character) == 127 for character in value)
+                for value in (client_id, client_secret.get_secret_value())
+            ):
+                raise EvidenceReadError("github_credentials_invalid")
         self.http = http_client
         self.base = f"https://api.github.com/repos/{full_name}"
         self.requests_left = max_requests
@@ -54,6 +71,7 @@ class EvidenceReader:
         self.bytes_left = max_total_bytes
         self.timeout = timeout_seconds
         self.trees: dict[str, list[object]] = {}
+        self._public_app_auth = public_app_auth
 
     async def get(
         self, suffix: str, *, ref: str | None = None, token: SecretStr | None = None
@@ -64,6 +82,11 @@ class EvidenceReader:
         headers = {"Accept": "application/vnd.github+json", "Accept-Encoding": "identity"}
         if token is not None:
             headers["Authorization"] = f"Bearer {token.get_secret_value()}"
+        elif self._public_app_auth is not None:
+            # 공개 데이터용 OAuth 앱 인증만 명시하며 사용자 token의 조회 범위를 넓히지 않는다.
+            client_id, secret = self._public_app_auth
+            basic = base64.b64encode(f"{client_id}:{secret.get_secret_value()}".encode()).decode()
+            headers["Authorization"] = f"Basic {basic}"
         # Request를 직접 만들어 client의 default auth·cookie·base_url을 배제한다.
         request = httpx.Request(
             "GET",
