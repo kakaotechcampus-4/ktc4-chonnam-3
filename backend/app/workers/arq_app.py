@@ -3,6 +3,7 @@
 from typing import Any
 
 import httpx
+from arq import cron
 from arq.connections import RedisSettings
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -11,6 +12,7 @@ from app.core.crypto import TokenCipher
 from app.features.interview.prepare_lease import JOB_TIMEOUT_SECONDS
 from app.workers.tasks.initial_sync import initial_sync
 from app.workers.tasks.interview_prep import interview_prep
+from app.workers.tasks.interview_preparation_reaper import interview_preparation_reaper
 
 
 async def startup(ctx: dict[str, Any]) -> None:
@@ -30,6 +32,7 @@ async def shutdown(ctx: dict[str, Any]) -> None:
 
 class WorkerSettings:
     functions = [initial_sync, interview_prep]
+    cron_jobs = [cron(interview_preparation_reaper, second={0, 30}, run_at_startup=True)]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
