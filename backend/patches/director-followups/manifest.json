@@ -8,7 +8,7 @@
   "rule": "base blob must match exactly; re-review on prerequisite changes; never force or auto-apply",
   "validation_reference": {
     "develop": "2fc0103a8f97043c12965f5e182734548bab2fcf",
-    "observed_on": "2026-10-29",
+    "observed_on": "2026-10-30",
     "rule": "reference only; repeat API, blob and runtime checks after upstream changes"
   },
   "patches": [
@@ -36,9 +36,10 @@
       ],
       "historical_application": "manual after exact base/SHA checks and Context regression verification; never auto-apply",
       "applied_in": {
-        "commit": "76e2ab1548722949a43346cc8bd912d51e075bf1",
+        "commit": "6c7872a60fa5429dee5c5c47d567d7c8a0de7a92",
         "target_blob": "a474136cf2eb282ccaa2ab202a08688fbb801dda",
-        "base": "2fc0103a8f97043c12965f5e182734548bab2fcf"
+        "base": "2fc0103a8f97043c12965f5e182734548bab2fcf",
+        "development_commit": "76e2ab1548722949a43346cc8bd912d51e075bf1"
       }
     },
     {
@@ -69,9 +70,10 @@
       ],
       "historical_application": "manual after PR #126, patch01 result and exact base/SHA checks; verify current-turn behavior; never auto-apply",
       "applied_in": {
-        "commit": "76e2ab1548722949a43346cc8bd912d51e075bf1",
+        "commit": "6c7872a60fa5429dee5c5c47d567d7c8a0de7a92",
         "target_blob": "c49ee3860dd83fafd179bcbc7991a251539e981f",
-        "base": "2fc0103a8f97043c12965f5e182734548bab2fcf"
+        "base": "2fc0103a8f97043c12965f5e182734548bab2fcf",
+        "development_commit": "76e2ab1548722949a43346cc8bd912d51e075bf1"
       }
     },
     {
@@ -116,9 +118,10 @@
       ],
       "historical_application": "manual only after exact base/SHA checks, call_model attempt_sink API and completed-attempt runtime checks; never auto-apply",
       "applied_in": {
-        "commit": "3f11e10ac605edc966611b95295888aeb8bcc7ec",
+        "commit": "1f31b79d9aadc03300ca737dff8fdbc03af9451f",
         "target_blob": "8ce0d810617c17280ba47e02edc33f31ca4b503d",
-        "base": "2fc0103a8f97043c12965f5e182734548bab2fcf"
+        "base": "2fc0103a8f97043c12965f5e182734548bab2fcf",
+        "development_commit": "3f11e10ac605edc966611b95295888aeb8bcc7ec"
       }
     },
     {
