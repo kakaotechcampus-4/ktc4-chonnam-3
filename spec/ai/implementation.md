@@ -698,6 +698,191 @@ HTTP 2회 상한이 통과했다. 과거의 AI 224·별도 결합 309/163을 이
 - 기존 설계와 `testing.md`의 과거 기록을 이번 통합에서 일괄 재작성하지 않는다.
   이후 구현 현황과 실행 결과는 이 파일을 갱신한다.
 
+## 2026-10-25 — #127 seed 범위 제외와 공통 보완 재검증
+
+### 게시 범위와 원본 보존
+
+- 사용자가 seed 오류 수정을 #131에 맡기고 #127에서 제외하도록 요청했다.
+  #131을 병합하거나 수정하지 않고, `develop@dbd7f890`에서 남은 신규 변경만 구성했다.
+- 기존 #127의 `eaea0e4b`는 `backup/pr127-before-seed-review-20261025`와 원본 worktree에
+  보존했다. 제외한 seed 실행 코드·추가 테스트도 이 원본에서 확인할 수 있다.
+- `backend/scripts/seed_all.py`, `backend/tests/test_seed_all.py`는 develop과 동일하다.
+  #131의 질문 저장 변경 세 파일도 가져오지 않았다. 이 다섯 파일은 기준선과 내용이 같은지 검사했다.
+- 남은 구현은 DDL 없는 `0003_director_runtime` merge revision과 검사 subprocess의
+  현재 worktree BE·AI 소스 경로 지정이다. 공개 계약·seed 데이터·활성화 정책은 변경하지 않는다.
+- seed 제외와 선행 의존은 [BE ADR](../backend/decisions/0008-director-foundation-publication.md)에
+  기록한다. 이전 통합본의 seed 실행 결과를 이번 게시본의 검증 결과로 사용하지 않는다.
+
+### 실제 실행 결과
+
+기존 Windows Python 3.12.14 환경을 사용했다. 아래 단독 검사는 실제 게시용 worktree에서 실행했다.
+
+| 범위 | 검사 | 결과 |
+| --- | --- | --- |
+| 게시본 backend | `pytest tests/core/test_llm_config.py -q` | 46 passed |
+| 게시본 backend | `ruff check .`, `ruff format --check .`, `mypy app` | 통과, format 254파일·mypy 133파일 |
+| 게시본 backend | 전체 `pytest -q` | 실패, 기존 `tests/test_seed_all.py`의 삭제된 `dispose_engine` import로 수집 중단 |
+| 게시본 backend | `alembic heads` | 실패, #82의 `0002_agent_storage` parent 부재 |
+| 별도 로컬 결합 | 게시본 + #82 migration 한 파일, PostgreSQL 15.19 | 단일 head `0003_director_runtime` 확인 |
+| 같은 결합 환경 | 초기 revision → 기존 사용자 행 추가 → `upgrade head` | 통과, 기존 행·추가 테이블과 컬럼 확인 |
+| 같은 결합 환경 | `downgrade base` → `upgrade head` | 통과 |
+
+로컬 결합은 #82 `0e973f33`의 `0002_agent_storage.py` 한 파일만 사용했고 seed·#131 코드는
+결합하지 않았다. 새 전용 cluster·테스트 DB를 사용했으며 생성 DB 삭제·DB 목록 보존·서버 종료를
+확인했다. 첫 실행 보조 스크립트는 Windows 자식 프로세스의 pipe 대기로 중단됐고, 해당 전용 서버를
+종료한 뒤 파일 로그 방식과 새 cluster로 재실행했다. 위 PostgreSQL 결과는 재실행에서 확인했다.
+
+### 미완료와 병합 조건
+
+- seed import 오류는 #131의 별도 범위다. 이번 변경이 seed 실행을 해결했다고 보고하지 않는다.
+- #82가 없는 게시본은 migration graph를 해석할 수 없으므로 Draft로 유지한다.
+  선행 반영 후 실제 graph에서 merge 필요성을 다시 확인하고 PostgreSQL에서 재검증한다.
+- migration 한 파일의 결합 검증은 #82 전체 모델·서비스 통합이나 전체 pytest 통과가 아니다.
+  실제 면접 실행·외부 모델 호출·seed 활성화 검증은 이번 범위가 아니다.
+
+## 2026-10-27 — #127 기존 DB 이력 보존과 최종 합류 검증
+
+### 수정과 선행
+
+- `0003_director_runtime`과 #82·#108의 기존 revision ID·부모·DDL을 보존한다.
+  #82의 신규 `0003_agent_storage_merge`, 기존 Director merge, #108 분석 실행을
+  DDL 없는 `0004_interview_foundation_merge`에서 합친다.
+- 신규 graph 검사는 최종 head 하나와 저장·공고·분석·Director의 기존 이력을 확인한다.
+  선행 파일을 테스트에 복사하거나 가짜 revision으로 대체하지 않는다.
+- BE ADR은 기존 Task 9의 0002와 구분해 [0008](../backend/decisions/0008-director-foundation-publication.md)로
+  연결하고 색인에 추가했다. 원래 #127의 고유 실행 기록은 위에 보존하고 위치만 분리했다.
+- #131 반영 이후 seed import 수집 오류는 현재 실패 원인이 아니다. 당시 실패 기록과
+  최신 상태를 구분하며 seed 구현은 이번 게시본에 추가하지 않았다.
+- Director 분리 게시·통합 검증의 원본은 AI 기록에 유지한다. BE ADR은 이 기록을 참조하며
+  현황을 중복 작성하지 않는다. 이는 루트 CLAUDE 문서 원칙과 AI ADR 0020을 따른다.
+
+### 이번 실행 결과
+
+Windows Python 3.12, `develop@d063d8d` 기준이다. PostgreSQL은 새 전용 로컬 cluster를 사용했다.
+
+| 범위 | 검사 | 결과 |
+| --- | --- | --- |
+| 최신 develop + #127 | `pytest tests/core/test_llm_config.py -q` | 50 passed |
+| 같은 게시 범위 | Ruff·format·mypy app | 통과, format 279파일·mypy 136 source |
+| 같은 게시 범위 | `alembic heads`·신규 graph 검사 | 선행 #82 부재로 실패, `0002_agent_storage` 없음 |
+| 로컬 #81·#82·#108·#127 결합 | 설정 + 신규 graph pytest | 51 passed |
+| 같은 결합의 실제 PostgreSQL | 초기·공고·Agent·Agent merge·기존 Director merge·분석 실행의 6개 출발점 → head | 모두 단일 `0004_interview_foundation_merge`, 기존 사용자 행 보존 |
+| 같은 6개 DB | 명시한 출발 revision으로 downgrade → upgrade head | 모두 통과, 기존 사용자 행·호출 기록 테이블·분석 지표 컬럼 확인 |
+| 초기 출발 DB | `downgrade base` → `upgrade head` | 통과 |
+| 검증 자원 | 경로별 전용 DB 생성·삭제 | 6개 모두 정리 |
+
+DB 경로 검사의 코드 tree는 `afd5adf1ceb4f27e237e0836d6ffe233fa1ecd71`이다.
+이 로컬 결합에서 #108 main의 충돌은 문서 router와 분석 router 등록을 모두 보존해 해소했다.
+이는 #108의 원격 코드 수정이나 해당 PR 전체 검증 결과가 아니다.
+
+처음 사용한 상대 `downgrade -1`은 합류 경로가 모호해 실패했다. 대상 revision을 명시하여
+다시 검사한 위 결과와 구분한다. 과거 리뷰어의 전체 pytest 수치를 이번 결과로 사용하지 않았다.
+
+### 최종 PR 조합의 추가 확인
+
+#81·#82·#108·#124·#125·#126·#127·#132를 최신 develop에 로컬 결합했다.
+검증 tree `742d924a39480a118607487c589f8901ecca10d7`에서 AI 전체 347 passed,
+BE의 저장·예산·gateway·설정·graph·분석 API/worker 집중 검사 423 passed·1 skipped였다.
+AI Ruff·format 57파일·mypy 13 source와 BE Ruff·format 331파일·mypy 158 source,
+부분 계약 2개·fixture 7개 및 단일 Alembic head를 확인했다. 검사 전후 Python 원문 hash는 같고
+실제 import 경로도 해당 결합 worktree의 AI·BE 소스였다. BE 전체 pytest 수치는 아니다.
+
+제외된 #108 migration 검사는 이름이 고정된 별도 DB를 요구했다. 전용 DB로 실행하니
+`alembic_version` 첫 행만 비교하는 기존 단일 가지 가정이 드러났다. #108에서 실패 전후
+revision 전체 집합·기존 자료·위험 downgrade 차단을 보존하도록 고친 뒤 같은 누적 코드의
+전용 PostgreSQL 검사 1 passed와 health 5 passed를 확인했다. analysis·documents·me·health
+등록도 함께 확인했고 전용 DB는 삭제했다. #108 자체 source는 #81이 없으면 import할 수 없으므로
+이 결과를 단독 완료로 보고하지 않는다. 최종 보완은 migration DDL을 바꾸지 않는다.
+
+#126 결합에서는 기존 `generate_question`과 새 `execute_director`를 모두 보존했다.
+두 함수는 각 게시본과 AST가 같음을 독립 대조했고, 공통 gateway의 주소·timeout·시도 기록도
+유지했다. 이 해소본은 로컬 검증에만 사용하며 선행 구현을 다른 게시본에 복사하지 않았다.
+
+### 병합 조건
+
+#82·#108이 없는 게시본은 graph를 실행할 수 없으므로 develop base의 Draft로 검토한다.
+두 선행 반영 후 그 시점의 실제 graph·기존 자료·전체 BE 회귀와 CI를 다시 확인해야 한다.
+이 검증은 외부 모델 품질·면접 완주·운영 DB 배포 확인을 포함하지 않는다.
+
+## 2026-10-27 — #127 순차 게시 graph의 누락 보완과 자료 보존 재검사
+
+### 실제 결함과 수정
+
+앞선 6개 출발점과 최종 PR 조합 검증은 #127까지 결합한 graph의 결과였다.
+develop → #82 → #108만 반영한 중간 snapshot에 두 head가 남는 문제를 놓쳤다.
+이전 실행 기록을 보존하고 순차 게시 단계 자체를 새 회귀 범위로 추가한다.
+
+- #108 `ef237c56`의 신규 `0004_analysis_storage_merge`가 저장·분석 이력을 먼저 합친다.
+  최종 #108 `d0704b97`에서도 해당 migration 원문은 같다.
+- #127 `78d39238`은 그 신규 합류와 기존 `0004_interview_foundation_merge`를 부모로 하는
+  DDL 없는 `0005_director_foundation_merge`를 추가한다. 기존 migration ID·부모·DDL은 보존한다.
+- 최종 head 검사와 기존 이력 검사를 유지하고, 실제 Script의 ID·부모 metadata로
+  develop·#82·#108·#127 네 snapshot의 head를 각각 확인한다. 선행 코드는 게시본에 복사하지 않는다.
+- [BE ADR 0008](../backend/decisions/0008-director-foundation-publication.md)의 새 절에
+  현재 목표 0005와 이전 최종 0004의 관계를 기록한다. Proposed 상태는 유지한다.
+
+### 이번 실행 결과
+
+Windows Python 3.12, `develop@d063d8d` 기준이다. 결합 migration source tree는
+`00996aa3ae9f572ff7c67275930c291e3bb36ee7`이며, 새 전용 PostgreSQL DB에서 합성 자료를 사용했다.
+아래 수치는 앞선 통합 검증 수치를 재사용한 것이 아니다.
+
+| 범위 | 검사 | 결과 |
+| --- | --- | --- |
+| 새 #108 + 기존 #127 결합, 신규 회귀 | 수정 전 graph 검사 | 2 failed·3 passed, 실제 두 head와 0005 부재 확인 |
+| 새 #108 + 보완 #127 결합 | `pytest tests/core/test_director_migration_graph.py -q` | 5 passed, 기존 Alembic 설정 경고 5개 |
+| 같은 결합의 최신 설정 검사 포함 | 설정 + graph pytest | 55 passed, 5 warnings |
+| 변경한 Python 두 파일 | Ruff·format | 통과, 2 files already formatted |
+| 최신 develop + #127 게시 범위 | 설정 pytest | 50 passed |
+| 같은 게시 범위 + 신규 graph 회귀 | graph pytest | 5 failed, 모두 선행 `0002_agent_storage` 부재 |
+| 실제 PostgreSQL 순차 게시 | 공고 → #82 merge → #108 merge → head | 각 게시 단계 단일 head, 최종 0005, 기존 모든 fixture 행 보존 |
+| 기존 branch의 두 적용 순서 | Agent → Director → Analysis, Analysis → Director → Agent → 신규 merge들 | 두 경로 모두 최종 0005, 모든 fixture 행 보존 |
+| 위 세 경로 각각 | 활성 분석 작업 3개 상태에서 `downgrade 0002_posting_versions` | 기존 분석 downgrade 차단, version 전체 집합과 모든 fixture 행 보존 |
+| 위 세 경로 각각 | 명시한 #108 merge로 downgrade → head 재적용 | 통과, sibling 기존 #127 merge 이력과 모든 fixture 행 보존 |
+| 검사 자원·원문 | 세 경로 후 base 정리, migration SHA-256 전후 대조 | 전용 DB public 테이블 0개로 복원, 원문 hash 동일 |
+
+fixture는 사용자·공고 원문 JSON·작업 steps·질문 Contract·호출 raw·후보 페이지 지표를 포함한다.
+전진·실패 rollback·merge-only 왕복에서 해당 테이블의 전체 행 JSON을 대조했다.
+위험 downgrade의 첫 probe는 저장 merge를 대상으로 삼아 분석 branch를 내리지 않았다.
+공통 조상으로 대상을 교정해 실제 분석 차단을 호출한 뒤 위 세 경로를 새로 실행했다.
+
+이 결과는 #82·새 #108을 로컬 결합한 검증이며, 미병합 선행을 포함하지 않는 단독 CI 통과가 아니다.
+#127은 develop base의 Draft를 유지한다. 선행 반영 후 실제 게시 순서와 최종 BE 회귀·CI를 다시
+확인해야 한다. 외부 모델·면접 완주·운영 DB 적용과 전체 BE pytest는 이번 검사에 포함하지 않았다.
+
+## 2026-10-28 — #127 선행 병합 후 이력 보존과 검증 기록 정리
+
+- 기준 develop은 `4e511a992d7954fa310146bcba2f2d4c6358fb69`다. #82와 #108은 모두 반영됐고,
+  현재 develop+#127의 실제 graph는 `0005_director_foundation_merge` 단일 head다.
+  10월28일11:20 KST 리뷰의 #108 미병합 조건은 같은 날16:15 병합 이후 해소됐다.
+- 원본 #127 `d580863`을 `backup/pr127-before-review-fix-20261028`에 보존했다.
+  이번 보완은 설명·검증 기록만 정리하며 기존 migration 파일 전체의 Git blob을 유지한다.
+- 같은 부모를 가진 `0003_director_runtime`은 기존 경로의 이력을 보존한다. 실제 개발자·공유·운영 DB의
+  전수 적용 이력은 확인하지 못했으므로 적용된 DB가 없다고 단정하지 않는다. 부모에서만 제거하면
+  별도 head가 남고 파일까지 없애면 그 revision을 가리키는 DB의 이력 해석을 깨뜨릴 수 있다.
+- [BE ADR0008](../backend/decisions/0008-director-foundation-publication.md)은 Proposed·날짜 이력,
+  기존 ID·부모·DDL 보존 이유, 현재 합류 관계와 rollback 보호 조건을 유지했다.
+  검증 실수의 반복 서술은 줄이고 상세 실행 결과는 이 기록을 원본으로 삼는다.
+
+| 구성 | 이번에 직접 실행한 검사 | 결과 |
+| --- | --- | --- |
+| 최신 develop+#127 | 설정·실제 Script graph pytest | 55 passed, skip0, 34.67초, 기존 Alembic 경고5개 |
+| 같은 구성 | BE Ruff·format·Mypy app | 통과, format330파일·156 source |
+| 같은 구성 | 부분 계약 검사 | schema2개·fixture7개 통과. 전체 API 호환성 검증은 아님 |
+| 별도 전용 DB와 격리 schema | 기존 위험 downgrade 회귀·두 선행 적용 순서 회귀 | 3 passed, skip0, 53.27초 |
+| 전용 PostgreSQL15.19 | 순차 게시·Agent→Director→Analysis·역순의 세 경로 | 모두0005, 기존 fixture 전체 행 보존 |
+| 위 세 경로 각각 | 중복 active 분석이 있는 위험 downgrade | 기존 guard로 차단, 자료와 version 전체 집합 보존 |
+| 위 세 경로 각각 | 명시0004_analysis_storage_merge로 downgrade→head | 기존 sibling 이력과 fixture 행 보존 |
+| 같은 전용 DB | base→head 재적용 후 base 정리 | 통과, 마지막 public 테이블0개·migration 원문 hash 동일 |
+
+DB fixture는 사용자·공고 원문 JSON·분석 steps·질문 Contract·호출 raw·페이지 지표를 포함한다.
+수치와 DB 결과는 이번 최신 develop 결합에서 새로 실행했으며 이전 전체1438/347 결과를 재사용하지 않았다.
+리뷰에서 보고한 설정 검사 간헐 실패는 이번55개 실행에서 재현되지 않았다. 최초 실패명·traceback이 없어
+원인이나 해결 여부를 확정하지 않으며 재실행 통과를 오류 수정으로 보고하지 않는다.
+최신 base의 원격 CI는 게시 후 별도로 확인하고 통과 전에는 Draft 해제나 병합 가능 상태로 단정하지 않는다.
+전체BE·AI·외부 모델·운영 DB·배포·면접 완주 검증은 이번 집중·합성 자료 검사의 범위 밖이다.
+이전 절의 seed 오류·선행 부재·예전 목표 head는 당시 기준의 기록으로 보존한다.
+
 ## 2026-09-27 — task-04 L1 호출·재요청과 캐시 판정
 
 ### 기준과 변경

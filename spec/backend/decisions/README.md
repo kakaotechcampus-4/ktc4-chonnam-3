@@ -35,6 +35,13 @@
 - [0007 Task 10 재수집 실패 보존과 README 축약 캐시](0007-task10-collection-retry-and-partial-cache.md): Proposed.
   확인한 필드만 저장하고 같은 run의 성공을 보존한다. 축약 partial은 동일 입력일 때만 재사용한다.
 
+## Director 연결 기반의 게시 경계
+
+- [0008 Director 공통 보완의 게시 경계](0008-director-foundation-publication.md): Proposed.
+  기존 migration 이력을 보존하고 #82·#108·#127의 순차 반영마다 단일 head를 구성한다.
+  현재 최종 목표는 신규 `0005_director_foundation_merge`다. 두 선행 반영 전 Draft이며
+  검사 subprocess 소스 경로 보완과 AI 통합 검증 기록의 원본 위치를 설명한다.
+
 ## 관련 AI 결정
 
 - [0011 Sprint 1 모델 선택](../../ai/decisions/0011-sprint1-model-selection.md): 2026-09-21 사용자 결정. Sprint 1 LLM 모델은 OpenAI `gpt-5.6-luna`다. 인증·SDK/client·호출 경로·버전 기록 방식은 AI-L01에서 계속 검토한다.
