@@ -7,7 +7,7 @@ import httpx
 from sqlalchemy import func, select
 
 from app.db.models import InterviewSession, InterviewTurn, LLMCallRecord
-from tests.agents.test_director_runtime_service import (
+from tests.agents.director_helpers import (
     approved_review,
     plan,
     response,

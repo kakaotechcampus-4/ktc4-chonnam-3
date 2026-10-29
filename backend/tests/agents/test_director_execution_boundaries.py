@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from app.db.models import InterviewSession, InterviewTurn, LLMCallRecord
 from app.features.interview.agent_context import AgentStateError
-from tests.agents.test_director_runtime_service import analysis, seed_turns, settings
+from tests.agents.director_helpers import analysis, seed_turns, settings
 
 
 @pytest.mark.parametrize("turn_no", [1, 9])

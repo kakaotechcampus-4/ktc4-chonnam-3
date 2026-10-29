@@ -8,7 +8,7 @@ from devon_ai import contracts as c
 from sqlalchemy import select
 
 from app.db.models import InterviewSession, RepoAnalysis
-from tests.agents.test_director_runtime_service import approved_review, plan, response, settings
+from tests.agents.director_helpers import approved_review, plan, response, settings
 
 
 async def test_fixed_repository_limitations_reach_director_plan_and_independent_review(
