@@ -6,6 +6,7 @@
 - 관련 PR: 없음 (이 결정과 함께 올림)
 - 검토자: 담당 파트 내부 결정. BE 저장·호출 위치와 Director 사용은 아래 "확인 필요"로 각 담당자에게 제안한다.
 - 연결 항목: [AI-L22](../features/extensions.md#ai-l22-문서-claim과-문서코드-충돌), [0010](0010-sprint1-interface-runtime-decisions.md)의 "문서 claim 추출은 Sprint 2로 넘긴다"
+- 후속 정정: [0030 검증 순서와 서비스 연결 경계](0030-document-claims-validation-boundary.md). 아래 원본의 면접 준비 상태·기존 `claim_checks` 재사용·호출 단위 설명은 후속 경계와 함께 읽는다.
 
 ## 맥락
 
