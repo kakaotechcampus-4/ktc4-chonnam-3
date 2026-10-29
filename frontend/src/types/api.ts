@@ -241,6 +241,12 @@ export type CandidatesAnalyzingResponse = {
   retryAfter: number;
 };
 
+// errorCode 는 카드의 errorCode 와 같은 BE repo_analyses.error_code 값이다.
+export type FailedRepository = {
+  repositoryId: string;
+  errorCode: string;
+};
+
 export type AnalysisResultResponse = {
   runId: string;
   position: string;
@@ -248,6 +254,11 @@ export type AnalysisResultResponse = {
   jdRequirements: JdRequirement[];
   mentionedRepoCount: number;
   matchedRepoCount: number;
+  // 배정 batch 의 L1 성공·partial 수. 배정 뒤 카드에서 빠진 저장소도 센다.
+  analyzedCount: number;
+  // failedRepositories 원소 수와 같다.
+  failedCount: number;
+  failedRepositories: FailedRepository[];
   repositories: RepositoryItem[];
 };
 

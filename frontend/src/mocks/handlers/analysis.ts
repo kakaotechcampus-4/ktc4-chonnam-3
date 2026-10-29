@@ -199,6 +199,19 @@ export const analysisHandlers = [
       }
 
       await delay(200);
+      const repositories =
+        pickScenario(request, 'result', 'default') === 'all-failed'
+          ? resultRepositories.map((repo) => ({
+              ...repo,
+              status: 'failed' as const,
+              errorCode: 'llm_failed',
+              recommended: false,
+            }))
+          : resultRepositories;
+      // mock은 배정 뒤 카드에서 빠지는 저장소가 없어 카드만으로 집계한다.
+      const failedRepositories = repositories
+        .filter((repo) => repo.status === 'failed')
+        .map((repo) => ({ repositoryId: repo.id, errorCode: repo.errorCode ?? 'internal_error' }));
       return HttpResponse.json<AnalysisResultResponse>({
         runId: run.runId,
         position: jdPosition,
@@ -206,15 +219,10 @@ export const analysisHandlers = [
         jdRequirements,
         mentionedRepoCount,
         matchedRepoCount,
-        repositories:
-          pickScenario(request, 'result', 'default') === 'all-failed'
-            ? resultRepositories.map((repo) => ({
-                ...repo,
-                status: 'failed' as const,
-                errorCode: 'llm_failed',
-                recommended: false,
-              }))
-            : resultRepositories,
+        analyzedCount: repositories.length - failedRepositories.length,
+        failedCount: failedRepositories.length,
+        failedRepositories,
+        repositories,
       });
     },
   ),
