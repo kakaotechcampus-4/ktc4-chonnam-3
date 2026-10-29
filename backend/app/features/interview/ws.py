@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 from anyio import CancelScope
 from devon_ai import contracts as c
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from pydantic import ValidationError
 from redis.asyncio import Redis
 from redis.asyncio.client import PubSub
 from redis.exceptions import RedisError
@@ -22,6 +23,7 @@ from sqlalchemy import select
 from starlette.responses import JSONResponse
 
 from app.agents.director.tools import EvidenceLimits
+from app.core.config import INTERVIEW_MAX_TURNS
 from app.core.deps import current_user
 from app.core.errors import AppError
 from app.core.logging import get_logger
@@ -30,13 +32,18 @@ from app.features.interview.agent_context import AgentStateError
 from app.features.interview.director_service import AnswerExecution, process_answer
 from app.features.interview.queries import list_turns
 from app.features.interview.schemas import InterviewLastError
-from app.features.interview.service import REALTIME_SESSION_TTL_SECONDS, _reverse_key, _rt_key
-from app.shared.enums import Reason
+from app.features.interview.service import (
+    REALTIME_SESSION_TTL_SECONDS,
+    realtime_interview_key,
+    realtime_session_key,
+)
+from app.shared.enums import PrepareStepKey, Reason
 
 router = APIRouter(prefix="/ws/interviews", tags=["interview"])
 logger = get_logger(__name__)
 _SESSION_ID = re.compile(r"[A-Za-z0-9_-]{43}")
 _LEASE_SECONDS = 30
+_PREPARE_POLL_SECONDS = 1.0
 _REFRESH = """
 if redis.call('GET', KEYS[1]) ~= ARGV[1]
 or redis.call('GET', KEYS[2]) ~= ARGV[2]
@@ -71,6 +78,28 @@ class _State:
     question: dict[str, object] | None
     snapshot: dict[str, object]
     last_error: dict[str, object] | None
+    prepare_steps: tuple[tuple[str, str], ...]
+
+
+def _preparation_steps(raw: object) -> tuple[tuple[str, str], ...]:
+    """저장된 네 단계만 공개 이벤트로 내보내며 임의 상태를 만들지 않는다."""
+    if type(raw) is not list or len(raw) > 4:
+        raise AgentStateError("prepare_steps_invalid")
+    steps: dict[str, str] = {}
+    for item in raw:
+        if type(item) is not dict:
+            raise AgentStateError("prepare_steps_invalid")
+        key, status = item.get("step"), item.get("status")
+        if (
+            type(key) is not str
+            or key not in PrepareStepKey
+            or key in steps
+            or type(status) is not str
+            or status not in {"pending", "running", "completed", "failed"}
+        ):
+            raise AgentStateError("prepare_steps_invalid")
+        steps[key] = status
+    return tuple(steps.items())
 
 
 async def _script(redis: Redis, script: str, key_count: int, *values: object) -> object:
@@ -119,17 +148,26 @@ async def _read_state(socket: WebSocket, user_id: UUID, interview_id: UUID) -> _
         interview = await db.get(InterviewSession, interview_id)
         if interview is None or interview.user_id != user_id:
             raise AppError(Reason.NOT_FOUND)
-        turns = await list_turns(db, interview_id=interview_id)
-        pending = await db.scalar(
-            select(LLMCallRecord.id)
-            .where(
-                LLMCallRecord.interview_session_id == interview_id,
-                LLMCallRecord.turn_no >= interview.current_turn,
-                LLMCallRecord.turn_id.is_(None),
-                LLMCallRecord.failure.is_(None),
-                LLMCallRecord.discard_reason.is_(None),
+        # 준비 중 폴링은 세션 한 행만 읽는다. 질문·pending 조회는 준비 완료 뒤에 한다.
+        turns = (
+            []
+            if interview.status == "preparing"
+            else await list_turns(db, interview_id=interview_id)
+        )
+        pending = (
+            None
+            if interview.status != "in_progress"
+            else await db.scalar(
+                select(LLMCallRecord.id)
+                .where(
+                    LLMCallRecord.interview_session_id == interview_id,
+                    LLMCallRecord.turn_no >= interview.current_turn,
+                    LLMCallRecord.turn_id.is_(None),
+                    LLMCallRecord.failure.is_(None),
+                    LLMCallRecord.discard_reason.is_(None),
+                )
+                .limit(1)
             )
-            .limit(1)
         )
         current = next((turn for turn in turns if turn.turn_no == interview.current_turn), None)
         question = None
@@ -162,7 +200,13 @@ async def _read_state(socket: WebSocket, user_id: UUID, interview_id: UUID) -> _
                 for turn in turns
             ],
         }
-        return _State(interview.status, question, snapshot, interview.last_error)
+        return _State(
+            interview.status,
+            question,
+            snapshot,
+            interview.last_error,
+            _preparation_steps(interview.prepare_steps),
+        )
 
 
 class _Connection:
@@ -256,8 +300,8 @@ class _Connection:
                 _REFRESH,
                 3,
                 self.lock,
-                _rt_key(self.session_id),
-                _reverse_key(self.interview_id),
+                realtime_session_key(self.session_id),
+                realtime_interview_key(self.interview_id),
                 self.nonce,
                 self.raw_session,
                 self.session_id,
@@ -276,6 +320,41 @@ class _Connection:
             if not valid:
                 await self.close(1011)
 
+    async def preparation(self, state: _State, user_id: UUID) -> _State:
+        """DB 스냅샷과 변경분을 복원하며 재연결로 준비 작업을 재실행하지 않는다."""
+        observed: dict[str, str] = {}
+        receiving = asyncio.create_task(self.receive())
+        try:
+            while self.connected:
+                for key, status in state.prepare_steps:
+                    if observed.get(key) != status:
+                        await self.send({"type": "prepareStep", "key": key, "status": status})
+                        observed[key] = status
+                if state.status != "preparing":
+                    break
+                deadline = asyncio.get_running_loop().time() + _PREPARE_POLL_SECONDS
+                while self.connected:
+                    remaining = deadline - asyncio.get_running_loop().time()
+                    if remaining <= 0:
+                        break
+                    done, _ = await asyncio.wait((receiving,), timeout=remaining)
+                    if not done:
+                        break
+                    try:
+                        receiving.result()
+                    except (ValueError, KeyError):
+                        pass
+                    # 수신 task를 조회 주기마다 취소하지 않아 이미 받은 프레임을 잃지 않는다.
+                    await self.send(_error("answer_rejected"))
+                    receiving = asyncio.create_task(self.receive())
+                if self.connected:
+                    state = await _read_state(self.socket, user_id, self.interview_id)
+        finally:
+            receiving.cancel()
+            with CancelScope(shield=True):
+                await asyncio.gather(receiving, return_exceptions=True)
+        return state
+
     async def restore(self, user_id: UUID) -> bool:
         # 교체된 소켓이 확정한 답변의 T3→Tool→T4가 끝날 때까지 기다릴 뿐 재실행하지 않는다.
         # T3 저장과 T4 시작 사이에는 DB pending 기록이 잠시 없을 수도 있다.
@@ -285,6 +364,11 @@ class _Connection:
         if not self.connected:
             return False
         state = await _read_state(self.socket, user_id, self.interview_id)
+        preparing = state.status == "preparing"
+        if preparing:
+            state = await self.preparation(state, user_id)
+            if not self.connected:
+                return False
         saved = await _script(
             self.redis,
             _CACHE,
@@ -303,6 +387,8 @@ class _Connection:
             await self.close()
             return False
         if state.question is not None:
+            if preparing:
+                await self.send({"type": "prepareCompleted"})
             await self.send(state.question)
             return self.connected
         event = _error("question_failed")
@@ -346,7 +432,7 @@ def _answer(raw: object) -> tuple[int, str] | str:
         or set(raw) != {"type", "turn", "text"}
         or raw.get("type") != "answer"
         or type(raw.get("turn")) is not int
-        or not 1 <= raw["turn"] <= 9
+        or not 1 <= raw["turn"] <= INTERVIEW_MAX_TURNS
         or type(raw.get("text")) is not str
         or not raw["text"].strip()
         or any(0xD800 <= ord(char) <= 0xDFFF for char in raw["text"])
@@ -360,7 +446,20 @@ def _answer(raw: object) -> tuple[int, str] | str:
 async def _execute(connection: _Connection, user_id: UUID, turn: int, text: str) -> AnswerExecution:
     state = connection.socket.app.state
     config = state.settings
-    llm = config.require_llm()
+    current = await _read_state(connection.socket, user_id, connection.interview_id)
+    if current.question is None or current.question["turn"] != turn:
+        raise AgentStateError("answer_turn_invalid")
+    try:
+        llm = config.require_llm()
+    except ValidationError as error:
+        # 설정 값·키 원문 없이 필드 이름만 남겨 사용자 답변 오류와 구분한다.
+        fields = sorted({str(item["loc"][0]) for item in error.errors() if item["loc"]})
+        logger.error(
+            "interview_ws_llm_configuration_invalid",
+            interview_id=str(connection.interview_id),
+            fields=fields,
+        )
+        raise
     # WS 전송 수명 취소가 이미 시작한 DB·모델 처리를 중단하지 않게 한다.
     with CancelScope(shield=True):
         # 연결 인계용 유한 표식이다. 호출·재시도 대기·근거 조회 예산과 정리 여유를 포함한다.
@@ -373,8 +472,8 @@ async def _execute(connection: _Connection, user_id: UUID, turn: int, text: str)
             4,
             connection.lock,
             connection.work,
-            _rt_key(connection.session_id),
-            _reverse_key(connection.interview_id),
+            realtime_session_key(connection.session_id),
+            realtime_interview_key(connection.interview_id),
             connection.nonce,
             connection.raw_session,
             connection.session_id,
@@ -415,7 +514,7 @@ async def interview_socket(socket: WebSocket, session_id: str) -> None:
         await _deny(socket, "session_expired")
         return
     redis: Redis = socket.app.state.redis
-    raw = await redis.get(_rt_key(session_id))
+    raw = await redis.get(realtime_session_key(session_id))
     try:
         data = json.loads(raw) if raw is not None else None
         if (
