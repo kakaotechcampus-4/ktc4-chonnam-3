@@ -978,7 +978,28 @@ skip0을 확인했다. 앞선 공통 후보 241 passed는 이 잠금 보완 전 
 
 위 결과는 전용 PostgreSQL 15와 외부 HTTP mock 기준이다. 실제 모델 품질·운영 GitHub 호출·배포
 성공을 뜻하지 않는다. #135~#137의 실행 연결은 각 후속 PR에만 두고 공통 PR에 복사하지 않는다.
-최종 결합 및 원격 CI 결과는 게시 시 갱신하며 과거 #126의 실패한 run과 구분한다.
+배포 worker의 선택적인 부모 cron을 계승하며 기존에 cron 설정이 없으면 ARQ의 빈 기본값을 유지한다.
+부모 작업 보존·빈 목록·설정 부재의 3개 회귀와 실제 배포 등록을 검사했다.
+
+### 최종 게시 소스를 결합한 새 전체 검증
+
+공통 게시본과 #135·#136·#137의 실제 게시 소스를 `develop@2fc0103` 위에 결합했다.
+검증용 로컬 head는 `7eb6a929cc2a`이며 원격 PR base는 모두 develop이다.
+REST·WS의 두 등록을 모두 보존하고, 부모 준비 cron을 실제 analysis worker가 계승하는 구성이다.
+
+| 새 전체 검사 | 결과 |
+| --- | --- |
+| PostgreSQL15·Redis7의 전체 BE pytest | 1601 passed, skip0, 1038.2초 |
+| AI 전체 pytest, 최종 AI source hash 동일 | 347 passed, skip0 |
+| 별도 DB의 Alembic upgrade/downgrade | 1 passed; 전체 BE에도 포함되므로 고유 건수에 더하지 않음 |
+| BE / AI Ruff·format·Mypy | 모두 통과, format 367/57파일·type 163/13 source |
+| 부분 계약 검사 | schema 2개·부분 OpenAPI·fixture 7개 통과 |
+| 소스·게시 분리 | 실행 전후 Python 347파일 hash 동일, 소유 파일40개와 통합 소스 일치 |
+
+중단된 이전 전체 실행과 그 이전 집중 검사 수치는 이번 전체 통과로 재사용하지 않았다.
+원격 CI는 각 PR 본문의 해당 head별 검사 링크로 확인한다. 선행 미병합으로 생기는 단독 CI
+실패를 이 로컬 결합의 통과와 구분한다. 실제 외부 모델·GitHub·Caddy/브라우저·운영 배포와
+abandon 후속은 검증하지 않았다. 기존 정책·보류 계약을 임의 확정하지 않는다.
 
 
 ## 2026-10-28 — PR #126 기존 어댑터 보존과 수집 한계 지침
