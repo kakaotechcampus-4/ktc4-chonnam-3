@@ -80,6 +80,7 @@ const FAILURE_TITLE: Record<string, string> = {
 const RETRY_REJECTED_MESSAGE: Record<string, string> = {
   prep_in_progress: '이미 다시 준비하고 있어요 · 잠시만 기다려주세요',
   prep_failed: '지금은 다시 시도할 수 없어요 · 상태를 다시 확인할게요',
+  session_limit_exceeded: '같은 공고로 진행 중인 면접이 있어요 · 그 면접을 끝내거나 나간 뒤 다시 시도해주세요',
   session_expired: '면접 세션이 만료됐어요 · 레포를 다시 선택해주세요',
 };
 

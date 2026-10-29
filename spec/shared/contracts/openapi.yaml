@@ -322,7 +322,8 @@ paths:
         '409':
           description: >-
             prep_in_progress when a re-run is already running, prep_failed when the
-            interview is not in preparing_failed.
+            interview is not in preparing_failed, session_limit_exceeded when another
+            active interview exists for the same run.
           content:
             application/json:
               schema:
@@ -406,6 +407,12 @@ paths:
                 $ref: '#/components/schemas/CreateInterviewResponse'
         '401':
           $ref: '#/components/responses/Error'
+        '404':
+          description: not_found when the original interview does not exist or belongs to another user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '409':
           description: >-
             original_not_completed when the original is neither completed nor abandoned

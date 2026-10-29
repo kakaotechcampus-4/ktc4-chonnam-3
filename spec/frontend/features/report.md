@@ -101,6 +101,7 @@
 
 | 코드 | reason | 처리 |
 | --- | --- | --- |
+| 404 | `not_found` | 원본 면접이 없거나 남의 면접 |
 | 409 | `original_not_completed` | 원본이 `completed`도, 시작 후 중단된 `abandoned`도 아님 |
 | 409 | `repository_unavailable` | 원본 레포가 삭제·private 전환됨 |
 | 409 | `session_limit_exceeded` | 동시 세션 상한 |

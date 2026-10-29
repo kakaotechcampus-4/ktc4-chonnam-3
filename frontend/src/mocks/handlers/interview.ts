@@ -192,8 +192,9 @@ export const interviewHandlers = [
     path('/interviews/:id/prepare/retry'),
     async ({ params }) => {
       const record = getInterview(String(params.id));
+      // 계약·BE 모두 없는 면접의 준비 재시도는 404가 아니라 410 session_expired다.
       if (!record) {
-        return errorResponse(404, 'not_found', '면접을 찾을 수 없어요.');
+        return errorResponse(410, 'session_expired', '면접 세션이 만료됐어요.');
       }
       if (interviewStatus(record) !== 'preparing_failed') {
         return errorResponse(409, 'prep_failed', '준비 실패 상태에서만 다시 시도할 수 있어요.');
