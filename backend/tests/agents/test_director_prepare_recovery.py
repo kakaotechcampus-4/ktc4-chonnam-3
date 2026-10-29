@@ -57,6 +57,9 @@ async def test_changed_completed_criteria_rejects_resume_without_external_io(age
     retried = Transport(ready)
     assert not await run(agent_sessions, ready, retried)
     assert retried.github == [] and retried.model_operations == []
+    async with agent_sessions() as db:
+        row = await db.get(InterviewSession, ready["interview_id"])
+        assert row.last_error["code"] == "preparation_inputs_changed"
 
 
 @pytest.mark.parametrize(
@@ -84,9 +87,6 @@ async def test_middle_phase_retry_keeps_prior_success(
     retried = Transport(ready)
     assert await run(agent_sessions, ready, retried)
     assert retried.github == [] and retried.model_operations == ["plan", "review"]
-    async with agent_sessions() as db:
-        row = await db.get(InterviewSession, ready["interview_id"])
-        assert row.last_error["code"] == "preparation_inputs_changed"
 
 
 async def test_actual_deployment_worker_keeps_all_jobs_and_reaper():
