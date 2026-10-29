@@ -26,7 +26,6 @@ from tests.agents.test_director_runtime_service import analysis, contract, respo
 def connect_ws(agent_sessions, agent_seed, test_redis_url):
     @contextmanager
     def connect(handler=None, *, user_id=None):
-        from app.features.interview import ws
         from app.features.interview.service import _issue_session_id
         from app.main import create_app
 
@@ -44,10 +43,6 @@ def connect_ws(agent_sessions, agent_seed, test_redis_url):
             llm_max_response_bytes=262144,
         )
         app = create_app(config)
-        if not any(
-            getattr(route, "path", "") == "/api/ws/interviews/{session_id}" for route in app.routes
-        ):
-            app.include_router(ws.router, prefix="/api")
         with TestClient(app) as client:
             app.state.session_factory = agent_sessions
             http = httpx.AsyncClient(transport=httpx.MockTransport(handler or unexpected_model))
@@ -503,11 +498,13 @@ async def test_third_connection_waits_until_the_middle_socket_has_actually_close
                 model_release.set()
 
 
+@pytest.mark.parametrize("error", [OSError, RuntimeError, WebSocketDisconnect])
 async def test_failed_ack_delivery_preserves_answer_and_finishes_analysis_once(
     agent_sessions,
     agent_seed,
     connect_ws,
     monkeypatch,
+    error,
 ):
     await seed_turns(agent_sessions, agent_seed, 9)
     original = WebSocket.send_json
@@ -517,7 +514,7 @@ async def test_failed_ack_delivery_preserves_answer_and_finishes_analysis_once(
     async def fail_ack(socket, data, mode="text"):
         if data.get("type") == "answerReceived":
             acknowledged.set()
-            raise OSError("connection lost")
+            raise error("connection lost")
         await original(socket, data, mode=mode)
 
     monkeypatch.setattr(WebSocket, "send_json", fail_ack)
