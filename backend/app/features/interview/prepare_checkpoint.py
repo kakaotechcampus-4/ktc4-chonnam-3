@@ -3,7 +3,7 @@
 import hashlib
 import json
 
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
@@ -21,7 +21,13 @@ from app.db.models import (
     SessionRepository,
 )
 from app.db.models.report import SCORE_KEYS
+from app.features.analysis.analysis_results import resolve_bound_analysis
 from app.features.interview.repository_sources import SourcePreparationError
+
+
+def locked[T: tuple[object, ...]](query: Select[T], enabled: bool) -> Select[T]:
+    query = query.execution_options(populate_existing=True)
+    return query.with_for_update(read=True) if enabled else query
 
 
 def digest(value: object) -> str:
@@ -34,21 +40,36 @@ def values(row: object, names: str) -> dict[str, object]:
     return {name: getattr(row, name) for name in names.split()}
 
 
-async def criteria_context(db: AsyncSession, row: InterviewSession) -> dict[str, object]:
-    posting = await db.get(JobPosting, row.job_posting_id)
+async def criteria_context(
+    db: AsyncSession, row: InterviewSession, *, lock: bool = False
+) -> dict[str, object]:
+    posting = await db.get(
+        JobPosting,
+        row.job_posting_id,
+        with_for_update={"read": True} if lock else None,
+        populate_existing=True,
+    )
     assert posting is not None
-    criteria = (await db.scalars(select(ScoreCriterion).where(ScoreCriterion.is_active))).all()
+    criteria = (
+        await db.scalars(locked(select(ScoreCriterion).where(ScoreCriterion.is_active), lock))
+    ).all()
     frames = (
         await db.scalars(
-            select(DomainQuestionFrame).where(
-                DomainQuestionFrame.is_active,
-                DomainQuestionFrame.domain_category == (posting.domain_category or "etc"),
+            locked(
+                select(DomainQuestionFrame).where(
+                    DomainQuestionFrame.is_active,
+                    DomainQuestionFrame.domain_category == (posting.domain_category or "etc"),
+                ),
+                lock,
             )
         )
     ).all()
     requirements = (
         await db.scalars(
-            select(JdRequirement).where(JdRequirement.job_posting_id == row.job_posting_id)
+            locked(
+                select(JdRequirement).where(JdRequirement.job_posting_id == row.job_posting_id),
+                lock,
+            )
         )
     ).all()
     return {
@@ -66,43 +87,69 @@ async def criteria_context(db: AsyncSession, row: InterviewSession) -> dict[str,
     }
 
 
-async def input_digest(db: AsyncSession, row: InterviewSession) -> str:
-    run = await db.get(AnalysisJob, row.analysis_job_id)
-    posting = await db.get(JobPosting, row.job_posting_id)
+async def input_digest(db: AsyncSession, row: InterviewSession, *, lock: bool = False) -> str:
+    run = await db.get(
+        AnalysisJob,
+        row.analysis_job_id,
+        with_for_update={"read": True} if lock else None,
+        populate_existing=True,
+    )
+    posting = await db.get(
+        JobPosting,
+        row.job_posting_id,
+        with_for_update={"read": True} if lock else None,
+        populate_existing=True,
+    )
     selected = (
         await db.execute(
-            select(SessionRepository, Repository)
-            .join(Repository, Repository.id == SessionRepository.repository_id)
-            .where(SessionRepository.interview_session_id == row.id)
-            .order_by(SessionRepository.display_order.nulls_last(), SessionRepository.id)
+            locked(
+                select(SessionRepository, Repository)
+                .join(Repository, Repository.id == SessionRepository.repository_id)
+                .where(SessionRepository.interview_session_id == row.id)
+                .order_by(SessionRepository.display_order.nulls_last(), SessionRepository.id),
+                lock,
+            )
         )
     ).all()
     candidates = (
         await db.scalars(
-            select(AnalysisRepoCandidate).where(
-                AnalysisRepoCandidate.analysis_job_id == row.analysis_job_id,
-                AnalysisRepoCandidate.repository_id.in_([repo.id for _, repo in selected]),
+            locked(
+                select(AnalysisRepoCandidate).where(
+                    AnalysisRepoCandidate.analysis_job_id == row.analysis_job_id,
+                    AnalysisRepoCandidate.repository_id.in_([repo.id for _, repo in selected]),
+                ),
+                lock,
             )
         )
     ).all()
     l1 = (
         await db.scalars(
-            select(RepoAnalysis)
-            .where(
-                RepoAnalysis.repository_id.in_([repo.id for _, repo in selected]),
-                RepoAnalysis.analysis_level == "l1",
+            locked(
+                select(RepoAnalysis)
+                .where(
+                    RepoAnalysis.repository_id.in_([repo.id for _, repo in selected]),
+                    RepoAnalysis.analysis_level == "l1",
+                )
+                .order_by(RepoAnalysis.id),
+                lock,
             )
-            .order_by(RepoAnalysis.id)
         )
     ).all()
+    bound = [
+        resolve_bound_analysis(candidate, {item.id: item for item in l1})
+        for candidate in candidates
+    ]
     prompts = (
         await db.scalars(
-            select(PromptVersion)
-            .where(
-                PromptVersion.is_active,
-                PromptVersion.task_name.in_(["repo_deep", "director", "answer_analysis"]),
+            locked(
+                select(PromptVersion)
+                .where(
+                    PromptVersion.is_active,
+                    PromptVersion.task_name.in_(["repo_deep", "director", "answer_analysis"]),
+                )
+                .order_by(PromptVersion.task_name, PromptVersion.id),
+                lock,
             )
-            .order_by(PromptVersion.task_name, PromptVersion.id)
         )
     ).all()
     return digest(
@@ -130,32 +177,44 @@ async def input_digest(db: AsyncSession, row: InterviewSession) -> str:
             ),
             "l1": [
                 values(item, "id repository_id status head_sha prompt_version result")
-                for item in l1
+                for item in sorted((item for item in bound if item is not None), key=lambda x: x.id)
             ],
             "prompts": [values(item, "task_name version model template") for item in prompts],
-            "criteria": await criteria_context(db, row),
+            "criteria": await criteria_context(db, row, lock=lock),
         }
     )
 
 
-async def output_digest(db: AsyncSession, row: InterviewSession) -> str:
-    repository_ids = select(SessionRepository.repository_id).where(
-        SessionRepository.interview_session_id == row.id, SessionRepository.is_primary
-    )
+async def output_digest(db: AsyncSession, row: InterviewSession, *, lock: bool = False) -> str:
     analyses = (
         await db.scalars(
-            select(RepoAnalysis)
-            .where(
-                RepoAnalysis.repository_id.in_(repository_ids), RepoAnalysis.analysis_level == "l2"
+            locked(
+                select(RepoAnalysis)
+                .join(
+                    SessionRepository, SessionRepository.repository_id == RepoAnalysis.repository_id
+                )
+                .join(PromptVersion, PromptVersion.version == RepoAnalysis.prompt_version)
+                .where(
+                    SessionRepository.interview_session_id == row.id,
+                    SessionRepository.is_primary,
+                    RepoAnalysis.head_sha == SessionRepository.snapshot_head_sha,
+                    RepoAnalysis.analysis_level == "l2",
+                    PromptVersion.task_name == "repo_deep",
+                    PromptVersion.is_active,
+                )
+                .order_by(RepoAnalysis.id),
+                lock,
             )
-            .order_by(RepoAnalysis.id)
         )
     ).all()
     evidence = (
         await db.scalars(
-            select(Evidence)
-            .where(Evidence.interview_session_id == row.id, Evidence.tool_name.is_(None))
-            .order_by(Evidence.id)
+            locked(
+                select(Evidence)
+                .where(Evidence.interview_session_id == row.id, Evidence.tool_name.is_(None))
+                .order_by(Evidence.id),
+                lock,
+            )
         )
     ).all()
     state = row.context_state or {}
@@ -175,9 +234,11 @@ async def output_digest(db: AsyncSession, row: InterviewSession) -> str:
     )
 
 
-async def checked(db: AsyncSession, row: InterviewSession) -> dict[str, object]:
+async def checked(
+    db: AsyncSession, row: InterviewSession, *, lock: bool = False
+) -> dict[str, object]:
     saved = (row.context_state or {}).get("preparation_checkpoint")
-    fingerprint = await input_digest(db, row)
+    fingerprint = await input_digest(db, row, lock=lock)
     if saved is None:
         return {"version": 1, "inputs": fingerprint, "completed": 0}
     if (
@@ -188,7 +249,7 @@ async def checked(db: AsyncSession, row: InterviewSession) -> dict[str, object]:
         or saved.get("inputs") != fingerprint
     ):
         raise SourcePreparationError("preparation_inputs_changed")
-    if saved["completed"] and saved.get("outputs") != await output_digest(db, row):
+    if saved["completed"] and saved.get("outputs") != await output_digest(db, row, lock=lock):
         raise SourcePreparationError("preparation_outputs_changed")
     return dict(saved)
 
