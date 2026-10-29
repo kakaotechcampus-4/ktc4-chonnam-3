@@ -12,6 +12,10 @@ API를 대조한 뒤 일반 Python 코드에 수동 반영했다. `manifest.json
 검증했다. 수집 항목이 정확히 상한이고 미방문 디렉터리가 남는 경계도 추가 보완했다.
 실행 결과와 후속 실행 PR의 의존성은 `spec/ai/implementation.md`에 기록한다.
 
+일반 코드 반영 후 Context의 공유 공고 잠금 순서를 추가 보완했다. 패치 1의 원래 result blob과
+적용 커밋은 보존하며 최신 대상 blob·후속 커밋은 manifest의 `current_target_blob`과
+`post_application_changes`로 구분한다. 원본 패치를 이 후속 코드 위에 다시 적용하지 않는다.
+
 ## 아래는 적용 전 검토·재현 기록
 
 이 디렉터리는 **Python 소스에 자동 적용하지 않는 검토 자료**다. 적용 대기인 패치 1·2·3과

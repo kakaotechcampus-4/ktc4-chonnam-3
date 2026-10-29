@@ -970,6 +970,12 @@ DB fixture는 사용자·공고 원문 JSON·분석 steps·질문 Contract·호�
 | 정확한 구조 상한 2/512·미방문/완료/초과 | RED 2 failed/4 passed → 기존 수집 검사와 합계 9 passed |
 | 공개 앱 인증·비공개 전환·오류·비밀값 보호 | 신규 reader 11·collector 9사례의 RED 후 기존 도구 포함 78 passed, skip0 |
 
+추가 독립 검토에서 서로 다른 사용자의 준비와 기존 Context가 공유 공고·Frame을 반대로
+잠그는 SQLSTATE 40P01을 실제 PostgreSQL로 재현했다. `lock=True`에서 공고를 먼저 잠가
+순서를 통일했다. 신규 회귀 RED 1 failed/1 passed 후 기존 Context·storage 포함 91 passed,
+skip0을 확인했다. 앞선 공통 후보 241 passed는 이 잠금 보완 전 결과이며 최신 전체 결합·
+원격 검사는 별도로 기록한다. read-only 경로와 기존 Context AST는 추가 블록 외에 같다.
+
 위 결과는 전용 PostgreSQL 15와 외부 HTTP mock 기준이다. 실제 모델 품질·운영 GitHub 호출·배포
 성공을 뜻하지 않는다. #135~#137의 실행 연결은 각 후속 PR에만 두고 공통 PR에 복사하지 않는다.
 최종 결합 및 원격 CI 결과는 게시 시 갱신하며 과거 #126의 실패한 run과 구분한다.
