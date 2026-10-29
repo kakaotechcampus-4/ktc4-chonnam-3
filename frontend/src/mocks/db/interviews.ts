@@ -105,7 +105,7 @@ export function interviewLastError(
   if (interviewStatus(record, now) !== 'preparing_failed') return null;
   return (
     record.fixedLastError ?? {
-      // reason 은 화면 분기용 snake_case, code 는 배너에 노출하는 표시용 식별자다. api-spec.md #18
+      // reason 은 화면 분기용 snake_case, code 는 오류 식별자다(화면 미노출). api-spec.md #18
       reason: 'question_gen_timeout',
       code: 'ERR_QUESTION_GEN_TIMEOUT',
       step: 'compose_question',

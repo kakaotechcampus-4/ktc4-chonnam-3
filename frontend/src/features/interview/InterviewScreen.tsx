@@ -596,9 +596,6 @@ export default function InterviewScreen() {
           <p className="text-[12px] font-bold text-error">
             {ERROR_MESSAGE[error.reason] ?? '면접 중 문제가 생겼어요.'}
           </p>
-          <p className="mt-1 text-[11px] text-muted">
-            {error.code} · {error.occurredAt}
-          </p>
         </div>
       )}
 

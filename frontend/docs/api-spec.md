@@ -1352,7 +1352,7 @@ Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시�
 
 `recoverable: false`면 서버가 WS 연결을 닫는다. 오류 안내나 연결 종료만으로 DB 상태를 `completed` 또는 `abandoned`로 바꾸지 않는다. 정상 완료는 9번째 답변 처리 완료, `abandoned`는 명시적 나가기 확인·레포 재선택에 따른다. 오류 전달·종료 요청·실패 기록 복원의 실제 연결은 구현·검증 대상이다.
 
-`code`는 화면에 그대로 노출하는 표시용 식별자로, `occurredAt`과 함께 배너 하단에 표기한다. `step`은 준비 단계 오류일 때만 값이 있고 진행 중 오류에서는 `null`이다.
+`code`는 오류 식별자다. 화면에는 `code`·`occurredAt`을 노출하지 않고 `reason`별 문구만 보인다. `step`은 준비 단계 오류일 때만 값이 있고 진행 중 오류에서는 `null`이다.
 
 `repo_unreachable`의 "레포 재선택"은 `GET /interviews/{id}`의 `runId`로 5a-v2에 진입한다.
 

@@ -57,7 +57,7 @@ function stepsFromSnapshot(failedStep: PrepareStepKey | null | undefined): StepM
   ) as StepMap;
 }
 
-/** 실패 제목은 error.reason 별로 갈린다. code·occurredAt은 제목 아래에 그대로 노출한다. */
+/** 실패 제목은 error.reason 별로 갈린다. code·occurredAt은 화면에 노출하지 않는다. */
 const FAILURE_TITLE: Record<string, string> = {
   repo_analyze_failed: '레포를 분석하지 못했어요',
   persona_build_failed: '면접관 페르소나를 준비하지 못했어요',
@@ -438,7 +438,6 @@ export default function InterviewPrepare() {
         </p>
       )}
 
-      {/* code·occurredAt은 표시용 식별자라 그대로 노출한다. */}
       {displayError && (
         <p className="text-[11px] text-muted">
           {/*
@@ -448,8 +447,7 @@ export default function InterviewPrepare() {
             ponytail: 페이지가 생기면 <Link to="/help">고객센터</Link>로 되돌린다.
             MyPage 쪽도 같이 바꾼다.
           */}
-          {displayError.code} · {displayError.occurredAt} · 선택한 레포와 공고는 저장되어 있어요.
-          문의는 고객센터로 부탁드려요.
+          선택한 레포와 공고는 저장되어 있어요. 문의는 고객센터로 부탁드려요.
         </p>
       )}
 
