@@ -16,6 +16,7 @@ export type ScenarioName =
   | 'auth-expired'
   | 'github-token-invalid'
   | 'run-expired'
+  | 'candidate-page-failed'
   | 'report-unavailable'
   | 'session-limit'
   | 'server-error'
@@ -75,6 +76,19 @@ export const scenarios: Record<ScenarioName, Scenario> = {
         status: 410,
         reason: 'run_expired',
         message: '분석 결과가 만료되었어요. 다시 분석해주세요.',
+      },
+    ],
+  },
+
+  /** 더 보기 page 분석 실패. BE는 같은 page를 다시 요청해도 재실행하지 않는다. */
+  'candidate-page-failed': {
+    describe: '후보 더 보기 page 분석 실패(409). 재시도 없이 안내하는지 본다.',
+    rules: [
+      {
+        path: '/analysis-runs/*/candidates',
+        status: 409,
+        reason: 'candidate_page_failed',
+        message: '추가 레포지토리 분석에 실패했습니다.',
       },
     ],
   },

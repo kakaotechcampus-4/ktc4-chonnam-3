@@ -243,7 +243,7 @@ export const analysisHandlers = [
       const raw = new URL(request.url).searchParams.get('page');
       const page = Number(raw);
       if (raw === null || !Number.isInteger(page) || page < 1) {
-        return errorResponse(400, 'internal_error', 'page는 1 이상의 정수여야 하며 필수입니다.');
+        return errorResponse(400, 'invalid_request', 'page는 1 이상의 정수여야 하며 필수입니다.');
       }
 
       const analyzing = HttpResponse.json<CandidatesAnalyzingResponse>(
