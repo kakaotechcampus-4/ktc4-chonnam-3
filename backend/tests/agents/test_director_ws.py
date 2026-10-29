@@ -19,7 +19,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from app.core.config import Settings
 from app.db.models import Evidence, InterviewSession, InterviewTurn, LLMCallRecord
-from tests.agents.test_director_runtime_service import analysis, contract, response, seed_turns
+from tests.agents.director_helpers import analysis, contract, response, seed_turns
 
 
 @pytest.fixture

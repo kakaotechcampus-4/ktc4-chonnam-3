@@ -10,7 +10,7 @@ import uvicorn
 from websockets.asyncio.client import connect
 
 from tests.agents import test_director_ws
-from tests.agents.test_director_runtime_service import seed_turns
+from tests.agents.director_helpers import seed_turns
 
 connect_ws = test_director_ws.connect_ws
 
