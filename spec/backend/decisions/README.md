@@ -23,6 +23,12 @@
 - [0004 면접 질문 배분의 기존 기준 복원](../../shared/decisions/0004-flexible-persona-allocation-restoration.md): 2026-09-22 사용자 결정. 정상 9턴·첫 HR을 유지하고 기술 목표 6턴·최소 5턴, 도메인·HR 합산 최소 3턴과 개별 배분 비고정을 복원한다. DB·공개 API 구조는 유지하며 실제 횟수 제어는 구현·검증 대기다.
 - [0003 Sprint 1 세션 인증](../../shared/decisions/0003-sprint1-session-auth.md): 2026-09-22 사용자 결정. Redis `auth:sess:{sid}`·HttpOnly `devon_session`·14일 sliding 세션을 사용하고 JWT·refresh는 Sprint 2로 넘긴다. SQL `auth_sessions` 제외와 GitHub token의 암호화 DB 저장을 유지하며 실제 인증 연결은 구현·검증 대기다.
 
+## Task 15 내부 구현 결정
+
+- [0009 준비 중 WS 상태 관찰](0009-interview-ws-preparation-observation.md): Proposed.
+  DB의 준비 단계 snapshot과 변경분을 복원한다. 연결 교체와 잠금 소유권은 유지하고
+  진행 상태 관찰·재연결·실패·운영 handshake 확인의 경계를 구분한다.
+
 ## Task 10 내부 구현 결정
 
 - [0003 Task 10 후보 순위와 run별 L1 참조](0003-task10-ranking-and-analysis-reference.md): Proposed.

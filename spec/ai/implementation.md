@@ -79,6 +79,30 @@ PostgreSQL은 전용 로컬 테스트 DB의 임시 schema만 사용했다. 테�
 실제 모델의 자연어 평가 품질·답변 분석 생성·WS 전체 서비스 연결은 이번 검증에 포함하지 않았다.
 공통 계약 스크립트는 부분 형식 검사이며 전체 공개 API 호환성 검증을 대신하지 않는다.
 
+## 2026-10-30 — #137 준비 상태와 실제 WS 등록 리뷰 반영
+
+- 원본 `109b8e0`과 별도 로컬 통합본을 보존했다. 준비 중에는 commit된 DB 단계 snapshot과
+  변경분을 전달하고, 저장 질문과 `in_progress`를 확인한 뒤 `prepareCompleted`와 질문을 보낸다.
+  재연결은 worker나 모델을 다시 실행하지 않는다. 짧은 중간 상태는 조회 간격 안에 합쳐질 수 있다.
+- 준비 동안 수신 task를 유지해 조회 timeout 취소로 프레임을 잃지 않게 했다. 첫 질문 전 답변은
+  거절한다. stale 답변 검사는 LLM 설정 검사보다 먼저 하며, 설정 로그는 비밀값 없이 필드명만 남긴다.
+- realtime 키의 공개 helper는 이미 develop에 있는 service를 수정하는 공통 PR에 둔다.
+  이 PR은 그 함수를 사용하며 선행 REST 구현을 복사하지 않는다. 실제 앱 등록 fixture를 사용하고
+  REST·WS 등록을 함께 보존한다. 9턴 상수와 기존 ACK 전송 오류 보호도 유지한다.
+
+| 별도 로컬 결합에서 이번 검증 | 결과 |
+| --- | --- |
+| 준비·재접속·실패·설정 회귀 | 기존 구현에서 5 failed → 같은 5 passed, 실패 복원 1개 추가 |
+| 기존 WS·ACK 오류 3종·준비 6개·실제 등록 | 29 passed, skip0 |
+| 실제 Uvicorn TCP + Redis의 죽은 owner 잠금 | 1 passed, handshake 30.406초, 명시적인 client 제한 35초 |
+| 기존 REST 조회·생성·재시도 | 별도 48 passed, skip0 |
+| Mypy / 변경 Python Ruff·format | 160 source / 5파일 통과 |
+
+선행을 결합한 결과이며 게시본 단독 통과를 뜻하지 않는다. 최종 결합 결과는 같은 기록의
+[공통 검증](#director-review-integration-20261030)에서 관리한다. Caddy·브라우저 전체 경로는
+미실행이고 nonce를 강제로 덮지 않는다. 명시적 abandon과 열린 소켓 종료·늦은 결과 차단은
+공통 ADR0009 및 #143 후속이다. 실제 모델 품질·운영 배포·면접 전체 완료로 확대하지 않는다.
+
 ## PR #56의 현재 범위
 
 관련 PR: [AI task-01~03 기반 및 Director 기본 질문 생성 구현](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/56)
