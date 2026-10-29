@@ -229,6 +229,11 @@ async def load_context(
             )
         )
     ).all()
+    if lock:
+        # 준비 검증과 같은 공고→요구사항·프레임 순서로 잠가 공유 자료의 교착을 막는다.
+        await session.scalar(
+            select(JobPosting.id).where(JobPosting.id == interview.job_posting_id).with_for_update()
+        )
     requirements = (
         await session.scalars(
             _fresh(
