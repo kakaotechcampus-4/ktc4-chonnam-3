@@ -119,6 +119,31 @@
 새 PR의 실제 원격 범위를 확인한 뒤 #134와 상호 연결하고 기존 PR만 닫는다. 원본 브랜치는 삭제하거나
 재작성하지 않는다. seed·#131, 다른 선행 PR, 기존 미완료 범위는 이번 분할로 변경하지 않는다.
 
+## 2026-10-30 — #135 실행 경계의 새 리뷰 반영
+
+- 원본 `b262298`과 별도 로컬 통합본을 보존했다. 신규 실행 보완만 후속 커밋으로 추가하며
+  선행 Context와 공통 설정 필드를 복사하지 않는다. 공유 byte 상한 설명은 공통 PR에 둔다.
+- `process_answer`의 답변 저장·T3 성공 후 정상 완료 책임을 명시했다. 기존 WS 송신 경계가
+  처리하는 예상 I/O 오류와 예상 밖 콜백 예외·실제 취소를 구분한다. 이미 확정한 답변을
+  재전송했다고 모델 작업을 자동 재실행하지 않는다. 종료 비교는 기존 9턴 상수를 재사용한다.
+- 내부 scope가 없으면 외부 조회 전에 `evidence_scope_invalid`로 거절한다. 준비 호출자는
+  같은 DB 세션과 잠근 최신 면접 행을 받는 비동기 guard를 주입한다. 호출 전과 저장 직전에
+  소유권·입력 snapshot을 검사하며 외부 HTTP를 실행하지 않는다. 기본 None 경로는 유지한다.
+- 테스트 helper 7개를 공용 모듈로 옮겼다. 기존 테스트 14함수·helper 7개의 AST 본문과
+  Settings AST를 보존했고, 설정 문단 제목만 담당 구간에서 정리했다.
+
+| 이번 검증 구성 | 결과 |
+| --- | --- |
+| 최신 develop + #135 + 정확한 Context01/02, 누락 scope·콜백·취소 | RED 1 failed/4 passed → GREEN 5 passed |
+| 최종 비동기 DB guard의 두 저장 경계 | RED 2 failed → GREEN 2 passed, skip0 |
+| 최종 API의 기존 None 경로 | 별도 28 passed, skip0 |
+| 같은 최종 소스의 BE Ruff·format·Mypy | 통과, format 348파일·type 160 source |
+
+위 2개+28개는 서로 다른 집중 사례다. 앞선 동기 guard 구성의 30개와 mutation 검사는
+이전 단계의 이력이며 최종 API의 검증 수치에 더하지 않는다. 전체 결합 결과는 같은 기록의
+[공통 검증](#director-review-integration-20261030)에서 관리한다. 외부 모델·운영 배포를 검증한
+결과가 아니며 필요한 공통 선행 코드가 develop에 반영되기 전에는 Draft를 유지한다.
+
 ## 2026-10-28 — #124 후속 검토의 미실행 조회 범위 보존
 
 - #124의 [새 리뷰](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/124#issuecomment-6447685428)에 대응하는
