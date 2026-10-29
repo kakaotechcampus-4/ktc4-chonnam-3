@@ -9,6 +9,7 @@ import type {
   ReportResponse,
 } from '@/types/api';
 import {
+  abandonInterview,
   createInterview,
   getInterview,
   getRun,
@@ -209,6 +210,30 @@ export const interviewHandlers = [
     },
   ),
 
+  /** 나가기·레포 재선택의 중단. api-spec.md #24, 공통 0009. */
+  http.post<IdParams, never, Res<undefined>>(
+    path('/interviews/:id/abandon'),
+    async ({ params }) => {
+      const record = getInterview(String(params.id));
+      if (!record) {
+        return errorResponse(404, 'not_found', '면접을 찾을 수 없어요.');
+      }
+
+      const status = interviewStatus(record);
+      if (status !== 'abandoned') {
+        if (status !== 'in_progress' && status !== 'preparing_failed') {
+          return errorResponse(409, 'already_completed', '이미 끝난 면접이에요.');
+        }
+        abandonInterview(record);
+        // 전용 close code 없이 그 면접의 열린 연결을 닫는다.
+        clientsForSession(record.sessionId).forEach((client) => client.close());
+      }
+
+      await delay(150);
+      return new HttpResponse(null, { status: 204 });
+    },
+  ),
+
   http.post<IdParams, never, Res<CreateInterviewResponse>>(
     path('/interviews/:id/retry'),
     async ({ params }) => {
@@ -217,8 +242,10 @@ export const interviewHandlers = [
         return errorResponse(404, 'not_found', '면접을 찾을 수 없어요.');
       }
 
+      // 재도전은 completed와 시작 후 중단된 abandoned만 허용한다(공통 0009).
       const status = interviewStatus(record);
-      if (status !== 'completed' && status !== 'abandoned') {
+      const startedAbandoned = status === 'abandoned' && record.startedAt !== undefined;
+      if (status !== 'completed' && !startedAbandoned) {
         return errorResponse(409, 'original_not_completed', '끝난 면접만 다시 볼 수 있어요.');
       }
       if (hasActiveInterviewForRun(record.runId)) {

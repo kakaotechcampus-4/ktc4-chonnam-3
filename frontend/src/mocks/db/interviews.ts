@@ -6,6 +6,7 @@ import {
   INTERVIEW_LIMIT_SECONDS,
   PREPARE_DURATION_MS,
   REPORT_GENERATE_MS,
+  SEED_ABANDONED_INTERVIEW_ID,
   SEED_INTERVIEW_ID,
   SEED_IN_PROGRESS_INTERVIEW_ID,
   SEED_IN_PROGRESS_RUN_ID,
@@ -29,6 +30,8 @@ export type InterviewRecord = {
   fixedStatus?: InterviewStatus;
   /** status 가 preparing_failed 일 때만 값이 있다. */
   fixedLastError?: InterviewLastError;
+  /** 첫 질문 시각. 시작 전에 중단한 면접은 없다. 재도전 허용 기준이다(공통 0009). */
+  startedAt?: number;
   /** 리포트 lazy generation 시작 시각. 최초 조회 때 기록한다. */
   reportRequestedAt?: number;
   /**
@@ -215,6 +218,19 @@ export function clearPrepareFailure(record: InterviewRecord, createdAt: number) 
   return record;
 }
 
+/**
+ * 나가기·레포 재선택의 중단(공통 0009). 진행 중이었으면 시작 시각을 남겨
+ * 마이페이지 표시·재도전 대상으로 둔다. 준비 실패 면접은 시작 전이라 남기지 않는다.
+ */
+export function abandonInterview(record: InterviewRecord, now = Date.now()) {
+  if (interviewStatus(record, now) === 'in_progress') {
+    record.startedAt = record.createdAt + PREPARE_DURATION_MS;
+  }
+  record.fixedStatus = 'abandoned';
+  record.fixedLastError = undefined;
+  return record;
+}
+
 /** 마지막 턴까지 답변이 끝났으면 면접을 종료 상태로 고정한다. */
 export function finishInterview(record: InterviewRecord) {
   record.fixedStatus = 'completed';
@@ -276,6 +292,18 @@ function seedInterviews() {
       recoverable: true,
       occurredAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
     },
+  });
+
+  interviews.set(SEED_ABANDONED_INTERVIEW_ID, {
+    interviewId: SEED_ABANDONED_INTERVIEW_ID,
+    sessionId: 'sess_0000000000000003',
+    runId: SEED_RUN_ID,
+    repositoryIds: SEED_REPOSITORY_IDS,
+    createdAt: Date.now() - 2 * 60 * 60 * 1000,
+    position: jdPosition,
+    companyName: jdCompanyName,
+    fixedStatus: 'abandoned',
+    startedAt: Date.now() - 2 * 60 * 60 * 1000 + PREPARE_DURATION_MS,
   });
 
   interviews.set(SEED_IN_PROGRESS_INTERVIEW_ID, {
