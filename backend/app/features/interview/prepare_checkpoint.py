@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from uuid import UUID
 
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +28,20 @@ from app.features.interview.repository_sources import SourcePreparationError
 
 def locked[T: tuple[object, ...]](query: Select[T], enabled: bool) -> Select[T]:
     query = query.execution_options(populate_existing=True)
-    return query.with_for_update(read=True) if enabled else query
+    return query.with_for_update() if enabled else query
+
+
+def bound_ids(candidates: list[AnalysisRepoCandidate]) -> list[UUID]:
+    keys = []
+    for candidate in candidates:
+        value = (candidate.ranking_signals or {}).get("analysis")
+        raw = value.get("analysis_id") if isinstance(value, dict) else None
+        if isinstance(raw, str):
+            try:
+                keys.append(UUID(raw))
+            except ValueError:
+                pass
+    return keys
 
 
 def digest(value: object) -> str:
@@ -46,7 +60,7 @@ async def criteria_context(
     posting = await db.get(
         JobPosting,
         row.job_posting_id,
-        with_for_update={"read": True} if lock else None,
+        with_for_update=lock,
         populate_existing=True,
     )
     assert posting is not None
@@ -56,9 +70,15 @@ async def criteria_context(
     frames = (
         await db.scalars(
             locked(
-                select(DomainQuestionFrame).where(
+                select(DomainQuestionFrame)
+                .where(
                     DomainQuestionFrame.is_active,
                     DomainQuestionFrame.domain_category == (posting.domain_category or "etc"),
+                )
+                .order_by(
+                    DomainQuestionFrame.axis,
+                    DomainQuestionFrame.display_order,
+                    DomainQuestionFrame.id,
                 ),
                 lock,
             )
@@ -91,13 +111,13 @@ async def input_digest(db: AsyncSession, row: InterviewSession, *, lock: bool = 
     run = await db.get(
         AnalysisJob,
         row.analysis_job_id,
-        with_for_update={"read": True} if lock else None,
+        with_for_update=lock,
         populate_existing=True,
     )
     posting = await db.get(
         JobPosting,
         row.job_posting_id,
-        with_for_update={"read": True} if lock else None,
+        with_for_update=lock,
         populate_existing=True,
     )
     selected = (
@@ -127,7 +147,7 @@ async def input_digest(db: AsyncSession, row: InterviewSession, *, lock: bool = 
             locked(
                 select(RepoAnalysis)
                 .where(
-                    RepoAnalysis.repository_id.in_([repo.id for _, repo in selected]),
+                    RepoAnalysis.id.in_(bound_ids(list(candidates))),
                     RepoAnalysis.analysis_level == "l1",
                 )
                 .order_by(RepoAnalysis.id),
