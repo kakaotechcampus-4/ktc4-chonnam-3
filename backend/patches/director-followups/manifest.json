@@ -1,0 +1,149 @@
+{
+  "format_version": 1,
+  "state": "unapplied_review_patches",
+  "original_source_tree": "c8f2cb5d749b55cd2ed7ead78c95041448be61c7",
+  "prerequisite_integration_tree": "a4d7c1bf17b9845a19ef4ddd8e9d74505af42773",
+  "base": "dbd7f89002fd236c8160ffcea2e8d511b78c5dd7",
+  "original_backup": "backup/director-unpublished-before-pr-20261025",
+  "rule": "base blob must match exactly; re-review on prerequisite changes; never force or auto-apply",
+  "validation_reference": {
+    "develop": "4e511a992d7954fa310146bcba2f2d4c6358fb69",
+    "observed_on": "2026-10-28",
+    "rule": "reference only; repeat API, blob and runtime checks after upstream changes"
+  },
+  "patches": [
+    {
+      "order": 1,
+      "status": "pending_manual_application",
+      "application_required": true,
+      "patch": "backend/patches/director-followups/01-agent_context.patch",
+      "target": "backend/app/features/interview/agent_context.py",
+      "base_blob": "e199df05e9a7d11d486499277b9c91d7287d03d1",
+      "result_blob": "a474136cf2eb282ccaa2ab202a08688fbb801dda",
+      "patch_sha256": "25634539ecfb205dd952c259aeceb4fb0785d95691248c271060fff1c8023957",
+      "prerequisites": [
+        {
+          "pr": 82,
+          "head": "fcbacd2da4f8aab12fc113784264c3abc5deafd6",
+          "merged_at_reference": true
+        }
+      ],
+      "application": "manual after exact base/SHA checks and Context regression verification; never auto-apply",
+      "owner_role": "author of the ordinary-code Context application PR",
+      "refresh_on": [
+        "PR #82 head or merge changes",
+        "agent_context.py base or Context/storage contract changes"
+      ]
+    },
+    {
+      "order": 2,
+      "status": "pending_manual_application",
+      "application_required": true,
+      "patch": "backend/patches/director-followups/02-answer_context.patch",
+      "target": "backend/app/features/interview/answer_context.py",
+      "base_blob": "1f5c7991e86aafcc25a71cc63dc72653acb4958b",
+      "result_blob": "c49ee3860dd83fafd179bcbc7991a251539e981f",
+      "patch_sha256": "513d0213e1943dedcf7b6d28dbd7d411a4e2bdf04a683cefbf3a4008968bc302",
+      "prerequisites": [
+        {
+          "pr": 126,
+          "head": "d0293ec96bd342c2e2c5a7ff026b2adf723cea04",
+          "merged_at_reference": false
+        },
+        {
+          "patch_order": 1
+        }
+      ],
+      "application": "manual after PR #126, patch01 result and exact base/SHA checks; verify current-turn behavior; never auto-apply",
+      "owner_role": "author of the ordinary-code AnswerContext application PR",
+      "refresh_on": [
+        "PR #126 head or merge changes",
+        "patch01 result, answer_context.py base or current-turn contract changes"
+      ]
+    },
+    {
+      "order": 3,
+      "status": "pending_manual_application",
+      "application_required": true,
+      "patch": "backend/patches/director-followups/03-repo_deep.patch",
+      "target": "backend/app/llm_tasks/repo_deep.py",
+      "base_blob": "6948791bbe6f855de672cd1ddae42cdf31ab18de",
+      "result_blob": "8ce0d810617c17280ba47e02edc33f31ca4b503d",
+      "patch_sha256": "c52784cffad2292da420bf61680e4977c4e1f06085b2ff2c1dbf56c16b8487f6",
+      "prerequisites": [
+        {
+          "pr": 119,
+          "head": "255d31f3540af9dd86b92d35b43928ebe6aa9c4a",
+          "merged_at_reference": true
+        },
+        {
+          "pr": 114,
+          "head": "613527512da46d2de9bf9cdd32f14dc261f68c87",
+          "merged_at_reference": true
+        },
+        {
+          "pr": 82,
+          "head": "fcbacd2da4f8aab12fc113784264c3abc5deafd6",
+          "merged_at_reference": true,
+          "provides": "call_model attempt_sink keyword and completed-attempt retention"
+        }
+      ],
+      "application": "manual only after exact base/SHA checks, call_model attempt_sink API and completed-attempt runtime checks; never auto-apply",
+      "runtime_requirements": [
+        "call_model accepts the attempt_sink keyword",
+        "completed attempts reach the sink before retry or cancellation",
+        "selection and L2 share one CallBudget with two total provider attempts",
+        "semantic terminal failure does not re-enter the provider"
+      ],
+      "additional_runtime_requirement": "Merged PR #82 supplies the hook at validation_reference.develop; historical standalone PR #114 did not. Recheck the current API and behavior before applying.",
+      "owner_role": "author of the ordinary-code L2 adapter application PR",
+      "refresh_on": [
+        "PR #119 or gateway head/merge changes",
+        "repo_deep.py base, call_model signature, attempt retention or CallBudget changes"
+      ]
+    },
+    {
+      "order": 4,
+      "status": "already_implemented_in_develop",
+      "application_required": false,
+      "patch": "backend/patches/director-followups/04-agent.patch",
+      "target": "backend/app/agents/director/agent.py",
+      "base_blob": "a41c5842a084e0365cbe0c7556269091d1a32639",
+      "result_blob": "69fcf40a0739469fe07bbe8dbd1414ce561ad95b",
+      "patch_sha256": "0d2ed7808001234fdc95507a10d99ec877404cdc5fadd96004c3b69f6d7da922",
+      "prerequisites": [
+        {
+          "pr": 82,
+          "head": "0e973f3377553b13bbea419bfd662f968bf64b97"
+        },
+        {
+          "pr": 126,
+          "head": "e29c8f971fa87b32aace1bd5a3d6be1d43c88478"
+        },
+        {
+          "pr": 114,
+          "head": "613527512da46d2de9bf9cdd32f14dc261f68c87"
+        }
+      ],
+      "application": "historical reference only; do not apply to the current Director modules",
+      "prerequisites_are_historical": true,
+      "reason": "PR #82 already forwards base_url in generate_question; PR #126 now separates execute_director into runtime_adapter.py. The old combined-file base is not the current target.",
+      "implemented_by": {
+        "pr": 82,
+        "head": "fcbacd2da4f8aab12fc113784264c3abc5deafd6",
+        "merge_commit": "09a6f77725ac910544875e62862aaf45e736895c",
+        "target_blob": "23eb17818e23de6b2fac28854438f466e387c363"
+      },
+      "layout_reference": {
+        "pr": 126,
+        "head": "d0293ec96bd342c2e2c5a7ff026b2adf723cea04",
+        "merged_at_reference": false,
+        "runtime_target": "backend/app/agents/director/runtime_adapter.py"
+      },
+      "owner_role": "author of a later change to the Director adapter layout",
+      "refresh_on": [
+        "generate_question base_url behavior or Director module layout changes"
+      ]
+    }
+  ]
+}
