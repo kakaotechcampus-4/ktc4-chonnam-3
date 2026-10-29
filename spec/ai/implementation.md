@@ -5,6 +5,19 @@ AI 작업의 구현·수정 내역, 코드 위치, 실행 결과와 남은 작�
 [decisions](decisions/README.md)에 보존한다. 문서 역할은
 [ADR 0020](decisions/0020-implementation-record-policy.md)을 따른다.
 
+## 2026-10-29 — #126 병합 후 최신 코드의 CI 검증 경로 보완
+
+- 기준 develop은 `e58fff86ef8c876edb220b5e67dd73b4de01c0db`다. #125·#126·#127·#133이 반영돼 있다.
+- 과거 Backend CI `40589589648`은 `09a6f77+d0293ec`의 합성 commit `3db9a486`에서
+  #125 runtime 부재의 Mypy2오류로 중단됐고 pytest는 미실행이었다. 해당 실패 이력은 보존한다.
+- 현재 두 workflow는 PR만 검사해 병합 뒤 develop의 새 결과가 남지 않았다. 기존 검사·권한·DB를
+  유지하며 리뷰 준비 완료 이벤트, develop push, 수동 실행과 이벤트·PR/ref별 동시 실행을 추가한다.
+- 최신 소스의 새 격리 venv에서 Mypy159 source·기존/신규 adapter와 예산·패키지 연결10건이 통과했다.
+  actionlint1.7.12의 두 workflow 검사와 독립 검토도 통과했다. 독립 검토에서 jobs 원문 일치를 확인했다.
+- 새 원격 결과는 후속 CI PR의 실제 head·merge SHA 및 실행 링크로 별도 확인한다. 위 로컬 결과를
+  원격 CI 통과로 보고하지 않으며 수동·push 경로는 기본 develop에 변경이 반영된 뒤 사용할 수 있다.
+- 이번 범위는 CI 검증 경로다. 수집기 경계 결함·미적용 Context/L2·후속 실행 연결의 결과로 확대하지 않는다.
+
 ## 2026-10-26 — 사용자 요청에 따라 PR #107 번호 유지
 
 - 사용자가 #107 번호 유지를 명시해 기존 번호 유지 예외를 적용한다. #107의 원본 `ce24c82`와
