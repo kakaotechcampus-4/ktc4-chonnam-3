@@ -210,6 +210,16 @@ tool_error만으로 확보 근거를 버리거나 사용자 감점·Director 전
 
 L1의 생성 요약은 0006에 따라 프로젝트의 기능·역할을 설명하며 README·commit 수로 개인 기여를 추정하지 않는다. `role_summary`는 오래된 task 주석의 필드명으로, 유지·변경과 실제 저장/API 매핑은 BE와 합의한다. 기존 개인 역할 필드를 프로젝트 요약으로 임의 재해석하지 않으며, 근거 없는 개인 기여 값은 빈칸을 추측으로 채우지 않고 미확인으로 다룬다.
 
+### 문서 Claim의 후속 AI 모듈 계약
+
+이 계약은 독립 추출 모듈의 입력·출력·검증 범위다. Sprint 1 preview·`doc_extract`의 Claim 생성·저장이나 면접 사용을 활성화하는 결정이 아니다. [0029](decisions/0029-document-claims.md)의 내부 추출 설계와 [0030](decisions/0030-document-claims-validation-boundary.md)의 검증·연결 경계를 함께 따른다. 실제 연결·검증 현황은 [구현 기록](implementation.md)에서 관리한다.
+
+| prompt version | 성공 결과에 필요한 의미 | 검증 | 서비스 연결 조건 |
+| --- | --- | --- | --- |
+| `doc_claims_v1` | 포트폴리오 추출 텍스트의 Claim 최대 20개(`claim_text`, `claim_type` 4종, `tech_tags` 최대 5개)와 근거 줄 ID | 전체 응답의 schema를 먼저 검사하고, 통과한 응답의 줄 ID가 이번 요청에 있는지 검사한다. schema 실패는 공통 재시도 정책, 없는 ID는 semantic 실패·무재시도다. 한 항목 위반도 전체 거절하며 빈 Claim 목록은 성공이다. | BE 호출·prompt 등록·저장·처리 상태와 Director 소비 계약을 확인한 뒤 연결한다. 문서별 중복 호출 방지와 실패 기록은 호출자 책임이다. |
+
+`paragraph_no`는 입력에 사용한 저장 `extracted_text`에서 빈 줄을 제외한 0번 시작 줄 순번이다. PDF 페이지나 원본 DOCX 문단 번호가 아니며, 두 줄에 걸친 주장은 시작 줄을 가리킨다. 줄 ID의 존재와 원문 한 줄 복원은 Claim 내용·기술·수치의 충실성이나 진위를 보장하지 않는다. 문서 Claim을 현재 답변 인용을 검사하는 기존 `claim_checks`에 그대로 넣지 않는다.
+
 ## Model Gateway와 실패
 
 입력은 `task_name`, 실제 provider/model 설정, prompt/version, schema/version, 검증된 task input, timeout·호출 budget이다. 출력은 검증된 data 또는 typed failure와 호출 metadata다. token을 받지 못했을 때 0으로 추정하지 않는다.

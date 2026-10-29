@@ -1148,3 +1148,74 @@ DB fixture는 사용자·공고 원문 JSON·분석 steps·질문 Contract·호�
 실제 분류 품질은 검증하지 않았다. 로그는 `.claude/scratch/ai-pr-reviews-20261026/pr99-concurrent/`에
 보존한다. 이전 v1·로컬 v2 후보·팀원 원본의 검증 수치를 이번 보완본의 새 결과로 합치지 않는다.
 다른 PR과 새로 결합한 결과 및 실제 게시 head는 후속 게시·재검증에서 구분해 기록한다.
+
+## 2026-10-26 — 포트폴리오 문서 Claim 추출 (0029)
+
+### 기준과 변경
+
+- 작업 브랜치: `feature/doc-claims`, 기준 develop `fca606a`(#99 머지 후). AI-L22 중 AI 추출 모듈 범위.
+- `ai/src/devon_ai/llm_tasks/doc_claims.py`: `extract_claims`가 추출 텍스트의 비어 있지 않은 줄에 `L<순번>` ID를
+  붙여 한 번 호출하고 `{claims: [{claim_text, claim_type, tech_tags, line_id}]}`를 받는다. 요청별 줄 표로 만든
+  validator가 schema·semantic(없는 줄 ID)을 검사하고 줄 번호(`paragraph_no`)와 원문 줄을 복원한다. 실패하면
+  Claim 없이 실패 정보를 돌려준다. 원문이 비면 호출하지 않고, prompt·limits·입력 타입 오류는 호출 전에 거절한다.
+- `ai/prompts/doc-claims-v1.md`: 검수 전 prompt 초안. Claim 4종 정의, 뽑지 않는 것, 원문에 없는 기술·수치 추가 금지.
+- `ai/tests/llm_tasks/test_doc_claims.py`: 줄 번호 부여(빈 줄 제외·CRLF 분리·양 끝 공백 유지), 줄 번호·원문 복원과 태그
+  중복 제거, 빈 결과 성공, 없는 줄 ID 3종의 semantic 기록·무재시도, schema 위반 9종, provider 실패, 빈 문서
+  비호출, 입력 거절 3종(다른 task prompt, `doc_claims_v1`이 아닌 version, 문자열이 아닌 입력).
+
+### 실행 결과 (2026-10-26)
+
+환경: Windows, uv. `ai`에서 `ruff check .`·`ruff format --check .`·`mypy`(12개 파일) 통과, `pytest -q` 213 passed.
+`backend`에서 `tests/agents/test_ai_package_imports.py` 1 passed.
+
+실제 BE `call_model` + `httpx.MockTransport`(외부 호출 없음)로 확인했다. gateway가 보내는 schema는 `strict: true`이며
+모든 object 단계에서 `required`가 전체 속성과 같고 `additionalProperties: false`다.
+
+| 모델 응답 | claims | failure | attempt 오류 | HTTP 호출 |
+| --- | --- | --- | --- | --- |
+| 정상 Claim 2개 | 2개(줄 번호 1·2) | 없음 | 없음 | 1 |
+| 1개가 없는 줄 ID | 없음 | semantic | (semantic, llm_failed) | 1 |
+| 없는 `claim_type` | 없음 | schema | (schema, llm_failed) | 2 (gateway schema 재시도) |
+| `claims: []` | 없음 | 없음 | 없음 | 1 |
+
+### 검증 한계와 후속 작업
+
+- 실제 provider 호출과 추출 품질 평가는 미실행이다(API 키 없음). 실행 시 포트폴리오 표본·모델 버전·비용과
+  누락·과잉 추출·원문에 없는 내용 추가를 함께 기록한다.
+- BE 연결과 Director 사용은 범위 밖이다: `doc_extract` 단계 호출, BE adapter와 `document_claims` 저장,
+  `seed_prompt_versions.py`의 `doc_claims` 등록, `claim_type` CHECK 여부, `Context`의 Claim 전달과
+  `interview_turns.claim_ids` 기록(0029 영향 절).
+
+## 2026-10-30 — PR #146 리뷰 후속: 검증 순서와 연결 범위 정정
+
+### 기준과 변경
+
+- 원본 PR head `099e7f3`를 `backup/pr146-before-review-fix-20261030`에 보존하고 후속 커밋만 추가했다.
+  단독 검증과 최신 develop `2fc0103`에 합친 검증을 구분한다. 다른 미병합 구현을 추가하지 않았다.
+- `doc_claims.py`는 모든 항목의 schema를 검사한 뒤 줄 ID를 검사한다. 같은 혼합 오류의 항목 순서를
+  바꿔도 schema로 분류한다. 기존 정상 결과·4종·20개·태그 5개·원문 복원·전체 거절 정책은 유지한다.
+- 회귀 5사례를 추가했다: 혼합 오류의 두 순서·동일 항목, 정상 항목 뒤 schema/semantic 오류의 부분 채택 방지.
+  단일 호출 대역의 설명도 Gateway HTTP·재시도를 검증하는 것처럼 읽히지 않게 고쳤다.
+- [0030](decisions/0030-document-claims-validation-boundary.md)과 내부 계약에서 독립 AI 모듈과 서비스 활성화,
+  문서 Claim과 답변 `claim_checks`, 원문 ID 존재와 추출 충실성의 경계를 정정했다. 0029의 원본과 Accepted
+  상태는 보존하고 후속 링크를 추가했다. FE·공개 API·DB·BE 호출·Director 소비 코드는 변경하지 않았다.
+
+### 이번 수정 후 직접 실행한 검증
+
+| 대상·명령 | 실제 결과 |
+| --- | --- |
+| 수정 전 새 회귀 포함 `pytest tests/llm_tasks/test_doc_claims.py` | 1 failed / 24 passed. 줄 ID 오류가 먼저인 혼합 응답의 분류 차이 재현 |
+| 수정 후 동일 파일 | 25 passed |
+| 수정 PR 단독 AI `pytest -q` | 303 passed |
+| 최신 develop + 수정 PR AI `pytest -q` | 372 passed |
+| 두 환경 AI Ruff·format·Mypy | 통과. format 54/60 files, Mypy 13/14 source files |
+| 통합 BE 패키지 import·기존 `tests/contract` | 55 passed |
+| 실제 Gateway + `httpx.MockTransport`, 단독/통합 각각 같은 13사례 | 통과. 혼합 오류 세 경우 모두 schema 재시도 후 정상 응답 채택(HTTP 2회), schema가 맞는 없는 ID는 semantic 종료(1회), 일부 채택 없음, 빈 입력 비호출·빈 결과 성공·byte 상한·취소 전파 확인 |
+| 공통 계약 검사 | schema 2개·부분 OpenAPI·양성/음성 fixture 7개 통과. 전체 API·FE 호환성 검증 아님 |
+| 최신 develop 병합 검사 | 충돌 없음. 최신 공통 계약·색인·구현 기록 보존 |
+
+위 결과는 이전 검토의 298/367개나 작성 당시 213개를 재사용한 수치가 아니다. 이번 수정의 테스트를
+현재 소스 경로에 고정해 실행했다. 실제 모델 호출·추출 품질 데이터셋·BE 저장/분석·면접 서비스 흐름·
+전체 DB/Redis suite·배포 검증은 미실행이다. 실패·시도 정보의 영구 기록, 문서 버전별 실행 상태·중복 방지,
+prompt 등록·adapter·Context/질문 근거 연결은 후속이다. 로그·source hash·정확한 명령은
+`.claude/scratch/pr146-review-fix-20261030/`에 보존한다.
