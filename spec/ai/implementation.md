@@ -946,6 +946,35 @@ DB fixture는 사용자·공고 원문 JSON·분석 steps·질문 Contract·호�
   (`backend/app/llm_tasks/repo_shallow.py`)와 `repo_analyze`의 저장 매핑·캐시 조회 구현은 이번 범위
   밖이며 후속 작업이다. L0-b 입력 수집은 BE PR #45 범위다.
 
+<a id="director-review-integration-20261030"></a>
+
+## 2026-10-30 — Director 선행 패치의 실제 코드 적용과 수집 경계 보완
+
+- 기준은 `develop@2fc0103`이다. #126·#133·#155 병합 상태와 패치 1·2·3의 정확한
+  base/result blob·원문 SHA-256을 대조했다. 현재 답변 Context·9번째 답변·L2 공유 예산·
+  완료 시도 기록·수집 한계 전달을 일반 Python 코드에 수동 반영했다. 패치 4는 이미 구현된
+  과거 자료로 보존하며 다시 적용하지 않는다. manifest에 적용 커밋을 기록했다.
+- 원문 수집기가 정확히 항목 상한에 도달했을 때 미방문 디렉터리가 남으면 확인하지 못한
+  범위를 명시한다. 상한에서 전체 구조를 다 읽은 경우에는 한계를 붙이지 않는다.
+- 공개 저장소 수집에는 기존 OAuth App ID/secret의 공개 데이터 전용 Basic 인증을 사용한다.
+  사용자 token의 파일 조회 권한을 확대하지 않는다. 명시적인 GitHub 요청만 만들며 client의
+  기본 인증·쿠키·redirect를 상속하지 않는다. 인증값 한쪽만 있는 설정은 익명으로 강등하지 않는다.
+  근거: [GitHub 공식 OAuth App rate limit 문서](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#primary-rate-limit-for-oauth-apps).
+- REST 발급과 WS 검사가 쓰는 realtime 키 함수는 기존 service에서 공개 이름 하나로 공유한다.
+  이미 develop에 있는 공통 파일의 변경이며 #137에 선행 REST 구현을 복사하지 않는다.
+
+| 이번 새 집중 검증 | 결과 |
+| --- | --- |
+| 현재 질문/이력·1/9턴의 저장 전후·잘못된 턴 | RED 7 failed → GREEN 7 passed, 기존 배분 검사와 합계 31 passed |
+| L2 예산·sink·source limitations·취소 | RED 2 failed → 기존 adapter와 합계 20 passed |
+| 정확한 구조 상한 2/512·미방문/완료/초과 | RED 2 failed/4 passed → 기존 수집 검사와 합계 9 passed |
+| 공개 앱 인증·비공개 전환·오류·비밀값 보호 | 신규 reader 11·collector 9사례의 RED 후 기존 도구 포함 78 passed, skip0 |
+
+위 결과는 전용 PostgreSQL 15와 외부 HTTP mock 기준이다. 실제 모델 품질·운영 GitHub 호출·배포
+성공을 뜻하지 않는다. #135~#137의 실행 연결은 각 후속 PR에만 두고 공통 PR에 복사하지 않는다.
+최종 결합 및 원격 CI 결과는 게시 시 갱신하며 과거 #126의 실패한 run과 구분한다.
+
+
 ## 2026-10-28 — PR #126 기존 어댑터 보존과 수집 한계 지침
 
 - 원본 `68c088f`를 `backup/pr126-before-review-fix-20261028`에 보존했다. 기존 `agent.py`는
