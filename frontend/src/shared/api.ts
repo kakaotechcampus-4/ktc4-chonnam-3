@@ -104,6 +104,9 @@ export const api = {
     request<ReportResponse | ReportGeneratingResponse>(`/interviews/${id}/report`),
   retryInterview: (id: string) =>
     request<CreateInterviewResponse>(`/interviews/${id}/retry`, { method: 'POST' }),
+  /** 나가기·레포 재선택의 면접 중단. 이미 abandoned면 다시 불러도 204다. api-spec.md #24. */
+  abandonInterview: (id: string) =>
+    request<void>(`/interviews/${id}/abandon`, { method: 'POST' }),
   submitFeedbackDisagreement: (id: string, body: FeedbackDisagreementRequest) =>
     requestJson<void>(`/interviews/${id}/feedback-disagreements`, 'POST', body),
   analysisRunEventsUrl: (runId: string) => `${BASE}/analysis-runs/${runId}/events`,

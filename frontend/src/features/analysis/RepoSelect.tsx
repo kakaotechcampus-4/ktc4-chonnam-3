@@ -9,6 +9,11 @@ import Footer from '@/shared/components/Footer';
 import { isApiError } from '@/types/api';
 import RunLoadError from '@/features/analysis/RunLoadError';
 import { postingUrlFrom, type AnalysisInputState } from '@/features/analysis/steps';
+import {
+  abandonInterview,
+  interviewPath,
+  previousInterviewIdFrom,
+} from '@/features/interview/abandon';
 
 const MAX_REPOSITORIES = 5;
 
@@ -95,11 +100,24 @@ export default function RepoSelect() {
     });
   }
 
+  // [레포 다시 선택하기]로 왔으면 기존 면접을 먼저 abandon한 뒤 새 면접을 만든다(공통 0009).
+  const previousInterviewId = previousInterviewIdFrom(location.state);
   const createInterviewMutation = useMutation({
-    mutationFn: () => api.createInterview({ runId, repositoryIds: selected }),
-    onSuccess: (data) => {
+    mutationFn: async () => {
+      if (previousInterviewId) {
+        const status = await abandonInterview(previousInterviewId);
+        // 이미 완료됐거나 다른 탭에서 다시 준비 중이면 새로 만들지 않고 그 면접으로 간다.
+        if (status !== null && status !== 'abandoned') {
+          return interviewPath(previousInterviewId, status);
+        }
+      }
+      const created = await api.createInterview({ runId, repositoryIds: selected });
+      return `/interview/${created.interviewId}/prepare`;
+    },
+    onSuccess: (path) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.interviewsAll });
-      navigate(`/interview/${data.interviewId}/prepare`);
+      // 뒤로 가기로 같은 run의 레포 선택 화면에 돌아와 기존 면접 id 없이 새 면접을 만들지 않게 한다.
+      navigate(path, { replace: true });
     },
   });
 

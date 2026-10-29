@@ -16,6 +16,7 @@ import type {
 } from '@/types/api';
 
 import { playTestTone, useMicCheck, type MicStatus } from './useMicCheck';
+import type { ReselectState } from './abandon';
 
 /** 실행 순서는 spec/frontend/features/interview.md의 4단계를 따른다. */
 const PREPARE_STEPS: { key: PrepareStepKey; label: string }[] = [
@@ -619,7 +620,11 @@ export default function InterviewPrepare() {
           ) : (
             <button
               type="button"
-              onClick={() => navigate(`/interview/repos/${interview!.runId}`)}
+              onClick={() =>
+                navigate(`/interview/repos/${interview!.runId}`, {
+                  state: { previousInterviewId: id } satisfies ReselectState,
+                })
+              }
               className={
                 displayError.recoverable
                   ? 'h-10 text-[13px] font-bold text-muted'
