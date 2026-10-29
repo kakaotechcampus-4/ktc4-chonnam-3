@@ -1,5 +1,6 @@
 """L2 BE 연결: 가짜 HTTP 공급자로 호출 상한과 repo_analyses 행 매핑을 검사한다. DB는 쓰지 않는다."""
 
+import asyncio
 import json
 import uuid
 
@@ -9,6 +10,7 @@ from devon_ai import contracts as c
 from pydantic import SecretStr
 
 from app.core.config import LLMSettings, Settings
+from app.integrations.llm.client import CallBudget
 from app.llm_tasks import repo_deep
 
 SHA = "a" * 40
@@ -138,6 +140,48 @@ async def test_verified_area_is_stored_as_l2_success() -> None:
         "stage": "semantic",
         "reason_summary": "invalid field: unread source",
     }
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_shared_selection_budget_keeps_attempts_and_source_limits(cancel):
+    budget = CallBudget()
+    sink = []
+    sent = []
+
+    async def handle(request):
+        sent.append(json.loads(request.content))
+        if cancel and len(sent) == 2:
+            raise asyncio.CancelledError
+        return httpx.Response(200, json=_response("not JSON"))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+
+        async def invoke():
+            return await repo_deep.analyze_repository(
+                _input(),
+                snapshot_head_sha=SHA,
+                prompt=PROMPT,
+                settings=SETTINGS,
+                http_client=http,
+                budget=budget,
+                attempt_sink=sink,
+                source_limitations=("하위 디렉터리는 확인하지 못했습니다.",),
+            )
+
+        if cancel:
+            with pytest.raises(asyncio.CancelledError):
+                await invoke()
+            assert len(sink) == 1
+        else:
+            first = await invoke()
+            second = await invoke()
+            assert first.data is second.data is None
+            assert len(sink) == 2
+        assert len(sent) == 2 and budget.remaining_attempts == 0
+        for payload in sent:
+            model_input = json.loads(payload["input"][0]["content"][0]["text"])
+            assert model_input["source_limitations"] == ["하위 디렉터리는 확인하지 못했습니다."]
+        assert sink[0].error_stage == "parse"
 
 
 async def test_no_verified_area_fails_without_retry_and_keeps_rejections() -> None:
