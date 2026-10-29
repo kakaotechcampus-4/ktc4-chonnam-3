@@ -73,6 +73,29 @@ task·version·model을 확인하고 같은 DB의 활성 row가 맞는지 확인
 `SameSite=None`만으로 브라우저의 서드파티 쿠키 정책을 우회할 수는 없다. FE·API·WS를 같은
 HTTPS origin으로 제공하면 `SameSite=Lax`를 유지하고 CORS와 별도 WS 호스트를 피할 수 있다.
 
+### 면접 준비 worker와 복구
+
+공통 선행 코드와 #135·#136·#137을 반영한 동일 릴리스에서 면접을 실행한다.
+배포의 `arq app.workers.analysis_app.WorkerSettings`는 부모 worker의 `interview_prep`와
+시작 시·30초 주기의 `interview_preparation_reaper`도 계승한다. 신규 변경만 담은 Draft의
+단독 import 실패를 배포 가능 상태로 해석하지 않는다.
+
+준비 owner는 20초마다 90초 lease를 갱신한다. 만료 reaper는 새 큐 메시지가 없어도 실패
+상태로 회수하며, lease·claim 없는 이전 preparing 행에는 마지막 수정 이후 600초를 둔다.
+REST 재시도는 완료된 단계의 고정 입력·산출물이 같으면 재사용한다. API·worker를 같은
+버전으로 교체하고 진행 중인 준비 작업은 먼저 배출한다.
+[복구 결정](../../spec/backend/decisions/0011-interview-preparation-resume-and-recovery.md)을 따른다.
+
+`max_tries=1`, `job_timeout=600`을 유지하며 준비 시작 시 다음을 검사한다.
+`2 × DIRECTOR_PREPARE_TIMEOUT_SECONDS + 4 × LLM_TIMEOUT_SECONDS + 30 ≤ 600`.
+이는 외부 호출 예산의 설정 검사이며 DB 지연 보장은 아니다. 필수 LLM 설정 누락이나
+proxy 쌍 불일치는 비재시도 오류이므로 설정 수정·재시작 뒤 새 면접을 접수한다.
+
+면접 준비 전 대상 DB의 `repo_deep`·`director`·`answer_analysis` 활성 버전·모델·본문과
+점수 기준·도메인 프레임을 확인한다. `seed_all`은 prompt를 넣지 않는다. 검수한 UTF-8 본문을
+기존 등록 절차로 각각 등록하며, 예시 prompt를 운영용으로 자동 활성화하거나 기존 version을
+덮어쓰지 않는다. 실제 모델 품질과 배포 후 면접 흐름은 별도로 확인한다.
+
 ## 2. 쿠키
 
 ```

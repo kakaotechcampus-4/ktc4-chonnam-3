@@ -1,19 +1,24 @@
-"""Initial repository synchronization worker; AI tasks remain unregistered."""
+"""저장소 수집과 면접 준비 task를 같은 worker에 등록한다."""
 
 from typing import Any
 
 import httpx
+from arq import cron
 from arq.connections import RedisSettings
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
 from app.core.crypto import TokenCipher
+from app.features.interview.prepare_lease import JOB_TIMEOUT_SECONDS
 from app.workers.tasks.initial_sync import initial_sync
+from app.workers.tasks.interview_prep import interview_prep
+from app.workers.tasks.interview_preparation_reaper import interview_preparation_reaper
 
 
 async def startup(ctx: dict[str, Any]) -> None:
     settings = get_settings()
     settings.validate_auth()
+    ctx["settings"] = settings
     ctx["engine"] = create_async_engine(settings.database_url, pool_pre_ping=True)
     ctx["session_factory"] = async_sessionmaker(ctx["engine"], expire_on_commit=False)
     ctx["cipher"] = TokenCipher(settings.token_encryption_key.get_secret_value())
@@ -26,9 +31,10 @@ async def shutdown(ctx: dict[str, Any]) -> None:
 
 
 class WorkerSettings:
-    functions = [initial_sync]
+    functions = [initial_sync, interview_prep]
+    cron_jobs = [cron(interview_preparation_reaper, second={0, 30}, run_at_startup=True)]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     max_tries = 1
-    job_timeout = 600
+    job_timeout = JOB_TIMEOUT_SECONDS
