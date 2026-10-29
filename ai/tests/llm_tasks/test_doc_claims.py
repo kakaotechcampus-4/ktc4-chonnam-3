@@ -41,7 +41,7 @@ def _metadata(attempt: int, failure: c.CallFailure | None = None) -> c.AttemptMe
 
 
 class Provider:
-    """BE gateway 대역. 응답마다 실제 validator를 실행하고, semantic이면 재시도하지 않는다."""
+    """실제 validator를 실행하는 단일 호출 대역. Gateway의 HTTP·재시도는 검증하지 않는다."""
 
     def __init__(self, *responses: object) -> None:
         self.responses = list(responses)
@@ -102,7 +102,7 @@ def test_no_claims_is_success() -> None:
 
 
 @pytest.mark.parametrize("line_id", ["L9", "1", "Redis 캐시를 도입해"])
-def test_unknown_line_id_is_semantic_failure_without_retry(line_id: str) -> None:
+def test_unknown_line_id_is_semantic_failure(line_id: str) -> None:
     provider = Provider({"claims": [_claim(line_id=line_id)]})
     result = _extract(provider)
 
@@ -130,6 +130,36 @@ def test_schema_violation_is_failure_with_no_claims(response: object) -> None:
     result = _extract(Provider(response))
     assert result.claims == ()
     assert result.failure is not None and result.failure.stage == "schema"
+
+
+@pytest.mark.parametrize(
+    "items",
+    [
+        [_claim(claim_type="personality"), _claim(line_id="L9")],
+        [_claim(line_id="L9"), _claim(claim_type="personality")],
+        [_claim(claim_type="personality", line_id="L9")],
+    ],
+    ids=["schema-first", "semantic-first", "same-item"],
+)
+def test_all_claim_schemas_are_checked_before_source_ids(items: list[object]) -> None:
+    result = _extract(Provider({"claims": items}))
+
+    assert result.claims == ()
+    assert result.failure is not None and result.failure.stage == "schema"
+    assert result.attempts[0].error_stage == "schema"
+
+
+@pytest.mark.parametrize(
+    ("invalid", "stage"),
+    [(_claim(claim_type="personality"), "schema"), (_claim(line_id="L9"), "semantic")],
+)
+def test_invalid_claim_rejects_valid_claims_in_the_same_response(
+    invalid: object, stage: str
+) -> None:
+    result = _extract(Provider({"claims": [_claim(), invalid]}))
+
+    assert result.claims == ()
+    assert result.failure is not None and result.failure.stage == stage
 
 
 def test_provider_failure_returns_no_claims() -> None:
