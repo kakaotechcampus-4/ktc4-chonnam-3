@@ -441,6 +441,75 @@ async def _store_analysis(
     )
 
 
+async def _save_analysis(
+    sessions: Sessions,
+    user_id: UUID,
+    interview_id: UUID,
+    job_id: UUID,
+    snapshot: Snapshot,
+    call_records: list[LLMCallRecord],
+    pending_rows: list[tuple[PreparedRepository, dict[str, object]]],
+    collected: list[tuple[PreparedRepository, c.DeepRepoAnalysis, SourceCollection]],
+    failures: list[str],
+    repository_limitations: dict[str, list[str]],
+    step: str,
+) -> bool | None:
+    async with sessions.begin() as db:
+        row = await _unchanged(db, user_id, interview_id, job_id, snapshot)
+        if row is None:
+            for record in call_records:
+                record.discard_reason = "context_changed"
+            db.add_all(call_records)
+            await _release_stale(db, user_id, interview_id, job_id, step)
+            return None
+        db.add_all(call_records)
+        for repo, row_values in pending_rows:
+            await _store_analysis(db, repo, row_values)
+        for repo, analysis, sources in collected:
+            by_path = {item.path: item for item in sources.item.sources}
+            for area in analysis.notable_areas:
+                source = by_path.get(area.path)
+                if source is None or source.kind != "file" or source.read_scope != area.scope:
+                    continue
+                existing = await db.scalar(
+                    select(Evidence.id).where(
+                        Evidence.interview_session_id == interview_id,
+                        Evidence.repository_id == UUID(repo.scope.repository_id),
+                        Evidence.git_ref == repo.scope.git_ref,
+                        Evidence.path == source.path,
+                        Evidence.snippet == source.content,
+                        Evidence.tool_name.is_(None),
+                    )
+                )
+                if existing is None:
+                    db.add(
+                        Evidence(
+                            interview_session_id=interview_id,
+                            repository_id=UUID(repo.scope.repository_id),
+                            source_type="file",
+                            git_ref=repo.scope.git_ref,
+                            path=source.path,
+                            snippet=source.content,
+                            summary=area.observation,
+                            tool_name=None,
+                            start_line=1,
+                            end_line=max(1, len(source.content.splitlines())),
+                        )
+                    )
+            failures.extend(sources.limitations)
+        if collected:
+            state = dict(row.context_state or {})
+            state["preparation_limitations"] = failures
+            state["preparation_repository_limitations"] = repository_limitations
+            row.context_state, row.prepare_steps = state, _steps(3)
+        else:
+            state = dict(row.context_state or {})
+            state["preparation_limitations"] = failures
+            state["preparation_repository_limitations"] = repository_limitations
+            row.context_state = state
+    return bool(collected)
+
+
 async def prepare_interview(
     sessions: async_sessionmaker[AsyncSession],
     *,
@@ -557,59 +626,21 @@ async def prepare_interview(
             except c.ContractError:
                 failures.append("l2_cache_source_mismatch")
                 repository_limitations[repo.scope.repository_id] = ["l2_cache_source_mismatch"]
-        async with sessions.begin() as db:
-            row = await _unchanged(db, user_id, interview_id, job_id, snapshot)
-            if row is None:
-                for record in call_records:
-                    record.discard_reason = "context_changed"
-                db.add_all(call_records)
-                await _release_stale(db, user_id, interview_id, job_id, step)
-                return False
-            db.add_all(call_records)
-            for repo, row_values in pending_rows:
-                await _store_analysis(db, repo, row_values)
-            for repo, analysis, sources in collected:
-                by_path = {item.path: item for item in sources.item.sources}
-                for area in analysis.notable_areas:
-                    source = by_path.get(area.path)
-                    if source is None or source.kind != "file" or source.read_scope != area.scope:
-                        continue
-                    existing = await db.scalar(
-                        select(Evidence.id).where(
-                            Evidence.interview_session_id == interview_id,
-                            Evidence.repository_id == UUID(repo.scope.repository_id),
-                            Evidence.git_ref == repo.scope.git_ref,
-                            Evidence.path == source.path,
-                            Evidence.snippet == source.content,
-                            Evidence.tool_name.is_(None),
-                        )
-                    )
-                    if existing is None:
-                        db.add(
-                            Evidence(
-                                interview_session_id=interview_id,
-                                repository_id=UUID(repo.scope.repository_id),
-                                source_type="file",
-                                git_ref=repo.scope.git_ref,
-                                path=source.path,
-                                snippet=source.content,
-                                summary=area.observation,
-                                tool_name=None,
-                                start_line=1,
-                                end_line=max(1, len(source.content.splitlines())),
-                            )
-                        )
-                failures.extend(sources.limitations)
-            if collected:
-                state = dict(row.context_state or {})
-                state["preparation_limitations"] = failures
-                state["preparation_repository_limitations"] = repository_limitations
-                row.context_state, row.prepare_steps = state, _steps(3)
-            else:
-                state = dict(row.context_state or {})
-                state["preparation_limitations"] = failures
-                state["preparation_repository_limitations"] = repository_limitations
-                row.context_state = state
+        saved = await _save_analysis(
+            sessions,
+            user_id,
+            interview_id,
+            job_id,
+            snapshot,
+            call_records,
+            pending_rows,
+            collected,
+            failures,
+            repository_limitations,
+            step,
+        )
+        if saved is None:
+            return False
         records_saved = True
         if not collected:
             raise SourcePreparationError(failures[0] if failures else "l2_unavailable")
