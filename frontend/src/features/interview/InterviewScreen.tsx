@@ -737,7 +737,7 @@ export default function InterviewScreen() {
       <dialog
         ref={leaveDialogRef}
         onClose={() => setLeaveModalOpen(false)}
-        className="rounded-card bg-surface p-5 text-ink backdrop:bg-ink/40"
+        className="m-auto rounded-card bg-surface p-5 text-ink backdrop:bg-ink/40"
       >
         <div className="flex w-[300px] max-w-full flex-col gap-3">
           <h2 className="text-[15px] font-bold">면접을 종료할까요?</h2>
