@@ -7,12 +7,14 @@ from uuid import UUID, uuid4
 
 import httpx
 from devon_ai import contracts as c
+from pydantic import ValidationError
 from sqlalchemy import JSON, and_, or_, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agents.director.tools import EvidenceScope
-from app.core.config import Settings
+from app.core.config import LLMSettings, Settings
+from app.core.logging import get_logger
 from app.db.models import (
     AnalysisJob,
     AnalysisRepoCandidate,
@@ -47,6 +49,7 @@ from app.llm_tasks.prompt_loader import (
 from app.llm_tasks.repo_deep import analyze_repository, to_repo_analysis_row
 
 STEPS = ("analyze_repo", "build_persona", "set_criteria", "compose_question")
+logger = get_logger(__name__)
 type Sessions = async_sessionmaker[AsyncSession]
 type Snapshot = tuple[tuple[UUID, str, bool, UUID], ...]
 
@@ -357,6 +360,8 @@ async def _fail(
     job_id: UUID,
     code: str,
     step: str,
+    *,
+    recoverable: bool = True,
 ) -> None:
     async with sessions.begin() as db:
         row = await _owned(db, user_id, interview_id)
@@ -366,10 +371,10 @@ async def _fail(
             or (row.context_state or {}).get("prepare_job_id") != str(job_id)
         ):
             return
-        _mark_failed(row, code, step)
+        _mark_failed(row, code, step, recoverable=recoverable)
 
 
-def _mark_failed(row: InterviewSession, code: str, step: str) -> None:
+def _mark_failed(row: InterviewSession, code: str, step: str, *, recoverable: bool = True) -> None:
     row.status, row.prepare_steps = "preparing_failed", _steps(STEPS.index(step), failed=True)
     row.context_state = {
         key: value for key, value in (row.context_state or {}).items() if key != "prepare_job_id"
@@ -378,7 +383,7 @@ def _mark_failed(row: InterviewSession, code: str, step: str) -> None:
         reason="prep_failed",
         code=code,
         step=step,
-        recoverable=True,
+        recoverable=recoverable,
         occurredAt=datetime.now(UTC).isoformat(),
     )
 
@@ -454,7 +459,32 @@ async def prepare_interview(
         if claimed is not False:
             return claimed is True
         prompt, repositories, snapshot = await _snapshot(sessions, user_id, interview_id, job_id)
-        llm = settings.require_llm()
+        try:
+            llm = settings.require_llm()
+        except (ValidationError, ValueError) as error:
+            # 검증 오류의 input·본문·비밀값 대신 허용한 설정 이름만 기록한다.
+            fields = (
+                sorted(
+                    {
+                        str(item["loc"][0])
+                        for item in error.errors()
+                        if item["loc"] and str(item["loc"][0]) in LLMSettings.model_fields
+                    }
+                )
+                if isinstance(error, ValidationError)
+                else ["proxy_token", "chat_proxy_url"]
+            )
+            logger.warning("interview_prepare_config_unavailable", fields=fields)
+            await _fail(
+                sessions,
+                user_id,
+                interview_id,
+                job_id,
+                "llm_config_unavailable",
+                step,
+                recoverable=False,
+            )
+            return False
         collected: list[tuple[PreparedRepository, c.DeepRepoAnalysis, SourceCollection]] = []
         pending_rows: list[tuple[PreparedRepository, dict[str, object]]] = []
         failures: list[str] = []
