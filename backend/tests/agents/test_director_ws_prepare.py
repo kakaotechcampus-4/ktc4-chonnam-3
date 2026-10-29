@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 import pytest
+from pydantic import SecretStr
 from sqlalchemy import select
 from starlette.websockets import WebSocketDisconnect
 
@@ -152,12 +153,24 @@ async def test_preparing_failure_delivers_committed_stage_and_original_error(
             assert closed.value.code == 1000
 
 
+@pytest.mark.parametrize(
+    "updates,field",
+    [
+        ({"llm_timeout_seconds": None}, "llm_timeout_seconds"),
+        ({"proxy_token": SecretStr("fixture-proxy-secret"), "chat_proxy_url": None}, "proxy_token"),
+        (
+            {"proxy_token": None, "chat_proxy_url": "https://proxy.example.test/v1"},
+            "chat_proxy_url",
+        ),
+    ],
+    ids=["missing-limit", "proxy-token-only", "proxy-url-only"],
+)
 async def test_missing_llm_settings_keeps_stale_validation_and_logs_configuration_fields(
-    agent_sessions, agent_seed, connect_ws, caplog
+    agent_sessions, agent_seed, connect_ws, caplog, updates, field
 ):
     await seed_turns(agent_sessions, agent_seed)
     with connect_ws() as (client, app, path, _, _):
-        app.state.settings = app.state.settings.model_copy(update={"llm_timeout_seconds": None})
+        app.state.settings = app.state.settings.model_copy(update=updates)
         with client.websocket_connect(path, headers={"origin": "http://localhost:5173"}) as socket:
             assert socket.receive_json()["turn"] == 1
             socket.send_json({"type": "answer", "turn": 2, "text": "오래된 턴"})
@@ -169,7 +182,11 @@ async def test_missing_llm_settings_keeps_stale_validation_and_logs_configuratio
             assert closed.value.code == 1011
     output = caplog.text
     assert "interview_ws_llm_configuration_invalid" in output
-    assert "llm_timeout_seconds" in output and "fixture-key" not in output
+    assert field in output
+    assert all(
+        value not in output
+        for value in ["fixture-key", "fixture-proxy-secret", "proxy.example.test"]
+    )
     async with agent_sessions() as db:
         assert (await db.scalar(select(InterviewTurn))).answer_text is None
         assert await db.scalar(select(LLMCallRecord.id)) is None

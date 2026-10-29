@@ -460,6 +460,14 @@ async def _execute(connection: _Connection, user_id: UUID, turn: int, text: str)
             fields=fields,
         )
         raise
+    except ValueError:
+        # require_llm의 proxy 쌍 불일치만 분류하며 외부 실행 오류를 포괄하지 않는다.
+        logger.error(
+            "interview_ws_llm_configuration_invalid",
+            interview_id=str(connection.interview_id),
+            fields=["proxy_token", "chat_proxy_url"],
+        )
+        raise
     # WS 전송 수명 취소가 이미 시작한 DB·모델 처리를 중단하지 않게 한다.
     with CancelScope(shield=True):
         # 연결 인계용 유한 표식이다. 호출·재시도 대기·근거 조회 예산과 정리 여유를 포함한다.
