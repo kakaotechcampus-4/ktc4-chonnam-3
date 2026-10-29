@@ -70,7 +70,7 @@ def _text(value: object) -> bool:
 
 
 def _validator(source: dict[str, str]) -> Callable[[object], tuple[DocumentClaim, ...]]:
-    """이번 요청의 줄 표로만 ID를 확인한다. 없는 줄 ID는 semantic이라 재시도하지 않는다."""
+    """전체 schema를 먼저 검사한다. 이후 없는 줄 ID는 semantic으로 거절한다."""
 
     def validate(payload: object) -> tuple[DocumentClaim, ...]:
         if type(payload) is not dict or set(payload) != {"claims"}:
@@ -78,7 +78,7 @@ def _validator(source: dict[str, str]) -> Callable[[object], tuple[DocumentClaim
         items = payload["claims"]
         if type(items) is not list or len(items) > MAX_CLAIMS:
             raise c.ContractError("schema", "claims")
-        claims = []
+        # 항목 순서와 관계없이 schema 오류를 먼저 분류한다.
         for item in items:
             if type(item) is not dict or set(item) != _ITEM_KEYS:
                 raise c.ContractError("schema", "claim")
@@ -92,13 +92,15 @@ def _validator(source: dict[str, str]) -> Callable[[object], tuple[DocumentClaim
                 or type(item["line_id"]) is not str
             ):
                 raise c.ContractError("schema", "claim")
+        claims = []
+        for item in items:
             if item["line_id"] not in source:
                 raise c.ContractError("semantic", "line_id")
             claims.append(
                 DocumentClaim(
                     item["claim_text"].strip(),
                     item["claim_type"],
-                    tuple(dict.fromkeys(tag.strip() for tag in tags)),
+                    tuple(dict.fromkeys(tag.strip() for tag in item["tech_tags"])),
                     int(item["line_id"][1:]),
                     source[item["line_id"]],
                 )
