@@ -1,21 +1,21 @@
 {
   "format_version": 1,
-  "state": "unapplied_review_patches",
+  "state": "manually_applied_ordinary_code",
   "original_source_tree": "c8f2cb5d749b55cd2ed7ead78c95041448be61c7",
   "prerequisite_integration_tree": "a4d7c1bf17b9845a19ef4ddd8e9d74505af42773",
   "base": "dbd7f89002fd236c8160ffcea2e8d511b78c5dd7",
   "original_backup": "backup/director-unpublished-before-pr-20261025",
   "rule": "base blob must match exactly; re-review on prerequisite changes; never force or auto-apply",
   "validation_reference": {
-    "develop": "4e511a992d7954fa310146bcba2f2d4c6358fb69",
-    "observed_on": "2026-10-28",
+    "develop": "2fc0103a8f97043c12965f5e182734548bab2fcf",
+    "observed_on": "2026-10-29",
     "rule": "reference only; repeat API, blob and runtime checks after upstream changes"
   },
   "patches": [
     {
       "order": 1,
-      "status": "pending_manual_application",
-      "application_required": true,
+      "status": "manually_applied_ordinary_code",
+      "application_required": false,
       "patch": "backend/patches/director-followups/01-agent_context.patch",
       "target": "backend/app/features/interview/agent_context.py",
       "base_blob": "e199df05e9a7d11d486499277b9c91d7287d03d1",
@@ -28,17 +28,23 @@
           "merged_at_reference": true
         }
       ],
-      "application": "manual after exact base/SHA checks and Context regression verification; never auto-apply",
+      "application": "Already manually applied as ordinary code; do not reapply this historical patch.",
       "owner_role": "author of the ordinary-code Context application PR",
       "refresh_on": [
         "PR #82 head or merge changes",
         "agent_context.py base or Context/storage contract changes"
-      ]
+      ],
+      "historical_application": "manual after exact base/SHA checks and Context regression verification; never auto-apply",
+      "applied_in": {
+        "commit": "76e2ab1548722949a43346cc8bd912d51e075bf1",
+        "target_blob": "a474136cf2eb282ccaa2ab202a08688fbb801dda",
+        "base": "2fc0103a8f97043c12965f5e182734548bab2fcf"
+      }
     },
     {
       "order": 2,
-      "status": "pending_manual_application",
-      "application_required": true,
+      "status": "manually_applied_ordinary_code",
+      "application_required": false,
       "patch": "backend/patches/director-followups/02-answer_context.patch",
       "target": "backend/app/features/interview/answer_context.py",
       "base_blob": "1f5c7991e86aafcc25a71cc63dc72653acb4958b",
@@ -48,23 +54,30 @@
         {
           "pr": 126,
           "head": "d0293ec96bd342c2e2c5a7ff026b2adf723cea04",
-          "merged_at_reference": false
+          "merged_at_reference": false,
+          "merged_at_application": true
         },
         {
           "patch_order": 1
         }
       ],
-      "application": "manual after PR #126, patch01 result and exact base/SHA checks; verify current-turn behavior; never auto-apply",
+      "application": "Already manually applied as ordinary code; do not reapply this historical patch.",
       "owner_role": "author of the ordinary-code AnswerContext application PR",
       "refresh_on": [
         "PR #126 head or merge changes",
         "patch01 result, answer_context.py base or current-turn contract changes"
-      ]
+      ],
+      "historical_application": "manual after PR #126, patch01 result and exact base/SHA checks; verify current-turn behavior; never auto-apply",
+      "applied_in": {
+        "commit": "76e2ab1548722949a43346cc8bd912d51e075bf1",
+        "target_blob": "c49ee3860dd83fafd179bcbc7991a251539e981f",
+        "base": "2fc0103a8f97043c12965f5e182734548bab2fcf"
+      }
     },
     {
       "order": 3,
-      "status": "pending_manual_application",
-      "application_required": true,
+      "status": "manually_applied_ordinary_code",
+      "application_required": false,
       "patch": "backend/patches/director-followups/03-repo_deep.patch",
       "target": "backend/app/llm_tasks/repo_deep.py",
       "base_blob": "6948791bbe6f855de672cd1ddae42cdf31ab18de",
@@ -88,7 +101,7 @@
           "provides": "call_model attempt_sink keyword and completed-attempt retention"
         }
       ],
-      "application": "manual only after exact base/SHA checks, call_model attempt_sink API and completed-attempt runtime checks; never auto-apply",
+      "application": "Already manually applied as ordinary code; do not reapply this historical patch.",
       "runtime_requirements": [
         "call_model accepts the attempt_sink keyword",
         "completed attempts reach the sink before retry or cancellation",
@@ -100,7 +113,13 @@
       "refresh_on": [
         "PR #119 or gateway head/merge changes",
         "repo_deep.py base, call_model signature, attempt retention or CallBudget changes"
-      ]
+      ],
+      "historical_application": "manual only after exact base/SHA checks, call_model attempt_sink API and completed-attempt runtime checks; never auto-apply",
+      "applied_in": {
+        "commit": "3f11e10ac605edc966611b95295888aeb8bcc7ec",
+        "target_blob": "8ce0d810617c17280ba47e02edc33f31ca4b503d",
+        "base": "2fc0103a8f97043c12965f5e182734548bab2fcf"
+      }
     },
     {
       "order": 4,
@@ -145,5 +164,10 @@
         "generate_question base_url behavior or Director module layout changes"
       ]
     }
-  ]
+  ],
+  "previous_validation_reference": {
+    "develop": "4e511a992d7954fa310146bcba2f2d4c6358fb69",
+    "observed_on": "2026-10-28",
+    "rule": "reference only; repeat API, blob and runtime checks after upstream changes"
+  }
 }
