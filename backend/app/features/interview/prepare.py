@@ -1,8 +1,10 @@
 """선택 run의 고정 자료를 준비하고 첫 검증된 Director 질문까지 확정한다."""
 
 import asyncio
+from contextlib import suppress
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
+from functools import partial
 from uuid import UUID, uuid4
 
 import httpx
@@ -18,7 +20,6 @@ from app.core.logging import get_logger
 from app.db.models import (
     AnalysisJob,
     AnalysisRepoCandidate,
-    DomainQuestionFrame,
     Evidence,
     InterviewSession,
     InterviewTurn,
@@ -26,12 +27,11 @@ from app.db.models import (
     LLMCallRecord,
     RepoAnalysis,
     Repository,
-    ScoreCriterion,
     SessionRepository,
     User,
 )
-from app.db.models.report import SCORE_KEYS
 from app.features.analysis.analysis_results import resolve_bound_analysis
+from app.features.interview import prepare_checkpoint, prepare_lease
 from app.features.interview.agent_context import AgentStateError
 from app.features.interview.answer_context import load_answer_context
 from app.features.interview.director_service import start_director
@@ -135,26 +135,18 @@ async def _claim(
                     recoverable=True,
                     occurredAt=datetime.now(UTC).isoformat(),
                 )
-                row.context_state = {
-                    key: value
-                    for key, value in (row.context_state or {}).items()
-                    if key != "prepare_job_id"
-                }
+                prepare_lease.clear(row)
                 return None
             # 질문 commit 후 상태 전이 전에 중단된 작업은 같은 질문으로 복구한다.
             row.status, row.prepare_steps, row.last_error = "in_progress", _steps(4), None
             row.started_at = row.started_at or datetime.now(UTC)
-            row.context_state = {
-                key: value
-                for key, value in (row.context_state or {}).items()
-                if key != "prepare_job_id"
-            }
+            prepare_lease.clear(row)
             return True
         state = dict(row.context_state or {})
         if state.get("prepare_job_id"):
             return None
-        state["prepare_job_id"] = str(job_id)
-        row.context_state, row.prepare_steps = state, _steps(0)
+        prepare_lease.claim(row, job_id)
+        row.prepare_steps = prepare_lease.steps(row)
         row.last_error = None
         return False
 
@@ -170,9 +162,11 @@ async def _snapshot(
         if (
             interview is None
             or interview.status != "preparing"
-            or (interview.context_state or {}).get("prepare_job_id") != str(job_id)
+            or not prepare_lease.owns_preparation(interview, job_id=job_id)
         ):
             raise SourcePreparationError("preparation_changed")
+        # 읽은 이후 입력이 달라진 결과를 최초 checkpoint로 채택하지 않는다.
+        await prepare_checkpoint.input_digest(db, interview, lock=True)
         run = await db.get(AnalysisJob, interview.analysis_job_id)
         posting = await db.get(JobPosting, interview.job_posting_id)
         if (
@@ -188,28 +182,13 @@ async def _snapshot(
         prompt = await load_active_prompt(db, "repo_deep")
         await load_active_prompt(db, "director")
         await load_active_prompt(db, "answer_analysis")
-        criteria = (
-            await db.scalars(select(ScoreCriterion).where(ScoreCriterion.is_active.is_(True)))
-        ).all()
-        if {row.score_key for row in criteria} != set(SCORE_KEYS) or any(
-            not row.rubric for row in criteria
-        ):
-            raise SourcePreparationError("score_criteria_unavailable")
-        frame = await db.scalar(
-            select(DomainQuestionFrame.id).where(
-                DomainQuestionFrame.is_active.is_(True),
-                DomainQuestionFrame.domain_category == (posting.domain_category or "etc"),
-            )
-        )
-        if frame is None:
-            raise SourcePreparationError("domain_frames_unavailable")
         selected = (
             await db.execute(
                 select(SessionRepository, Repository)
                 .join(Repository, Repository.id == SessionRepository.repository_id)
                 .where(SessionRepository.interview_session_id == interview_id)
                 .order_by(SessionRepository.display_order.nulls_last(), SessionRepository.id)
-                .with_for_update()
+                .with_for_update(of=SessionRepository)
             )
         ).all()
         if not 1 <= len(selected) <= 5:
@@ -294,6 +273,9 @@ async def _snapshot(
                     invalid_cache,
                 )
             )
+        if await load_active_prompt(db, "repo_deep") != prompt:
+            raise SourcePreparationError("preparation_inputs_changed")
+        prepare_checkpoint.store(interview, await prepare_checkpoint.checked(db, interview))
         return prompt, tuple(repositories), tuple(snapshot)
 
 
@@ -308,7 +290,7 @@ async def _unchanged(
     if (
         row is None
         or row.status != "preparing"
-        or (row.context_state or {}).get("prepare_job_id") != str(job_id)
+        or not prepare_lease.owns_preparation(row, job_id=job_id)
     ):
         return None
     selected = (
@@ -375,17 +357,7 @@ async def _fail(
 
 
 def _mark_failed(row: InterviewSession, code: str, step: str, *, recoverable: bool = True) -> None:
-    row.status, row.prepare_steps = "preparing_failed", _steps(STEPS.index(step), failed=True)
-    row.context_state = {
-        key: value for key, value in (row.context_state or {}).items() if key != "prepare_job_id"
-    }
-    row.last_error = dict(
-        reason="prep_failed",
-        code=code,
-        step=step,
-        recoverable=recoverable,
-        occurredAt=datetime.now(UTC).isoformat(),
-    )
+    prepare_lease.failed(row, code, step, recoverable=recoverable)
 
 
 async def _release_stale(
@@ -439,6 +411,16 @@ async def _store_analysis(
             where=replaceable,
         )
     )
+
+
+async def _may_publish(db: AsyncSession, row: InterviewSession, *, job_id: UUID) -> bool:
+    if not prepare_lease.owns_preparation(row, job_id=job_id):
+        return False
+    try:
+        await prepare_checkpoint.checked(db, row, lock=True)
+    except SourcePreparationError:
+        return False
+    return True
 
 
 async def _save_analysis(
@@ -501,7 +483,10 @@ async def _save_analysis(
             state = dict(row.context_state or {})
             state["preparation_limitations"] = failures
             state["preparation_repository_limitations"] = repository_limitations
-            row.context_state, row.prepare_steps = state, _steps(3)
+            row.context_state = state
+            await db.flush()
+            await prepare_checkpoint.complete_analysis(db, row)
+            row.prepare_steps = prepare_lease.steps(row)
         else:
             state = dict(row.context_state or {})
             state["preparation_limitations"] = failures
@@ -523,6 +508,7 @@ async def prepare_interview(
     call_records: list[LLMCallRecord] = []
     active_attempts: list[c.AttemptMetadata] = []
     active_recorded, records_saved = False, False
+    heartbeat: asyncio.Task[None] | None = None
     try:
         claimed = await _claim(sessions, user_id, interview_id, job_id)
         if claimed is not False:
@@ -530,6 +516,9 @@ async def prepare_interview(
         prompt, repositories, snapshot = await _snapshot(sessions, user_id, interview_id, job_id)
         try:
             llm = settings.require_llm()
+            prepare_lease.validate_timeout(
+                settings.director_prepare_timeout_seconds, llm.llm_timeout_seconds
+            )
         except (ValidationError, ValueError) as error:
             # 검증 오류의 input·본문·비밀값 대신 허용한 설정 이름만 기록한다.
             fields = (
@@ -541,6 +530,8 @@ async def prepare_interview(
                     }
                 )
                 if isinstance(error, ValidationError)
+                else ["director_prepare_timeout_seconds", "llm_timeout_seconds"]
+                if isinstance(error, prepare_lease.PreparationTimeoutError)
                 else ["proxy_token", "chat_proxy_url"]
             )
             logger.warning("interview_prepare_config_unavailable", fields=fields)
@@ -554,11 +545,19 @@ async def prepare_interview(
                 recoverable=False,
             )
             return False
+        heartbeat = prepare_lease.heartbeat(sessions, interview_id, job_id)
+        async with sessions.begin() as db:
+            row = await _unchanged(db, user_id, interview_id, job_id, snapshot)
+            if row is None:
+                await _release_stale(db, user_id, interview_id, job_id, step)
+                return False
+            prepare_checkpoint.store(row, await prepare_checkpoint.checked(db, row))
+            resumed = prepare_lease.completed(row)
         collected: list[tuple[PreparedRepository, c.DeepRepoAnalysis, SourceCollection]] = []
         pending_rows: list[tuple[PreparedRepository, dict[str, object]]] = []
         failures: list[str] = []
         repository_limitations: dict[str, list[str]] = {}
-        for repo in repositories:
+        for repo in () if resumed else repositories:
             budget = CallBudget()
             active_attempts, active_recorded = [], False
             try:
@@ -626,34 +625,67 @@ async def prepare_interview(
             except c.ContractError:
                 failures.append("l2_cache_source_mismatch")
                 repository_limitations[repo.scope.repository_id] = ["l2_cache_source_mismatch"]
-        saved = await _save_analysis(
-            sessions,
-            user_id,
-            interview_id,
-            job_id,
-            snapshot,
-            call_records,
-            pending_rows,
-            collected,
-            failures,
-            repository_limitations,
-            step,
-        )
-        if saved is None:
-            return False
-        records_saved = True
-        if not collected:
-            raise SourcePreparationError(failures[0] if failures else "l2_unavailable")
+        if not resumed:
+            saved = await _save_analysis(
+                sessions,
+                user_id,
+                interview_id,
+                job_id,
+                snapshot,
+                call_records,
+                pending_rows,
+                collected,
+                failures,
+                repository_limitations,
+                step,
+            )
+            if saved is None:
+                return False
+            records_saved = True
+            if not collected:
+                raise SourcePreparationError(failures[0] if failures else "l2_unavailable")
+        for index, phase in ((2, "build_persona"), (3, "set_criteria")):
+            if resumed >= index:
+                continue
+            step = phase
+            async with sessions.begin() as db:
+                row = await _unchanged(db, user_id, interview_id, job_id, snapshot)
+                if row is None:
+                    await _release_stale(db, user_id, interview_id, job_id, step)
+                    return False
+                if phase == "build_persona":
+                    await prepare_checkpoint.initialize_personas(
+                        db, row, settings.persona_turn_quota
+                    )
+                else:
+                    await prepare_checkpoint.initialize_criteria(db, row)
+                row.prepare_steps = prepare_lease.steps(row)
         step = "compose_question"
+        call_id = uuid4()
+        async with sessions.begin() as db:
+            row = await _unchanged(db, user_id, interview_id, job_id, snapshot)
+            if row is None:
+                await _release_stale(db, user_id, interview_id, job_id, step)
+                return False
+            await prepare_checkpoint.checked(db, row)
+            row.context_state = {
+                **(row.context_state or {}),
+                "prepare_director_call_id": str(call_id),
+            }
         outcome = await start_director(
             sessions,
             user_id=user_id,
             interview_id=interview_id,
-            call_id=uuid4(),
+            call_id=call_id,
             settings=llm,
             http_client=http_client,
+            preparation_guard=partial(_may_publish, job_id=job_id),
         )
         if outcome.turn_id is None:
+            async with sessions.begin() as db:
+                row = await _owned(db, user_id, interview_id)
+                if row is not None and prepare_lease.owns_preparation(row, job_id=job_id):
+                    await prepare_checkpoint.checked(db, row)
             raise SourcePreparationError("first_question_failed")
         async with sessions.begin() as db:
             row = await _unchanged(db, user_id, interview_id, job_id, snapshot)
@@ -662,11 +694,7 @@ async def prepare_interview(
                 return False
             row.status, row.started_at = "in_progress", datetime.now(UTC)
             row.prepare_steps, row.last_error = _steps(4), None
-            row.context_state = {
-                key: value
-                for key, value in (row.context_state or {}).items()
-                if key != "prepare_job_id"
-            }
+            prepare_lease.clear(row)
         return True
     except (PromptNotFoundError, PromptConfigurationError):
         await _fail(sessions, user_id, interview_id, job_id, "prompt_unavailable", step)
@@ -681,7 +709,20 @@ async def prepare_interview(
             step = "set_criteria"
         elif code == "domain_frames_unavailable":
             step = "build_persona"
-        await _fail(sessions, user_id, interview_id, job_id, code, step)
+        if not records_saved and call_records:
+            async with sessions.begin() as db:
+                for record in call_records:
+                    record.discard_reason = "context_changed"
+                db.add_all(call_records)
+        await _fail(
+            sessions,
+            user_id,
+            interview_id,
+            job_id,
+            code,
+            step,
+            recoverable=code not in {"preparation_inputs_changed", "preparation_outputs_changed"},
+        )
         return False
     except (asyncio.CancelledError, Exception) as error:
         if active_attempts and not active_recorded:
@@ -700,3 +741,8 @@ async def prepare_interview(
                 db.add_all(call_records)
         await _fail(sessions, user_id, interview_id, job_id, "preparation_interrupted", step)
         raise
+    finally:
+        if heartbeat is not None:
+            heartbeat.cancel()
+            with suppress(asyncio.CancelledError):
+                await heartbeat
