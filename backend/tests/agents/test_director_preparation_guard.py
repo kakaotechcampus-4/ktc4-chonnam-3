@@ -26,6 +26,12 @@ async def test_rejected_preparation_owner_cannot_start_a_provider_call(agent_ses
         calls.append(request)
         raise AssertionError("소유권을 잃은 준비 작업은 모델을 호출하면 안 된다")
 
+    async def owns_preparation(db, interview):
+        snapshot = await db.scalar(
+            select(InterviewSession.context_state).where(InterviewSession.id == interview.id)
+        )
+        return (snapshot or {}).get("prepare_job_id") == "original-worker"
+
     call_id = uuid4()
     async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as http:
         result = await start_director(
@@ -35,7 +41,7 @@ async def test_rejected_preparation_owner_cannot_start_a_provider_call(agent_ses
             call_id=call_id,
             settings=settings(),
             http_client=http,
-            preparation_guard=lambda interview: False,
+            preparation_guard=owns_preparation,
         )
     assert result.discard_reason == "context_changed" and result.turn_id is None
     assert calls == []
@@ -67,8 +73,11 @@ async def test_changed_preparation_owner_cannot_save_a_completed_director_result
             return response(approved_review())
         return response(plan())
 
-    def owns_preparation(interview):
-        return (interview.context_state or {}).get("prepare_job_id") == "original-worker"
+    async def owns_preparation(db, interview):
+        snapshot = await db.scalar(
+            select(InterviewSession.context_state).where(InterviewSession.id == interview.id)
+        )
+        return (snapshot or {}).get("prepare_job_id") == "original-worker"
 
     call_id = uuid4()
     async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as http:
