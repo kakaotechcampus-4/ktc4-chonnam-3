@@ -3,17 +3,26 @@ name: Analysis migration CI
 on:
   pull_request:
     branches: [develop, release]
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'backend/**'
       - 'ai/**'
       - '.github/workflows/analysis-migration-ci.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'backend/**'
+      - 'ai/**'
+      - '.github/workflows/analysis-migration-ci.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: analysis-migration-ci-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  # PR·병합·수동 검증이 서로 취소되지 않도록 이벤트와 ref를 구분한다.
+  group: analysis-migration-ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   analysis-migration:
