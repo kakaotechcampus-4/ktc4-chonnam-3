@@ -128,10 +128,17 @@ async def start_director(
     answer_analysis: c.ContractChecked[c.AnswerAnalysis] | None = None,
     lookup_summary: str = "",
     tool_results: tuple[c.ToolResult, ...] = (),
+    preparation_guard: Callable[[InterviewSession], bool] | None = None,
 ) -> QuestionExecution:
-    """DB에서 확정한 입력으로 질문을 만들고 저장한다. 공개 전송·준비 완료는 호출자 책임이다."""
+    """DB에서 확정한 입력으로 질문을 만들고 저장한다. 공개 전송·준비 완료는 호출자 책임이다.
+
+    준비 호출자는 잠근 최신 행의 소유권을 검사하는 순수 동기 guard를 선택적으로 전달한다.
+    이 조건 안에서 외부 I/O를 하지 않으며, 생략하면 진행 중 답변의 기존 경로를 유지한다.
+    """
     async with sessions.begin() as db:
-        await _owned(db, user_id, interview_id)
+        interview = await _owned(db, user_id, interview_id)
+        if preparation_guard is not None and not preparation_guard(interview):
+            return QuestionExecution(call_id, None, None, "context_changed")
         existing = await db.get(LLMCallRecord, call_id)
         if existing is not None:
             if existing.interview_session_id != interview_id or existing.task_name != "director":
@@ -177,6 +184,9 @@ async def start_director(
                 return _outcome(record)
             try:
                 interview = await _owned(db, user_id, interview_id)
+                if preparation_guard is not None and not preparation_guard(interview):
+                    record.discard_reason = "context_changed"
+                    return _outcome(record)
                 current = await load_context(
                     db, user_id=user_id, interview_id=interview_id, limits=limits, lock=True
                 )
