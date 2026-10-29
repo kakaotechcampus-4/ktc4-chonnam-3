@@ -1,4 +1,8 @@
-"""답변 분석·제한 근거 조회·자동 Director의 영구 저장 경계."""
+"""답변 분석·제한 근거 조회·자동 Director의 영구 저장 경계.
+
+진행 중 답변의 T2~T4와 정상 완료는 process_answer가 소유한다. 호출자는 기존
+turn_loop의 답변 저장·완료 경로를 같은 제출에 중복 실행하지 않는다.
+"""
 
 import asyncio
 from collections.abc import Awaitable, Callable
@@ -14,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agents.director.runtime_adapter import execute_director
 from app.agents.director.tools import EvidenceLimits, EvidenceScope, read_files
-from app.core.config import LLMSettings, get_settings
+from app.core.config import INTERVIEW_MAX_TURNS, LLMSettings, get_settings
 from app.db.models import (
     Evidence,
     EvidenceConflict,
@@ -339,7 +343,12 @@ async def process_answer(
     on_answer_saved: Callable[[], Awaitable[None]] | None = None,
     on_evidence_check: Callable[[tuple[c.Evidence, ...]], Awaitable[None]] | None = None,
 ) -> AnswerExecution:
-    """답변을 먼저 확정하고 T3·제한 조회·T4를 수행한다. 마지막 T3 성공 후에만 완료한다."""
+    """답변을 먼저 확정하고 T3·제한 조회·T4를 수행한다. 마지막 T3 성공 후에만 완료한다.
+
+    콜백은 저장 후 알림이다. 예상 전송 오류는 송신 어댑터가 처리하며, 예상 밖 콜백 예외와
+    실제 취소는 전파하고 claim을 닫는다. 이미 저장한 답변·분석을 지우거나 재전송으로
+    모델 작업을 자동 재실행하지 않는다. 알림 오류를 숨기는 포괄적 예외 처리는 하지 않는다.
+    """
     if type(text) is not str or not text.strip():
         raise AgentStateError("answer_text_invalid")
     async with sessions.begin() as db:
@@ -527,7 +536,7 @@ async def process_answer(
             turn = await db.get(InterviewTurn, UUID(loaded.turn_id))
             assert turn is not None
             await _evaluation_rows(db, turn.id, selected, final_evidence)
-            if turn_no == 9:
+            if turn_no == INTERVIEW_MAX_TURNS:
                 decision = c.validate_decision(
                     c.DirectorDecision(
                         "finish",
@@ -558,7 +567,7 @@ async def process_answer(
                         )
                     )
             record.turn_id = turn.id
-        if turn_no == 9:
+        if turn_no == INTERVIEW_MAX_TURNS:
             return AnswerExecution(call_id, UUID(loaded.turn_id), None, True, None, None, True)
         question = await start_director(
             sessions,
@@ -633,7 +642,10 @@ async def _retrieve(
             config.director_evidence_max_total_bytes,
             config.director_evidence_timeout_seconds,
         )
-    scope = next(scope for scope in scopes if scope.repository_id == request.repository_id)
+    # locations는 같은 scopes에서 만들지만 내부 불일치도 미조회 성공으로 숨기지 않는다.
+    scope = next((scope for scope in scopes if scope.repository_id == request.repository_id), None)
+    if scope is None:
+        raise AgentStateError("evidence_scope_invalid")
 
     async def execute(http: httpx.AsyncClient) -> c.ToolResult:
         return await read_files(
