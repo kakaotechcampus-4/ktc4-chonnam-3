@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
 from app.core.crypto import TokenCipher
+from app.features.interview.prepare_lease import JOB_TIMEOUT_SECONDS
 from app.workers.tasks.initial_sync import initial_sync
 from app.workers.tasks.interview_prep import interview_prep
 
@@ -33,4 +34,4 @@ class WorkerSettings:
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     max_tries = 1
-    job_timeout = 600
+    job_timeout = JOB_TIMEOUT_SECONDS
