@@ -762,3 +762,37 @@ BE 환경 준비는 캐시에 `lxml-stubs`가 없어 offline sync가 실패한 �
 - BE 연결과 Director 사용은 범위 밖이다: `doc_extract` 단계 호출, BE adapter와 `document_claims` 저장,
   `seed_prompt_versions.py`의 `doc_claims` 등록, `claim_type` CHECK 여부, `Context`의 Claim 전달과
   `interview_turns.claim_ids` 기록(0029 영향 절).
+
+## 2026-10-30 — PR #146 리뷰 후속: 검증 순서와 연결 범위 정정
+
+### 기준과 변경
+
+- 원본 PR head `099e7f3`를 `backup/pr146-before-review-fix-20261030`에 보존하고 후속 커밋만 추가했다.
+  단독 검증과 최신 develop `2fc0103`에 합친 검증을 구분한다. 다른 미병합 구현을 추가하지 않았다.
+- `doc_claims.py`는 모든 항목의 schema를 검사한 뒤 줄 ID를 검사한다. 같은 혼합 오류의 항목 순서를
+  바꿔도 schema로 분류한다. 기존 정상 결과·4종·20개·태그 5개·원문 복원·전체 거절 정책은 유지한다.
+- 회귀 5사례를 추가했다: 혼합 오류의 두 순서·동일 항목, 정상 항목 뒤 schema/semantic 오류의 부분 채택 방지.
+  단일 호출 대역의 설명도 Gateway HTTP·재시도를 검증하는 것처럼 읽히지 않게 고쳤다.
+- [0030](decisions/0030-document-claims-validation-boundary.md)과 내부 계약에서 독립 AI 모듈과 서비스 활성화,
+  문서 Claim과 답변 `claim_checks`, 원문 ID 존재와 추출 충실성의 경계를 정정했다. 0029의 원본과 Accepted
+  상태는 보존하고 후속 링크를 추가했다. FE·공개 API·DB·BE 호출·Director 소비 코드는 변경하지 않았다.
+
+### 이번 수정 후 직접 실행한 검증
+
+| 대상·명령 | 실제 결과 |
+| --- | --- |
+| 수정 전 새 회귀 포함 `pytest tests/llm_tasks/test_doc_claims.py` | 1 failed / 24 passed. 줄 ID 오류가 먼저인 혼합 응답의 분류 차이 재현 |
+| 수정 후 동일 파일 | 25 passed |
+| 수정 PR 단독 AI `pytest -q` | 303 passed |
+| 최신 develop + 수정 PR AI `pytest -q` | 372 passed |
+| 두 환경 AI Ruff·format·Mypy | 통과. format 54/60 files, Mypy 13/14 source files |
+| 통합 BE 패키지 import·기존 `tests/contract` | 55 passed |
+| 실제 Gateway + `httpx.MockTransport`, 단독/통합 각각 같은 13사례 | 통과. 혼합 오류 세 경우 모두 schema 재시도 후 정상 응답 채택(HTTP 2회), schema가 맞는 없는 ID는 semantic 종료(1회), 일부 채택 없음, 빈 입력 비호출·빈 결과 성공·byte 상한·취소 전파 확인 |
+| 공통 계약 검사 | schema 2개·부분 OpenAPI·양성/음성 fixture 7개 통과. 전체 API·FE 호환성 검증 아님 |
+| 최신 develop 병합 검사 | 충돌 없음. 최신 공통 계약·색인·구현 기록 보존 |
+
+위 결과는 이전 검토의 298/367개나 작성 당시 213개를 재사용한 수치가 아니다. 이번 수정의 테스트를
+현재 소스 경로에 고정해 실행했다. 실제 모델 호출·추출 품질 데이터셋·BE 저장/분석·면접 서비스 흐름·
+전체 DB/Redis suite·배포 검증은 미실행이다. 실패·시도 정보의 영구 기록, 문서 버전별 실행 상태·중복 방지,
+prompt 등록·adapter·Context/질문 근거 연결은 후속이다. 로그·source hash·정확한 명령은
+`.claude/scratch/pr146-review-fix-20261030/`에 보존한다.
