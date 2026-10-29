@@ -16,38 +16,62 @@ async def recover_preparations(
 ) -> int:
     recovered = 0
     now = now or datetime.now(UTC)
-    async with sessions.begin() as db:
-        rows = (
-            await db.scalars(
-                select(InterviewSession)
+    async with sessions() as db:
+        candidates = (
+            await db.execute(
+                select(
+                    InterviewSession.id,
+                    InterviewSession.context_state,
+                )
                 .where(
                     InterviewSession.status == "preparing",
-                    InterviewSession.context_state["prepare_job_id"].as_string().is_not(None),
                 )
                 .order_by(InterviewSession.updated_at)
                 .limit(100)
-                .with_for_update(skip_locked=True)
             )
         ).all()
-        for row in rows:
-            if prepare_lease.expires(row) > now:
-                continue
-            call_id = (row.context_state or {}).get("prepare_director_call_id")
-            try:
-                record = (
-                    await db.get(LLMCallRecord, UUID(call_id)) if isinstance(call_id, str) else None
+    for interview_id, state in candidates:
+        state = state if isinstance(state, dict) else {}
+        owner, call_id = state.get("prepare_job_id"), state.get("prepare_director_call_id")
+        async with sessions.begin() as db:
+            # Director 저장과 같은 record→interview 순서로 잠그고 owner를 다시 확인한다.
+            query = (
+                select(LLMCallRecord)
+                .where(
+                    LLMCallRecord.interview_session_id == interview_id,
+                    LLMCallRecord.task_name == "director",
+                    LLMCallRecord.turn_no == 1,
                 )
-            except ValueError:
-                record = None
+                .order_by(LLMCallRecord.id)
+                .with_for_update()
+            )
+            if call_id is not None:
+                try:
+                    query = query.where(LLMCallRecord.id == UUID(str(call_id)))
+                except ValueError:
+                    # 손상된 이전 marker도 만료 행의 회수 자체를 막지 않는다.
+                    pass
+            # call id가 없던 이전 claim은 같은 면접 첫 Director의 pending만 회수한다.
+            records = (await db.scalars(query)).all()
+            row = await db.scalar(
+                select(InterviewSession)
+                .where(
+                    InterviewSession.id == interview_id,
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
             if (
-                record is not None
-                and record.interview_session_id == row.id
-                and record.task_name == "director"
-                and record.turn_no == 1
-                and not (record.turn_id or record.failure or record.discard_reason)
+                row is None
+                or row.status != "preparing"
+                or (row.context_state or {}).get("prepare_job_id") != owner
+                or (row.context_state or {}).get("prepare_director_call_id") != call_id
+                or prepare_lease.expires(row) > now
             ):
-                # 동일 owner가 남긴 정확한 pending 기록만 닫아 새 첫 질문을 막지 않는다.
-                record.discard_reason = "preparation_lease_expired"
+                continue
+            for record in records:
+                if not (record.turn_id or record.failure or record.discard_reason):
+                    record.discard_reason = "preparation_lease_expired"
             step = prepare_lease.STEPS[prepare_lease.completed(row)]
             prepare_lease.failed(row, "preparation_lease_expired", step)
             recovered += 1

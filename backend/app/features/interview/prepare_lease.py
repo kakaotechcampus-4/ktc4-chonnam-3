@@ -33,7 +33,7 @@ def expires(row: InterviewSession) -> datetime:
     return (
         parsed
         if parsed is not None and parsed.tzinfo
-        else row.updated_at + timedelta(seconds=LEASE_SECONDS)
+        else row.updated_at + timedelta(seconds=JOB_TIMEOUT_SECONDS)
     )
 
 
@@ -81,6 +81,8 @@ def steps(row: InterviewSession, *, failed: str | None = None) -> list[dict[str,
 
 
 def failed(row: InterviewSession, code: str, step: str, *, recoverable: bool = True) -> None:
+    if STEPS.index(step) < completed(row):
+        step = STEPS[completed(row)]
     row.status, row.prepare_steps = "preparing_failed", steps(row, failed=step)
     row.last_error = dict(
         reason="prep_failed",
