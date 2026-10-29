@@ -4,8 +4,11 @@ from typing import Any
 from uuid import UUID
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.db.models import InterviewSession
 from app.features.interview.prepare import prepare_interview
+
+logger = get_logger(__name__)
 
 
 async def interview_prep(ctx: dict[str, Any], interview_id: str) -> None:
@@ -13,6 +16,11 @@ async def interview_prep(ctx: dict[str, Any], interview_id: str) -> None:
     async with ctx["session_factory"]() as db:
         row = await db.get(InterviewSession, key)
         if row is None or row.status != "preparing":
+            logger.info(
+                "interview_prep_skipped",
+                interview_id=str(key),
+                reason="not_found" if row is None else "status_changed",
+            )
             return
         user_id = row.user_id
     await prepare_interview(
