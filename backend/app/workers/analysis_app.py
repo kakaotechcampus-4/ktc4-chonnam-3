@@ -21,7 +21,10 @@ async def startup(ctx: dict[str, Any]) -> None:
 class WorkerSettings(InitialWorkerSettings):
     # ARQ가 작업별로 서로 다른 인자 목록을 전달하므로 초기 수집 함수 타입으로 한정하지 않는다.
     functions: list[Any] = [*InitialWorkerSettings.functions, analysis_run, candidate_page_analyze]
-    cron_jobs = [cron(analysis_reaper, second={0, 30}, run_at_startup=True)]
+    cron_jobs = [
+        *InitialWorkerSettings.cron_jobs,
+        cron(analysis_reaper, second={0, 30}, run_at_startup=True),
+    ]
     on_startup = startup
     max_tries = 1
     keep_result = 0
