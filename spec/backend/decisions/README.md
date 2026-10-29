@@ -17,6 +17,11 @@
 - [0006 Task 9 실패 상태 재사용](0006-task09-failure-records.md): NUL 원문을 수집 단계에서 거절하고 같은 URL의 미참조 실패 상태만 갱신한다. 성공 버전·기존 참조와 HTTP 재시도는 유지한다.
 - [0002 Task 9 저장 경계](0002-task09-persistence.md): 선행 인증·추출 구현에 의존하는 API·저장 Draft의 공고 버전 보존·7일 재확인·URL별 저장 잠금과 본문 중심 Preview를 정의한다. 전체 기능 완료를 뜻하지 않는다.
 
+## Task 13 준비 복구 결정
+
+- [0011 면접 준비의 단계 재개와 만료 복구](0011-interview-preparation-resume-and-recovery.md): Proposed.
+  완료 단계 보존, 입력 변경 거절, lease·독립 reaper와 늦은 결과 차단의 내부 경계를 정리한다.
+
 ## 관련 공통 결정
 
 - [0002 로컬 정책 기준 채택](../../shared/decisions/0002-local-policy-baseline.md): 2026-09-22 사용자 결정. 포트폴리오 20MB와 공고 재사용 7일은 유지하며 면접 배분은 후속 0004로 대체한다. 실제 BE 연결·검증은 구현 작업으로 남긴다.
