@@ -169,6 +169,31 @@
 미실행이고 nonce를 강제로 덮지 않는다. 명시적 abandon과 열린 소켓 종료·늦은 결과 차단은
 공통 ADR0009 및 #143 후속이다. 실제 모델 품질·운영 배포·면접 전체 완료로 확대하지 않는다.
 
+## 2026-10-30 — #136 준비 재개·회수 리뷰 반영
+
+- 준비 네 단계의 완료 입력·L2/Evidence 산출물을 DB checkpoint로 묶는다. 실패 단계부터
+  재개하며 완료된 원문 수집·분석을 다시 실행하지 않는다. 선택 run의 bound L1과 고정 SHA를
+  비교하고 다른 SHA의 새 분석은 현재 면접을 무효화하지 않는다. 실제 기준 입력 변경은 거절한다.
+- 새 owner는 90초 lease를 20초마다 갱신한다. 독립 cron이 만료 작업을 회수하며, lease나
+  claim이 없는 이전 행에는 마지막 수정 이후 600초를 둔다. 새 메시지 없는 고착도 실패로
+  전환해 REST 재시도를 허용하고 늦은 owner의 질문·준비 결과 저장을 막는다.
+- reaper는 Director와 같은 record→interview 순서로 잠근다. 실제 PG의 이전 역전을 재현한
+  뒤 최종 코드에서 제거됨을 대조했다. 입력 guard의 SHARE→UPDATE 승격 경합도 최초 UPDATE와
+  공통 Context의 Posting→Frame 순서로 보완한다. 준비 설정 오류는 비재시도이며 값 없이 필드명만 기록한다.
+- 준비 reaper의 실제 등록은 #136 부모 설정에 둔다. 이미 develop에 있는 배포 analysis worker의
+  선택적인 부모 cron 계승은 공통 PR에 둬 선행 worker 전체나 준비 모듈을 복사하지 않는다.
+  실제 배포 worker의 함수·cron·max_tries=1·job_timeout=600을 검사한다.
+
+| 이번 집중 검증 | 결과 |
+| --- | --- |
+| 기존 준비·설정·재개·lease·legacy·동시 실행 | 41 passed, skip0, 119.65초 |
+| 최종 reaper의 독립 PG 잠금 대조 | 교차 선점 제거, 회수 1건 |
+| BE Ruff·format·Mypy / 부분 계약 검사 | 통과, 163 source / schema 2개·fixture 7개 |
+
+41개는 로컬 explicit-child cron 구성의 검증이다. 게시용 부모 cron 계승과 공통 잠금 보완을
+결합한 결과는 [공통 검증](#director-review-integration-20261030)에서 별도로 기록한다.
+초기 설계·API·DB 모델은 바꾸지 않는다. 실제 외부 API·배포·SIGKILL 실험을 수행한 결과는 아니다.
+
 ## 2026-10-28 — #124 후속 검토의 미실행 조회 범위 보존
 
 - #124의 [새 리뷰](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/124#issuecomment-6447685428)에 대응하는
