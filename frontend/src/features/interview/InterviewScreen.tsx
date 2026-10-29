@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import { BASE, api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
@@ -99,7 +99,6 @@ function readInterruptedTurn(interviewId: string): number | null {
 export default function InterviewScreen() {
   const { id = '' } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   const { data: me } = useQuery({ queryKey: queryKeys.me, queryFn: api.getMe });
   const {
@@ -443,7 +442,6 @@ export default function InterviewScreen() {
     closeSocket();
     // 요청이 실패해도 홈으로 간다. 이미 완료된 면접일 때만 리포트로 보낸다.
     const status = await abandonInterview(id).catch(() => null);
-    void queryClient.invalidateQueries({ queryKey: queryKeys.interviewsAll });
     navigate(status === 'completed' ? `/interview/${id}/report` : '/home', { replace: true });
   }
 

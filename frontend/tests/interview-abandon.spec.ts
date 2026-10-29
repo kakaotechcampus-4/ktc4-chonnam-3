@@ -37,6 +37,8 @@ test('레포 재선택은 기존 면접 abandon 후 새 면접을 만들고 뒤�
   expect(calls).toEqual(['abandon', 'create']);
   await page.goBack();
   await expect(page).not.toHaveURL(/\/interview\/repos\//);
+  // 캐시된 준비 실패 화면이 아니라 중단된 면접 안내가 보여야 한다.
+  await expect(page.getByRole('heading', { name: '중단된 면접이에요' })).toBeVisible();
 });
 
 test('마이페이지 중단된 면접 행은 중단됨과 다시 도전하기를 보여준다', async ({ page }) => {

@@ -1,4 +1,6 @@
 import { api } from '@/shared/api';
+import { queryClient } from '@/shared/queryClient';
+import { queryKeys } from '@/shared/queryKeys';
 import { isApiError, type InterviewStatus } from '@/types/api';
 
 /**
@@ -13,6 +15,9 @@ import { isApiError, type InterviewStatus } from '@/types/api';
 export async function abandonInterview(id: string): Promise<InterviewStatus | null> {
   try {
     await api.abandonInterview(id);
+    // 뒤로 가기로 돌아왔을 때 캐시된 이전 상태(준비 실패 등)로 그리지 않게 한다.
+    void queryClient.invalidateQueries({ queryKey: queryKeys.interview(id) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.interviewsAll });
     return 'abandoned';
   } catch (error) {
     if (!isApiError(error)) throw error;
