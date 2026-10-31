@@ -42,6 +42,14 @@ async def test_current_question_stays_out_of_history(agent_sessions, agent_seed,
             turn_no=turn_no,
             limits=c.ContextLimits(2, 0, "fixture"),
         )
+        direct = await load_context(
+            db,
+            user_id=agent_seed["owner"],
+            interview_id=agent_seed["interview_id"],
+            limits=c.ContextLimits(2, 0, "fixture"),
+            answer_turn_no=turn_no,
+        )
+    assert direct == loaded.context
     assert loaded.context.turn_no == turn_no
     assert len(loaded.context.history) == turn_no - 1
     assert loaded.turn_id == loaded.context.current_turn_id

@@ -28,9 +28,10 @@ def configured_parent(monkeypatch):
     return configured
 
 
-def test_deployment_worker_preserves_parent_cron_once(configured_parent):
+@pytest.mark.parametrize("container", [list, tuple], ids=["list", "tuple"])
+def test_deployment_worker_preserves_parent_cron_once(configured_parent, container):
     inherited = cron(parent_job, second={15, 45})
-    with configured_parent([inherited]) as worker:
+    with configured_parent(container([inherited])) as worker:
         assert worker.cron_jobs.count(inherited) == 1
         assert sum(job.coroutine is analysis_reaper for job in worker.cron_jobs) == 1
         assert {function.__name__ for function in worker.functions} >= {
@@ -40,8 +41,9 @@ def test_deployment_worker_preserves_parent_cron_once(configured_parent):
         }
 
 
-def test_empty_parent_keeps_the_existing_analysis_schedule(configured_parent):
-    with configured_parent([]) as worker:
+@pytest.mark.parametrize("jobs", [[], (), None], ids=["list", "tuple", "none"])
+def test_empty_parent_keeps_the_existing_analysis_schedule(configured_parent, jobs):
+    with configured_parent(jobs) as worker:
         assert len(worker.cron_jobs) == 1
         assert worker.cron_jobs[0].coroutine is analysis_reaper
         assert worker.cron_jobs[0].second == {0, 30}
@@ -57,3 +59,9 @@ def test_parent_without_optional_cron_setting_preserves_arq_default(monkeypatch)
             assert worker.cron_jobs[0].coroutine is analysis_reaper
     finally:
         importlib.reload(analysis_app)
+
+
+def test_invalid_parent_cron_setting_is_not_treated_as_empty(configured_parent):
+    with pytest.raises(TypeError):
+        with configured_parent(0):
+            pass
