@@ -20,11 +20,11 @@ type FailureAction = 'relink' | 'input' | 'none';
 
 /**
  * failureReason 값은 frontend/docs/api-spec.md의 failureReason 표를 따른다. 없는 값은 DEFAULT_FAILURE.
- * GitHub 토큰 무효는 HTTP reason과 같은 github_token_invalid다(api-spec.md 변경 이력 2026-09-10).
+ * failureReason은 job 코드라 HTTP reason과 다르다. GitHub 토큰 무효는 job 코드 token_invalid다(#144).
  * input은 공고 입력 화면에 이전 URL을 채워 보낸다. 다시 분석은 사용자가 그 화면에서 시작한다.
  */
 const FAILURE: Record<string, { message: string; action: FailureAction; label?: string }> = {
-  github_token_invalid: {
+  token_invalid: {
     message: 'GitHub 연동이 만료됐어요. 다시 연동한 뒤 분석해주세요.',
     action: 'relink',
   },
@@ -86,11 +86,12 @@ export default function AnalysisFailed() {
   });
 
   const run = runQuery.data;
-  // ponytail: BE가 아직 내부 job 코드 token_invalid를 그대로 보낸다. BE가 github_token_invalid로 바꾸면 이 변환을 지운다.
-  const failureReason =
-    run?.failureReason === 'token_invalid' ? 'github_token_invalid' : run?.failureReason;
-  // 실패 사유는 200 응답 안의 값이라 전역 오류 처리가 보지 못한다.
-  useEffect(() => refreshMeIfTokenInvalid(failureReason), [failureReason]);
+  const failureReason = run?.failureReason;
+  // 실패 사유는 200 응답 안의 값이라 전역 오류 처리가 보지 못한다. job 코드를 HTTP reason으로 넘긴다.
+  useEffect(
+    () => refreshMeIfTokenInvalid(failureReason === 'token_invalid' ? 'github_token_invalid' : null),
+    [failureReason],
+  );
   // 실패하지 않은 run으로 직접 들어오면(링크·기록 이동) 맞는 화면으로 보낸다.
   // 캐시 값으로 보내면 진행 화면과 오가므로 이 화면에서 새로 받은 값만 본다.
   const runStatus = runQuery.isFetchedAfterMount && !runQuery.isFetching ? run?.status : undefined;
