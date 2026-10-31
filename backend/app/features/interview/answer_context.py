@@ -67,7 +67,11 @@ async def load_answer_context(
     limits: c.ContextLimits,
     lock: bool = False,
 ) -> AnswerContext:
-    """9번째 답변까지 현재 질문을 history 밖에 둔 상태로 읽는다."""
+    """9번째 답변까지 현재 질문을 history 밖에 둔 상태로 읽는다.
+
+    첫 제출 전 answer_text=None은 정상이다. 제출 문자열의 검증은 호출자가 맡는다.
+    """
+    # bool은 int의 하위 타입이므로 True를 1번 턴으로 받지 않도록 정확한 타입을 검사한다.
     if type(turn_no) is not int or not 1 <= turn_no <= 9:
         raise AgentStateError("answer_turn_invalid")
     context = await load_context(
@@ -76,7 +80,7 @@ async def load_answer_context(
         interview_id=interview_id,
         limits=limits,
         lock=lock,
-        _answer_turn_no=turn_no,
+        answer_turn_no=turn_no,
     )
     query = (
         select(InterviewTurn)

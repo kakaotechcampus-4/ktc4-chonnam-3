@@ -131,13 +131,16 @@ async def load_context(
     limits: c.ContextLimits,
     lock: bool = False,
     quota: Mapping[str, int] | None = None,
-    _answer_turn_no: int | None = None,
+    answer_turn_no: int | None = None,
 ) -> c.Context:
     """소유권·활성 상태·답변 이력·고정 SHA를 검증해 DB 원본으로만 Context를 만든다.
 
     lock=True는 저장 직전 재검증용이며 읽은 행을 잠근다. 트랜잭션 종료는 호출자 책임이고,
     반환값에는 세션·ORM·비밀값이 없다. Redis나 현재 HEAD로 빈 자료를 채우지 않으며,
     context_state에서는 준비 과정이 기록한 저장소별 실제 수집 한계만 읽는다.
+
+    answer_turn_no는 제출 전·저장 후 현재 질문을 재검증하는 경로다. 해당 턴은 asked·answered를
+    모두 허용하되 history에는 넣지 않는다. None이면 다음 질문용이며 current_turn이 9이면 거절한다.
     """
     if quota is None:
         quota = get_settings().persona_turn_quota
@@ -159,8 +162,8 @@ async def load_context(
         interview.status not in ("preparing", "in_progress")
         or interview.total_turns != INTERVIEW_MAX_TURNS
         or not 0 <= interview.current_turn <= INTERVIEW_MAX_TURNS
-        or (_answer_turn_no is None and interview.current_turn == INTERVIEW_MAX_TURNS)
-        or (_answer_turn_no is not None and interview.current_turn != _answer_turn_no)
+        or (answer_turn_no is None and interview.current_turn == INTERVIEW_MAX_TURNS)
+        or (answer_turn_no is not None and interview.current_turn != answer_turn_no)
     ):
         raise AgentStateError("interview_state_invalid")
     turns = (
@@ -173,12 +176,12 @@ async def load_context(
             )
         )
     ).all()
-    history_turns = turns if _answer_turn_no is None else turns[:-1]
+    history_turns = turns if answer_turn_no is None else turns[:-1]
     if (
         [turn.turn_no for turn in turns] != list(range(1, interview.current_turn + 1))
         or any(turn.status != "answered" or not turn.answer_text for turn in history_turns)
         or (
-            _answer_turn_no is not None
+            answer_turn_no is not None
             and (not turns or turns[-1].status not in ("asked", "answered"))
         )
         or (turns and turns[0].persona != "hr_manager")
@@ -189,9 +192,9 @@ async def load_context(
         if turn.persona not in counts:
             raise AgentStateError("persona_counts_invalid")
         counts[turn.persona] += 1
-    target_turn = interview.current_turn + 1 if _answer_turn_no is None else _answer_turn_no
+    target_turn = interview.current_turn + 1 if answer_turn_no is None else answer_turn_no
     permitted = allowed_personas(counts, turn_no=target_turn, quota=quota)
-    if _answer_turn_no is not None and turns[-1].persona not in permitted:
+    if answer_turn_no is not None and turns[-1].persona not in permitted:
         raise AgentStateError("persona_counts_invalid")
 
     selected = (
