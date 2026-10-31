@@ -175,6 +175,11 @@ class Settings(BaseSettings):
     claim_limit: int = 10
 
     # ── 정책 · 면접 ──
+    # 진행 중 근거 조회의 유한 상한이며 품질·지연의 실측 목표는 아니다.
+    director_evidence_max_requests: LLMInteger = Field(default=12, gt=0, le=64)
+    director_evidence_max_files: LLMInteger = Field(default=2, gt=0, le=16)
+    director_evidence_timeout_seconds: LLMTimeout = Field(default=8.0, gt=0, allow_inf_nan=False)
+
     max_active_interviews_per_user: int = 1
     max_selected_repos: int = 5
     max_ai_recommended: int = 5

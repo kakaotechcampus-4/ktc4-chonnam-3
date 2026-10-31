@@ -1,5 +1,229 @@
 # AI 구현·검증 기록
 
+## 2026-10-25 — 미게시 면접 실행과 후속 보완의 Draft 게시
+
+### 원본과 신규 범위
+
+- 원본 tree `c8f2cb5d`와 실제 worktree·index를 보존했다.
+  `backup/director-unpublished-before-pr-20261025`는 원본 tree를 보존한 commit을 가리킨다.
+- 선행 통합 tree `a4d7c1bf` 대비 원본 신규 36파일을 대조했다. 기게시 신규분 10파일,
+  일부 게시 11파일, 전부 미게시 13파일, #131 담당으로 제외·보존한 seed 2파일이다.
+  파일 수만이 아니라 함수·수정 구간과 테스트 사례까지 대응시켰다.
+- 게시 기준은 `develop@dbd7f890`이다. 기존 #124~#127, #131과 다른 선행 PR은 변경·병합하지 않았다.
+  초기 설계는 보존하고 실행 명세는 [#132](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/132),
+  미적용 Context·L2 보완은 [#133](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/133)으로 분리했다.
+
+| 구간 | 이번 게시의 배치 |
+| --- | --- |
+| 준비·Director 실행·WS·앱/worker | 신규 실행 코드와 회귀 검사를 이 구현 PR에 게시 |
+| 현재 답변 Context·9번째 답변·수집 한계 | #133의 `agent_context.py`, `answer_context.py` 미적용 패치 |
+| L2 예산·호출 기록·base URL·한계 | #133의 `repo_deep.py` 미적용 패치 |
+| 기존 Director 생성기의 base URL 한 줄 | #133의 어댑터 미적용 패치 |
+| 수집 상한 | #126의 8개 설정은 재게시하지 않고 남은 진행 중 조회 3개와 검증만 추가 |
+| 준비 테스트 | #126에 옮긴 2함수·3사례를 제외하고 나머지 함수 AST를 보존 |
+| WS·준비·현재 답변의 통합 회귀 | 실행 서비스에 의존하므로 이 구현 PR에 함께 게시 |
+| seed 실행·추가 seed 검사 | 이번 변경에서 제외. #131 전담과 로컬 원본 보존 유지 |
+
+#133은 일반 Python 파일에 아직 적용하지 않은 검토 자료다. 패치만 병합해도 기능은 활성화되지
+않으며 앱·빌드·CI에서 자동 적용하지 않는다. 정확한 선행 base에서 일반 코드에 적용하고
+재검증해야 한다. 선행 구현·DB 모델·migration·의존성·기게시 함수 전체를 복사하지 않았다.
+
+### 게시본 단독 검사
+
+| 검사 | 실제 결과 |
+| --- | --- |
+| 명세 #132의 부분 계약 검사 | schema 2개·부분 OpenAPI·fixture 7개 통과 |
+| 실행 게시본 Ruff·format | 통과, format 260파일 |
+| 실행 게시본의 조회 상한 검사 | 3 passed |
+| 실행 게시본 전체 pytest | 수집 오류 9건. #82의 모델·#120의 router 등 선행 부재와 기존 seed import 오류 |
+| 실행 게시본 mypy | 4파일 30오류, 134 source 검사. 선행 어댑터·모델·Context·REST 타입 부재 |
+| 패치 4개 | SHA-256·base/result blob 일치, 정확한 선행에서 적용 검사·적용 후 원본 blob 대조 통과 |
+| 원본 보존·범위 | 원본 36파일·index 동일, 신규 PR 간 파일 중복 없음, seed·DB 모델·선행 migration 미포함 |
+
+### 별도 로컬 통합 검증
+
+원본 선행 통합과 이번 코드·패치를 결합한 별도 환경을 사용했다. runtime 함수와 분리한 테스트는
+원본 AST와 대조했다. 설정 3개와 #126의 나머지 설정도 원본과 일치한다. seed 오류 해결은
+게시하지 않고 #131의 seed 두 파일을 검증 환경에만 연결했다. 외부 모델·GitHub는 대역이며
+실제 외부 모델·서비스 DB·사용자 자료에 접근하지 않았다.
+
+- 기존 Python 3.12.14, 새 전용 PostgreSQL 15.19·Redis 7.4.11을 사용했다.
+- BE 첫 전체 실행: 1,231 passed·74 setup errors·경고 2개. 74건 모두 분석 fixture의
+  `task10_test` DB 이름 조건 위반이며 기능 실패는 없었다. 통과·오류를 합쳐 전체 통과로 쓰지 않는다.
+- AI 전체 실행: 295 passed. BE/AI Ruff·format·mypy 통과이며 각각 format 292/52파일,
+  type 검사 141/12 source다.
+- 올바른 새 `task10_test` DB에서 정확히 그 74개 오류 사례만 재실행해 74 passed를 확인했다.
+  첫 전체 445.54초·exit 1과 재실행 108.78초·exit 0을 구분하며, 서로 다른 고유 BE 사례
+  1,305개를 검증했다. 한 번의 전체 실행이 모두 통과했다고 표시하지 않는다.
+- 각 실행 전후 통합 Python 소스 해시는 같았다. 생성한 두 테스트 DB 삭제·임시 schema 0개·
+  연결 0개·DB 목록 복원·Redis/PG 종료와 포트 해제를 확인했다. 기존 서비스는 변경하지 않았다.
+
+검증 보조 스크립트의 첫 Redis 기동은 Cygwin의 config 경로 해석으로 중단됐으며 생성 DB·서버를
+정리하고 상대 config 경로로 재실행했다. DB 명명 문제도 보조 환경만 수정했으며 Python 소스는
+변경하지 않았다. 실제 결과와 오류 목록은 원본 저장소의
+`.claude/scratch/director-remaining-publication-20261025/validation-runtime/`에 보존한다.
+
+### 병합 전 조건과 남은 범위
+
+- Draft다. 필요한 선행·#132 명세·#133 후속 패치의 일반 코드 반영 뒤 최신 base에서 통합 재검증한다.
+- #124/#125/#127과 공유하는 계약·설정·결정 색인·구현 기록은 각 신규 구간을 합쳐 보존한다.
+  이번 PR의 파일 전체로 다른 PR의 추가 구간을 덮어쓰지 않는다.
+- 준비 이벤트·preparing WS 유지·정확한 단계 재개·명시적 이탈 wire·일반 lease/reaper는 미완료다.
+  Report·음성·다언어/대형 레포의 의미 품질·실제 모델 평가·배포도 이번 완료 범위가 아니다.
+
+## 2026-10-26 — #134를 BE Task 13·14·15로 분할
+
+### 범위 보존과 배치
+
+- 사용자가 #134를 task별로 나누도록 요청했다. 원격 head `f2da245f`와 기존 브랜치를 보존하고
+  `backup/pr134-before-task-split-20261026`을 만들었다. 게시본은 모두 `develop@dbd7f890` 기준이다.
+- Task 13은 준비·worker·REST 앱 등록과 기존 준비/등록 검사를, Task 14는 Director·답변 분석·
+  근거 조회 상한과 서비스/Context 검사를, Task 15는 WS·연결 인계와 WS 앱 등록/검사를 담당한다.
+- 실행 ADR0026과 단일 구현 기록은 Task 14, WS ADR0024와 결정 색인은 Task 15에만 둔다.
+  원본 18파일을 빠짐없이 배치하고 일반 파일을 중복 게시하지 않았다.
+- `main.py`만 REST 등록 2행과 WS 등록 2행으로 나눴다. Task 14 → Task 13 → Task 15 순서로
+  반영하며, 공유 삽입 구간의 충돌은 두 등록을 모두 유지해 해결해야 한다. 합성 결과는 원본과 같다.
+- 기존 함수·fixture·decorator·설정·테스트를 보존했다. 원본 6개 테스트 파일의 59사례는 그대로며
+  Task 15에 실제 앱의 WS 매칭/이름 경로를 검사하는 1사례만 추가했다.
+
+### 이번 실행과 이전 기록의 구분
+
+위 2026-10-25 절은 원본 #134의 검증 이력이다. 당시 전체 1,305개·AI 295개 결과를 이번 분할본의
+새 전체 검사 통과로 사용하지 않는다. 이번에는 분할 합성본의 직접 관련 사례와 등록을 재검증한다.
+
+| 범위 | 실제 검사 결과 |
+| --- | --- |
+| Task 13 게시본 | Ruff·format 255파일 통과. 전체 pytest 수집 6오류·mypy 2파일 10오류, 선행 모델/라우터/서비스 부재와 기존 seed 오류 |
+| Task 14 게시본 | Ruff·format 257파일·조회 상한 3사례 통과. 전체 pytest 수집 3오류·mypy 1파일 15오류, 선행 부재 |
+| Task 15 게시본 | Ruff·format 255파일 통과. 전체 pytest 수집 6오류·mypy 1파일 7오류, 선행 부재 |
+| 새 선행 결합본 | 원본 59사례+새 WS 등록 1사례, 60 passed·2 warnings·102.52초·exit 0. 원본 6개 테스트 파일 byte 동일 |
+| 실제 앱 등록 | REST 4경로·WS 1경로의 공개 매칭 API와 WS 이름 경로 확인. 빈 앱에서 새 검사가 실패하는 negative probe 확인 |
+| 결합본 정적 검사 | BE Ruff·format 293파일·mypy 141 source, AI Ruff·format 52파일·mypy 12 source 모두 통과 |
+| 공개 계약 형식 | 세 게시본의 계약 파일은 동일·무변경. backend venv는 검사 의존성 부재로 미실행 후 기존 전용 venv 재사용, schema 2개·부분 OpenAPI·fixture 7개 통과. 전체 API 호환성 검증은 아님 |
+| 실행 후 정리 | 생성 DB 삭제·임시 schema/연결 0개·DB 목록 복원·PG/Redis 종료·16094/16095 포트 해제 확인 |
+
+첫 결합 검사는 공통 설정 파일 전체 교체로 선행 설정이 누락돼 실행 전 중단됐다. 설정은 선행과
+신규 구간을 함께 보존하도록 바로잡았다. 다음 등록 probe는 설치 FastAPI의 포함-router 표현을
+평탄한 경로 목록으로 가정해 중단됐다. 실제 등록은 정상이며 공개 matches/이름 경로 API로 검사와
+추가 테스트를 정리했다. 원본 서비스 코드는 바꾸지 않았다.
+
+검증 복사 필터가 기존 `features/report` 골격 5파일을 제외한 것도 확인했다. 이전 통합본과 byte가
+같은 5파일을 복원하고 BE 정적 검사만 재실행했다. 앞서 실행한 450파일은 그대로이며, 복원 후
+455파일도 정적 검사 전후 hash가 같다. 관련 60사례를 전체 1,305개 재실행으로 표시하지 않는다.
+실제 모델 호출·AI 전체 테스트는 이번에 실행하지 않았다. 이번 로그와 최종 메타는 원본 저장소의
+`.claude/scratch/pr134-task-split-20261026/validation-runtime/`에 보존한다.
+
+### 게시와 후속 조건
+
+세 PR은 모두 Draft이며 선행·#132 명세·#133 미적용 후속 패치의 일반 코드 반영 뒤 재검증해야 한다.
+새 PR의 실제 원격 범위를 확인한 뒤 #134와 상호 연결하고 기존 PR만 닫는다. 원본 브랜치는 삭제하거나
+재작성하지 않는다. seed·#131, 다른 선행 PR, 기존 미완료 범위는 이번 분할로 변경하지 않는다.
+
+## 2026-10-30 — #135 실행 경계의 새 리뷰 반영
+
+- 원본 `b262298`과 별도 로컬 통합본을 보존했다. 신규 실행 보완만 후속 커밋으로 추가하며
+  선행 Context와 공통 설정 필드를 복사하지 않는다. 공유 byte 상한 설명은 공통 PR에 둔다.
+- `process_answer`의 답변 저장·T3 성공 후 정상 완료 책임을 명시했다. 기존 WS 송신 경계가
+  처리하는 예상 I/O 오류와 예상 밖 콜백 예외·실제 취소를 구분한다. 이미 확정한 답변을
+  재전송했다고 모델 작업을 자동 재실행하지 않는다. 종료 비교는 기존 9턴 상수를 재사용한다.
+- 내부 scope가 없으면 외부 조회 전에 `evidence_scope_invalid`로 거절한다. 준비 호출자는
+  같은 DB 세션과 잠근 최신 면접 행을 받는 비동기 guard를 주입한다. 호출 전과 저장 직전에
+  소유권·입력 snapshot을 검사하며 외부 HTTP를 실행하지 않는다. 기본 None 경로는 유지한다.
+- 테스트 helper 7개를 공용 모듈로 옮겼다. 기존 테스트 14함수·helper 7개의 AST 본문과
+  Settings AST를 보존했고, 설정 문단 제목만 담당 구간에서 정리했다.
+
+| 이번 검증 구성 | 결과 |
+| --- | --- |
+| 최신 develop + #135 + 정확한 Context01/02, 누락 scope·콜백·취소 | RED 1 failed/4 passed → GREEN 5 passed |
+| 최종 비동기 DB guard의 두 저장 경계 | RED 2 failed → GREEN 2 passed, skip0 |
+| 최종 API의 기존 None 경로 | 별도 28 passed, skip0 |
+| 같은 최종 소스의 BE Ruff·format·Mypy | 통과, format 348파일·type 160 source |
+
+위 2개+28개는 서로 다른 집중 사례다. 앞선 동기 guard 구성의 30개와 mutation 검사는
+이전 단계의 이력이며 최종 API의 검증 수치에 더하지 않는다. 전체 결합 결과는 같은 기록의
+[공통 검증](#director-review-integration-20261030)에서 관리한다. 외부 모델·운영 배포를 검증한
+결과가 아니며 필요한 공통 선행 코드가 develop에 반영되기 전에는 Draft를 유지한다.
+
+## 2026-10-30 — #137 준비 상태와 실제 WS 등록 리뷰 반영
+
+- 원본 `109b8e0`과 별도 로컬 통합본을 보존했다. 준비 중에는 commit된 DB 단계 snapshot과
+  변경분을 전달하고, 저장 질문과 `in_progress`를 확인한 뒤 `prepareCompleted`와 질문을 보낸다.
+  재연결은 worker나 모델을 다시 실행하지 않는다. 짧은 중간 상태는 조회 간격 안에 합쳐질 수 있다.
+- 준비 동안 수신 task를 유지해 조회 timeout 취소로 프레임을 잃지 않게 했다. 첫 질문 전 답변은
+  거절한다. stale 답변 검사는 LLM 설정 검사보다 먼저 하며, 설정 로그는 비밀값 없이 필드명만 남긴다.
+- realtime 키의 공개 helper는 이미 develop에 있는 service를 수정하는 공통 PR에 둔다.
+  이 PR은 그 함수를 사용하며 선행 REST 구현을 복사하지 않는다. 실제 앱 등록 fixture를 사용하고
+  REST·WS 등록을 함께 보존한다. 9턴 상수와 기존 ACK 전송 오류 보호도 유지한다.
+
+| 별도 로컬 결합에서 이번 검증 | 결과 |
+| --- | --- |
+| 준비·재접속·실패·설정 회귀 | 기존 구현에서 5 failed → 같은 5 passed, 실패 복원 1개 추가 |
+| 기존 WS·ACK 오류 3종·준비 6개·실제 등록 | 29 passed, skip0 |
+| 실제 Uvicorn TCP + Redis의 죽은 owner 잠금 | 1 passed, handshake 30.406초, 명시적인 client 제한 35초 |
+| 기존 REST 조회·생성·재시도 | 별도 48 passed, skip0 |
+| 최종 proxy token-only·URL-only와 기존 설정 누락 | RED 2 failed/1 passed → GREEN 3 passed, 기존 29개와 일부 중복 |
+| Mypy / 변경 Python Ruff·format | 160 source / 5파일 통과 |
+
+선행을 결합한 결과이며 게시본 단독 통과를 뜻하지 않는다. 최종 결합 결과는 같은 기록의
+[공통 검증](#director-review-integration-20261030)에서 관리한다. Caddy·브라우저 전체 경로는
+미실행이고 nonce를 강제로 덮지 않는다. 명시적 abandon과 열린 소켓 종료·늦은 결과 차단은
+공통 ADR0009 및 #143 후속이다. 실제 모델 품질·운영 배포·면접 전체 완료로 확대하지 않는다.
+
+## 2026-10-30 — #136 준비 재개·회수 리뷰 반영
+
+- 준비 네 단계의 완료 입력·L2/Evidence 산출물을 DB checkpoint로 묶는다. 실패 단계부터
+  재개하며 완료된 원문 수집·분석을 다시 실행하지 않는다. 선택 run의 bound L1과 고정 SHA를
+  비교하고 다른 SHA의 새 분석은 현재 면접을 무효화하지 않는다. 실제 기준 입력 변경은 거절한다.
+- 새 owner는 90초 lease를 20초마다 갱신한다. 독립 cron이 만료 작업을 회수하며, lease나
+  claim이 없는 이전 행에는 마지막 수정 이후 600초를 둔다. 새 메시지 없는 고착도 실패로
+  전환해 REST 재시도를 허용하고 늦은 owner의 질문·준비 결과 저장을 막는다.
+- reaper는 Director와 같은 record→interview 순서로 잠근다. 실제 PG의 이전 역전을 재현한
+  뒤 최종 코드에서 제거됨을 대조했다. 입력 guard의 SHARE→UPDATE 승격 경합도 최초 UPDATE와
+  공통 Context의 Posting→Frame 순서로 보완한다. 준비 설정 오류는 비재시도이며 값 없이 필드명만 기록한다.
+- 준비 reaper의 실제 등록은 #136 부모 설정에 둔다. 이미 develop에 있는 배포 analysis worker의
+  선택적인 부모 cron 계승은 공통 PR에 둬 선행 worker 전체나 준비 모듈을 복사하지 않는다.
+  실제 배포 worker의 함수·cron·max_tries=1·job_timeout=600을 검사한다.
+
+| 이번 집중 검증 | 결과 |
+| --- | --- |
+| 기존 준비·설정·재개·lease·legacy·동시 실행 | 41 passed, skip0, 119.65초 |
+| 최종 reaper의 독립 PG 잠금 대조 | 교차 선점 제거, 회수 1건 |
+| BE Ruff·format·Mypy / 부분 계약 검사 | 통과, 163 source / schema 2개·fixture 7개 |
+
+41개는 로컬 explicit-child cron 구성의 검증이다. 게시용 부모 cron 계승과 공통 잠금 보완을
+결합한 결과는 [공통 검증](#director-review-integration-20261030)에서 별도로 기록한다.
+초기 설계·API·DB 모델은 바꾸지 않는다. 실제 외부 API·배포·SIGKILL 실험을 수행한 결과는 아니다.
+
+## 2026-10-28 — #124 후속 검토의 미실행 조회 범위 보존
+
+- #124의 [새 리뷰](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/124#issuecomment-6447685428)에 대응하는
+  실행 보완은 #135에 둔다. #124는 계약 문단 위치만 정리하며 선행 service를 복사하지 않는다.
+- 기존 정상 경로에는 이미 나머지 요청을 한 라운드 제한으로 실행하지 않았다는 공통 이유가 있었다.
+  이번에는 생략한 허용 요청마다 repo·고정 SHA·path와 턴당 1개 제한 사유를 기록한다.
+- 실제 I/O는 첫 요청 하나만 실행한다. 해당 실행의 status·items·searched_scope·error_code는 유지하고,
+  생략 범위는 ToolResult.limitations와 저장 요약에 더해 보강 T3·후속 T4에 전달한다.
+  조회 시작·취소·도구 오류·보강 실패·다음 질문 확정 뒤에도 이 설명을 보존한다.
+- 기존 생성기의 `agent.py`를 유지하는 #126의 별도 `runtime_adapter.py`에서 신규 실행자를 import한다.
+  새 API·DB 필드·테이블·조회 loop나 예산 초기화는 추가하지 않는다.
+
+| 구성 | 이번에 직접 실행한 검사 | 결과 |
+| --- | --- | --- |
+| 수정 전 service와 신규 다중 요청 회귀 | 정상 미발견·도구 오류·보강 실패·취소 | 4 failed, 모두 생략 path 누락 재현 |
+| develop `09a6f77` + #125 `23873ef` + #126 실행 연결 + #135 + 로컬 Context 후속 | PostgreSQL service·Context 한계·조회 상한 | 23 passed, skip 0, 최종 별도 adapter 연결 후 99.36초 |
+| 같은 최종 로컬 결합 | Mypy app·변경한 Python 4파일 Ruff·format | 152 source 및 4파일 통과 |
+| #135 단독 게시 소스 | BE Ruff·format·조회 상한 | 통과, format 257파일·3 passed |
+| 같은 단독 게시 소스 | Mypy app | 선행 없는 원래 base 기준 1파일 15오류, 134 source |
+
+로컬 Context 보완은 #133 patch01·02의 정확한 base/result blob과 SHA를 확인해 적용했다.
+다른 미적용 패치나 선행 코드는 게시본에 복사하지 않았다. 최종 별도 adapter는 #126 후속 수정본을 사용했다.
+게시본과 로컬 결합의 service·신규 회귀 bytes는 같으며 기존 service 테스트·도우미의 AST도 보존했다.
+기록의 공용 파일 끝 충돌은 기존 실행 기록 내용을 보존한 배치와 이미 병합된 고정 배분 안내만 정리했다.
+최신 develop과 게시 head의 실제 merge-tree는 충돌이 없다. 필요한 #125·#126과 Context 후속의 일반 코드
+반영 및 실제 게시본 재검증 전에는 단독 실행 완료로 보지 않는다. 위 검사는 새 집중 검사이며 이전
+전체 BE·AI 결과나 실제 외부 모델·GitHub·배포·전체 WS 검증 수치를 재사용하지 않는다.
+
+## 기록 관리 기준
+
 AI 작업의 구현·수정 내역, 코드 위치, 실행 결과와 남은 작업을 관리하는 원본이다.
 기능 요구사항·초기 설계·검증 방법은 각 명세에, 지속할 결정의 맥락·이유·영향은
 [decisions](decisions/README.md)에 보존한다. 문서 역할은
