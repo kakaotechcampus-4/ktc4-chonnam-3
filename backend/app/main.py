@@ -22,6 +22,7 @@ from app.features.auth.router import router as auth_router
 from app.features.auth.session_store import SessionStore
 from app.features.documents.router import router as documents_router
 from app.features.me.router import router as me_router
+from app.features.report.router import router as report_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -68,6 +69,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(auth_router, prefix=settings.api_prefix)
     application.include_router(me_router, prefix=settings.api_prefix)
     application.include_router(documents_router, prefix=settings.api_prefix)
+    application.include_router(report_router, prefix=settings.api_prefix)
 
     @application.get(f"{settings.api_prefix}/health", tags=["ops"])
     async def health() -> dict[str, str]:
