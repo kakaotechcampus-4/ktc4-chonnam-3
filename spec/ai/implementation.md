@@ -946,6 +946,47 @@ DB fixture는 사용자·공고 원문 JSON·분석 steps·질문 Contract·호�
   (`backend/app/llm_tasks/repo_shallow.py`)와 `repo_analyze`의 저장 매핑·캐시 조회 구현은 이번 범위
   밖이며 후속 작업이다. L0-b 입력 수집은 BE PR #45 범위다.
 
+<a id="pr156-review-followup-20261031"></a>
+
+## 2026-10-31 — PR #156 리뷰 후속의 cron·답변 Context 경계 보완
+
+- 원본 head `fa217cd`를 `backup/pr156-before-review-fix-20261031`에 보존하고 후속 커밋만 추가했다.
+  단독 게시본과 최신 develop `fa13526`을 합친 검증을 구분한다. #135·#136·#137 구현을 복사하지 않았다.
+- 부모 `cron_jobs=None`만 빈 sequence로 정규화했다. list·tuple·설정 부재·기존 분석 reaper의 1회 등록을
+  보존하고 잘못된 숫자 설정을 조용히 숨기지 않는다. 공개 `answer_turn_no` 키워드와 호출부를 맞추고
+  asked/answered·현재 질문의 history 제외·저장 전 None·bool 거절의 의미를 설명했다.
+- 두 Context 파일은 키워드명·docstring 정규화 후 원본과 AST가 같다. 잠금·실패 분류·답변 로직을 바꾸지 않았다.
+- #136과 수집 한계 key·저장소 ID·문자열 목록 형태를 대조하고 소비 경계 5사례를 추가했다. 실제 writer→DB→
+  worker 전체 통합 검사와 단독 소비 검사는 구분한다. 과거 패치 파일·SHA·base/result·적용 이력은 보존하고
+  manifest의 현재 blob과 후속 변경만 갱신했다.
+
+| 이번에 직접 실행한 검사 | 결과 |
+| --- | --- |
+| cron 수정 전 → 후 회귀 | 1 failed / 6 passed → 7 passed |
+| 공개 답변 키워드 수정 전 → 후 | 4 failed / 3 passed → 기존 PG 7개와 소비 경계 5개, 12 passed |
+| 게시본 전체 BE, 전용 PostgreSQL15·Redis7 | 1507 passed, skip0, 9 warnings |
+| 게시본 AI 전체 | 347 passed, skip0 |
+| 최신 develop + 수정본 AI 전체 | 372 passed, skip0 |
+| 최신 develop 결합본 BE package import·기존 계약 검사 | 55 passed |
+| BE / 게시본 AI / 결합본 AI Ruff·format·Mypy | 모두 통과. format348/57/60 files, Mypy159/13/14 source files |
+| 공통 계약 부분 검사 | schema2·부분 OpenAPI·fixture7 통과. 전체 API 호환성 검증은 아님 |
+
+BE 전체에는 전용 migration 검사도 포함돼 별도 1개를 더해 합산하지 않는다. 검사 전후 Python source hash가
+같고 최신 develop 결합본의 BE 앱·테스트는 게시본과 같다. 두 Context 파일의 호출자는 공개 키워드로 맞췄다.
+로컬 전체 검사 도중 전용 DB의 신규 연결은 `synchronous_commit=off`로 조정했다. SQL 가시성·잠금 검증이며
+정전 복구 내구성 검증이 아니다. 원격 CI의 별도 기본 PostgreSQL 환경과 구분한다. 관측 경고는 기존 Alembic
+설정과 pytest `record_property`/xunit2이며 통과 수에서 숨기지 않았다.
+
+현재 소스로 redirect 11사례, 실제 Gateway의 공유 예산·timeout/schema·선택→L2 3시나리오와 cron 6입력을
+확인했다. 동일 budget의 총2회는 저장소 작업 단위이며 준비 run 전체 상한으로 확대하지 않는다. 실제 #136의
+소유권/checkpoint 원문 일부를 사용한 제한 PG 대조에서 User 잠금을 포함한 경로는 정상이고, 보호를 인위적으로
+제외한 반례만 교착이었다. 이는 현재 경로의 장애나 준비 worker 전체 통과로 보고하지 않는다.
+
+운영 DB의 활성 prompt 본문·실제 GitHub 자격/잔여 quota·실모델 품질·전체 면접 서비스·운영 배포는 미검증이다.
+#156 이후 #135→#136→#137 반영과 최신 CI·REST/WS 양쪽 등록의 재검증 조건을 유지한다. 이전 리뷰의 1498개나
+과거 네 PR 결합의 1601/347개를 이번 수치로 재사용하지 않았다. 정확한 명령·XML·source hash·환경·미실행 범위는
+`.claude/scratch/pr156-review-fix-20261031/`에 보존한다.
+
 <a id="director-review-integration-20261030"></a>
 
 ## 2026-10-30 — Director 선행 패치의 실제 코드 적용과 수집 경계 보완

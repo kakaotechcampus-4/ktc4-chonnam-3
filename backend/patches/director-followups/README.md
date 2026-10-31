@@ -16,6 +16,14 @@ API를 대조한 뒤 일반 Python 코드에 수동 반영했다. `manifest.json
 적용 커밋은 보존하며 최신 대상 blob·후속 커밋은 manifest의 `current_target_blob`과
 `post_application_changes`로 구분한다. 원본 패치를 이 후속 코드 위에 다시 적용하지 않는다.
 
+## 2026-10-31 리뷰 후속의 현재 코드 기록
+
+답변용 Context 인자를 공개 키워드 `answer_turn_no`로 정리하고 제출 전·저장 후 동작과 bool 거절
+의도를 설명했다. 패치 1·2의 원래 base/result·`applied_in`과 패치 파일 SHA는 보존한다. 두 대상의
+현재 blob과 후속 커밋은 `current_target_blob`·`post_application_changes`, 이번 검증의 기준은
+`review_validation_reference`로 구분한다. 원본 패치를 최신 파일에 재적용하지 않는다.
+실행 결과와 미실행 범위는 [단일 구현 기록](../../../spec/ai/implementation.md#pr156-review-followup-20261031)에 둔다.
+
 ## 아래는 적용 전 검토·재현 기록
 
 이 디렉터리는 **Python 소스에 자동 적용하지 않는 검토 자료**다. 적용 대기인 패치 1·2·3과

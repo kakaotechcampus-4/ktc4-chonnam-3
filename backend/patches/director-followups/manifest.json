@@ -41,13 +41,19 @@
         "base": "2fc0103a8f97043c12965f5e182734548bab2fcf",
         "development_commit": "76e2ab1548722949a43346cc8bd912d51e075bf1"
       },
-      "current_target_blob": "1ccaa710c64493e368b366488aa8d8ad2b87e50b",
+      "current_target_blob": "5f88b642383827ac49e5da86a0477b650138b536",
       "post_application_changes": [
         {
           "commit": "fac3ae7cd6062dec94c738c3e8b4d7e89d60f82e",
           "target_blob": "1ccaa710c64493e368b366488aa8d8ad2b87e50b",
           "reason": "lock=True acquires shared Posting before JD and Frame to prevent a proven preparation/Context deadlock",
           "verification": "real load_context PostgreSQL lock regression: red 1 failed/1 passed, green 91 passed including previous Context/storage"
+        },
+        {
+          "commit": "38d42490d91313c18cec0d87a89da041e69a43cd",
+          "target_blob": "5f88b642383827ac49e5da86a0477b650138b536",
+          "reason": "Expose the answer_turn_no keyword and clarify existing current-answer semantics without changing runtime control flow.",
+          "verification": "Public keyword and wrapper equivalence for asked/answered turns1/9; exact-int invalid inputs; see spec/ai/implementation.md#pr156-review-followup-20261031."
         }
       ]
     },
@@ -83,7 +89,16 @@
         "target_blob": "c49ee3860dd83fafd179bcbc7991a251539e981f",
         "base": "2fc0103a8f97043c12965f5e182734548bab2fcf",
         "development_commit": "76e2ab1548722949a43346cc8bd912d51e075bf1"
-      }
+      },
+      "current_target_blob": "5a7e8596cafe9cf165056a6bfff814dda0ffdd44",
+      "post_application_changes": [
+        {
+          "commit": "38d42490d91313c18cec0d87a89da041e69a43cd",
+          "target_blob": "5a7e8596cafe9cf165056a6bfff814dda0ffdd44",
+          "reason": "Expose the answer_turn_no keyword and clarify existing current-answer semantics without changing runtime control flow.",
+          "verification": "Public keyword and wrapper equivalence for asked/answered turns1/9; exact-int invalid inputs; see spec/ai/implementation.md#pr156-review-followup-20261031."
+        }
+      ]
     },
     {
       "order": 3,
@@ -183,5 +198,11 @@
     "develop": "4e511a992d7954fa310146bcba2f2d4c6358fb69",
     "observed_on": "2026-10-28",
     "rule": "reference only; repeat API, blob and runtime checks after upstream changes"
+  },
+  "review_validation_reference": {
+    "develop": "fa1352693d49f1f5233997ce3576df96f20a9265",
+    "observed_on": "2026-10-31",
+    "reviewed_original_pr_head": "fa217cd10b4c4bd5a5a04a38e20d42634b715e2d",
+    "rule": "Followup validation only; historical patch files, base/result and application commits remain unchanged."
   }
 }
