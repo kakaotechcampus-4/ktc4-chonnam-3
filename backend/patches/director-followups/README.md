@@ -1,5 +1,31 @@
 # Director Context·L2 후속 패치
 
+## 2026-10-29 수동 적용 후 상태
+
+최신 `develop` `2fc0103`에는 #126과 공통 gateway가 병합돼 있다. 아래 2026-10-28 기록은
+당시 판단의 이력이다. 이번에는 패치 1·2·3의 원문 SHA-256, 대상 base/result blob과 gateway
+API를 대조한 뒤 일반 Python 코드에 수동 반영했다. `manifest.json`의 `applied_in`이 실제
+적용 커밋을 가리킨다. 세 패치의 `application_required`는 이제 `false`이며 재적용하지 않는다.
+패치 4도 계속 보관 전용이다. 원본 패치와 과거 base·선행 참조는 변경하지 않았다.
+
+현재 질문/답변 분리·9번째 턴, L2 공유 예산·완료 시도 보존·취소·원문 한계 전달을 새 회귀로
+검증했다. 수집 항목이 정확히 상한이고 미방문 디렉터리가 남는 경계도 추가 보완했다.
+실행 결과와 후속 실행 PR의 의존성은 `spec/ai/implementation.md`에 기록한다.
+
+일반 코드 반영 후 Context의 공유 공고 잠금 순서를 추가 보완했다. 패치 1의 원래 result blob과
+적용 커밋은 보존하며 최신 대상 blob·후속 커밋은 manifest의 `current_target_blob`과
+`post_application_changes`로 구분한다. 원본 패치를 이 후속 코드 위에 다시 적용하지 않는다.
+
+## 2026-10-31 리뷰 후속의 현재 코드 기록
+
+답변용 Context 인자를 공개 키워드 `answer_turn_no`로 정리하고 제출 전·저장 후 동작과 bool 거절
+의도를 설명했다. 패치 1·2의 원래 base/result·`applied_in`과 패치 파일 SHA는 보존한다. 두 대상의
+현재 blob과 후속 커밋은 `current_target_blob`·`post_application_changes`, 이번 검증의 기준은
+`review_validation_reference`로 구분한다. 원본 패치를 최신 파일에 재적용하지 않는다.
+실행 결과와 미실행 범위는 [단일 구현 기록](../../../spec/ai/implementation.md#pr156-review-followup-20261031)에 둔다.
+
+## 아래는 적용 전 검토·재현 기록
+
 이 디렉터리는 **Python 소스에 자동 적용하지 않는 검토 자료**다. 적용 대기인 패치 1·2·3과
 이미 선행 코드에서 해결돼 이력으로만 보존하는 패치 4를 함께 둔다. 미병합 선행 파일 전체를
 복사하지 않고 신규 수정 구간을 보존한다. 자료가 병합돼도 앱·worker·빌드·CI는 패치를 실행하지 않는다.

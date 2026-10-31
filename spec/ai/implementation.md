@@ -946,6 +946,105 @@ DB fixture는 사용자·공고 원문 JSON·분석 steps·질문 Contract·호�
   (`backend/app/llm_tasks/repo_shallow.py`)와 `repo_analyze`의 저장 매핑·캐시 조회 구현은 이번 범위
   밖이며 후속 작업이다. L0-b 입력 수집은 BE PR #45 범위다.
 
+<a id="pr156-review-followup-20261031"></a>
+
+## 2026-10-31 — PR #156 리뷰 후속의 cron·답변 Context 경계 보완
+
+- 원본 head `fa217cd`를 `backup/pr156-before-review-fix-20261031`에 보존하고 후속 커밋만 추가했다.
+  단독 게시본과 최신 develop `fa13526`을 합친 검증을 구분한다. #135·#136·#137 구현을 복사하지 않았다.
+- 부모 `cron_jobs=None`만 빈 sequence로 정규화했다. list·tuple·설정 부재·기존 분석 reaper의 1회 등록을
+  보존하고 잘못된 숫자 설정을 조용히 숨기지 않는다. 공개 `answer_turn_no` 키워드와 호출부를 맞추고
+  asked/answered·현재 질문의 history 제외·저장 전 None·bool 거절의 의미를 설명했다.
+- 두 Context 파일은 키워드명·docstring 정규화 후 원본과 AST가 같다. 잠금·실패 분류·답변 로직을 바꾸지 않았다.
+- #136과 수집 한계 key·저장소 ID·문자열 목록 형태를 대조하고 소비 경계 5사례를 추가했다. 실제 writer→DB→
+  worker 전체 통합 검사와 단독 소비 검사는 구분한다. 과거 패치 파일·SHA·base/result·적용 이력은 보존하고
+  manifest의 현재 blob과 후속 변경만 갱신했다.
+
+| 이번에 직접 실행한 검사 | 결과 |
+| --- | --- |
+| cron 수정 전 → 후 회귀 | 1 failed / 6 passed → 7 passed |
+| 공개 답변 키워드 수정 전 → 후 | 4 failed / 3 passed → 기존 PG 7개와 소비 경계 5개, 12 passed |
+| 게시본 전체 BE, 전용 PostgreSQL15·Redis7 | 1507 passed, skip0, 9 warnings |
+| 게시본 AI 전체 | 347 passed, skip0 |
+| 최신 develop + 수정본 AI 전체 | 372 passed, skip0 |
+| 최신 develop 결합본 BE package import·기존 계약 검사 | 55 passed |
+| BE / 게시본 AI / 결합본 AI Ruff·format·Mypy | 모두 통과. format348/57/60 files, Mypy159/13/14 source files |
+| 공통 계약 부분 검사 | schema2·부분 OpenAPI·fixture7 통과. 전체 API 호환성 검증은 아님 |
+
+BE 전체에는 전용 migration 검사도 포함돼 별도 1개를 더해 합산하지 않는다. 검사 전후 Python source hash가
+같고 최신 develop 결합본의 BE 앱·테스트는 게시본과 같다. 두 Context 파일의 호출자는 공개 키워드로 맞췄다.
+로컬 전체 검사 도중 전용 DB의 신규 연결은 `synchronous_commit=off`로 조정했다. SQL 가시성·잠금 검증이며
+정전 복구 내구성 검증이 아니다. 원격 CI의 별도 기본 PostgreSQL 환경과 구분한다. 관측 경고는 기존 Alembic
+설정과 pytest `record_property`/xunit2이며 통과 수에서 숨기지 않았다.
+
+현재 소스로 redirect 11사례, 실제 Gateway의 공유 예산·timeout/schema·선택→L2 3시나리오와 cron 6입력을
+확인했다. 동일 budget의 총2회는 저장소 작업 단위이며 준비 run 전체 상한으로 확대하지 않는다. 실제 #136의
+소유권/checkpoint 원문 일부를 사용한 제한 PG 대조에서 User 잠금을 포함한 경로는 정상이고, 보호를 인위적으로
+제외한 반례만 교착이었다. 이는 현재 경로의 장애나 준비 worker 전체 통과로 보고하지 않는다.
+
+운영 DB의 활성 prompt 본문·실제 GitHub 자격/잔여 quota·실모델 품질·전체 면접 서비스·운영 배포는 미검증이다.
+#156 이후 #135→#136→#137 반영과 최신 CI·REST/WS 양쪽 등록의 재검증 조건을 유지한다. 이전 리뷰의 1498개나
+과거 네 PR 결합의 1601/347개를 이번 수치로 재사용하지 않았다. 정확한 명령·XML·source hash·환경·미실행 범위는
+`.claude/scratch/pr156-review-fix-20261031/`에 보존한다.
+
+<a id="director-review-integration-20261030"></a>
+
+## 2026-10-30 — Director 선행 패치의 실제 코드 적용과 수집 경계 보완
+
+- 기준은 `develop@2fc0103`이다. #126·#133·#155 병합 상태와 패치 1·2·3의 정확한
+  base/result blob·원문 SHA-256을 대조했다. 현재 답변 Context·9번째 답변·L2 공유 예산·
+  완료 시도 기록·수집 한계 전달을 일반 Python 코드에 수동 반영했다. 패치 4는 이미 구현된
+  과거 자료로 보존하며 다시 적용하지 않는다. manifest에 적용 커밋을 기록했다.
+- 원문 수집기가 정확히 항목 상한에 도달했을 때 미방문 디렉터리가 남으면 확인하지 못한
+  범위를 명시한다. 상한에서 전체 구조를 다 읽은 경우에는 한계를 붙이지 않는다.
+- 공개 저장소 수집에는 기존 OAuth App ID/secret의 공개 데이터 전용 Basic 인증을 사용한다.
+  사용자 token의 파일 조회 권한을 확대하지 않는다. 명시적인 GitHub 요청만 만들며 client의
+  기본 인증·쿠키·redirect를 상속하지 않는다. 인증값 한쪽만 있는 설정은 익명으로 강등하지 않는다.
+  근거: [GitHub 공식 OAuth App rate limit 문서](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#primary-rate-limit-for-oauth-apps).
+- REST 발급과 WS 검사가 쓰는 realtime 키 함수는 기존 service에서 공개 이름 하나로 공유한다.
+  이미 develop에 있는 공통 파일의 변경이며 #137에 선행 REST 구현을 복사하지 않는다.
+
+| 이번 새 집중 검증 | 결과 |
+| --- | --- |
+| 현재 질문/이력·1/9턴의 저장 전후·잘못된 턴 | RED 7 failed → GREEN 7 passed, 기존 배분 검사와 합계 31 passed |
+| L2 예산·sink·source limitations·취소 | RED 2 failed → 기존 adapter와 합계 20 passed |
+| 정확한 구조 상한 2/512·미방문/완료/초과 | RED 2 failed/4 passed → 기존 수집 검사와 합계 9 passed |
+| 공개 앱 인증·비공개 전환·오류·비밀값 보호 | 신규 reader 11·collector 9사례의 RED 후 기존 도구 포함 78 passed, skip0 |
+
+추가 독립 검토에서 서로 다른 사용자의 준비와 기존 Context가 공유 공고·Frame을 반대로
+잠그는 SQLSTATE 40P01을 실제 PostgreSQL로 재현했다. `lock=True`에서 공고를 먼저 잠가
+순서를 통일했다. 신규 회귀 RED 1 failed/1 passed 후 기존 Context·storage 포함 91 passed,
+skip0을 확인했다. 앞선 공통 후보 241 passed는 이 잠금 보완 전 결과이며 최신 전체 결합·
+원격 검사는 별도로 기록한다. read-only 경로와 기존 Context AST는 추가 블록 외에 같다.
+
+위 결과는 전용 PostgreSQL 15와 외부 HTTP mock 기준이다. 실제 모델 품질·운영 GitHub 호출·배포
+성공을 뜻하지 않는다. #135~#137의 실행 연결은 각 후속 PR에만 두고 공통 PR에 복사하지 않는다.
+배포 worker의 선택적인 부모 cron을 계승하며 기존에 cron 설정이 없으면 ARQ의 빈 기본값을 유지한다.
+부모 작업 보존·빈 목록·설정 부재의 3개 회귀와 실제 배포 등록을 검사했다.
+
+### 최종 게시 소스를 결합한 새 전체 검증
+
+공통 게시본과 #135·#136·#137의 실제 게시 소스를 `develop@2fc0103` 위에 결합했다.
+검증용 로컬 head는 `7eb6a929cc2a`이며 원격 PR base는 모두 develop이다.
+REST·WS의 두 등록을 모두 보존하고, 부모 준비 cron을 실제 analysis worker가 계승하는 구성이다.
+
+| 새 전체 검사 | 결과 |
+| --- | --- |
+| PostgreSQL15·Redis7의 전체 BE pytest | 1601 passed, skip0, 1038.2초 |
+| AI 전체 pytest, 최종 AI source hash 동일 | 347 passed, skip0 |
+| 별도 DB의 Alembic upgrade/downgrade | 1 passed; 전체 BE에도 포함되므로 고유 건수에 더하지 않음 |
+| 실제 통합 DB의 Alembic upgrade head·check | 통과, No new upgrade operations detected |
+| BE / AI Ruff·format·Mypy | 모두 통과, format 367/57파일·type 163/13 source |
+| 부분 계약 검사 | schema 2개·부분 OpenAPI·fixture 7개 통과 |
+| 소스·게시 분리 | 실행 전후 Python 347파일 hash 동일, 소유 파일40개와 통합 소스 일치 |
+
+중단된 이전 전체 실행과 그 이전 집중 검사 수치는 이번 전체 통과로 재사용하지 않았다.
+전체 BE의 경고12개는 라이브러리의 기존 안내와 JUnit record_property 계측 경고이며 실패·skip과 구분한다.
+원격 CI는 각 PR 본문의 해당 head별 검사 링크로 확인한다. 선행 미병합으로 생기는 단독 CI
+실패를 이 로컬 결합의 통과와 구분한다. 실제 외부 모델·GitHub·Caddy/브라우저·운영 배포와
+abandon 후속은 검증하지 않았다. 기존 정책·보류 계약을 임의 확정하지 않는다.
+
+
 ## 2026-10-28 — PR #126 기존 어댑터 보존과 수집 한계 지침
 
 - 원본 `68c088f`를 `backup/pr126-before-review-fix-20261028`에 보존했다. 기존 `agent.py`는

@@ -6,6 +6,8 @@ DB 저장·캐시 조회는 service(pipeline deep_analysis)가 소유한다. 이
 """
 
 import uuid
+from collections.abc import Callable
+from dataclasses import replace
 from functools import partial
 
 import httpx
@@ -29,6 +31,9 @@ async def analyze_repository(
     prompt: c.PromptSpec,
     settings: LLMSettings,
     http_client: httpx.AsyncClient,
+    budget: CallBudget | None = None,
+    attempt_sink: list[c.AttemptMetadata] | None = None,
+    source_limitations: tuple[str, ...] = (),
 ) -> DeepResult:
     """저장소 하나의 L2 작업에 CallBudget 하나를 묶어 총 2회 호출로 제한한다.
 
@@ -38,16 +43,28 @@ async def analyze_repository(
     model_call = partial(
         call_model,
         api_key=settings.openai_api_key,
-        base_url=settings.llm_base_url,
         http_client=http_client,
-        budget=CallBudget(),
+        budget=budget if budget is not None else CallBudget(),
+        base_url=settings.llm_base_url,
+        attempt_sink=attempt_sink,
     )
+
+    async def with_source_limits(
+        request: c.ModelRequest,
+        validator: Callable[[object], c.ContractChecked[c.DeepAnalysisResult]],
+    ) -> DeepResult:
+        if source_limitations:
+            request = replace(
+                request, payload={**request.payload, "source_limitations": list(source_limitations)}
+            )
+        return await model_call(request, validator)
+
     return await analyze_deep(
         item,
         snapshot_head_sha=snapshot_head_sha,
         prompt=prompt,
         limits=settings.call_limits(),
-        model_call=model_call,
+        model_call=with_source_limits,
     )
 
 

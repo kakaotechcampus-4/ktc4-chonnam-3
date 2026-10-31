@@ -79,6 +79,50 @@ def _evidence(row: Evidence, refs: Mapping[UUID, str]) -> c.Evidence | None:
         return None
 
 
+def _limitation_texts(values: object) -> tuple[str, ...]:
+    return (
+        tuple(value for value in values if isinstance(value, str) and value.strip())
+        if isinstance(values, list)
+        else ()
+    )
+
+
+def _analysis_limitations(row: RepoAnalysis) -> tuple[str, ...]:
+    result = row.result or {}
+    notes = list(_limitation_texts(result.get("limitations")))
+    analysis = result.get("analysis")
+    if isinstance(analysis, dict):
+        notes.extend(_limitation_texts(analysis.get("limitations")))
+        areas = analysis.get("notable_areas")
+        if isinstance(areas, list):
+            for area in areas:
+                if isinstance(area, dict) and isinstance(path := area.get("path"), str):
+                    notes.extend(
+                        f"{path}: {note}" for note in _limitation_texts(area.get("limitations"))
+                    )
+    rejected = result.get("rejected_areas")
+    if isinstance(rejected, list):
+        for area in rejected:
+            if not isinstance(area, dict):
+                continue
+            reason = area.get("reason_summary")
+            if not isinstance(reason, str) or not reason.strip():
+                continue
+            path, stage = area.get("path"), area.get("stage")
+            scope = f" {path}" if isinstance(path, str) and path.strip() else ""
+            failure = f" ({stage})" if isinstance(stage, str) and stage.strip() else ""
+            # 검증에서 제외된 후보는 확인한 코드가 아니라 미확인 범위로만 전달한다.
+            notes.append(f"L2 후보 검증 제외{scope}{failure}: {reason}")
+    return tuple(dict.fromkeys(notes))
+
+
+def _preparation_limitations(interview: InterviewSession, repository_id: UUID) -> tuple[str, ...]:
+    per_repository = (interview.context_state or {}).get("preparation_repository_limitations")
+    if not isinstance(per_repository, dict):
+        return ()
+    return _limitation_texts(per_repository.get(str(repository_id)))
+
+
 async def load_context(
     session: AsyncSession,
     *,
@@ -87,11 +131,16 @@ async def load_context(
     limits: c.ContextLimits,
     lock: bool = False,
     quota: Mapping[str, int] | None = None,
+    answer_turn_no: int | None = None,
 ) -> c.Context:
     """소유권·활성 상태·답변 이력·고정 SHA를 검증해 DB 원본으로만 Context를 만든다.
 
     lock=True는 저장 직전 재검증용이며 읽은 행을 잠근다. 트랜잭션 종료는 호출자 책임이고,
-    반환값에는 세션·ORM·비밀값이 없다. Redis/context_state나 현재 HEAD로 빈 자료를 채우지 않는다.
+    반환값에는 세션·ORM·비밀값이 없다. Redis나 현재 HEAD로 빈 자료를 채우지 않으며,
+    context_state에서는 준비 과정이 기록한 저장소별 실제 수집 한계만 읽는다.
+
+    answer_turn_no는 제출 전·저장 후 현재 질문을 재검증하는 경로다. 해당 턴은 asked·answered를
+    모두 허용하되 history에는 넣지 않는다. None이면 다음 질문용이며 current_turn이 9이면 거절한다.
     """
     if quota is None:
         quota = get_settings().persona_turn_quota
@@ -112,7 +161,9 @@ async def load_context(
     if (
         interview.status not in ("preparing", "in_progress")
         or interview.total_turns != INTERVIEW_MAX_TURNS
-        or not 0 <= interview.current_turn < INTERVIEW_MAX_TURNS
+        or not 0 <= interview.current_turn <= INTERVIEW_MAX_TURNS
+        or (answer_turn_no is None and interview.current_turn == INTERVIEW_MAX_TURNS)
+        or (answer_turn_no is not None and interview.current_turn != answer_turn_no)
     ):
         raise AgentStateError("interview_state_invalid")
     turns = (
@@ -125,18 +176,26 @@ async def load_context(
             )
         )
     ).all()
+    history_turns = turns if answer_turn_no is None else turns[:-1]
     if (
         [turn.turn_no for turn in turns] != list(range(1, interview.current_turn + 1))
-        or any(turn.status != "answered" or not turn.answer_text for turn in turns)
+        or any(turn.status != "answered" or not turn.answer_text for turn in history_turns)
+        or (
+            answer_turn_no is not None
+            and (not turns or turns[-1].status not in ("asked", "answered"))
+        )
         or (turns and turns[0].persona != "hr_manager")
     ):
         raise AgentStateError("turn_history_invalid")
     counts: dict[str, int] = dict.fromkeys(PERSONAS, 0)
-    for turn in turns:
+    for turn in history_turns:
         if turn.persona not in counts:
             raise AgentStateError("persona_counts_invalid")
         counts[turn.persona] += 1
-    permitted = allowed_personas(counts, turn_no=interview.current_turn + 1, quota=quota)
+    target_turn = interview.current_turn + 1 if answer_turn_no is None else answer_turn_no
+    permitted = allowed_personas(counts, turn_no=target_turn, quota=quota)
+    if answer_turn_no is not None and turns[-1].persona not in permitted:
+        raise AgentStateError("persona_counts_invalid")
 
     selected = (
         await session.execute(
@@ -173,6 +232,11 @@ async def load_context(
             )
         )
     ).all()
+    if lock:
+        # 준비 검증과 같은 공고→요구사항·프레임 순서로 잠가 공유 자료의 교착을 막는다.
+        await session.scalar(
+            select(JobPosting.id).where(JobPosting.id == interview.job_posting_id).with_for_update()
+        )
     requirements = (
         await session.scalars(
             _fresh(
@@ -230,7 +294,19 @@ async def load_context(
                     for row in analyses
                     if row.repository_id == repo.id and row.head_sha == refs[repo.id]
                 ),
-                (),
+                tuple(
+                    dict.fromkeys(
+                        (
+                            *_preparation_limitations(interview, repo.id),
+                            *(
+                                value
+                                for row in analyses
+                                if row.repository_id == repo.id and row.head_sha == refs[repo.id]
+                                for value in _analysis_limitations(row)
+                            ),
+                        )
+                    )
+                ),
             )
             for selection, repo in selected
         )
@@ -242,13 +318,13 @@ async def load_context(
                 cast(str, turn.answer_text),
                 str(turn.id) if turn.analysis is not None else None,
             )
-            for turn in turns
+            for turn in history_turns
         )
         contract = c.decode(c.QuestionContract, turns[-1].question_contract) if turns else None
         return c.Context(
             interview_id=str(interview.id),
             current_turn_id=str(turns[-1].id) if turns else None,
-            turn_no=interview.current_turn + 1,
+            turn_no=target_turn,
             total_turns=INTERVIEW_MAX_TURNS,
             persona_counts=tuple(c.PersonaCount(persona, counts[persona]) for persona in PERSONAS),
             allowed_personas=permitted,

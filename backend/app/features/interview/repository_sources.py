@@ -107,6 +107,8 @@ async def _structure(
         # regular_blob이 같은 부모 tree를 다시 요청하지 않도록 검증한 목록을 공유한다.
         reader.trees[sha] = valid
         if observed >= settings.director_prepare_max_entries:
+            if queue:
+                limitations.append("구조 항목 상한으로 일부 디렉터리는 확인하지 못했습니다.")
             break
     return tuple(files), limitations
 
@@ -131,15 +133,22 @@ async def collect_repository_sources(
     limitations: list[str] = []
     sources: list[c.SourceDocument] = []
     active_path: str | None = None
-    reader = EvidenceReader(
-        http_client,
-        scope.full_name,
-        max_requests=settings.director_prepare_max_requests,
-        max_response_bytes=settings.director_evidence_max_response_bytes,
-        max_total_bytes=settings.director_evidence_max_total_bytes,
-        timeout_seconds=settings.director_prepare_timeout_seconds,
-    )
     try:
+        # 앱 자격은 공개 데이터 quota용이다. 사용자 저장소 token을 원문 조회로 확대하지 않는다.
+        app_auth = (
+            (settings.github_client_id, settings.github_client_secret)
+            if settings.github_client_id or settings.github_client_secret.get_secret_value()
+            else None
+        )
+        reader = EvidenceReader(
+            http_client,
+            scope.full_name,
+            max_requests=settings.director_prepare_max_requests,
+            max_response_bytes=settings.director_evidence_max_response_bytes,
+            max_total_bytes=settings.director_evidence_max_total_bytes,
+            timeout_seconds=settings.director_prepare_timeout_seconds,
+            public_app_auth=app_auth,
+        )
         if shallow.repository_id != scope.repository_id or shallow.head_sha != scope.git_ref:
             raise SourcePreparationError("l1_snapshot_mismatch")
         async with asyncio.timeout(settings.director_prepare_timeout_seconds):

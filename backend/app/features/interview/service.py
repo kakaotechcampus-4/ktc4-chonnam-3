@@ -263,11 +263,13 @@ def _remaining_seconds(interview: InterviewSession) -> int:
 
 # ★ rt:{sessionId} 와 rt:interview:{interviewId} 는 한 쌍이다. 같이 쓰고, TTL 연장·삭제도
 #   같이 한다 (WS·이탈·종료 처리 포함). 역방향 키는 GET 이 sessionId 를 다시 찾는 데 쓴다.
-def _rt_key(session_id: str) -> str:
+def realtime_session_key(session_id: str) -> str:
+    """REST 발급과 WS 소유권 검사가 공유하는 실시간 세션 키다."""
     return f"rt:{session_id}"
 
 
-def _reverse_key(interview_id: uuid.UUID) -> str:
+def realtime_interview_key(interview_id: uuid.UUID) -> str:
+    """영구 면접 ID에서 현재 실시간 세션을 찾는 역방향 키다."""
     return f"rt:interview:{interview_id}"
 
 
@@ -275,15 +277,15 @@ async def _issue_session_id(redis: ArqRedis, *, interview_id: uuid.UUID, user_id
     """새 sessionId 로 두 키를 쓴다. 다른 요청이 방금 먼저 썼으면 그 값을 돌려준다 (두 탭 GET)."""
     session_id = secrets.token_urlsafe(32)
     await redis.set(
-        _rt_key(session_id),
+        realtime_session_key(session_id),
         json.dumps({"interviewId": str(interview_id), "userId": str(user_id)}),
         ex=REALTIME_SESSION_TTL_SECONDS,
     )
-    reverse = _reverse_key(interview_id)
+    reverse = realtime_interview_key(interview_id)
     if not await redis.set(reverse, session_id, ex=REALTIME_SESSION_TTL_SECONDS, nx=True):
         winner = await redis.get(reverse)
         if winner is not None:
-            await redis.delete(_rt_key(session_id))
+            await redis.delete(realtime_session_key(session_id))
             return str(winner.decode())
         await redis.set(reverse, session_id, ex=REALTIME_SESSION_TTL_SECONDS)
     return session_id
@@ -293,11 +295,11 @@ async def _current_session_id(
     redis: ArqRedis, *, interview_id: uuid.UUID, user_id: uuid.UUID
 ) -> str:
     """살아 있는 sessionId 를 돌려준다. 만료됐거나 짝이 깨졌으면 새로 발급한다 (pipeline.md 4.4)."""
-    reverse = _reverse_key(interview_id)
+    reverse = realtime_interview_key(interview_id)
     found = await redis.get(reverse)
     if found is not None:
         session_id = str(found.decode())
-        if await redis.exists(_rt_key(session_id)):
+        if await redis.exists(realtime_session_key(session_id)):
             return session_id
         await redis.delete(reverse)
     return await _issue_session_id(redis, interview_id=interview_id, user_id=user_id)

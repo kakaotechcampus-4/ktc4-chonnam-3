@@ -2,7 +2,7 @@
 
 import json
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import cast
 from uuid import UUID
 
@@ -12,8 +12,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import InterviewSession, InterviewTurn, JobPosting, LLMCallRecord
-from app.features.interview.agent_context import AgentStateError
+from app.features.interview.agent_context import AgentStateError, load_context
 from app.features.interview.agent_queries import load_evidence_scope
+
+
+@dataclass(frozen=True)
+class AnswerContext:
+    context: c.Context
+    question: c.ContractChecked[c.Question]
+    turn_id: str
+    answer_text: str | None
 
 
 def restored_question(
@@ -48,6 +56,52 @@ def restored_question(
         )
     except c.ContractError:
         raise AgentStateError("question_contract_invalid") from None
+
+
+async def load_answer_context(
+    db: AsyncSession,
+    *,
+    user_id: UUID,
+    interview_id: UUID,
+    turn_no: int,
+    limits: c.ContextLimits,
+    lock: bool = False,
+) -> AnswerContext:
+    """9번째 답변까지 현재 질문을 history 밖에 둔 상태로 읽는다.
+
+    첫 제출 전 answer_text=None은 정상이다. 제출 문자열의 검증은 호출자가 맡는다.
+    """
+    # bool은 int의 하위 타입이므로 True를 1번 턴으로 받지 않도록 정확한 타입을 검사한다.
+    if type(turn_no) is not int or not 1 <= turn_no <= 9:
+        raise AgentStateError("answer_turn_invalid")
+    context = await load_context(
+        db,
+        user_id=user_id,
+        interview_id=interview_id,
+        limits=limits,
+        lock=lock,
+        answer_turn_no=turn_no,
+    )
+    query = (
+        select(InterviewTurn)
+        .where(
+            InterviewTurn.interview_session_id == interview_id,
+            InterviewTurn.turn_no == turn_no,
+        )
+        .execution_options(populate_existing=True)
+    )
+    if lock:
+        query = query.with_for_update()
+    turn = await db.scalar(query)
+    if turn is None:
+        raise AgentStateError("answer_turn_invalid")
+    sources = await reference_texts(db, interview_id)
+    return AnswerContext(
+        context,
+        restored_question(turn, context, source_texts=sources),
+        str(turn.id),
+        turn.answer_text,
+    )
 
 
 async def reference_texts(db: AsyncSession, interview_id: UUID) -> dict[c.BasisRef, str]:

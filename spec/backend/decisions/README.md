@@ -4,6 +4,9 @@
 
 ## BE 내부 구현 결정
 
+- [0010 공개 저장소의 OAuth App 인증](0010-public-repository-app-auth.md): Proposed.
+  기존 앱 자격 증명으로 공개 데이터를 조회하며 사용자 token의 비공개 접근 범위를 확대하지 않는다.
+
 - [0005 Director 호출·저장과 고정 코드 Evidence 경계](0005-director-storage-boundary.md):
   Proposed. 짧은 DB transaction, 호출 기록, 고정 SHA 근거의 검증·저장 경계를 정의한다.
 
