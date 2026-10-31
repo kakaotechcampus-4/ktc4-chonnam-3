@@ -1,0 +1,3 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# 기본값: develop(기본 브랜치) 대상 PR만 자동 리뷰, draft 제외
+language: ko-KR
