@@ -77,7 +77,7 @@ async def test_worker_success_enqueues_profile_summary_and_releases_lock(
     )
 
 
-async def test_worker_failure_records_history_and_releases_lock(
+async def test_worker_failure_records_history_and_keeps_lock(
     app, db, ctx, prompt, worker_env, enqueue, monkeypatch
 ):
     interview, _ = ctx
@@ -85,11 +85,24 @@ async def test_worker_failure_records_history_and_releases_lock(
     await app.state.redis.set(f"report:gen:{interview.id}", "1")
     await worker.report_generate(worker_env, str(interview.id))
     assert await _counts(db) == (0, 0)
-    assert await app.state.redis.exists(f"report:gen:{interview.id}") == 0
+    # 실패 후에는 lock TTL 이 냉각 시간이라 폴링이 바로 재enqueue 하지 못한다.
+    assert await app.state.redis.exists(f"report:gen:{interview.id}") == 1
     assert await app.state.redis.get(f"report:fail:{interview.id}") in (
         b"report_invalid",
         "report_invalid",
     )
+    enqueue.assert_not_awaited()
+
+
+async def test_worker_skipped_releases_lock(app, db, ctx, prompt, worker_env, enqueue, monkeypatch):
+    interview, _ = ctx
+    interview.status = "abandoned"
+    await db.commit()
+    _use(monkeypatch, FakeGenerator())
+    await app.state.redis.set(f"report:gen:{interview.id}", "1")
+    await worker.report_generate(worker_env, str(interview.id))
+    assert await app.state.redis.exists(f"report:gen:{interview.id}") == 0
+    assert await app.state.redis.exists(f"report:fail:{interview.id}") == 0
     enqueue.assert_not_awaited()
 
 

@@ -3,7 +3,9 @@
 features/report 로직을 호출하고 성공 뒤 profile_summary 를 enqueue 한다.
 면접 종료만으로 자동 생성하지 않으며 자동 재시도도 없다(max_tries=1).
 재생성·수동 재시도는 Sprint 2다.
-실패하면 실패 코드를 Redis 에 남기고 어떤 결과든 마지막에 report:gen lock 을 푼다.
+실패하면 실패 코드를 Redis 에 남기고 report:gen lock 은 풀지 않는다. 실패 이력이 409 판정에
+연결되기 전까지 lock TTL(5분)이 냉각 시간이라 폴링마다 생성이 재시도되지 않는다.
+성공·skipped·exists 일 때만 lock 을 푼다.
 
 docs/layer-rules.md 1절 / task-16
 """
@@ -21,6 +23,7 @@ logger = get_logger(__name__)
 async def report_generate(ctx: dict[str, Any], interview_id: str) -> None:
     iid = uuid.UUID(interview_id)
     redis = ctx["redis"]
+    failed = False
     try:
         outcome = await service.generate_report(
             ctx["session_factory"],
@@ -31,10 +34,11 @@ async def report_generate(ctx: dict[str, Any], interview_id: str) -> None:
         if outcome == "created":
             await _enqueue_profile_summary(ctx, iid)
     except Exception as error:
+        failed = True
         code = service.failure_code(error)
         logger.warning("report_generate_failed", interview_id=interview_id, error_code=code)
         await service.record_failure(redis, iid, code)
-    finally:
+    if not failed:
         await service.release_lock(redis, iid)
 
 
