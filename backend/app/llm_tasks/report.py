@@ -148,6 +148,9 @@ def _feedbacks(raw: object) -> tuple[FeedbackDraft, ...]:
         )
     if len({f.persona for f in out}) != len(out):
         raise ReportDraftInvalidError("feedbacks.persona_duplicate")
+    # openapi agentFeedbacks 는 minItems=maxItems=3 이라 persona 3명이 모두 있어야 한다.
+    if {f.persona for f in out} != set(PERSONAS):
+        raise ReportDraftInvalidError("feedbacks.persona_missing")
     return tuple(out)
 
 

@@ -4,6 +4,7 @@ import copy
 
 import pytest
 
+from app.db.models.interview import PERSONAS
 from app.db.models.report import SCORE_KEYS
 from app.llm_tasks import report as adapter
 from app.llm_tasks.report import ReportDraftInvalidError, validate_draft
@@ -16,7 +17,8 @@ VALID = {
         for key, value in zip(SCORE_KEYS, (80, 70, 60, 90, 50, 100), strict=True)
     },
     "feedbacks": [
-        {"persona": "tech_lead", "tags": ["a"], "strengths": ["s"], "improvements": ["i"]}
+        {"persona": persona, "tags": ["a"], "strengths": ["s"], "improvements": ["i"]}
+        for persona in PERSONAS
     ],
 }
 
@@ -77,9 +79,15 @@ def test_unknown_or_duplicate_persona_fails():
     bad = [{"persona": "ceo", "tags": [], "strengths": [], "improvements": []}]
     with pytest.raises(ReportDraftInvalidError, match="persona"):
         validate_draft(_with(feedbacks=bad))
-    dup = VALID["feedbacks"] * 2
+    dup = VALID["feedbacks"] + VALID["feedbacks"][:1]
     with pytest.raises(ReportDraftInvalidError, match="persona_duplicate"):
         validate_draft(_with(feedbacks=dup))
+
+
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_fewer_than_three_personas_fails(count):
+    with pytest.raises(ReportDraftInvalidError, match="persona_missing"):
+        validate_draft(_with(feedbacks=VALID["feedbacks"][:count]))
 
 
 def test_non_mapping_output_fails():

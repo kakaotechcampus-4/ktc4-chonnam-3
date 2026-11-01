@@ -3,6 +3,7 @@
 import copy
 
 from app.core.config import LLMSettings
+from app.db.models.interview import PERSONAS
 from app.db.models.report import SCORE_KEYS
 
 SCORES = (80, 70, 60, 90, 50, 100)
@@ -14,7 +15,8 @@ OUTPUT = {
         for key, value in zip(SCORE_KEYS, SCORES, strict=True)
     },
     "feedbacks": [
-        {"persona": "tech_lead", "tags": ["t"], "strengths": ["s"], "improvements": ["i"]}
+        {"persona": persona, "tags": ["t"], "strengths": ["s"], "improvements": ["i"]}
+        for persona in PERSONAS
     ],
 }
 LLM = LLMSettings(
