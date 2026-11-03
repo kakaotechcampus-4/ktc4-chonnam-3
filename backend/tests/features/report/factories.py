@@ -32,10 +32,21 @@ FEEDBACK = [
 COVERAGE = {"totalRequirements": 8, "coveredRequirements": 5, "uncoveredRequirements": ["Kafka"]}
 
 
-async def seed_criteria(db: AsyncSession) -> None:
-    """score_criteria 6행. display_order 는 SCORE_KEYS 순서다."""
+def sample_rubric(key: str) -> dict[str, Any]:
+    """rubric 구조는 바뀔 수 있어 BE 가 해석하지 않는다. 테스트는 값이 그대로 전달되는지만 본다."""
+    return {"levels": {"0": f"{key} 0단계", "4": f"{key} 4단계"}}
+
+
+async def seed_criteria(db: AsyncSession, *, active: bool = True) -> None:
+    """score_criteria 6행. display_order 는 SCORE_KEYS 순서다. 운영 seed 는 아직 비활성이다."""
     db.add_all(
-        ScoreCriterion(score_key=key, label_ko=LABELS[key], display_order=i)
+        ScoreCriterion(
+            score_key=key,
+            label_ko=LABELS[key],
+            display_order=i,
+            rubric=sample_rubric(key),
+            is_active=active,
+        )
         for i, key in enumerate(SCORE_KEYS)
     )
     await db.flush()

@@ -3,7 +3,7 @@
 import copy
 
 import pytest
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 
 from app.db.models import (
     InterviewReport,
@@ -11,27 +11,16 @@ from app.db.models import (
     JdRequirement,
     PromptVersion,
     ReportScore,
+    ScoreCriterion,
 )
 from app.db.models.report import SCORE_KEYS
 from app.features.report import service
-from app.llm_tasks.report import ReportDraftInvalidError
+from app.llm_tasks.prompt_loader import PromptNotFoundError
+from app.llm_tasks.report import ReportDraftInvalidError, ReportRubricUnavailableError
 
 from ..interview.factories import make_turn
+from .factories import sample_rubric
 from .fakes import LLM, OUTPUT, FakeGenerator
-
-
-@pytest.fixture
-async def prompt(db):
-    db.add(
-        PromptVersion(
-            task_name="report",
-            version="fixture-v1",
-            model="fixture-model",
-            template="t",
-            is_active=True,
-        )
-    )
-    await db.commit()
 
 
 async def _generate(app, ctx, generator):
@@ -55,7 +44,7 @@ async def test_saves_report_and_six_scores(app, db, ctx, prompt):
     assert await _generate(app, ctx, FakeGenerator()) == "created"
     report = await db.scalar(select(InterviewReport))
     assert (report.headline, float(report.total_score)) == ("한 줄 총평", 75.0)
-    assert (report.model, report.prompt_version) == ("fixture-model", "fixture-v1")
+    assert (report.model, report.prompt_version) == ("report-model", "report_v1+report_score_v1")
     assert report.generated_at is not None
     assert report.feedback_json[0]["persona"] == "tech_lead"
     rows = (await db.scalars(select(ReportScore))).all()
@@ -70,6 +59,77 @@ async def test_payload_has_only_fixed_score_keys_and_turns(app, ctx, prompt):
     assert payload["score_keys"] == list(SCORE_KEYS)
     assert [t["turn_no"] for t in payload["turns"]] == [1]
     assert "score_criteria" not in payload
+
+
+async def test_payload_turn_and_evidence_fields(app, db, ctx, prompt):
+    interview, _ = ctx
+    await db.execute(
+        update(InterviewTurn)
+        .where(InterviewTurn.interview_session_id == interview.id)
+        .values(parent_turn_no=None, decision={"next": "follow_up"})
+    )
+    await db.commit()
+    generator = FakeGenerator()
+    await _generate(app, ctx, generator)
+    turn = generator.calls[0]["turns"][0]
+    assert "parent_turn_no" in turn
+    assert "decision" not in turn
+    assert all("id" in e for e in turn["evidences"])
+
+
+async def test_loads_both_prompts(app, ctx, prompt):
+    generator = FakeGenerator()
+    await _generate(app, ctx, generator)
+    assert set(generator.prompts) == {"report", "report_score"}
+    assert generator.prompts["report_score"].version == "report_score_v1"
+
+
+async def test_missing_score_prompt_fails_without_calling_ai(app, db, ctx, prompt):
+    await db.execute(delete(PromptVersion).where(PromptVersion.task_name == "report_score"))
+    await db.commit()
+    generator = FakeGenerator()
+    with pytest.raises(PromptNotFoundError):
+        await _generate(app, ctx, generator)
+    assert generator.calls == []
+    assert await _counts(db) == (0, 0)
+
+
+async def test_rubrics_are_passed_through_unparsed(app, ctx, prompt):
+    generator = FakeGenerator()
+    await _generate(app, ctx, generator)
+    assert generator.calls[0]["rubrics"] == {key: sample_rubric(key) for key in SCORE_KEYS}
+
+
+async def test_rubric_shape_change_is_not_interpreted(app, db, ctx, prompt):
+    # rubric 형식이 바뀌어도(예: 배열) BE 는 구조를 읽지 않고 그대로 넘긴다.
+    await db.execute(update(ScoreCriterion).values(rubric=["a", {"b": 1}]))
+    await db.commit()
+    generator = FakeGenerator()
+    await _generate(app, ctx, generator)
+    assert generator.calls[0]["rubrics"] == {key: ["a", {"b": 1}] for key in SCORE_KEYS}
+
+
+@pytest.mark.parametrize("active_count", [0, 5])
+async def test_fewer_than_six_active_rubrics_fails(app, db, ctx, prompt, active_count):
+    await db.execute(update(ScoreCriterion).values(is_active=False))
+    await db.execute(
+        update(ScoreCriterion)
+        .where(ScoreCriterion.score_key.in_(SCORE_KEYS[:active_count]))
+        .values(is_active=True)
+    )
+    await db.commit()
+    generator = FakeGenerator()
+    with pytest.raises(ReportRubricUnavailableError):
+        await _generate(app, ctx, generator)
+    assert generator.calls == []
+    assert await _counts(db) == (0, 0)
+
+
+async def test_model_call_factory_gives_each_call_its_own_budget(app, ctx, prompt):
+    generator = FakeGenerator()
+    await _generate(app, ctx, generator)
+    first, second = generator.factory(), generator.factory()
+    assert first.keywords["budget"] is not second.keywords["budget"]
 
 
 async def test_coverage_counts_requirements_asked(app, db, ctx, prompt):

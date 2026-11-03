@@ -30,14 +30,25 @@ def _with(**changes):
 
 
 def test_total_score_is_simple_average():
-    assert validate_draft(VALID).total_score == 75.0
+    assert validate_draft(VALID).total_score == 75
 
 
-def test_total_score_rounds_to_two_decimals():
+@pytest.mark.parametrize(
+    ("scores", "expected"),
+    [
+        ((10, 10, 10, 10, 10, 11), 10),  # 10.17 -> 내림
+        ((10, 10, 10, 10, 10, 13), 11),  # 10.5 -> 올림(half-up, 짝수 반올림 아님)
+        ((11, 11, 11, 11, 11, 12), 11),  # 11.17 -> 내림
+        ((0, 0, 0, 0, 0, 0), 0),
+        ((100, 100, 100, 100, 100, 100), 100),
+    ],
+)
+def test_total_score_rounds_half_up_to_integer(scores, expected):
     data = copy.deepcopy(VALID)
-    for key, value in zip(SCORE_KEYS, (10, 10, 10, 10, 10, 11), strict=True):
+    for key, value in zip(SCORE_KEYS, scores, strict=True):
         data["scores"][key]["score"] = value
-    assert validate_draft(data).total_score == 10.17
+    assert validate_draft(data).total_score == expected
+    assert adapter.total_score(scores) == expected
 
 
 def test_boundary_scores_are_accepted():
@@ -61,7 +72,9 @@ def test_extra_score_key_fails():
         validate_draft(data)
 
 
-@pytest.mark.parametrize("bad", [-1, 100.5, None, "80", True, float("nan"), float("inf")])
+@pytest.mark.parametrize(
+    "bad", [-1, 101, 100.5, 80.0, None, "80", True, float("nan"), float("inf")]
+)
 def test_invalid_score_value_fails(bad):
     data = copy.deepcopy(VALID)
     data["scores"]["communication"]["score"] = bad

@@ -132,6 +132,17 @@ async def list_turn_evidences(
     return out
 
 
+async def list_active_rubrics(db: AsyncSession) -> dict[str, object]:
+    """활성 score_criteria 의 rubric. 출력: score_key -> rubric (구조는 해석하지 않고 그대로 둔다).
+
+    비활성 행은 검수 전 기준이라 읽지 않는다. 활성 key 가 6개인지는 service 가 판단한다.
+    """
+    rows = await db.execute(
+        select(ScoreCriterion.score_key, ScoreCriterion.rubric).where(ScoreCriterion.is_active)
+    )
+    return {key: rubric for key, rubric in rows}
+
+
 async def list_requirements(db: AsyncSession, *, posting_id: uuid.UUID) -> list[JdRequirement]:
     """공고 요구사항을 display_order 순으로. coverage 계산의 분모다."""
     rows = await db.scalars(

@@ -7,7 +7,6 @@ AI 모듈이 아직 없으면 ``ReportModuleUnavailableError`` 로 실패하며 
 """
 
 import importlib
-import math
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol, cast
@@ -26,13 +25,17 @@ class ReportModuleUnavailableError(RuntimeError):
     """AI의 report 모듈 또는 진입 함수가 없을 때 발생한다."""
 
 
+class ReportRubricUnavailableError(RuntimeError):
+    """활성 score_criteria rubric 이 SCORE_KEYS 6개와 정확히 같지 않을 때 발생한다."""
+
+
 class ReportDraftInvalidError(ValueError):
     """AI 모듈 출력이 저장 가능한 모양이 아닐 때 발생한다. 값을 보정해 저장하지 않는다."""
 
 
 @dataclass(frozen=True)
 class ScoreDraft:
-    score: float
+    score: int
     reason: str | None
     evidence_turn_nos: tuple[int, ...]
 
@@ -47,29 +50,31 @@ class FeedbackDraft:
 
 @dataclass(frozen=True)
 class ReportDraft:
-    """검증을 통과한 AI 출력. total_score 는 6개 점수의 단순 평균이다."""
+    """검증을 통과한 AI 출력. total_score 는 6개 정수 점수 평균의 half-up 정수 반올림이다."""
 
     headline: str
     summary: str
     scores: Mapping[str, ScoreDraft]
     feedbacks: tuple[FeedbackDraft, ...]
-    total_score: float
+    total_score: int
 
 
 class ReportGenerator(Protocol):
     """AI 모듈 ``generate_report`` 가 따라야 할 호출 형태.
 
-    payload 는 BE가 모은 문답·분석·근거 입력이고, 반환값은 검증 전 원문 객체다.
-    공급자 호출은 주입된 model_call(BE gateway) 로만 한다.
+    payload 는 BE가 모은 문답·분석·근거·rubric 입력이고, 반환값은 검증 전 원문 객체다.
+    prompts 는 task 이름(report, report_score) → 활성 prompt 다.
+    공급자 호출은 model_call_factory() 가 돌려주는 BE gateway 호출로만 하며, 호출할 때마다
+    새 CallBudget 이 묶여 task 마다 총 2회 시도를 따로 쓴다.
     """
 
     async def __call__(
         self,
         payload: Mapping[str, object],
         *,
-        prompt: c.PromptSpec,
+        prompts: Mapping[str, c.PromptSpec],
         limits: c.CallLimits,
-        model_call: ModelCall,
+        model_call_factory: Callable[[], ModelCall],
     ) -> Mapping[str, object]: ...
 
 
@@ -85,10 +90,15 @@ def resolve_generator() -> ReportGenerator:
     return cast(ReportGenerator, generator)
 
 
+def total_score(scores: Sequence[int]) -> int:
+    """정수 점수 6개의 단순 평균을 한 번 반올림한다. .5 는 올린다(AI report_scores 와 같은 규칙)."""
+    return (2 * sum(scores) + len(scores)) // (2 * len(scores))
+
+
 def validate_draft(raw: object) -> ReportDraft:
     """AI 출력을 검증하고 단순 평균 total_score 를 계산한다.
 
-    점수 key 는 SCORE_KEYS 6개와 정확히 같아야 하고 각 값은 0~100 유한 number 다(bool 제외).
+    점수 key 는 SCORE_KEYS 6개와 정확히 같아야 하고 각 값은 0~100 정수다(bool·소수 불가).
     누락·null·범위 밖 값을 0점이나 평균으로 채우지 않는다.
     """
     data = _mapping(raw, "report")
@@ -98,25 +108,19 @@ def validate_draft(raw: object) -> ReportDraft:
     if set(raw_scores) != set(SCORE_KEYS):
         raise ReportDraftInvalidError("scores.keys")
     scores = {key: _score(key, raw_scores[key]) for key in SCORE_KEYS}
-    total = round(sum(item.score for item in scores.values()) / len(SCORE_KEYS), 2)
     return ReportDraft(
         headline=headline,
         summary=summary,
         scores=scores,
         feedbacks=_feedbacks(data.get("feedbacks")),
-        total_score=total,
+        total_score=total_score([item.score for item in scores.values()]),
     )
 
 
 def _score(key: str, raw: object) -> ScoreDraft:
     item = _mapping(raw, f"scores.{key}")
     value = item.get("score")
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(value)
-        or not 0 <= value <= 100
-    ):
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 100:
         raise ReportDraftInvalidError(f"scores.{key}.score")
     reason = item.get("reason")
     if reason is not None and not isinstance(reason, str):
@@ -126,7 +130,7 @@ def _score(key: str, raw: object) -> ScoreDraft:
         raise ReportDraftInvalidError(f"scores.{key}.evidence_turn_nos")
     if any(isinstance(n, bool) or not isinstance(n, int) or n < 1 for n in turns):
         raise ReportDraftInvalidError(f"scores.{key}.evidence_turn_nos")
-    return ScoreDraft(float(value), reason, tuple(turns))
+    return ScoreDraft(value, reason, tuple(turns))
 
 
 def _feedbacks(raw: object) -> tuple[FeedbackDraft, ...]:
