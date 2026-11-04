@@ -329,3 +329,33 @@ def test_pair_history_turn_needs_all_fields(tmp_path, missing):
     _write_report_pair(tmp_path, strong=strong)
     with pytest.raises(CaseError, match="history needs"):
         load_cases(tmp_path)
+
+
+def _quota_case(history, left):
+    inp = _input()
+    turns = enumerate(history, 1)
+    inp["payload"] = {
+        "history": [{"turn": n, "persona": p, "question": "q", "answer": "a"} for n, p in turns],
+        "persona_left": left,
+    }
+    return inp
+
+
+def test_persona_left_must_complete_the_interview_quota(tmp_path):
+    _pair(tmp_path, _quota_case(["hr_manager", "tech_lead"], {"tech_lead": 5, "domain_lead": 2}))
+    assert load_cases(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "left",
+    [
+        {"tech_lead": 4, "domain_lead": 2},
+        {"tech_lead": 5},
+        {"tech_lead": 5, "domain_lead": 2, "x": 1},
+    ],
+    ids=["tech short", "domain missing", "unknown persona"],
+)
+def test_persona_left_that_breaks_the_quota_is_rejected(tmp_path, left):
+    _pair(tmp_path, _quota_case(["hr_manager", "tech_lead"], left))
+    with pytest.raises(CaseError):
+        load_cases(tmp_path)

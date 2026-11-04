@@ -13,4 +13,4 @@
   {"kind": "forbidden", "output": "ask / tech_lead: 재발급이 일어나면 이전에 발급된 토큰들은 어떻게 되도록 하셨는지 다시 설명해 주세요."},
   {"kind": "forbidden", "output": "ask / hr_manager: 팀에서 협업하며 힘들었던 점을 말씀해 주세요."}
  ],
- "review": {"status": "approved", "author": "geonyeong325", "reviewer": "kyeonsol", "reviewed_at": "2026-11-02", "pending_notes": []}}
+ "review": {"status": "unreviewed", "author": "geonyeong325", "reviewer": null, "reviewed_at": null, "pending_notes": []}}

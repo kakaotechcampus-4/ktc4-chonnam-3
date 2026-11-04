@@ -3,7 +3,7 @@
  "payload": {
   "turn": 5,
   "allowed_personas": ["tech_lead", "domain_lead"],
-  "persona_left": {"tech_lead": 3, "domain_lead": 1, "hr_manager": 0},
+  "persona_left": {"tech_lead": 4, "domain_lead": 1, "hr_manager": 0},
   "history": [{"turn": 1, "persona": "hr_manager", "question": "간단히 자기소개와 이 프로젝트에서 맡은 역할을 말씀해 주세요.", "answer": "백엔드를 맡았고 로그인과 토큰 재발급을 담당했습니다."}, {"turn": 2, "persona": "tech_lead", "question": "재발급할 때 기존 토큰은 어떻게 처리하셨나요?", "answer": "재발급과 동시에 기존 토큰 전체를 폐기하고, 폐기된 토큰으로 요청이 오면 거절하며 로그를 남깁니다."}, {"turn": 3, "persona": "tech_lead", "question": "의존성 구성은 어떻게 하셨나요?", "answer": "web, jpa, redis 스타터를 선언했고 redis는 토큰 저장에 씁니다."}, {"turn": 4, "persona": "domain_lead", "question": "개인정보가 담긴 토큰 로그는 어떻게 관리하나요?", "answer": "로그에는 사용자 번호만 남기고 토큰 값은 남기지 않습니다."}],
   "latest_analysis": {"evaluation_status": "evaluated", "sufficiency": "partial", "covered_points": ["재발급 시 기존 토큰 전체 폐기와 폐기 토큰 요청 거절(turn 2, 충분히 확인됨)", "로그에 토큰 값을 남기지 않음"], "missing_points": ["로그 보관 기간"]},
   "evidence": [],
