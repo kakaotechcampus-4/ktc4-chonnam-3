@@ -1,6 +1,7 @@
 """Render a one-page reviewer sheet per eval case. Not part of the runtime package.
 
 Usage (run in ai/): uv run python evals/review_sheet.py [case_id ...]
+Sheet file name: {case_id}.v{version}.md, so versions of one case do not overwrite each other.
 Sheets contain the answer key, so they go to the ignored ai/report/ folder, never to a model.
 """
 
@@ -26,6 +27,18 @@ _QUESTIONS = {
     "evidence": (
         "통과 항목이 원본 사실의 '확인 범위'를 넘지 않는가? (원본보다 넓지 않은가)",
         "실패 항목은 모두 원본 사실의 '미확인'에서 나온 넘겨짚기인가? 빠진 넘겨짚기는 없는가?",
+        *_SHARED,
+    ),
+    "report": (
+        "통과 항목은 입력 대화와 근거에 맞는 리포트 서술인가? 근거 없는 단정을 허용하지 않는가?",
+        "실패 항목은 모두 입력 대화나 근거에 어긋나는 서술인가? 빠진 실패 서술은 없는가?",
+        *_SHARED,
+    ),
+    "report_pair": (
+        "강한 사례의 답변이 약한 사례보다 비교 key에서 분명히 더 좋은가?",
+        "달라진 답변이 비교 key 외의 다른 key 점수를 좌우하지 않게 쓰였는가?",
+        "두 사례의 점수 차이가 `min_gap`의 두 배 이상 날 만큼 답변 차이가 충분한가?",
+        "비교 key를 평가하는 질문이 이 면접 대화에 실제로 있는가? (없으면 점수가 비교되지 않는다)",
         *_SHARED,
     ),
     "interview": (
@@ -97,7 +110,29 @@ def _payload(payload: dict[str, Any]) -> list[str]:
     return out
 
 
-def render_sheet(case: Case, fact: dict[str, str] | None) -> str:
+def _comparison(case: Case, partner: Case) -> list[str]:
+    pair = case.expectation["pair"]
+    role = {"stronger": "강한 사례", "weaker": "약한 사례"}[pair["role"]]
+    lines = [
+        "## 비교 정보 (쌍 사례)",
+        "",
+        f"쌍 `{pair['pair_id']}` / 이 사례는 **{role}** / "
+        f"상대 사례 `{partner.case_id}` v{partner.version} / 비교 key `{pair['key']}` / "
+        f"최소 점수 차이 `min_gap` {pair['min_gap']}점",
+        "",
+        "질문·Persona·근거는 두 사례가 같고, 아래 답변만 다르다.",
+        "",
+    ]
+    mine = {t["turn"]: t for t in case.payload["history"]}
+    rows: list[tuple[str, ...]] = [
+        (str(n), mine[n]["persona"], mine[n]["answer"], other["answer"])
+        for n, other in ((t["turn"], t) for t in partner.payload["history"])
+        if mine[n]["answer"] != other["answer"]
+    ]
+    return lines + _table(("turn", "Persona", "이 사례의 답변", "상대 사례의 답변"), rows) + [""]
+
+
+def render_sheet(case: Case, fact: dict[str, str] | None, partner: Case | None = None) -> str:
     exp, review = case.expectation, case.expectation["review"]
     lines = [
         f"# 검수 시트 — {case.case_id} v{case.version}",
@@ -122,6 +157,8 @@ def render_sheet(case: Case, fact: dict[str, str] | None) -> str:
     else:
         lines += ["## ② 원본 사실", ""]
         lines += _table(("항목", "내용"), [(k, fact[k]) for k in _FACT_ROWS if k in fact])
+    if partner is not None:
+        lines += ["", *_comparison(case, partner)]
     lines += ["", "## ③ 정답 기준 (작성자가 정함)", ""]
     lines += _table(("통과(허용)", "내용"), [(a["id"], a["purpose"]) for a in exp["allowed"]])
     lines += [""]
@@ -134,13 +171,16 @@ def render_sheet(case: Case, fact: dict[str, str] | None) -> str:
         ("종류", "가짜 답", "채점기가 내야 할 판정"),
         [(g["kind"], g["output"], _VERDICT[EXPECTED[g["kind"]]]) for g in exp["grader_controls"]],
     )
+    if interview:
+        kind = "interview"
+    elif case.kind == "report":
+        kind = "report_pair" if partner is not None else "report"
+    else:
+        kind = "evidence"
     lines += ["", "## 판단할 것", ""]
     lines += _table(
         ("#", "질문", "판정"),
-        [
-            (str(i), q, "□ 맞음 □ 수정 필요 □ 모름")
-            for i, q in enumerate(_QUESTIONS["interview" if interview else "evidence"], 1)
-        ],
+        [(str(i), q, "□ 맞음 □ 수정 필요 □ 모름") for i, q in enumerate(_QUESTIONS[kind], 1)],
     )
     lines += [
         "",
@@ -157,12 +197,26 @@ def main(root: Path, out_dir: Path, only: list[str]) -> list[Path]:
     fact_text = (root / "expectations" / "fact-table.md").read_text(encoding="utf-8")
     out_dir.mkdir(parents=True, exist_ok=True)
     written = []
-    for case in load_cases(root):
+    cases = load_cases(root)
+    by_pair: dict[str, list[Case]] = {}
+    for case in cases:
+        if "pair" in case.expectation:
+            by_pair.setdefault(case.expectation["pair"]["pair_id"], []).append(case)
+    for case in cases:
         if only and case.case_id not in only:
             continue
         fact_id = case.expectation.get("source_fact")
-        sheet = render_sheet(case, fact_record(fact_text, fact_id) if fact_id else None)
-        path = out_dir / f"{case.case_id}.md"
+        partners = [
+            c
+            for c in by_pair.get(case.expectation.get("pair", {}).get("pair_id"), [])
+            if c is not case
+        ]
+        sheet = render_sheet(
+            case,
+            fact_record(fact_text, fact_id) if fact_id else None,
+            partners[0] if partners else None,
+        )
+        path = out_dir / f"{case.case_id}.v{case.version}.md"
         path.write_text(sheet, encoding="utf-8", newline="\n")
         written.append(path)
     return written
