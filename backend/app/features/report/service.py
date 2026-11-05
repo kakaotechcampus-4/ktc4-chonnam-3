@@ -190,9 +190,10 @@ async def generate_report(
             return "exists"
         if interview.status != "completed":
             return "skipped"
-        turns = await queries.list_answered_turns(db, interview_id=interview_id)
-        if not turns:
+        answered = await queries.list_answered_turns(db, interview_id=interview_id)
+        if not answered:
             return "skipped"
+        turns = await queries.list_report_turns(db, interview_id=interview_id)
         posting = await db.get(JobPosting, interview.job_posting_id)
         requirements = await queries.list_requirements(db, posting_id=interview.job_posting_id)
         evidences = await queries.list_turn_evidences(db, interview_id=interview_id)
@@ -202,7 +203,7 @@ async def generate_report(
             # 검수 전(비활성) 기준이나 일부 key 만으로 채점하지 않는다. 활성화는 평가 담당 몫이다.
             raise ReportRubricUnavailableError(",".join(sorted(rubrics)))
         payload = _build_payload(posting, turns, evidences, requirements, rubrics)
-        coverage = _coverage(requirements, turns)
+        coverage = _coverage(requirements, answered)
         turn_ids = {t.turn_no: t.id for t in turns}
 
     generate = generator or resolve_generator()
@@ -274,7 +275,8 @@ def _build_payload(
                 "turn_no": t.turn_no,
                 "persona": t.persona,
                 "question": t.question_text,
-                "answer": t.answer_text,
+                # 답하지 못한 턴은 빈 답변으로 보낸다. AI 는 이를 0단계로 판정한다.
+                "answer": t.answer_text or "",
                 "question_contract": t.question_contract,
                 "analysis": t.analysis,
                 "parent_turn_no": t.parent_turn_no,
@@ -283,8 +285,12 @@ def _build_payload(
                     {
                         "id": str(e.id),
                         "usage": usage,
+                        "repository_id": None if e.repository_id is None else str(e.repository_id),
+                        "git_ref": e.git_ref,
                         "source_type": e.source_type,
                         "path": e.path,
+                        "metadata_key": e.metadata_key,
+                        "tool_name": e.tool_name,
                         "start_line": e.start_line,
                         "end_line": e.end_line,
                         "snippet": e.snippet,
@@ -310,7 +316,7 @@ def _coverage(requirements: list[JdRequirement], turns: list[InterviewTurn]) -> 
 
 
 def _score_rows(draft: ReportDraft, turn_ids: Mapping[int, uuid.UUID]) -> list[dict[str, object]]:
-    """ReportScore 값. 근거 turn 번호가 답변 완료 턴이 아니면 보정하지 않고 실패시킨다."""
+    """ReportScore 값. 근거 turn 번호가 이 면접의 턴이 아니면 보정하지 않고 실패시킨다."""
     rows: list[dict[str, object]] = []
     for key in SCORE_KEYS:
         item = draft.scores[key]

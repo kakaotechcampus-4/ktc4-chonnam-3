@@ -33,8 +33,8 @@ COVERAGE = {"totalRequirements": 8, "coveredRequirements": 5, "uncoveredRequirem
 
 
 def sample_rubric(key: str) -> dict[str, Any]:
-    """rubric 구조는 바뀔 수 있어 BE 가 해석하지 않는다. 테스트는 값이 그대로 전달되는지만 본다."""
-    return {"levels": {"0": f"{key} 0단계", "4": f"{key} 4단계"}}
+    """운영 seed 와 같은 {"0".."4": 문구} 모양. BE 는 구조를 해석하지 않고 그대로 전달한다."""
+    return {str(level): f"{key} {level}단계" for level in range(5)}
 
 
 async def seed_criteria(db: AsyncSession, *, active: bool = True) -> None:

@@ -12,13 +12,14 @@ from app.db.models import (
     PromptVersion,
     ReportScore,
     ScoreCriterion,
+    TurnEvidence,
 )
 from app.db.models.report import SCORE_KEYS
 from app.features.report import service
 from app.llm_tasks.prompt_loader import PromptNotFoundError
 from app.llm_tasks.report import ReportDraftInvalidError, ReportRubricUnavailableError
 
-from ..interview.factories import make_turn
+from ..interview.factories import make_evidence, make_turn
 from .factories import sample_rubric
 from .fakes import LLM, OUTPUT, FakeGenerator
 
@@ -215,3 +216,27 @@ async def test_invalid_output_saves_nothing(app, db, ctx, prompt, mutate):
     with pytest.raises(ReportDraftInvalidError):
         await _generate(app, ctx, FakeGenerator(output=_bad(mutate)))
     assert await _counts(db) == (0, 0)
+
+
+async def test_payload_includes_unanswered_turn_with_empty_answer(app, db, ctx, prompt):
+    interview, _ = ctx
+    await make_turn(db, interview, 2, persona="domain_lead")
+    await db.commit()
+    generator = FakeGenerator()
+    await _generate(app, ctx, generator)
+    turns = generator.calls[0]["turns"]
+    assert [(t["turn_no"], t["answer"]) for t in turns] == [(1, "답변 1"), (2, "")]
+
+
+async def test_payload_evidence_carries_repository_and_location_fields(app, db, ctx, prompt):
+    interview, repo = ctx
+    turn = await db.scalar(select(InterviewTurn).where(InterviewTurn.turn_no == 1))
+    evidence = await make_evidence(db, interview, repo, metadata_key=None, tool_name="read_file")
+    db.add(TurnEvidence(turn_id=turn.id, evidence_id=evidence.id, usage="question_basis"))
+    await db.commit()
+    generator = FakeGenerator()
+    await _generate(app, ctx, generator)
+    item = generator.calls[0]["turns"][0]["evidences"][0]
+    assert item["repository_id"] == str(repo.id)
+    assert item["git_ref"] == "a" * 40
+    assert (item["metadata_key"], item["tool_name"]) == (None, "read_file")
