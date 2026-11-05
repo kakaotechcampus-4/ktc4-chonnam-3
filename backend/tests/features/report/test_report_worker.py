@@ -100,7 +100,8 @@ async def test_worker_without_ai_module_records_failure(
     app, db, ctx, prompt, worker_env, enqueue, monkeypatch
 ):
     interview, _ = ctx
-    # 실제 resolve_generator 를 그대로 쓴다. AI 모듈에 generate_report 가 아직 없다.
+    # AI 모듈에 generate_report 가 없는 상태를 만든다(병합 뒤에도 실패 경로를 확인한다).
+    monkeypatch.delattr("devon_ai.llm_tasks.report.generate_report", raising=False)
     await worker.report_generate(worker_env, str(interview.id))
     assert await app.state.redis.get(f"report:fail:{interview.id}") in (
         b"report_module_unavailable",
@@ -149,4 +150,8 @@ def test_failure_codes_are_stable():
     assert service.failure_code(ReportModuleUnavailableError("x")) == "report_module_unavailable"
     assert service.failure_code(ReportDraftInvalidError("x")) == "report_invalid"
     assert service.failure_code(c.ContractError("schema", "x")) == "llm_failed"
+    assert (
+        service.failure_code(c.ContractError("semantic", "unscorable key"))
+        == "report_unscorable_key"
+    )
     assert service.failure_code(RuntimeError("x")) == "internal_error"

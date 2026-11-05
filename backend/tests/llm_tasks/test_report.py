@@ -108,7 +108,7 @@ def test_non_mapping_output_fails():
         validate_draft("not json object")
 
 
-def test_resolve_generator_without_ai_function_fails():
-    # AI 모듈은 아직 docstring 뿐이라 generate_report 가 없다.
+def test_resolve_generator_without_ai_function_fails(monkeypatch):
+    monkeypatch.delattr("devon_ai.llm_tasks.report.generate_report", raising=False)
     with pytest.raises(adapter.ReportModuleUnavailableError):
         adapter.resolve_generator()

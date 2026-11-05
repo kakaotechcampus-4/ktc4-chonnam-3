@@ -342,7 +342,8 @@ def failure_code(error: BaseException) -> str:
     if isinstance(error, ReportDraftInvalidError):
         return "report_invalid"
     if isinstance(error, c.ContractError):
-        return "llm_failed"
+        # 점수를 낼 수 없는 key 가 있으면 AI 가 실패시킨다. 점수 없음 계약 전까지 알려진 실패다.
+        return "report_unscorable_key" if error.field == "unscorable key" else "llm_failed"
     return "internal_error"
 
 
