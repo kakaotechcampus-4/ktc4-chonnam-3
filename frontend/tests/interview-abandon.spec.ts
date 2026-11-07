@@ -166,3 +166,24 @@ test('같은 레포로 다시 시작이 run_expired면 공고 입력부터 다�
   await page.getByRole('button', { name: '공고 입력부터 다시' }).click();
   await expect(page).toHaveURL(/\/interview\/new$/);
 });
+
+test('복구할 수 없는 질문 생성 실패 뒤에는 다시 연결하지 않는다', async ({ page }) => {
+  // #200의 원래 문제: recoverable true면 FE가 복구되지 않는 면접에 계속 재접속했다.
+  // 재연결은 항상 GET /interviews/{id}를 먼저 부르므로(useInterviewSocket) 그 호출 수로 센다.
+  await faults(page, QUESTION_FAILED_CLOSED);
+  let refetches = 0;
+  let counting = false;
+  page.on('request', (request) => {
+    if (!counting || request.method() !== 'GET') return;
+    if (new URL(request.url()).pathname.endsWith(`/interviews/${IN_PROGRESS}`)) refetches += 1;
+  });
+
+  await page.goto(`/interview/${IN_PROGRESS}/session`);
+  await expect(page.getByRole('button', { name: '같은 레포로 다시 시작' })).toBeVisible({
+    timeout: 15_000,
+  });
+  counting = true;
+  // 재연결 간격(2초)을 두 번 넘게 기다린다.
+  await page.waitForTimeout(5_000);
+  expect(refetches).toBe(0);
+});
