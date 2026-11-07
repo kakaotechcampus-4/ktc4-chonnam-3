@@ -18,12 +18,20 @@ import { isApiError, type StepKey, type StepStatus } from '@/types/api';
 
 type FailureAction = 'relink' | 'input' | 'none';
 
+/** tips는 경고 아래에 보여 줄 기준·해결 방법이다(짧은 제목 + 설명). 경고 문구는 한 줄로 둔다. */
+type FailureGuide = {
+  message: string;
+  action: FailureAction;
+  label?: string;
+  tips?: { title: string; body: string }[];
+};
+
 /**
  * failureReason 값은 frontend/docs/api-spec.md의 failureReason 표를 따른다. 없는 값은 DEFAULT_FAILURE.
  * failureReason은 job 코드라 HTTP reason과 다르다. GitHub 토큰 무효는 job 코드 token_invalid다(#144).
  * input은 공고 입력 화면에 이전 URL을 채워 보낸다. 다시 분석은 사용자가 그 화면에서 시작한다.
  */
-const FAILURE: Record<string, { message: string; action: FailureAction; label?: string }> = {
+const FAILURE: Record<string, FailureGuide> = {
   token_invalid: {
     message: 'GitHub 연동이 만료됐어요. 다시 연동한 뒤 분석해주세요.',
     action: 'relink',
@@ -33,13 +41,19 @@ const FAILURE: Record<string, { message: string; action: FailureAction; label?: 
   // 작은 크기(github/base.py filter_reason). 포트폴리오에 언급된 레포는 제외를 건너뛴다(BE 결정 0001).
   // 레포 목록은 로그인할 때만 다시 수집한다(auth/service.py).
   no_public_repo: {
-    message:
-      '분석할 수 있는 레포를 찾지 못했어요. 내 계정이 소유한 공개 레포만 분석해요. ' +
-      'fork·보관(archived)된 레포, 내용이 너무 적거나 주 언어가 없는 레포, 조직(organization) 레포는 제외돼요.\n' +
-      '제외된 레포도 포트폴리오에 레포 주소를 적어 첨부하면 분석할 수 있어요. ' +
-      '조직 레포는 내 계정으로 fork한 뒤 그 주소를 적어주세요. ' +
-      'GitHub에서 레포를 바꿨다면 다시 로그인해야 반영돼요.',
+    message: '분석할 수 있는 레포를 찾지 못했어요.',
     action: 'none',
+    tips: [
+      {
+        title: '분석 대상',
+        body: '내 계정이 소유한 공개 레포만 분석해요. fork·보관·조직 레포와 코드가 거의 없는 레포는 빠져요.',
+      },
+      {
+        title: '빠진 레포를 넣으려면',
+        body: '포트폴리오에 레포 주소를 적어 첨부해주세요. 조직 레포는 내 계정으로 fork한 주소를 적어주세요.',
+      },
+      { title: '레포를 새로 올렸다면', body: '다시 로그인한 뒤 시작해주세요.' },
+    ],
   },
   unsupported_site: {
     message: '지원하지 않는 공고 사이트예요. 공고 URL을 확인해주세요.',
@@ -74,9 +88,9 @@ const FAILURE: Record<string, { message: string; action: FailureAction; label?: 
   },
 };
 
-const DEFAULT_FAILURE = {
+const DEFAULT_FAILURE: FailureGuide = {
   message: '분석 중 일시적인 문제가 생겼어요. 다시 시도해주세요.',
-  action: 'input' as FailureAction,
+  action: 'input',
   label: '다시 시도',
 };
 
@@ -171,10 +185,24 @@ export default function AnalysisFailed() {
           {ready && (
             <div
               role="alert"
-              className="whitespace-pre-line rounded-card border border-error-soft bg-error-soft px-4 py-3 text-sm text-error"
+              className="rounded-card border border-error-soft bg-error-soft px-4 py-3 text-sm text-error"
             >
               {message}
             </div>
+          )}
+          {ready && !hasSucceededRepos && failure.tips && (
+            // 리포트의 요구사항 안내 박스(Report.tsx)와 같은 bg-paper 박스로 맞춘다.
+            <ul
+              aria-label="분석 기준과 해결 방법"
+              className="flex flex-col gap-3 break-keep rounded-lg bg-paper px-4 py-3"
+            >
+              {failure.tips.map((tip) => (
+                <li key={tip.title} className="flex flex-col gap-0.5">
+                  <p className="text-[13px] font-bold">{tip.title}</p>
+                  <p className="text-[13px] leading-relaxed text-muted">{tip.body}</p>
+                </li>
+              ))}
+            </ul>
           )}
           {ready && resultLoadFailed && (
             <div className="flex flex-col gap-3">

@@ -155,11 +155,18 @@ test('분석 실패는 failureReason별 안내와 이전 URL을 채운 공고 �
 test('분석할 레포가 없으면 분석 대상 기준과 포함하는 방법을 안내한다', async ({ page }) => {
   // 공개 레포가 있어도 fork·조직 레포만 있으면 같은 사유가 온다. 기준을 모르면 원인을 알 수 없다.
   await page.goto(`/interview/failed/${NO_PUBLIC_REPO_RUN}`);
+  // 경고는 한 줄로 두고, 기준과 방법은 따로 읽기 쉬운 목록으로 보여 준다.
   const alert = page.getByRole('alert');
-  await expect(alert).toContainText('내 계정이 소유한 공개 레포만 분석해요');
-  await expect(alert).toContainText('조직(organization) 레포');
-  await expect(alert).toContainText('포트폴리오에 레포 주소를 적어 첨부하면');
-  await expect(alert).toContainText('다시 로그인해야 반영돼요');
+  await expect(alert).toHaveText('분석할 수 있는 레포를 찾지 못했어요.');
+  const tips = page.getByRole('list', { name: '분석 기준과 해결 방법' }).getByRole('listitem');
+  await expect(tips).toHaveCount(3);
+  // 항목마다 짧은 제목을 두어 훑어보기 쉽게 한다.
+  await expect(tips.nth(0)).toContainText('분석 대상');
+  await expect(tips.nth(0)).toContainText('내 계정이 소유한 공개 레포만 분석해요');
+  await expect(tips.nth(1)).toContainText('빠진 레포를 넣으려면');
+  await expect(tips.nth(1)).toContainText('포트폴리오에 레포 주소를 적어 첨부해주세요');
+  await expect(tips.nth(2)).toContainText('레포를 새로 올렸다면');
+  await expect(tips.nth(2)).toContainText('다시 로그인');
   // 재시도 불가 사유라 공고 입력 버튼은 두지 않는다(spec/frontend/features/analysis.md).
   await expect(page.getByRole('button', { name: '홈으로' })).toBeVisible();
   await expect(page.getByRole('button', { name: /다시 시도|공고/ })).toHaveCount(0);
