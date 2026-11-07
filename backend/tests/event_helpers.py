@@ -23,3 +23,23 @@ def broken_events(monkeypatch: pytest.MonkeyPatch) -> None:
 
     real = events.Event
     monkeypatch.setattr(events, "Event", lambda **kw: real(**{**kw, "event_name": "not_allowed"}))
+
+
+def fail_commit_on(monkeypatch: pytest.MonkeyPatch, nth: int) -> None:
+    """AsyncSession.commit 의 nth 번째 호출을 DB 오류로 만든다. 이벤트 전용 commit 실패 주입용.
+
+    요청 처리 세션은 테스트의 db 와 다르므로 인스턴스가 아니라 클래스를 바꾼다.
+    """
+    from sqlalchemy.exc import OperationalError
+
+    real = AsyncSession.commit
+    calls = 0
+
+    async def commit(self: AsyncSession) -> None:
+        nonlocal calls
+        calls += 1
+        if calls == nth:
+            raise OperationalError("COMMIT", {}, Exception("connection lost"))
+        await real(self)
+
+    monkeypatch.setattr(AsyncSession, "commit", commit)

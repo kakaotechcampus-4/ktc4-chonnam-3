@@ -34,7 +34,7 @@ from app.features.interview.schemas import (
     InterviewTurn,
 )
 from app.shared.enums import Reason
-from app.shared.events import record_event
+from app.shared.events import commit_events, record_event
 
 # rt:{sessionId} TTL (docs/pipeline.md 4.4, docs/redis-keys.md).
 REALTIME_SESSION_TTL_SECONDS = 2 * 60 * 60
@@ -119,7 +119,7 @@ async def create_interview(
         interview_session_id=interview_id,
         payload={"repositoryCount": len(repository_ids)},
     )
-    await db.commit()
+    await commit_events(db)
     return interview_id, session_id
 
 

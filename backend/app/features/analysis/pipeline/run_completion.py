@@ -42,7 +42,7 @@ async def finish_run(ctx: dict[str, Any], run_id: UUID, status: str, error: str 
         run.status, run.error_code = status, error
         await record_event(
             db,
-            "analysis_run_failed" if status == "failed" else "analysis_run_completed",
+            "analysis_run_completed" if status == "succeeded" else "analysis_run_failed",
             user_id=run.user_id,
             analysis_job_id=run_id,
             payload={"status": status, "errorCode": error} if error else {"status": status},

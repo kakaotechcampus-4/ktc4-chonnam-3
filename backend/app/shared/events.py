@@ -46,3 +46,16 @@ async def record_event(
             await db.flush()
     except SQLAlchemyError:
         logger.warning("event_record_failed", event_name=event_name, exc_info=True)
+
+
+async def commit_events(db: AsyncSession) -> None:
+    """이벤트만 남은 트랜잭션을 commit 한다. commit 실패는 로그만 남기고 rollback 한다.
+
+    record_event 의 SAVEPOINT 는 INSERT 오류만 막는다. 이벤트 전용 commit 이 실패해도
+    이미 끝난 업무 결과의 응답을 막지 않도록, 업무 commit 뒤에만 호출한다.
+    """
+    try:
+        await db.commit()
+    except SQLAlchemyError:
+        logger.warning("event_commit_failed", exc_info=True)
+        await db.rollback()

@@ -35,6 +35,7 @@ async def _running(client, db) -> UUID:
     ("status", "error", "expected"),
     [
         ("succeeded", None, "analysis_run_completed"),
+        ("partial", "repo_analysis_failed", "analysis_run_failed"),
         ("failed", "internal_error", "analysis_run_failed"),
     ],
 )

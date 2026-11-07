@@ -1,10 +1,12 @@
 """repo_selected 이벤트 연결. task-17"""
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
+from app.db.models import InterviewSession
 from tests.event_helpers import broken_events as broken_events
-from tests.event_helpers import names
+from tests.event_helpers import fail_commit_on, names
 
 from .factories import make_repo, make_run, make_user
 from .test_service import FakeRedis, _create
@@ -39,6 +41,19 @@ async def test_repo_selected_failure_does_not_block_create(db: AsyncSession, bro
     interview_id, session_id = await _create(db, run, [r.id for r in repos])
 
     assert interview_id and session_id
+    assert await names(db) == []
+
+
+async def test_event_commit_failure_still_returns_created_ids(
+    db: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run, repos = await _selectable(db)
+    fail_commit_on(monkeypatch, nth=2)  # 1번째는 면접 본체, 2번째가 이벤트 전용 commit
+
+    interview_id, session_id = await _create(db, run, [r.id for r in repos])
+
+    assert interview_id and session_id
+    assert (await db.get(InterviewSession, interview_id)) is not None
     assert await names(db) == []
 
 

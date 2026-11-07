@@ -30,7 +30,7 @@ from app.features.report.schemas import (
     ScoreItem,
 )
 from app.shared.enums import Reason
-from app.shared.events import record_event
+from app.shared.events import commit_events, record_event
 
 # docs/redis-keys.md: report generation lock. worker 가 끝나기 전에 풀리면 중복 enqueue 가 난다.
 REPORT_LOCK_TTL_SECONDS = 5 * 60
@@ -57,7 +57,7 @@ async def get_report(
     if report is not None:
         response = await _build_report(db, interview, posting, report)
         await record_event(db, "report_viewed", user_id=user_id, interview_session_id=interview.id)
-        await db.commit()
+        await commit_events(db)
         return response
 
     if interview.status != "completed":
