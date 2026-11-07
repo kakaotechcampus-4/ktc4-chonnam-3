@@ -20,7 +20,6 @@ from app.integrations.github.base import (
     filter_reason,
 )
 from app.shared.enums import Reason
-from app.shared.events import record_event
 
 
 def repository_summary(repository: Repository) -> RepoSummary:
@@ -152,14 +151,6 @@ async def prepare_candidates(
         )
     session.add_all(rows)
     await session.flush()
-    if rows:
-        await record_event(
-            session,
-            "repo_recommended",
-            user_id=run.user_id,
-            analysis_job_id=run_id,
-            payload={"candidateCount": sum(r.filter_status != "excluded" for r in rows)},
-        )
     return rows
 
 

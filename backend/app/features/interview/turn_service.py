@@ -26,7 +26,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Evidence, InterviewSession, InterviewTurn, TurnEvidence
 from app.db.models.interview import PERSONAS
-from app.shared.events import record_event
 
 
 class TurnRejected(StrEnum):
@@ -125,12 +124,6 @@ async def save_question(
             await db.rollback()
             raise ValueError("evidence_ids 에 이 면접의 근거가 아닌 id 가 있다")
 
-    await record_event(
-        db,
-        "turn_asked",
-        interview_session_id=interview_id,
-        payload={"turnNo": turn_no, "depth": depth, "persona": persona},
-    )
     await db.commit()
     return turn
 
@@ -171,9 +164,6 @@ async def save_answer(
     )
     if saved is None:  # 쓴 게 없어 rollback 하지 않는다 (save_question 참고)
         return await _answer_rejection(db, interview_id, turn_no)
-    await record_event(
-        db, "turn_answered", interview_session_id=interview_id, payload={"turnNo": turn_no}
-    )
     await db.commit()
     return None
 
@@ -203,7 +193,6 @@ async def complete_interview(db: AsyncSession, *, interview_id: uuid.UUID) -> bo
     )
     if done is None:  # 쓴 게 없어 rollback 하지 않는다 (save_question 참고)
         return False
-    await record_event(db, "interview_completed", interview_session_id=interview_id)
     await db.commit()
     return True
 
