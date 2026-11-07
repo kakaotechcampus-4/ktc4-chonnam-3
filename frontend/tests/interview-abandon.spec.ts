@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 // 공통 0009: 나가기·레포 재선택의 abandon과 마이페이지 중단된 면접 행.
 // seed id는 src/mocks/db/config.ts를 따른다.
@@ -95,4 +95,95 @@ test('마이페이지 중단된 면접 행은 중단됨과 다시 도전하기�
 
   await row.getByRole('button', { name: '다시 도전하기 →' }).click();
   await expect(page).toHaveURL(/\/interview\/[^/]+\/prepare$/);
+});
+
+// 공통 0010: 진행 중 분석·질문 생성 실패는 question_failed recoverable false로 온다.
+// 면접은 in_progress로 남으므로 abandon을 거쳐 새 면접이나 홈으로 보낸다(이슈 #200).
+const QUESTION_FAILED_CLOSED = [
+  {
+    path: '/ws/interviews/*',
+    reason: 'question_failed',
+    code: 'ERR_QUESTION_FAILED',
+    recoverable: false,
+  },
+];
+
+function faults(page: Page, rules: object[]) {
+  return page.addInitScript(
+    (value) => localStorage.setItem('msw.faults', value),
+    JSON.stringify(rules),
+  );
+}
+
+test('복구할 수 없는 질문 생성 실패는 같은 레포로 다시 시작해 새 면접 준비로 간다', async ({
+  page,
+}) => {
+  await faults(page, QUESTION_FAILED_CLOSED);
+  const calls: string[] = [];
+  page.on('request', (request) => {
+    if (request.method() !== 'POST') return;
+    const { pathname } = new URL(request.url());
+    if (pathname.endsWith(`/interviews/${IN_PROGRESS}/abandon`)) calls.push('abandon');
+    if (pathname.endsWith(`/interviews/${IN_PROGRESS}/retry`)) calls.push('retry');
+  });
+
+  await page.goto(`/interview/${IN_PROGRESS}/session`);
+  await expect(page.getByRole('alert')).toContainText(
+    '다음 질문을 만들지 못해 면접을 이어갈 수 없어요.',
+    { timeout: 15_000 },
+  );
+  await page.getByRole('button', { name: '같은 레포로 다시 시작' }).click();
+
+  await expect(page).toHaveURL(/\/interview\/(?!a3d51c20-1005)[^/]+\/prepare$/);
+  expect(calls).toEqual(['abandon', 'retry']);
+});
+
+test('복구할 수 없는 질문 생성 실패에서 나가기는 abandon 후 홈으로 간다', async ({ page }) => {
+  await faults(page, QUESTION_FAILED_CLOSED);
+  await page.goto(`/interview/${IN_PROGRESS}/session`);
+  const abandon = page.waitForRequest(
+    (request) =>
+      request.method() === 'POST' && request.url().endsWith(`/interviews/${IN_PROGRESS}/abandon`),
+  );
+  await page.getByRole('button', { name: '나가기' }).click({ timeout: 15_000 });
+  await abandon;
+  await expect(page).toHaveURL(/\/home$/);
+});
+
+test('같은 레포로 다시 시작이 run_expired면 공고 입력부터 다시 시작하게 안내한다', async ({
+  page,
+}) => {
+  await faults(page, [
+    ...QUESTION_FAILED_CLOSED,
+    { path: '/interviews/*/retry', method: 'POST', status: 410, reason: 'run_expired' },
+  ]);
+  await page.goto(`/interview/${IN_PROGRESS}/session`);
+  await page.getByRole('button', { name: '같은 레포로 다시 시작' }).click({ timeout: 15_000 });
+
+  await expect(
+    page.getByText('분석 결과가 만료됐어요. 공고 입력부터 다시 시작해주세요.'),
+  ).toBeVisible();
+  await page.getByRole('button', { name: '공고 입력부터 다시' }).click();
+  await expect(page).toHaveURL(/\/interview\/new$/);
+});
+
+test('복구할 수 없는 질문 생성 실패 뒤에는 다시 연결하지 않는다', async ({ page }) => {
+  // #200의 원래 문제: recoverable true면 FE가 복구되지 않는 면접에 계속 재접속했다.
+  // 재연결은 항상 GET /interviews/{id}를 먼저 부르므로(useInterviewSocket) 그 호출 수로 센다.
+  await faults(page, QUESTION_FAILED_CLOSED);
+  let refetches = 0;
+  let counting = false;
+  page.on('request', (request) => {
+    if (!counting || request.method() !== 'GET') return;
+    if (new URL(request.url()).pathname.endsWith(`/interviews/${IN_PROGRESS}`)) refetches += 1;
+  });
+
+  await page.goto(`/interview/${IN_PROGRESS}/session`);
+  await expect(page.getByRole('button', { name: '같은 레포로 다시 시작' })).toBeVisible({
+    timeout: 15_000,
+  });
+  counting = true;
+  // 재연결 간격(2초)을 두 번 넘게 기다린다.
+  await page.waitForTimeout(5_000);
+  expect(refetches).toBe(0);
 });
