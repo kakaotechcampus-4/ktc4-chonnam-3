@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.db.models import PromptVersion
+
 from ..interview.factories import make_interview, make_repo, make_run, make_turn, make_user
 from .factories import seed_criteria
 
@@ -27,3 +29,19 @@ async def ctx(app, db, client):
     await db.commit()
     client.cookies.set("devon_session", await app.state.sessions.create(user.id))
     return interview, repo
+
+
+@pytest.fixture
+async def prompt(db):
+    """서술(report)과 점수 판정(report_score) 두 task 의 활성 prompt."""
+    db.add_all(
+        PromptVersion(
+            task_name=task,
+            version=version,
+            model=f"{task}-model",
+            template="t",
+            is_active=True,
+        )
+        for task, version in (("report", "report_v1"), ("report_score", "report_score_v1"))
+    )
+    await db.commit()
