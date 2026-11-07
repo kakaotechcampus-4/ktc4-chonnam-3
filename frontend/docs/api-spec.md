@@ -1359,7 +1359,7 @@ Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시�
 | `answer_too_long` | `ERR_ANSWER_TOO_LONG` | `true` | 같은 턴 재제출 |
 | `answer_rejected` | `ERR_ANSWER_REJECTED` | `true` | 같은 턴 재제출 (저장 실패) |
 | `answer_stale_turn` | `ERR_ANSWER_STALE_TURN` | `true` | 지나간 턴에 보낸 답변 — 초안을 버리고 현재 질문으로 |
-| `question_failed` | `ERR_QUESTION_FAILED` | `true` | 허용된 시도 후 실패 안내·기록 보존·명시적 나가기 (아래 재시도 책임 참고) |
+| `question_failed` | `ERR_QUESTION_FAILED` | 진행 중 분석·질문 생성 실패 `false`, 연결 교체·서버 오류 `true` | `false`: 이어갈 수 없음 안내 — abandon 후 같은 레포로 재도전(#20) 또는 홈. `true`: 재연결 ([공통 0010](../../spec/shared/decisions/0010-in-progress-question-failed-unrecoverable.md)) |
 | `question_gen_timeout` | `ERR_QUESTION_GEN_TIMEOUT` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
 | `persona_build_failed` | `ERR_PERSONA_BUILD_FAILED` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
 | `criteria_set_failed` | `ERR_CRITERIA_SET_FAILED` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
@@ -1368,7 +1368,7 @@ Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시�
 | `repo_unreachable` | `ERR_REPO_UNREACHABLE` | `false` | "레포에 접근할 수 없어요" — 레포 재선택 |
 | `github_token_invalid` | `ERR_GITHUB_TOKEN_INVALID` | `false` | GitHub 재연동 유도 |
 
-[0010 결정](../../spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md)에 따라 LLM의 timeout/provider 오류·parse/schema 실패는 공통 호출 계층에서만 자동 1회 재시도한다(최초 호출 포함 최대 2회). semantic 실패는 재호출하지 않는다. `question_failed`의 기존 `recoverable: true`는 FE의 추가 재시도나 재연결을 통한 LLM 재호출을 허용한다는 뜻이 아니다. 허용된 시도 후에도 질문 생성에 실패하면 [기존 면접 실패 정책](../../spec/ai/features/interviewer.md#공개-메시지와-보류-항목)에 따라 오류 안내·기록 보존·명시적 나가기와 새 면접 흐름을 유지하며, 진행 중 면접의 새 수동 이어가기를 추가하지 않는다.
+[0010 결정](../../spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md)에 따라 LLM의 timeout/provider 오류·parse/schema 실패는 공통 호출 계층에서만 자동 1회 재시도한다(최초 호출 포함 최대 2회). semantic 실패는 재호출하지 않는다. 진행 중 분석·질문 생성이 실패하면 `question_failed`는 `recoverable: false`다([공통 0010](../../spec/shared/decisions/0010-in-progress-question-failed-unrecoverable.md)). 연결 교체·서버 오류의 `recoverable: true`도 FE의 추가 재시도나 재연결을 통한 LLM 재호출을 허용한다는 뜻이 아니다. 허용된 시도 후에도 질문 생성에 실패하면 [기존 면접 실패 정책](../../spec/ai/features/interviewer.md#공개-메시지와-보류-항목)에 따라 오류 안내·기록 보존·명시적 나가기와 새 면접 흐름을 유지하며, 진행 중 면접의 새 수동 이어가기를 추가하지 않는다.
 
 `recoverable: false`면 서버가 WS 연결을 닫는다. 오류 안내나 연결 종료만으로 DB 상태를 `completed` 또는 `abandoned`로 바꾸지 않는다. 정상 완료는 9번째 답변 처리 완료, `abandoned`는 명시적 나가기 확인·레포 재선택에 따른다. 오류 전달·종료 요청·실패 기록 복원의 실제 연결은 구현·검증 대상이다.
 
@@ -1831,4 +1831,5 @@ Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagr
 | 2026-09-17 | #19의 **`202 Accepted`를 Failure → Response로 이동** (생성 중은 실패가 아님), `error.retryAfter`와 본문 최상위 `retryAfter`의 위치 차이 명시 |
 | 2026-09-22 | [공통 0003](../../spec/shared/decisions/0003-sprint1-session-auth.md): Sprint 1은 기존 Redis·HttpOnly `devon_session`·14일 sliding 세션으로 확정. JWT·refresh 및 #3은 Sprint 2로 이관. 기존 번호와 과거안은 보존하며 실제 인증 구현·검증은 후속 작업으로 구분 |
 | 2026-10-28 | **#24 `POST /interviews/{id}/abandon` 추가**, #10 `/me/interviews`에 시작 후 중단된 `abandoned` 포함, #20 재도전 허용을 `completed`와 시작 후 중단으로 확정, #10 정렬 기준 명시 — [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md) |
+| 2026-11-07 | #18 진행 중 분석·질문 생성 실패의 **`question_failed`를 `recoverable: false`로 변경** — [공통 0010](../../spec/shared/decisions/0010-in-progress-question-failed-unrecoverable.md). 연결 교체·서버 오류는 `true` 유지 |
 | 2026-10-29 | #15 결과에 **`analyzedCount`·`failedCount`·`failedRepositories` 추가**, #15 레포 `errorCode` 표를 `repo_analyses.error_code`로 정정, #14 `failureReason`의 GitHub 토큰 무효를 job 코드 `token_invalid`로 정정, #14 `failureReason`에서 BE job 코드에 없는 `user_not_found` 삭제, #22 실패 응답(`invalid_request`·`candidate_page_failed`·`not_ready`·`run_expired`) 명시 — [#144](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/144) |
