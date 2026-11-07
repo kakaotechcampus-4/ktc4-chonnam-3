@@ -2,17 +2,20 @@
 
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
-from app.db.models.analysis import AnalysisRepoCandidate, RepoMatchScore
+from app.db.models.analysis import AnalysisJob, AnalysisRepoCandidate, RepoMatchScore
+from app.db.models.github import Repository
+from app.db.models.metric import Event
 from app.db.models.posting import JdRequirement, JobPosting
 from app.features.analysis import queries
 from app.features.analysis.analysis_results import resolve_bound_analysis
 from app.features.analysis.pipeline.steps.match_score import match_technologies
 from app.shared.enums import CandidateSource, Reason
+from app.shared.events import record_event
 
 
 def candidate_source(candidate: AnalysisRepoCandidate) -> CandidateSource:
@@ -74,4 +77,36 @@ async def refresh_matches(session: AsyncSession, run_id: uuid.UUID) -> list[Repo
             )
         )
     stored = await queries.run_matches(session, run_id)
-    return [stored[c.repository_id] for c, _ in candidates]
+    rows = [stored[c.repository_id] for c, _ in candidates]
+    await _record_recommended(session, run, candidates, rows)
+    return rows
+
+
+async def _record_recommended(
+    session: AsyncSession,
+    run: AnalysisJob,
+    candidates: list[tuple[AnalysisRepoCandidate, Repository]],
+    rows: list[RepoMatchScore],
+) -> None:
+    """추천 결과가 처음 저장될 때 run당 1건만 남긴다. 추천 0개도 결과로 기록한다.
+
+    refresh_matches 는 페이지마다 다시 호출되므로 이미 기록한 run 은 건너뛴다.
+    run 행 배타 잠금 안에서 확인하므로 동시 호출도 한 번만 기록한다.
+    """
+    already = await session.scalar(
+        select(
+            exists().where(Event.event_name == "repo_recommended", Event.analysis_job_id == run.id)
+        )
+    )
+    if already:
+        return
+    await record_event(
+        session,
+        "repo_recommended",
+        user_id=run.user_id,
+        analysis_job_id=run.id,
+        payload={
+            "candidateCount": sum(c.filter_status != "excluded" for c, _ in candidates),
+            "recommendedCount": sum(row.is_recommended for row in rows),
+        },
+    )

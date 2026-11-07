@@ -47,6 +47,7 @@ from app.llm_tasks.prompt_loader import (
     load_active_prompt,
 )
 from app.llm_tasks.repo_deep import analyze_repository, to_repo_analysis_row
+from app.shared.events import record_event
 
 STEPS = ("analyze_repo", "build_persona", "set_criteria", "compose_question")
 logger = get_logger(__name__)
@@ -141,6 +142,9 @@ async def _claim(
             row.status, row.prepare_steps, row.last_error = "in_progress", _steps(4), None
             row.started_at = row.started_at or datetime.now(UTC)
             prepare_lease.clear(row)
+            await record_event(
+                db, "interview_started", user_id=user_id, interview_session_id=interview_id
+            )
             return True
         state = dict(row.context_state or {})
         if state.get("prepare_job_id"):
@@ -701,6 +705,9 @@ async def prepare_interview(
             row.status, row.started_at = "in_progress", datetime.now(UTC)
             row.prepare_steps, row.last_error = _steps(4), None
             prepare_lease.clear(row)
+            await record_event(
+                db, "interview_started", user_id=user_id, interview_session_id=interview_id
+            )
         return True
     except (PromptNotFoundError, PromptConfigurationError):
         await _fail(sessions, user_id, interview_id, job_id, "prompt_unavailable", step)
