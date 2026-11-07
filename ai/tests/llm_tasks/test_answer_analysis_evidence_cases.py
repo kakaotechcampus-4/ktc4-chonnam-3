@@ -77,20 +77,68 @@ def test_request_for_another_ref_is_rejected(kit, run):
     assert result.data is None and result.failure.stage == "semantic"
 
 
-# 6. 도구 실패를 허위 주장으로 판단하지 않는다.
-def test_tool_failure_cannot_become_a_conflicting_claim(kit, run):
-    failed = c.ToolResult("tool_error", (), (), ("조회 시간 초과",), "tool_timeout")
+def test_tool_item_at_the_same_path_but_another_ref_is_not_adopted(kit, run):
+    stale = c.Evidence(
+        "ev-tool", "repo-1", kit.OTHER_REF, "code", "cache.py", None, "cache.get(key)", "read_file"
+    )
+    supported = claim(status="supported", evidence_refs=["ev-tool"], limitations=[])
+    provider = kit.Provider(kit.analysis_output(claim_checks=[supported]))
+    found = c.ToolResult("found", (stale,), ("repo-1:cache.py",), (), None)
+    result = run(provider, tool_results=(found,))
+    assert result.data is None and result.failure.error_code == "answer_analysis_input_invalid"
+    assert provider.requests == []
+
+
+# 6. 도구 실패·정상 미발견·분석 부족을 허위 주장으로 판단하지 않는다.
+@pytest.mark.parametrize(
+    "failed",
+    [
+        c.ToolResult("tool_error", (), (), ("조회 시간 초과",), "tool_timeout"),
+        c.ToolResult("not_found", (), ("repo-1:cache.py",), (), None),
+        c.ToolResult("insufficient_analysis", (), (), ("원문 준비 부족",), None),
+    ],
+    ids=lambda result: result.status,
+)
+def test_unconfirmed_lookup_cannot_become_a_conflicting_claim(kit, run, failed):
     conflicting = claim(status="conflicting", limitations=[])
     rejected = run(
         kit.Provider(kit.analysis_output(claim_checks=[conflicting])), tool_results=(failed,)
     )
     assert rejected.data is None and rejected.failure.stage == "semantic"
     provider = kit.Provider(
-        kit.analysis_output(claim_checks=[claim(limitations=["도구 조회 실패"])])
+        kit.analysis_output(claim_checks=[claim(limitations=["조회로 확인하지 못함"])])
     )
     kept = run(provider, tool_results=(failed,))
     assert kept.data.data.claim_checks[0].status == "unverified"
-    assert provider.requests[0].payload["tool_results"][0]["status"] == "tool_error"
+    assert provider.requests[0].payload["tool_results"][0]["status"] == failed.status
+
+
+def found_cache(ref):
+    evidence = c.Evidence(
+        "ev-tool", "repo-1", ref, "code", "cache.py", None, "cache.get(key)", "read_file"
+    )
+    return c.ToolResult("found", (evidence,), ("repo-1:cache.py",), (), None)
+
+
+def test_found_items_stay_citable_beside_another_failed_execution(kit, run):
+    # 독립된 다른 실행의 실패가 이미 확보한 근거를 소급해 무효로 만들지 않는다.
+    failed = c.ToolResult("tool_error", (), (), ("router.py 조회 시간 초과",), "tool_timeout")
+    supported = claim(status="supported", evidence_refs=["ev-tool"], limitations=[])
+    provider = kit.Provider(kit.analysis_output(claim_checks=[supported]))
+    result = run(provider, tool_results=(found_cache(kit.REF), failed))
+    assert result.data.data.claim_checks[0].evidence_refs == ("ev-tool",)
+    sent = provider.requests[0].payload["tool_results"]
+    assert [item["status"] for item in sent] == ["found", "tool_error"]
+    assert sent[0]["items"][0]["evidence_id"] == "ev-tool"
+
+
+def test_found_result_alone_keeps_the_claim_status_the_model_gave(kit, run):
+    # 원문 발견은 주장 지지를 자동 확정하지 않으며 관계 판단은 분석 결과를 따른다.
+    provider = kit.Provider(
+        kit.analysis_output(claim_checks=[claim(limitations=["원문과 주장의 관계 미확인"])])
+    )
+    result = run(provider, tool_results=(found_cache(kit.REF),))
+    assert result.data.data.claim_checks[0].status == "unverified"
 
 
 # 7. 평가 불가 상태와 실제 설명 부족을 구분한다.

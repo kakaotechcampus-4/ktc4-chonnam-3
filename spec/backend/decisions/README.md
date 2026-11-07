@@ -4,6 +4,12 @@
 
 ## BE 내부 구현 결정
 
+- [0012 L1 실패 행에 AI 실패 단계·사유 보존](0012-l1-failure-stage-reason.md): Proposed.
+  실패 행 `result._failure`에 단계·사유를 남기고 공개 `error_code`는 유지한다. 실패 행 `result`를 `null`로 가정하지 않는다.
+
+- [0010 공개 저장소의 OAuth App 인증](0010-public-repository-app-auth.md): Proposed.
+  기존 앱 자격 증명으로 공개 데이터를 조회하며 사용자 token의 비공개 접근 범위를 확대하지 않는다.
+
 - [0005 Director 호출·저장과 고정 코드 Evidence 경계](0005-director-storage-boundary.md):
   Proposed. 짧은 DB transaction, 호출 기록, 고정 SHA 근거의 검증·저장 경계를 정의한다.
 
@@ -22,11 +28,22 @@
 - [0006 Task 9 실패 상태 재사용](0006-task09-failure-records.md): NUL 원문을 수집 단계에서 거절하고 같은 URL의 미참조 실패 상태만 갱신한다. 성공 버전·기존 참조와 HTTP 재시도는 유지한다.
 - [0002 Task 9 저장 경계](0002-task09-persistence.md): 선행 인증·추출 구현에 의존하는 API·저장 Draft의 공고 버전 보존·7일 재확인·URL별 저장 잠금과 본문 중심 Preview를 정의한다. 전체 기능 완료를 뜻하지 않는다.
 
+## Task 13 준비 복구 결정
+
+- [0011 면접 준비의 단계 재개와 만료 복구](0011-interview-preparation-resume-and-recovery.md): Proposed.
+  완료 단계 보존, 입력 변경 거절, lease·독립 reaper와 늦은 결과 차단의 내부 경계를 정리한다.
+
 ## 관련 공통 결정
 
 - [0002 로컬 정책 기준 채택](../../shared/decisions/0002-local-policy-baseline.md): 2026-09-22 사용자 결정. 포트폴리오 20MB와 공고 재사용 7일은 유지하며 면접 배분은 0004를 거쳐 0008을 따른다. 실제 BE 연결·검증은 구현 작업으로 남긴다.
 - [0008 정상 면접의 Persona 배분을 6/2/1로 고정](../../shared/decisions/0008-fixed-persona-allocation.md): 2026-10-06 사용자 결정. 첫 HR을 포함한 기술 6회·도메인 2회·HR 1회이며 이후 기술·도메인 순서는 자율이다. DB·공개 API 구조를 유지하며 이번 반영은 문서에 한정한다. [0004](../../shared/decisions/0004-flexible-persona-allocation-restoration.md)는 대체된 이력으로 보존한다.
 - [0003 Sprint 1 세션 인증](../../shared/decisions/0003-sprint1-session-auth.md): 2026-09-22 사용자 결정. Redis `auth:sess:{sid}`·HttpOnly `devon_session`·14일 sliding 세션을 사용하고 JWT·refresh는 Sprint 2로 넘긴다. SQL `auth_sessions` 제외와 GitHub token의 암호화 DB 저장을 유지하며 실제 인증 연결은 구현·검증 대기다.
+
+## Task 15 내부 구현 결정
+
+- [0009 준비 중 WS 상태 관찰](0009-interview-ws-preparation-observation.md): Proposed.
+  DB의 준비 단계 snapshot과 변경분을 복원한다. 연결 교체와 잠금 소유권은 유지하고
+  진행 상태 관찰·재연결·실패·운영 handshake 확인의 경계를 구분한다.
 
 ## Task 10 내부 구현 결정
 
@@ -34,6 +51,13 @@
   기존 순위 표시값, 검증된 기여도 입력, run별 분석 참조와 추천 갱신의 동시성 경계를 정리한다.
 - [0007 Task 10 재수집 실패 보존과 README 축약 캐시](0007-task10-collection-retry-and-partial-cache.md): Proposed.
   확인한 필드만 저장하고 같은 run의 성공을 보존한다. 축약 partial은 동일 입력일 때만 재사용한다.
+
+## Director 연결 기반의 게시 경계
+
+- [0008 Director 공통 보완의 게시 경계](0008-director-foundation-publication.md): Proposed.
+  기존 migration 이력을 보존하고 #82·#108·#127의 순차 반영마다 단일 head를 구성한다.
+  현재 최종 목표는 신규 `0005_director_foundation_merge`다. 두 선행 반영 전 Draft이며
+  검사 subprocess 소스 경로 보완과 AI 통합 검증 기록의 원본 위치를 설명한다.
 
 ## 관련 AI 결정
 

@@ -31,7 +31,7 @@ service -> permission and state check -> DB commit -> notification
 | `llm_tasks/answer_analysis.py` | 답변 해석·판정 후보 | 질문 범위·근거·상태 검증과 저장 |
 | `llm_tasks/report.py` | 리포트 서술 후보 | 확정 문답·근거 로드, 점수·profile 집계·worker·저장 |
 
-기존 `backend/app/agents/`와 `backend/app/llm_tasks/`의 해당 파일은 연결 계층이다. AI와 BE에 같은 로직을 이중 구현하지 않는다. task-02~03 계약·호출·프롬프트 경계는 [구현 인계](../../spec/ai/designs/2026-09-23-ai-foundation.md)를 따른다. Director의 기본 질문 생성 callable은 [첫 구현 인계](../../spec/ai/designs/2026-09-23-director-question-path.md)를 따른다. 아직 구현하지 않은 Tool·분석 task 모듈의 docstring을 callable API처럼 호출하지 않는다.
+기존 `backend/app/agents/`와 `backend/app/llm_tasks/`의 해당 파일은 연결 계층이다. AI와 BE에 같은 로직을 이중 구현하지 않는다. task-02~03의 계약·호출·프롬프트 경계는 [AI 기반 설계](../../spec/ai/designs/2026-09-23-ai-foundation.md), Director 질문 경로는 [질문 경로 설계](../../spec/ai/designs/2026-09-23-director-question-path.md)를 기준선으로 확인한다. 사용할 callable·입력·출력·실패 경계는 실제 코드·테스트에서 확인하며 docstring만으로 API 제공 여부를 판단하지 않는다. 현재 구현·연결·검증 범위는 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
 
 ## 기능별 경로
 

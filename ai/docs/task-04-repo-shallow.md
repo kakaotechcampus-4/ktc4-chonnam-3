@@ -22,8 +22,8 @@
 - 비식별 batch fixture, 안정 ID 대응, 부분 실패 분리와 캐시 판정은 실제 모델·저장 없이 구현할 수 있다.
 - `repo_shallow_v1`의 정확한 schema는 AI-L02 채택 범위만 사용한다. 문서 후보 필드를 새 DTO로 먼저 고정하지 않는다.
 - L1의 LLM 사용 방향과 프로젝트 기능·역할 요약 의미는 Accepted다. 모델은 0011의 OpenAI `gpt-5.6-luna`를 유지하며, 실제 연결·계정 접근·task 적합성은 AI-L01의 구현·검증 작업이다.
-- `role_summary` 이름과 DB/API 저장 매핑, deterministic metadata는 AI-L03의 AI·BE 합의 전 연결하지 않는다.
-- 실패 item의 attempt는 공통 LLM gateway/task 호출 계층 정책을 따른다. semantic 실패 item은 재호출하지 않는다. batch budget과 timeout/token 상한은 AI-L04 남은 결정 전 production 정책으로 만들지 않는다.
+- 프로젝트 기능·역할 요약의 의미와 기존 저장 위치는 0018의 채택 범위를 따른다. `role_summary` 등 필드 표현, DB/API 매핑과 deterministic metadata는 AI-L03에서 기존 생산자·소비자에 맞춰 기록하고 구현·검증한다.
+- 실패 item의 attempt는 공통 LLM gateway/task 호출 계층 정책을 따른다. semantic 실패 item은 재호출하지 않는다. batch budget과 timeout/token 상한은 AI-L04에서 운영 조건·대표 사례 실측으로 설정·검증한 뒤 production에 연결한다.
 
 ## 대상 파일과 책임
 
@@ -66,11 +66,13 @@
 
 - [ ] 안정 ID batch 대응, 부분 성공 보존, 캐시 판정이 결정론적 fixture로 검증된다.
 - [ ] L1 결과가 프로젝트 설명과 개인 기여를 명확히 구분한다.
-- [ ] 채택되지 않은 출력 필드·저장 매핑·retry budget을 구현하지 않는다.
+- [ ] 출력 필드·저장 매핑은 채택 범위와 기존 구조에 맞춰 구현·검증하고, 운영 budget을 임의의 확정값이나 무제한으로 대체하지 않는다.
 - [ ] 실제 provider, BE durable 저장과 분석 API 조회가 검증되기 전 L1 production 완료로 보고하지 않는다.
 
-## 결정 대기와 재개 조건
+<a id="결정-대기와-재개-조건"></a>
 
-- AI-L03의 Accepted 의미 정책에 따라 개인 기여 없는 프로젝트 요약 검사는 즉시 진행한다. AI·BE가 필드명, 저장/API 매핑과 version·출처 metadata를 기록하면 durable 저장 연결을 재개한다.
-- ADR 0008의 실패 분류와 fail-closed batch 검사는 즉시 구현한다. 0010에 따라 semantic 실패는 재호출하지 않고, parse/schema 재시도는 공통 LLM 호출 계층의 총 2회 상한을 따른다. AI-L04의 남은 budget·소진 처리가 승인되면 production 상한을 연결한다.
-- AI-L02가 일부 출력만 채택하면 그 범위만 구현한다. 미승인 저장 매핑이 순수 batch 검증을 막지는 않는다.
+## 기존 정책의 구현·검증과 BE 연결 조건
+
+- AI-L03의 Accepted 의미 정책에 따라 개인 기여 없는 프로젝트 요약 검사를 진행한다. AI·BE가 기존 필드·저장 위치에 맞춰 저장/API 매핑과 version·출처 metadata를 기록하고 durable 저장·조회 연결을 검증한다.
+- ADR 0008의 실패 분류와 fail-closed batch 검사를 진행한다. 0010에 따라 semantic 실패는 재호출하지 않고, parse/schema 재시도는 공통 LLM 호출 계층의 총 2회 상한을 따른다. AI-L04의 budget·소진 처리는 운영 조건·실측에 따라 설정·검증한 뒤 production에 연결한다.
+- AI-L02의 채택된 출력 계약을 사용하고 미채택 상세는 기존 구조 안에서 구체화한다. 계약 밖 새 필드나 정책이 필요하면 그 차이를 검토하며, 저장 연결의 확인 조건 때문에 순수 batch 검증까지 중단하지 않는다. 실제 적용·검증 범위는 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.

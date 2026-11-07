@@ -1,0 +1,208 @@
+{
+  "format_version": 1,
+  "state": "manually_applied_ordinary_code",
+  "original_source_tree": "c8f2cb5d749b55cd2ed7ead78c95041448be61c7",
+  "prerequisite_integration_tree": "a4d7c1bf17b9845a19ef4ddd8e9d74505af42773",
+  "base": "dbd7f89002fd236c8160ffcea2e8d511b78c5dd7",
+  "original_backup": "backup/director-unpublished-before-pr-20261025",
+  "rule": "base blob must match exactly; re-review on prerequisite changes; never force or auto-apply",
+  "validation_reference": {
+    "develop": "2fc0103a8f97043c12965f5e182734548bab2fcf",
+    "observed_on": "2026-10-30",
+    "rule": "reference only; repeat API, blob and runtime checks after upstream changes"
+  },
+  "patches": [
+    {
+      "order": 1,
+      "status": "manually_applied_ordinary_code",
+      "application_required": false,
+      "patch": "backend/patches/director-followups/01-agent_context.patch",
+      "target": "backend/app/features/interview/agent_context.py",
+      "base_blob": "e199df05e9a7d11d486499277b9c91d7287d03d1",
+      "result_blob": "a474136cf2eb282ccaa2ab202a08688fbb801dda",
+      "patch_sha256": "25634539ecfb205dd952c259aeceb4fb0785d95691248c271060fff1c8023957",
+      "prerequisites": [
+        {
+          "pr": 82,
+          "head": "fcbacd2da4f8aab12fc113784264c3abc5deafd6",
+          "merged_at_reference": true
+        }
+      ],
+      "application": "Already manually applied as ordinary code; do not reapply this historical patch.",
+      "owner_role": "author of the ordinary-code Context application PR",
+      "refresh_on": [
+        "PR #82 head or merge changes",
+        "agent_context.py base or Context/storage contract changes"
+      ],
+      "historical_application": "manual after exact base/SHA checks and Context regression verification; never auto-apply",
+      "applied_in": {
+        "commit": "6c7872a60fa5429dee5c5c47d567d7c8a0de7a92",
+        "target_blob": "a474136cf2eb282ccaa2ab202a08688fbb801dda",
+        "base": "2fc0103a8f97043c12965f5e182734548bab2fcf",
+        "development_commit": "76e2ab1548722949a43346cc8bd912d51e075bf1"
+      },
+      "current_target_blob": "5f88b642383827ac49e5da86a0477b650138b536",
+      "post_application_changes": [
+        {
+          "commit": "fac3ae7cd6062dec94c738c3e8b4d7e89d60f82e",
+          "target_blob": "1ccaa710c64493e368b366488aa8d8ad2b87e50b",
+          "reason": "lock=True acquires shared Posting before JD and Frame to prevent a proven preparation/Context deadlock",
+          "verification": "real load_context PostgreSQL lock regression: red 1 failed/1 passed, green 91 passed including previous Context/storage"
+        },
+        {
+          "commit": "38d42490d91313c18cec0d87a89da041e69a43cd",
+          "target_blob": "5f88b642383827ac49e5da86a0477b650138b536",
+          "reason": "Expose the answer_turn_no keyword and clarify existing current-answer semantics without changing runtime control flow.",
+          "verification": "Public keyword and wrapper equivalence for asked/answered turns1/9; exact-int invalid inputs; see spec/ai/implementation.md#pr156-review-followup-20261031."
+        }
+      ]
+    },
+    {
+      "order": 2,
+      "status": "manually_applied_ordinary_code",
+      "application_required": false,
+      "patch": "backend/patches/director-followups/02-answer_context.patch",
+      "target": "backend/app/features/interview/answer_context.py",
+      "base_blob": "1f5c7991e86aafcc25a71cc63dc72653acb4958b",
+      "result_blob": "c49ee3860dd83fafd179bcbc7991a251539e981f",
+      "patch_sha256": "513d0213e1943dedcf7b6d28dbd7d411a4e2bdf04a683cefbf3a4008968bc302",
+      "prerequisites": [
+        {
+          "pr": 126,
+          "head": "d0293ec96bd342c2e2c5a7ff026b2adf723cea04",
+          "merged_at_reference": false,
+          "merged_at_application": true
+        },
+        {
+          "patch_order": 1
+        }
+      ],
+      "application": "Already manually applied as ordinary code; do not reapply this historical patch.",
+      "owner_role": "author of the ordinary-code AnswerContext application PR",
+      "refresh_on": [
+        "PR #126 head or merge changes",
+        "patch01 result, answer_context.py base or current-turn contract changes"
+      ],
+      "historical_application": "manual after PR #126, patch01 result and exact base/SHA checks; verify current-turn behavior; never auto-apply",
+      "applied_in": {
+        "commit": "6c7872a60fa5429dee5c5c47d567d7c8a0de7a92",
+        "target_blob": "c49ee3860dd83fafd179bcbc7991a251539e981f",
+        "base": "2fc0103a8f97043c12965f5e182734548bab2fcf",
+        "development_commit": "76e2ab1548722949a43346cc8bd912d51e075bf1"
+      },
+      "current_target_blob": "5a7e8596cafe9cf165056a6bfff814dda0ffdd44",
+      "post_application_changes": [
+        {
+          "commit": "38d42490d91313c18cec0d87a89da041e69a43cd",
+          "target_blob": "5a7e8596cafe9cf165056a6bfff814dda0ffdd44",
+          "reason": "Expose the answer_turn_no keyword and clarify existing current-answer semantics without changing runtime control flow.",
+          "verification": "Public keyword and wrapper equivalence for asked/answered turns1/9; exact-int invalid inputs; see spec/ai/implementation.md#pr156-review-followup-20261031."
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "status": "manually_applied_ordinary_code",
+      "application_required": false,
+      "patch": "backend/patches/director-followups/03-repo_deep.patch",
+      "target": "backend/app/llm_tasks/repo_deep.py",
+      "base_blob": "6948791bbe6f855de672cd1ddae42cdf31ab18de",
+      "result_blob": "8ce0d810617c17280ba47e02edc33f31ca4b503d",
+      "patch_sha256": "c52784cffad2292da420bf61680e4977c4e1f06085b2ff2c1dbf56c16b8487f6",
+      "prerequisites": [
+        {
+          "pr": 119,
+          "head": "255d31f3540af9dd86b92d35b43928ebe6aa9c4a",
+          "merged_at_reference": true
+        },
+        {
+          "pr": 114,
+          "head": "613527512da46d2de9bf9cdd32f14dc261f68c87",
+          "merged_at_reference": true
+        },
+        {
+          "pr": 82,
+          "head": "fcbacd2da4f8aab12fc113784264c3abc5deafd6",
+          "merged_at_reference": true,
+          "provides": "call_model attempt_sink keyword and completed-attempt retention"
+        }
+      ],
+      "application": "Already manually applied as ordinary code; do not reapply this historical patch.",
+      "runtime_requirements": [
+        "call_model accepts the attempt_sink keyword",
+        "completed attempts reach the sink before retry or cancellation",
+        "selection and L2 share one CallBudget with two total provider attempts",
+        "semantic terminal failure does not re-enter the provider"
+      ],
+      "additional_runtime_requirement": "Merged PR #82 supplies the hook at validation_reference.develop; historical standalone PR #114 did not. Recheck the current API and behavior before applying.",
+      "owner_role": "author of the ordinary-code L2 adapter application PR",
+      "refresh_on": [
+        "PR #119 or gateway head/merge changes",
+        "repo_deep.py base, call_model signature, attempt retention or CallBudget changes"
+      ],
+      "historical_application": "manual only after exact base/SHA checks, call_model attempt_sink API and completed-attempt runtime checks; never auto-apply",
+      "applied_in": {
+        "commit": "1f31b79d9aadc03300ca737dff8fdbc03af9451f",
+        "target_blob": "8ce0d810617c17280ba47e02edc33f31ca4b503d",
+        "base": "2fc0103a8f97043c12965f5e182734548bab2fcf",
+        "development_commit": "3f11e10ac605edc966611b95295888aeb8bcc7ec"
+      }
+    },
+    {
+      "order": 4,
+      "status": "already_implemented_in_develop",
+      "application_required": false,
+      "patch": "backend/patches/director-followups/04-agent.patch",
+      "target": "backend/app/agents/director/agent.py",
+      "base_blob": "a41c5842a084e0365cbe0c7556269091d1a32639",
+      "result_blob": "69fcf40a0739469fe07bbe8dbd1414ce561ad95b",
+      "patch_sha256": "0d2ed7808001234fdc95507a10d99ec877404cdc5fadd96004c3b69f6d7da922",
+      "prerequisites": [
+        {
+          "pr": 82,
+          "head": "0e973f3377553b13bbea419bfd662f968bf64b97"
+        },
+        {
+          "pr": 126,
+          "head": "e29c8f971fa87b32aace1bd5a3d6be1d43c88478"
+        },
+        {
+          "pr": 114,
+          "head": "613527512da46d2de9bf9cdd32f14dc261f68c87"
+        }
+      ],
+      "application": "historical reference only; do not apply to the current Director modules",
+      "prerequisites_are_historical": true,
+      "reason": "PR #82 already forwards base_url in generate_question; PR #126 now separates execute_director into runtime_adapter.py. The old combined-file base is not the current target.",
+      "implemented_by": {
+        "pr": 82,
+        "head": "fcbacd2da4f8aab12fc113784264c3abc5deafd6",
+        "merge_commit": "09a6f77725ac910544875e62862aaf45e736895c",
+        "target_blob": "23eb17818e23de6b2fac28854438f466e387c363"
+      },
+      "layout_reference": {
+        "pr": 126,
+        "head": "d0293ec96bd342c2e2c5a7ff026b2adf723cea04",
+        "merged_at_reference": false,
+        "runtime_target": "backend/app/agents/director/runtime_adapter.py",
+        "historical_reference": true,
+        "merged_at_application": true
+      },
+      "owner_role": "author of a later change to the Director adapter layout",
+      "refresh_on": [
+        "generate_question base_url behavior or Director module layout changes"
+      ]
+    }
+  ],
+  "previous_validation_reference": {
+    "develop": "4e511a992d7954fa310146bcba2f2d4c6358fb69",
+    "observed_on": "2026-10-28",
+    "rule": "reference only; repeat API, blob and runtime checks after upstream changes"
+  },
+  "review_validation_reference": {
+    "develop": "fa1352693d49f1f5233997ce3576df96f20a9265",
+    "observed_on": "2026-10-31",
+    "reviewed_original_pr_head": "fa217cd10b4c4bd5a5a04a38e20d42634b715e2d",
+    "rule": "Followup validation only; historical patch files, base/result and application commits remain unchanged."
+  }
+}

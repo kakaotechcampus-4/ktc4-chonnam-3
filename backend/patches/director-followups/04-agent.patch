@@ -1,0 +1,12 @@
+diff --git a/backend/app/agents/director/agent.py b/backend/app/agents/director/agent.py
+index a41c5842a084e0365cbe0c7556269091d1a32639..69fcf40a0739469fe07bbe8dbd1414ce561ad95b 100644
+--- a/backend/app/agents/director/agent.py
++++ b/backend/app/agents/director/agent.py
+@@ -29,6 +29,7 @@
+     model_call = partial(
+         call_model,
+         api_key=settings.openai_api_key,
++        base_url=settings.llm_base_url,
+         budget=budget,
+         http_client=http_client,
+         attempt_sink=attempt_sink,

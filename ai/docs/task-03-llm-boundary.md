@@ -1,6 +1,6 @@
 # task-03 - provider 중립 LLM 경계
 
-> 상태: provider 중립 호출 계약과 BE OpenAI HTTP transport·설정·prompt loader·초기 seed 구현. 로컬 PostgreSQL 15.19의 prompt 조회·seed·트랜잭션·동시성 검증 통과. 실제 모델 계정·운영 prompt 품질 검증은 미실행.
+> 상태: 구현 가이드. 현재 구현·검증 범위와 남은 연결은 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
 > 선행: [전체 순서](pipeline.md), [task-01 패키지 셋업](task-01-setup.md), [task-02 내부 계약](task-02-contracts.md)
 
 ## 목표
@@ -9,11 +9,11 @@ AI 로직은 주입된 모델 호출 경계만 소비하고, 구체 transport·�
 
 ## 현재 구현
 
-[구현 인계](../../spec/ai/designs/2026-09-23-ai-foundation.md)의 사용법을 따른다. `ModelRequest`와 validator를 주입된 `ModelCall`에 전달하며 `ModelResult`가 검증 결과 또는 typed failure를 반환한다. BE `call_model`이 OpenAI Responses 요청·실패 분류·재시도를 맡고, 부분 배치 재요청도 동일한 `CallBudget`의 총 2회 상한을 공유한다. raw output은 metadata에 보존하되 repr/log에서 제외한다. 별도 SDK 의존성은 추가하지 않았다.
+실제 구현·실행 결과는 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다. [구현 인계](../../spec/ai/designs/2026-09-23-ai-foundation.md)의 호출 경계를 따르며 `ModelRequest`와 validator를 주입된 `ModelCall`에 전달하고 `ModelResult`로 검증 결과 또는 typed failure를 반환한다. BE `call_model`이 OpenAI Responses 요청·실패 분류·재시도를 맡고, 부분 배치 재요청도 동일한 `CallBudget`의 총 2회 상한을 공유한다. raw output은 metadata에 보존하되 repr/log에서 제외한다.
 
-운영 제한값 4개는 `.env.example`에서 명시적으로 설정해야 한다. 초기 seed는 외부에서 검수된 7개 PromptSpec과 transaction을 받아 실행한다. DB migration·운영 prompt 본문·ARQ job·실제 모델 평가는 이 구현의 완료 주장에 포함하지 않는다.
+운영 제한값 4개는 `.env.example`에서 명시적으로 설정해야 한다. 초기 seed는 외부에서 검수된 7개 PromptSpec과 transaction을 받아 실행한다. DB migration·운영 prompt 본문·ARQ job·실제 모델 평가는 별도 검증 범위다.
 
-Director 첫 구현에서 `ModelRequest.max_attempts`(기본 2, 허용 1~2)를 추가했다.
+`ModelRequest.max_attempts`는 기본 2, 허용 1~2다.
 공통 호출 계층이 요청별 상한과 공유 CallBudget의 총 2회 상한을 함께 지키며,
 남은 호출이 1인 요청에 자동 재시도를 덧붙이지 않는다.
 
@@ -84,6 +84,8 @@ Director 첫 구현에서 `ModelRequest.max_attempts`(기본 2, 허용 1~2)를 �
 - [ ] ADR 0009의 비교 방법 적용을 실제 수치 목표·provider 선택·출시 승인으로 해석하지 않는다.
 
 ## 결정 대기와 재개 조건
+
+모델·호출 정책은 채택된 범위를 유지한다. 아래 항목은 [문서 상태 안내](../README.md#ai-document-status)에 따른 연결·설정·검증 조건이며, 채택되지 않은 상세 계약은 그 범위에서만 검토한다.
 
 - AI-L01은 0011·0018의 OpenAI `gpt-5.6-luna` 선택을 유지하고, AI·BE가 인증·SDK/client·transport 연결과 실제 모델·버전 기록을 구현한다. 계정 접근과 task별 schema·도구 호출·지연·비용·품질은 실제 연결·평가로 확인한다.
 - AI-L02는 0014·0015에서 채택한 입력·출력 구성과 저장 위치를 사용한다. 상세 타입·참조·실패 연결과 호출 metadata의 schema version은 기존 경계에 맞춰 구체화하고 runtime에서 검증한다.

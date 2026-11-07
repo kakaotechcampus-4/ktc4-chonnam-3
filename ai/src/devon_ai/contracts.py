@@ -762,7 +762,8 @@ class ShallowRepoInput(_Contract):
     repository_id: str
     head_sha: str
     description: str | None
-    readme_text: str | None
+    # README 원문이 로그에 남지 않도록 repr에서만 숨긴다.
+    readme_text: str | None = field(repr=False)
     readme_truncated: bool
     languages: tuple[LanguageBytes, ...]
     commit_count: int | None

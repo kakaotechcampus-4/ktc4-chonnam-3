@@ -42,4 +42,4 @@ $env:UV_CACHE_DIR = Join-Path $repoRoot '.claude/scratch/uv-cache'
 - BE 환경의 editable 설치와 `devon_ai` import smoke 결과를 별도로 확인한다.
 - 구조 검사의 성공을 callable AI 기능, 모델 품질, DB·Redis·API·worker 동작 또는 배포 성공으로 보고하지 않는다.
 
-검증 기반을 확인한 뒤 [내부 계약](task-02-contracts.md)과 [LLM 경계](task-03-llm-boundary.md)의 fixture·정책 검토로 이동한다. 실제 함수·타입 채택은 각 task의 결정 대기 조건에 따른다.
+검증 기반을 확인한 뒤 [내부 계약](task-02-contracts.md)과 [LLM 경계](task-03-llm-boundary.md)의 fixture·정책 검토로 이동한다. 각 task의 채택된 계약과 구현·검증 조건에 따라 진행하고, 미채택 상세 계약은 관련 결정의 검토 범위를 따른다. 현재 적용·검증 범위는 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.

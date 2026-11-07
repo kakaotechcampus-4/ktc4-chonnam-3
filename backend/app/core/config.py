@@ -175,11 +175,25 @@ class Settings(BaseSettings):
     claim_limit: int = 10
 
     # ── 정책 · 면접 ──
+    # 진행 중 근거 조회의 유한 상한이며 품질·지연의 실측 목표는 아니다.
+    director_evidence_max_requests: LLMInteger = Field(default=12, gt=0, le=64)
+    director_evidence_max_files: LLMInteger = Field(default=2, gt=0, le=16)
+    director_evidence_timeout_seconds: LLMTimeout = Field(default=8.0, gt=0, allow_inf_nan=False)
+
     max_active_interviews_per_user: int = 1
     max_selected_repos: int = 5
     max_ai_recommended: int = 5
     interview_max_turns: int = INTERVIEW_MAX_TURNS
     interview_duration_seconds: int = 1200
+    # 원문 byte 상한은 준비·진행 중 근거 조회에서 공유하고 PREPARE 상한은 준비에만 쓴다.
+    director_evidence_max_response_bytes: LLMInteger = Field(default=131072, gt=0)
+    director_evidence_max_total_bytes: LLMInteger = Field(default=262144, gt=0)
+    director_prepare_max_entries: LLMInteger = Field(default=512, gt=0, le=4096)
+    director_prepare_max_depth: LLMInteger = Field(default=8, gt=0, le=20)
+    director_prepare_max_requests: LLMInteger = Field(default=32, gt=0, le=128)
+    director_prepare_max_files: LLMInteger = Field(default=8, gt=0, le=16)
+    director_prepare_max_file_bytes: LLMInteger = Field(default=32768, gt=0)
+    director_prepare_timeout_seconds: LLMTimeout = Field(default=30.0, gt=0, allow_inf_nan=False)
     # NoDecode — pydantic-settings 가 dict 를 JSON 으로 먼저 파싱하지 않게 한다.
     #            .env 는 `tech_lead:6,...` 형식이라 아래 validator 가 직접 해석한다.
     persona_turn_quota: Annotated[dict[str, int], NoDecode] = FIXED_PERSONA_TURN_QUOTA
