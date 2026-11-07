@@ -168,6 +168,12 @@ export default function RepoSelect() {
                   찾았어요.
                 </p>
               )}
+              {/* 부분 실패 run은 실패 화면 대신 여기로 온다(analysis.md 부분 실패). 고를 수 없는 카드의 이유를 먼저 알린다. */}
+              {!noSelectable && result.repositories.some((r) => r.status !== 'succeeded') && (
+                <p className="mt-4 text-xs text-muted">
+                  일부 레포는 분석하지 못했어요. 흐리게 표시된 레포는 선택할 수 없어요.
+                </p>
+              )}
 
               <div className="mt-5 flex gap-4">
                 <div className="flex-1 rounded-[10px] border border-line-soft p-4">

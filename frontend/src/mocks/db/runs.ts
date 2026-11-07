@@ -9,9 +9,11 @@ import {
   CANDIDATE_PAGE_MS,
   SEED_FAILED_RUN_ID,
   SEED_IN_PROGRESS_RUN_ID,
+  SEED_NO_PUBLIC_REPO_RUN_ID,
   SEED_PARTIAL_RUN_ID,
   SEED_RUN_ID,
   SEED_RUNNING_RUN_ID,
+  SEED_STOPPED_RUN_ID,
   SEED_TOKEN_INVALID_RUN_ID,
   STEP_DURATION_MS,
   STEP_KEYS,
@@ -30,6 +32,11 @@ export type RunRecord = {
   fixedFailureReason?: string;
   /** fixedStatus가 failed일 때 어느 step에서 멈췄는지. */
   failedAtStep?: StepKey;
+  /**
+   * failedAtStep을 시작하기 전에 멈췄는지(단계 사이 실패·작업 중단). BE finish_run은 running 단계만
+   * failed로 바꾸므로 이때는 failed 단계 없이 failedAtStep부터 skipped다.
+   */
+  stoppedBeforeStart?: boolean;
   /**
    * DB partial run. API 상태는 failed로 보이지만 성공한 저장소의 결과 조회는 허용된다.
    * spec/backend/features/analysis-run.md 부분 실패.
@@ -100,8 +107,11 @@ export function runStatus(run: RunRecord, now = Date.now()): RunStatus {
 export function runSteps(run: RunRecord, now = Date.now()): AnalysisStep[] {
   const executed = executedStepKeys(run);
   // 실패 run은 멈춘 지점까지만 완료로 보여야 한다. 경과 시간으로 계산하면 계속 진행해 버린다.
+  // partial run은 L1 분석이 예외 없이 끝나 BE가 모든 단계를 completed로 준다(run_support.py batch_outcome).
   const failedIndex =
-    runStatus(run, now) === 'failed' ? executed.indexOf(run.failedAtStep ?? 'repo_analyze') : -1;
+    runStatus(run, now) === 'failed' && !run.partial
+      ? executed.indexOf(run.failedAtStep ?? 'repo_analyze')
+      : -1;
   const done = failedIndex >= 0 ? failedIndex : elapsedSteps(run, now);
 
   return STEP_KEYS.map((key) => {
@@ -110,7 +120,10 @@ export function runSteps(run: RunRecord, now = Date.now()): AnalysisStep[] {
 
     let status: StepStatus = 'pending';
     if (index < done) status = 'completed';
-    else if (index === done) status = failedIndex >= 0 ? 'failed' : 'running';
+    else if (index === done)
+      status = failedIndex < 0 ? 'running' : run.stoppedBeforeStart ? 'skipped' : 'failed';
+    // BE는 실패로 끝난 run의 남은 pending 단계를 skipped로 바꾼다(pipeline/run_completion.py finish_run).
+    else if (failedIndex >= 0) status = 'skipped';
     return { key, status };
   });
 }
@@ -196,6 +209,27 @@ function seedRuns() {
     failedAtStep: 'repo_select',
   });
 
+  runs.set(SEED_NO_PUBLIC_REPO_RUN_ID, {
+    runId: SEED_NO_PUBLIC_REPO_RUN_ID,
+    postingUrl: 'https://www.wanted.co.kr/wd/999999',
+    documentId: null,
+    createdAt: Date.now() - STEP_KEYS.length * STEP_DURATION_MS - 1000,
+    fixedStatus: 'failed',
+    fixedFailureReason: 'no_public_repo',
+    failedAtStep: 'repo_select',
+  });
+
+  runs.set(SEED_STOPPED_RUN_ID, {
+    runId: SEED_STOPPED_RUN_ID,
+    postingUrl: 'https://www.wanted.co.kr/wd/222222',
+    documentId: null,
+    createdAt: Date.now() - STEP_KEYS.length * STEP_DURATION_MS - 1000,
+    fixedStatus: 'failed',
+    fixedFailureReason: 'internal_error',
+    failedAtStep: 'repo_detail',
+    stoppedBeforeStart: true,
+  });
+
   // README 없는 저장소가 섞여 run 전체가 partial이 된 경우. BE는 첫 저장소 오류 코드를 사유로 둔다.
   runs.set(SEED_PARTIAL_RUN_ID, {
     runId: SEED_PARTIAL_RUN_ID,
@@ -204,7 +238,6 @@ function seedRuns() {
     createdAt: Date.now() - STEP_KEYS.length * STEP_DURATION_MS - 1000,
     fixedStatus: 'failed',
     fixedFailureReason: 'no_readme',
-    failedAtStep: 'repo_analyze',
     partial: true,
   });
 

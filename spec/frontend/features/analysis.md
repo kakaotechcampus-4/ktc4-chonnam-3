@@ -201,7 +201,7 @@ GitHub 토큰 무효는 HTTP reason과 같은 `github_token_invalid`다([`api-sp
 
 재시도는 공고 입력 화면에 이전 공고 URL을 채워 보낸다. 첨부 파일은 다시 올린다.
 
-**분석 실패도 HTTP 200이다.** `status: "failed"` + `failureReason`으로 판단한다. [부분 실패 기준](../../backend/features/analysis-run.md#부분-실패)에 따라 DB run이 `partial`이면 FE에는 `failed`로 매핑하지만 성공한 저장소의 결과는 기존 result API로 조회할 수 있다. 개별 저장소의 `status: 'partial'`과는 다른 범위다. 실패 화면은 result API 조회가 성공하고 `succeeded` 저장소가 1개 이상이면 "분석에 성공한 저장소 보기" 버튼으로 기존 저장소 선택 화면에 연결한다. 결과가 없는 실패 run은 result API가 `409 not_ready`이므로 버튼을 표시하지 않는다. status만으로는 DB partial과 실패를 구분할 수 없어 result API 응답으로 판단한다. 이 버튼을 표시할 때는 `failureReason` 문구 대신 "일부 레포를 분석하지 못했어요. 분석에 성공한 저장소로 면접을 진행할 수 있어요."를 보여 주고, 다시 분석 버튼은 보조 버튼으로 둔다. 기본 안내가 먼저 보였다가 바뀌지 않도록 안내와 버튼은 result API 응답을 받은 뒤 표시한다.
+**분석 실패도 HTTP 200이다.** `status: "failed"` + `failureReason`으로 판단한다. [부분 실패 기준](../../backend/features/analysis-run.md#부분-실패)에 따라 DB run이 `partial`이면 FE에는 `failed`로 매핑하지만 성공한 저장소의 결과는 기존 result API로 조회할 수 있다. 개별 저장소의 `status: 'partial'`과는 다른 범위다. status만으로는 DB partial과 실패를 구분할 수 없어 실패 화면은 result API 응답으로 판단한다. result API 조회가 성공하고 `succeeded` 저장소가 1개 이상이면 면접을 진행할 수 있으므로 실패 안내 없이 저장소 선택 화면으로 바로 이동한다(기록 대체). 저장소 선택 화면은 선택할 수 없는 카드가 있으면 "일부 레포는 분석하지 못했어요. 흐리게 표시된 레포는 선택할 수 없어요."를 보여 준다. 결과가 없는 실패 run은 result API가 `409 not_ready`이므로 실패 화면에 남는다. 실패 안내가 잠깐 보였다가 이동하지 않도록 실패 화면의 제목·안내·체크리스트·버튼은 result API 응답으로 실패가 확정된 뒤 표시한다.
 
 ### 레포별 errorCode (5a-v2 카드)
 
