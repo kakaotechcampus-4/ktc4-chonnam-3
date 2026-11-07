@@ -175,13 +175,13 @@ test('분석 실패 화면은 실행하지 않은 단계를 완료로 표시하�
   await expect(row('공고 요구사항 분석').getByText('!')).toBeVisible();
   // skipped는 체크리스트에서 숨긴다(frontend/docs/api-spec.md #13·#14).
   await expect(row('기술 스택 매칭')).toHaveCount(0);
-  await expect(row('공고 문서 확인')).toHaveCount(0);
+  await expect(row('첨부 문서 확인')).toHaveCount(0);
 });
 
 test('분석 진행 화면은 문서를 첨부하지 않은 단계를 숨긴다', async ({ page }) => {
   await page.goto(`/interview/analyzing/${RUNNING_RUN}`);
   await expect(page.locator('li', { hasText: 'Repository 구조 확인' })).toBeVisible();
-  await expect(page.locator('li', { hasText: '공고 문서 확인' })).toHaveCount(0);
+  await expect(page.locator('li', { hasText: '첨부 문서 확인' })).toHaveCount(0);
 });
 
 test('분석 실패 화면의 조회가 410이면 만료 안내를 보여준다', async ({ page }) => {
