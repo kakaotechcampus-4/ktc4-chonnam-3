@@ -6,6 +6,8 @@ const FAILED_RUN = '5c7b9e10-0000-4000-8000-00000000bbbb';
 const TOKEN_INVALID_RUN = '5c7b9e10-0000-4000-8000-00000000dddd';
 const RUNNING_RUN = '5c7b9e10-0000-4000-8000-00000000eeee';
 const NO_PUBLIC_REPO_RUN = '5c7b9e10-0000-4000-8000-000000001111';
+// repo_select를 마치고 repo_detail을 시작하기 전에 멈춘 run. failed 단계 없이 나머지가 skipped다.
+const STOPPED_RUN = '5c7b9e10-0000-4000-8000-000000002222';
 // DB partial run. API는 failed지만 성공한 저장소의 결과는 조회된다(analysis-run.md 부분 실패).
 const PARTIAL_RUN = '5c7b9e10-0000-4000-8000-00000000ffff';
 const RUN_GET = new RegExp(`/analysis-runs/${RUNNING_RUN}$`);
@@ -185,6 +187,16 @@ test('분석 실패 화면은 실행하지 않은 단계를 완료로 표시하�
   await expect(row('첨부 문서 확인')).toHaveCount(0);
 });
 
+test('분석 실패 화면은 일부 단계만 끝난 그룹을 완료로 표시하지 않는다', async ({ page }) => {
+  // 단계 사이에서 멈추면(작업 중단 등) BE finish_run은 failed 없이 시작 전 단계를 skipped로 남긴다.
+  await page.goto(`/interview/failed/${STOPPED_RUN}`);
+  await expect(page.getByRole('alert')).toContainText('일시적인 문제');
+
+  const row = page.locator('li', { hasText: 'Repository 구조 확인' });
+  await expect(row).toBeVisible();
+  await expect(row.getByText('✓')).toHaveCount(0);
+});
+
 test('분석 진행 화면은 문서를 첨부하지 않은 단계를 숨긴다', async ({ page }) => {
   await page.goto(`/interview/analyzing/${RUNNING_RUN}`);
   await expect(page.locator('li', { hasText: 'Repository 구조 확인' })).toBeVisible();
@@ -337,6 +349,8 @@ test('부분 실패 run의 결과에 성공한 저장소가 없으면 성공한 
     '분석 중 일시적인 문제가 생겼어요. 다시 시도해주세요.',
   );
   await expect(page.getByRole('button', { name: '분석에 성공한 저장소 보기' })).toHaveCount(0);
+  // BE의 partial run은 L1 분석이 예외 없이 끝나 단계가 모두 completed다(run_support.py batch_outcome).
+  await expect(page.locator('li', { hasText: '기술 스택 매칭' }).getByText('✓')).toBeVisible();
 });
 
 test('부분 실패 run의 결과 조회가 실패하면 다시 불러와 성공한 저장소 선택으로 이어진다', async ({

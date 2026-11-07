@@ -16,6 +16,7 @@ export const STEP_GROUPS: { label: string; keys: StepKey[] }[] = [
 /**
  * skipped는 실행하지 않은 단계다(문서 미첨부, 실패 뒤 남은 단계). 완료로 세지 않고,
  * 그룹이 전부 skipped면 'skipped'를 돌려 체크리스트에서 숨기게 한다(api-spec.md #13·#14).
+ * completed와 skipped가 섞이면(단계 사이에서 멈춘 run) 완료가 아니라 pending으로 둔다.
  */
 export function groupStatus(
   keys: StepKey[],
@@ -23,8 +24,7 @@ export function groupStatus(
 ): StepStatus {
   if (keys.some((key) => steps[key] === 'failed')) return 'failed';
   if (keys.every((key) => steps[key] === 'skipped')) return 'skipped';
-  if (keys.every((key) => steps[key] === 'completed' || steps[key] === 'skipped'))
-    return 'completed';
+  if (keys.every((key) => steps[key] === 'completed')) return 'completed';
   if (keys.some((key) => steps[key] === 'running')) return 'running';
   return 'pending';
 }
