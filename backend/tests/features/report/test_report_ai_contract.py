@@ -131,11 +131,8 @@ async def test_be_payload_passes_the_real_generate_report(app, db, ctx, prompt):
     assert sent["git_ref"] == evidence.git_ref
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason='AI 가 빈 답변("")을 schema 오류로 거절한다. AI 가 미답변 턴을 받도록 바꾸면 제거한다.',
-)
-async def test_unanswered_turn_is_sent_with_empty_answer(app, db, ctx, prompt):
+async def test_unanswered_turn_reaches_ai_as_none(app, db, ctx, prompt):
+    # BE 는 빈 답변을 보내고 AI 가 None(질문했지만 답하지 않음)으로 받는다.
     outcome, score, _ = await _run(app, db, ctx, answer_third=False)
     assert outcome == "created"
-    assert {t["turn_id"]: t["answer"] for t in score.requests[0].payload["turns"]}["3"] == ""
+    assert {t["turn_id"]: t["answer"] for t in score.requests[0].payload["turns"]}["3"] is None
