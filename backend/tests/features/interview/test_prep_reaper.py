@@ -15,10 +15,12 @@ from app.features.interview import prepare_lease, service
 from app.features.interview.queue import enqueue_interview_prep
 from app.shared.enums import Reason
 from app.workers import analysis_app, arq_app
+from app.workers.tasks import interview_prep_reaper as reaper_module
 from app.workers.tasks.interview_prep_reaper import (
     interview_prep_reaper,
     recover_unqueued_preparations,
 )
+from app.workers.tasks.interview_preparation_reaper import recover_preparations
 
 from .factories import make_repo, make_run, make_user
 from .test_service import FakeRedis
@@ -39,6 +41,19 @@ async def lost(db, app):
         repository_ids=[repo.id],
     )
     return run, repo, interview_id
+
+
+async def _lost_interview(db: Any) -> uuid.UUID:
+    run = await make_run(db, await make_user(db))
+    repo = await make_repo(db, run)
+    interview_id, _ = await service.create_interview(
+        db,
+        FakeRedis(enqueue_fail=True),
+        user_id=run.user_id,
+        run_id=run.id,
+        repository_ids=[repo.id],
+    )
+    return interview_id
 
 
 async def _age(app: Any, interview_id: uuid.UUID, seconds: int, **values: Any) -> None:
@@ -120,6 +135,52 @@ async def test_reaper_does_not_restart_a_running_job(app, lost) -> None:
     assert await _status(app, interview_id) == JobStatus.in_progress
     assert await _recover(app) == 1
     assert await redis.zcard(redis.default_queue_name) == 0
+
+
+async def test_reaper_reaches_lost_rows_behind_an_already_queued_page(
+    app, db, lost, monkeypatch
+) -> None:
+    """앞 페이지가 이미 큐에 있는 행으로 가득 차도 뒤쪽 유실 행을 재등록한다."""
+    monkeypatch.setattr(reaper_module, "PAGE_SIZE", 2)
+    _, _, last_id = lost
+    queued_ids = [await _lost_interview(db), await _lost_interview(db)]
+    for offset, interview_id in enumerate(queued_ids):
+        await _age(app, interview_id, MIN_AGE + 500 - offset)
+        assert await enqueue_interview_prep(app.state.redis, interview_id) is True
+    await _age(app, last_id, MIN_AGE + 5)
+
+    assert await _recover(app) == 3
+    assert await _status(app, last_id) == JobStatus.queued
+    assert await app.state.redis.zcard(app.state.redis.default_queue_name) == 3
+
+
+async def test_reaper_stops_after_max_pages(app, db, lost, monkeypatch) -> None:
+    monkeypatch.setattr(reaper_module, "PAGE_SIZE", 1)
+    monkeypatch.setattr(reaper_module, "MAX_PAGES", 2)
+    _, _, newest_id = lost
+    older_ids = [await _lost_interview(db), await _lost_interview(db)]
+    for offset, interview_id in enumerate(older_ids):
+        await _age(app, interview_id, MIN_AGE + 500 - offset)
+    await _age(app, newest_id, MIN_AGE + 5)
+
+    assert await _recover(app) == 2
+    assert await _status(app, newest_id) == JobStatus.not_found
+
+
+async def test_enqueue_window_is_bounded_by_the_lease_reaper_expiry(app, lost) -> None:
+    """claim 없는 preparing 은 60초 뒤 재등록되고, 600초가 지나면 기존 reaper 가 실패 처리한다."""
+    _, _, interview_id = lost
+    await _age(app, interview_id, MIN_AGE + 1)
+    assert await recover_preparations(app.state.session_factory) == 0
+    assert await _recover(app) == 1
+    assert await _status(app, interview_id) == JobStatus.queued
+
+    await _age(app, interview_id, prepare_lease.JOB_TIMEOUT_SECONDS + 1)
+    assert await recover_preparations(app.state.session_factory) == 1
+    async with app.state.session_factory() as session:
+        row = await session.get(InterviewSession, interview_id)
+        assert row is not None and row.status == "preparing_failed"
+    assert await _recover(app) == 0  # 실패 처리된 행은 새 reaper 의 대상이 아니다.
 
 
 async def test_cron_entry_reads_threshold_from_settings(app, lost) -> None:
