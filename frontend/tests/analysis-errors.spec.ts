@@ -151,6 +151,25 @@ test('분석 실패는 failureReason별 안내와 이전 URL을 채운 공고 �
   );
 });
 
+test('분석 실패 화면은 실행하지 않은 단계를 완료로 표시하지 않는다', async ({ page }) => {
+  // jd_fetch에서 멈춘 run이다. 이후 단계와 미첨부 문서 단계는 BE가 skipped로 준다.
+  await page.goto(`/interview/failed/${FAILED_RUN}`);
+  await expect(page.getByRole('alert')).toContainText('공고를 불러오지 못했어요.');
+
+  const row = (label: string) => page.locator('li', { hasText: label });
+  await expect(row('Repository 구조 확인').getByText('✓')).toBeVisible();
+  await expect(row('공고 요구사항 분석').getByText('!')).toBeVisible();
+  // skipped는 체크리스트에서 숨긴다(frontend/docs/api-spec.md #13·#14).
+  await expect(row('기술 스택 매칭')).toHaveCount(0);
+  await expect(row('공고 문서 확인')).toHaveCount(0);
+});
+
+test('분석 진행 화면은 문서를 첨부하지 않은 단계를 숨긴다', async ({ page }) => {
+  await page.goto(`/interview/analyzing/${RUNNING_RUN}`);
+  await expect(page.locator('li', { hasText: 'Repository 구조 확인' })).toBeVisible();
+  await expect(page.locator('li', { hasText: '공고 문서 확인' })).toHaveCount(0);
+});
+
 test('분석 실패 화면의 조회가 410이면 만료 안내를 보여준다', async ({ page }) => {
   await page.goto('/interview/failed/missing-run');
   await expect(page.getByRole('alert')).toContainText('분석 결과가 만료됐어요.');

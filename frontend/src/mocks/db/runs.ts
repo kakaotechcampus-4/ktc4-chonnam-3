@@ -111,6 +111,8 @@ export function runSteps(run: RunRecord, now = Date.now()): AnalysisStep[] {
     let status: StepStatus = 'pending';
     if (index < done) status = 'completed';
     else if (index === done) status = failedIndex >= 0 ? 'failed' : 'running';
+    // BE는 실패로 끝난 run의 남은 pending 단계를 skipped로 바꾼다(pipeline/run_completion.py finish_run).
+    else if (failedIndex >= 0) status = 'skipped';
     return { key, status };
   });
 }

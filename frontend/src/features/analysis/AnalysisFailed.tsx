@@ -184,6 +184,7 @@ export default function AnalysisFailed() {
             <ul className="flex flex-col gap-3">
               {STEP_GROUPS.map((group) => {
                 const status = groupStatus(group.keys, stepStatus);
+                if (status === 'skipped') return null;
                 const isFailed = status === 'failed';
                 const isDone = status === 'completed';
                 return (

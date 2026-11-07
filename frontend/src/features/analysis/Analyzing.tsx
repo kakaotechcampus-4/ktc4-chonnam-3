@@ -155,6 +155,7 @@ export default function Analyzing() {
           <ul className="flex flex-col gap-3">
             {STEP_GROUPS.map((group) => {
               const status = groupStatus(group.keys, steps);
+              if (status === 'skipped') return null;
               return (
                 <li key={group.label} className="flex items-center gap-2.5">
                   {status === 'completed' && (
