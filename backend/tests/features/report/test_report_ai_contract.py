@@ -1,12 +1,7 @@
-"""BE payload 가 AI 의 실제 generate_report 입력 계약을 통과하는지 본다(모델 호출만 대역). task-16
+"""BE payload 가 AI 의 실제 generate_report 입력 계약을 통과하는지 본다(모델만 대역). task-16"""
 
-AI 모듈에 generate_report 가 없으면(병합 전) 건너뛴다.
-"""
-
-import importlib
-
-import pytest
 from devon_ai import contracts as c
+from devon_ai.llm_tasks.report import generate_report as real_generate
 from sqlalchemy import select
 
 from app.db.models import Evidence, InterviewReport, InterviewTurn, ReportScore, TurnEvidence
@@ -14,11 +9,6 @@ from app.db.models.report import SCORE_KEYS
 
 from ..interview.factories import make_evidence, make_turn
 from .fakes import LLM
-
-real_generate = getattr(
-    importlib.import_module("devon_ai.llm_tasks.report"), "generate_report", None
-)
-pytestmark = pytest.mark.skipif(real_generate is None, reason="AI generate_report 미병합")
 
 CONTRACT = {
     "purpose": "목적",
