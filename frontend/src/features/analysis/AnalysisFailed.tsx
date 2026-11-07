@@ -286,7 +286,12 @@ export default function AnalysisFailed() {
               <button
                 type="button"
                 onClick={() => navigate('/home')}
-                className="rounded-md border border-line px-4 py-2 text-sm"
+                // 재연동·다시 입력 같은 주 버튼이 없으면 홈으로가 유일한 출구라 주 버튼 색으로 둔다.
+                className={
+                  failure.action === 'none'
+                    ? 'rounded-md bg-accent px-4 py-2 text-sm font-bold text-white'
+                    : 'rounded-md border border-line px-4 py-2 text-sm'
+                }
               >
                 홈으로
               </button>
