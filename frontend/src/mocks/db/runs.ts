@@ -9,6 +9,7 @@ import {
   CANDIDATE_PAGE_MS,
   SEED_FAILED_RUN_ID,
   SEED_IN_PROGRESS_RUN_ID,
+  SEED_NO_PUBLIC_REPO_RUN_ID,
   SEED_PARTIAL_RUN_ID,
   SEED_RUN_ID,
   SEED_RUNNING_RUN_ID,
@@ -195,6 +196,16 @@ function seedRuns() {
     createdAt: Date.now() - STEP_KEYS.length * STEP_DURATION_MS - 1000,
     fixedStatus: 'failed',
     fixedFailureReason: 'token_invalid',
+    failedAtStep: 'repo_select',
+  });
+
+  runs.set(SEED_NO_PUBLIC_REPO_RUN_ID, {
+    runId: SEED_NO_PUBLIC_REPO_RUN_ID,
+    postingUrl: 'https://www.wanted.co.kr/wd/999999',
+    documentId: null,
+    createdAt: Date.now() - STEP_KEYS.length * STEP_DURATION_MS - 1000,
+    fixedStatus: 'failed',
+    fixedFailureReason: 'no_public_repo',
     failedAtStep: 'repo_select',
   });
 

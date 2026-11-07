@@ -28,8 +28,17 @@ const FAILURE: Record<string, { message: string; action: FailureAction; label?: 
     message: 'GitHub 연동이 만료됐어요. 다시 연동한 뒤 분석해주세요.',
     action: 'relink',
   },
+  // 공개 레포가 있어도 기준에 맞는 레포가 없으면 같은 사유가 온다. 기준과 포함 방법을 함께 안내한다.
+  // 수집: 본인 소유 public만(BE github/client.py affiliation=owner). 제외: fork·archived·언어 없음·
+  // 작은 크기(github/base.py filter_reason). 포트폴리오에 언급된 레포는 제외를 건너뛴다(BE 결정 0001).
+  // 레포 목록은 로그인할 때만 다시 수집한다(auth/service.py).
   no_public_repo: {
-    message: '분석할 공개 레포가 없어요. GitHub에 공개 레포를 추가한 뒤 다시 시작해주세요.',
+    message:
+      '분석할 수 있는 레포를 찾지 못했어요. 내 계정이 소유한 공개 레포만 분석해요. ' +
+      'fork·보관(archived)된 레포, 내용이 너무 적거나 주 언어가 없는 레포, 조직(organization) 레포는 제외돼요.\n' +
+      '제외된 레포도 포트폴리오에 레포 주소를 적어 첨부하면 분석할 수 있어요. ' +
+      '조직 레포는 내 계정으로 fork한 뒤 그 주소를 적어주세요. ' +
+      'GitHub에서 레포를 바꿨다면 다시 로그인해야 반영돼요.',
     action: 'none',
   },
   unsupported_site: {
@@ -162,7 +171,7 @@ export default function AnalysisFailed() {
           {ready && (
             <div
               role="alert"
-              className="rounded-card border border-error-soft bg-error-soft px-4 py-3 text-sm text-error"
+              className="whitespace-pre-line rounded-card border border-error-soft bg-error-soft px-4 py-3 text-sm text-error"
             >
               {message}
             </div>
