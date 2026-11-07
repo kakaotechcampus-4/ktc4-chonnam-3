@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { BASE, api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
-import { refreshMeIfTokenInvalid } from '@/shared/queryClient';
+import { queryClient, refreshMeIfTokenInvalid } from '@/shared/queryClient';
 import Header from '@/shared/components/Header';
 import Footer from '@/shared/components/Footer';
 import { PERSONA_IMAGES, PERSONA_LABELS, PERSONA_ORDER } from '@/shared/persona';
@@ -13,13 +13,22 @@ import { useQuestionAudio } from '@/features/interview/useQuestionAudio';
 import { MAX_ANSWER_MS, useAnswerRecorder } from '@/features/interview/useAnswerRecorder';
 import { QUESTION_TEXT_KEY, readQuestionText } from '@/features/interview/questionText';
 import { abandonInterview, type ReselectState } from '@/features/interview/abandon';
-import type { InterviewLastError, MeResponse, Persona } from '@/types/api';
+import { RESTART_REASONS, RETRY_ERROR } from '@/features/interview/retryErrors';
+import { isApiError, type InterviewLastError, type MeResponse, type Persona } from '@/types/api';
 
 /** 진행 중 오류 문구. 답변 실패(stt_failed·answer_rejected)는 턴 안에서 따로 안내한다. */
 const ERROR_MESSAGE: Record<string, string> = {
   question_failed: '다음 질문을 만들지 못했어요. 잠시만 기다려주세요.',
   repo_unreachable: '레포에 접근할 수 없어 면접을 이어갈 수 없어요.',
   github_token_invalid: 'GitHub 연동이 만료돼 면접을 이어갈 수 없어요.',
+};
+
+/**
+ * recoverable: false일 때 문구가 달라지는 reason. question_failed는 연결 교체·서버 오류면 true로
+ * 와서 재연결로 이어가고, 진행 중 분석·질문 생성이 실패하면 false로 와서 이어갈 수 없다(공통 0010).
+ */
+const FATAL_ERROR_MESSAGE: Record<string, string> = {
+  question_failed: '다음 질문을 만들지 못해 면접을 이어갈 수 없어요.',
 };
 
 /** 30초간 다른 메시지가 없으면 근거 확인 배너를 내린다. */
@@ -436,6 +445,22 @@ export default function InterviewScreen() {
     setAnswer(null);
   }
 
+  /**
+   * 이어갈 수 없는 질문 생성 실패에서 같은 레포로 새 면접을 만든다. 실패한 면접은 in_progress로
+   * 남아 있어 먼저 abandon해야 재도전(시작 후 중단된 abandoned만 허용)이 열린다(공통 0009·0010).
+   */
+  const restart = useMutation({
+    mutationFn: async () => {
+      await abandonInterview(id);
+      return api.retryInterview(id);
+    },
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.interviewsAll });
+      navigate(`/interview/${data.interviewId}/prepare`, { replace: true });
+    },
+  });
+  const restartReason = isApiError(restart.error) ? restart.error.error.reason : null;
+
   async function handleLeave() {
     // 명시적 이탈은 REST abandon으로 알린다(공통 0009). 재연결 중에도 보낼 수 있다.
     setLeaving(true);
@@ -472,7 +497,8 @@ export default function InterviewScreen() {
     );
   }
 
-  if (status === 'abandoned') {
+  // 같은 레포로 다시 시작하는 동안·실패 뒤에는 방금 한 abandon으로 이 안내가 끼어들지 않게 한다.
+  if (status === 'abandoned' && restart.isIdle) {
     return (
       <Shell me={me}>
         <h1 className="text-base font-bold">중단된 면접이에요</h1>
@@ -596,8 +622,27 @@ export default function InterviewScreen() {
       {error && (
         <div role="alert" className="rounded-card border border-error/30 bg-error-soft px-3 py-2.5">
           <p className="text-[12px] font-bold text-error">
-            {ERROR_MESSAGE[error.reason] ?? '면접 중 문제가 생겼어요.'}
+            {(fatal && FATAL_ERROR_MESSAGE[error.reason]) ??
+              ERROR_MESSAGE[error.reason] ??
+              '면접 중 문제가 생겼어요.'}
           </p>
+        </div>
+      )}
+      {restart.isError && (
+        <div className="flex items-center gap-3">
+          <p role="alert" className="flex-1 text-[12px] text-error">
+            {(restartReason && RETRY_ERROR[restartReason]) ??
+              '새 면접을 준비하지 못했어요. 잠시 후 다시 시도해주세요.'}
+          </p>
+          {restartReason && RESTART_REASONS.has(restartReason) && (
+            <button
+              type="button"
+              onClick={() => navigate('/interview/new')}
+              className="h-9 rounded-lg border border-line px-4 text-[12px] font-bold text-muted"
+            >
+              공고 입력부터 다시
+            </button>
+          )}
         </div>
       )}
 
@@ -679,6 +724,25 @@ export default function InterviewScreen() {
               >
                 레포 다시 선택하기
               </button>
+            ) : error?.reason === 'question_failed' ? (
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={leaving || restart.isPending}
+                  onClick={() => void handleLeave()}
+                  className="h-10 rounded-lg border border-line px-4 text-[13px] font-bold text-muted disabled:opacity-50"
+                >
+                  {leaving ? '나가는 중…' : '나가기'}
+                </button>
+                <button
+                  type="button"
+                  disabled={leaving || restart.isPending}
+                  onClick={() => restart.mutate()}
+                  className="h-10 rounded-lg bg-accent px-5 text-[13px] font-bold text-surface disabled:opacity-50"
+                >
+                  {restart.isPending ? '준비 중…' : '같은 레포로 다시 시작'}
+                </button>
+              </div>
             ) : (
               <button
                 type="button"

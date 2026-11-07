@@ -213,7 +213,7 @@ Sprint 1의 `question` 수신은 질문 전달 완료를 뜻하며 `questionEnd`
 | --- | --- | --- | --- |
 | `answer_too_long` | `ERR_ANSWER_TOO_LONG` | ✅ | 같은 턴 재제출 |
 | `answer_rejected` | `ERR_ANSWER_REJECTED` | ✅ | 같은 턴 재제출 (저장 실패) |
-| `question_failed` | `ERR_QUESTION_FAILED` | ✅ | 허용된 시도 후 실패 안내·기록 보존·명시적 나가기 (아래 재시도 책임 참고) |
+| `question_failed` | `ERR_QUESTION_FAILED` | ❌ 진행 중 분석·질문 생성 실패 / ✅ 연결 교체·서버 오류 | ❌: "다음 질문을 만들지 못해 면접을 이어갈 수 없어요" — [같은 레포로 다시 시작](abandon → `POST /interviews/{id}/retry` → 새 면접 준비) · [나가기](abandon → 홈). retry 실패 안내는 재도전과 같다. ✅: 재연결 ([공통 0010](../../shared/decisions/0010-in-progress-question-failed-unrecoverable.md)) |
 | `question_gen_timeout` | `ERR_QUESTION_GEN_TIMEOUT` | ✅ | 면접 준비 실패 — `POST /interviews/{id}/prepare/retry` |
 | `persona_build_failed` | `ERR_PERSONA_BUILD_FAILED` | ✅ | 면접 준비 실패 — `POST /interviews/{id}/prepare/retry` |
 | `criteria_set_failed` | `ERR_CRITERIA_SET_FAILED` | ✅ | 면접 준비 실패 — `POST /interviews/{id}/prepare/retry` |
@@ -224,9 +224,9 @@ Sprint 1의 `question` 수신은 질문 전달 완료를 뜻하며 `questionEnd`
 
 `stt_failed`·`tts_failed`는 Sprint 2 전용이라 Sprint 1에는 없다.
 
-`error`는 `reason`과 `recoverable`을 함께 보고 위 원인별 처리로 분기한다. [0010 결정](../../ai/decisions/0010-sprint1-interface-runtime-decisions.md)에 따라 LLM의 timeout/provider 오류·parse/schema 실패만 공통 호출 계층에서 자동 1회 재시도한다(최초 호출 포함 최대 2회). semantic 실패는 재호출하지 않는다. `question_failed`의 기존 `recoverable: true`만으로 FE가 추가 재시도하거나 재연결로 LLM을 다시 호출하지 않는다.
+`error`는 `reason`과 `recoverable`을 함께 보고 위 원인별 처리로 분기한다. [0010 결정](../../ai/decisions/0010-sprint1-interface-runtime-decisions.md)에 따라 LLM의 timeout/provider 오류·parse/schema 실패만 공통 호출 계층에서 자동 1회 재시도한다(최초 호출 포함 최대 2회). semantic 실패는 재호출하지 않는다. 진행 중 분석·질문 생성이 실패하면 `question_failed`는 `recoverable: false`로 온다([공통 0010](../../shared/decisions/0010-in-progress-question-failed-unrecoverable.md)). 연결 교체·서버 오류의 `recoverable: true`도 FE가 추가 재시도하거나 재연결로 LLM을 다시 호출하는 근거가 아니다.
 
-허용된 시도 후에도 질문 생성에 실패하면 [기존 면접 실패 정책](../../ai/features/interviewer.md#공개-메시지와-보류-항목)에 따라 오류 안내·기록 보존·명시적 나가기와 새 면접 흐름을 유지한다. 진행 중 면접의 새 수동 이어가기는 추가하지 않는다.
+허용된 시도 후에도 질문 생성에 실패하면 [기존 면접 실패 정책](../../ai/features/interviewer.md#공개-메시지와-보류-항목)에 따라 오류 안내·기록 보존·명시적 나가기와 새 면접 흐름을 유지한다. 진행 중 면접의 새 수동 이어가기는 추가하지 않는다. 실패한 면접은 `in_progress`로 남으므로 FE는 abandon을 먼저 보낸 뒤 같은 레포로 재도전하거나 홈으로 나가게 한다(abandon 없이 홈으로 보내면 같은 run의 새 면접이 `409 session_limit_exceeded`가 된다).
 
 `recoverable: false`면 서버가 WS 연결을 닫는다. 오류 안내나 연결 종료만으로 DB 상태를 `completed` 또는 `abandoned`로 바꾸지 않는다. 정상 완료는 9번째 답변 처리 완료, `abandoned`는 명시적 나가기 확인·레포 재선택에 따른다. 오류 전달·종료 요청·실패 기록 복원의 실제 연결은 구현·검증 대상이다.
 
