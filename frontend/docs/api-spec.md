@@ -846,7 +846,7 @@ data: {"type":"failed","reason":"github_token_invalid"}
 `steps[]`는 항상 `stepKey` 7개를 모두 포함한다. 실행하지 않은 단계도 키를 생략하지 않고 `skipped`로 표기한다(공통 규약 "필드 생략 금지"). `skipped`인 스텝은 `progress` 계산에서 제외한다.
 
 > 분석 실패도 HTTP 200이다. `status: "failed"` + `failureReason`으로 판단한다.
-DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장소의 결과는 `GET /analysis-runs/{runId}/result`로 조회할 수 있다([부분 실패 기준](../../spec/backend/features/analysis-run.md#부분-실패)). 개별 저장소의 `status: 'partial'`과는 다른 범위다. 실패 화면에서 성공 결과로 이동하는 경로는 [task-09](task-09-analysis.md)에 제안만 기록했으며 화면 수정은 보류 중이다.
+DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장소의 결과는 `GET /analysis-runs/{runId}/result`로 조회할 수 있다([부분 실패 기준](../../spec/backend/features/analysis-run.md#부분-실패)). 개별 저장소의 `status: 'partial'`과는 다른 범위다. `succeeded` 저장소가 있으면 FE는 실패 화면 대신 저장소 선택 화면으로 이동한다([task-09](task-09-analysis.md#부분-실패-후-성공-결과-이동-경로)).
 > 
 
 **UI states**

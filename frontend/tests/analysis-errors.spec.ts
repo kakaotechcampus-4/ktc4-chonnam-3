@@ -298,15 +298,11 @@ test('면접 생성 409 session_limit_exceeded는 진행 중 면접을 안내한
   await expect(page.getByRole('alert')).toContainText('이미 진행 중인 면접이 있어요.');
 });
 
-test('부분 실패 run은 실패 화면에서 성공한 저장소 선택으로 이어진다', async ({ page }) => {
+test('부분 실패 run은 실패 화면 없이 레포 선택으로 이어진다', async ({ page }) => {
   await page.goto(`/interview/failed/${PARTIAL_RUN}`);
-  // 성공한 저장소가 있으면 일시 오류·재시도 안내 대신 부분 실패 안내를 보여 준다.
-  const alert = page.getByRole('alert');
-  await expect(alert).toHaveText(
-    '일부 레포를 분석하지 못했어요. 분석에 성공한 저장소로 면접을 진행할 수 있어요.',
-  );
-  await page.getByRole('button', { name: '분석에 성공한 저장소 보기' }).click();
+  // 성공한 저장소가 있으면 면접을 진행할 수 있으므로 실패 화면 대신 레포 선택으로 보낸다.
   await expect(page).toHaveURL(new RegExp(`/interview/repos/${PARTIAL_RUN}$`));
+  await expect(page.getByText('일부 레포는 분석하지 못했어요.')).toBeVisible();
   // README 없는 partial 카드와 실패 카드는 서버 선택 조건(L1 succeeded) 밖이라 고를 수 없다.
   await expect(page.getByRole('button', { name: /batch-pipeline/ })).toBeDisabled();
   await expect(page.getByRole('button', { name: /legacy-crawler/ })).toBeDisabled();
@@ -316,29 +312,25 @@ test('부분 실패 run은 실패 화면에서 성공한 저장소 선택으로 
   await expect(page).toHaveURL(/\/interview\/[^/]+\/prepare$/);
 });
 
-test('부분 실패 run은 결과 조회 전에 기본 실패 안내를 그리지 않는다', async ({ page }) => {
-  // DOM에 붙었던 alert 문구를 모두 기록한다. 잠깐 보였다 바뀐 문구도 남는다.
+test('부분 실패 run은 레포 선택으로 가기 전에 실패 안내를 그리지 않는다', async ({ page }) => {
+  // DOM에 붙었던 제목·alert 문구를 모두 기록한다. 잠깐 보였다 사라진 문구도 남는다.
   await page.addInitScript(() => {
     const seen: string[] = [];
-    (window as unknown as { alertTexts: string[] }).alertTexts = seen;
+    (window as unknown as { seenTexts: string[] }).seenTexts = seen;
     new MutationObserver(() => {
-      document.querySelectorAll('[role="alert"]').forEach((el) => seen.push(el.textContent ?? ''));
+      document
+        .querySelectorAll('h1, [role="alert"]')
+        .forEach((el) => seen.push(el.textContent ?? ''));
     }).observe(document, { childList: true, subtree: true, characterData: true });
   });
   await page.goto(`/interview/failed/${PARTIAL_RUN}`);
-  await expect(page.getByRole('alert')).toHaveText(
-    '일부 레포를 분석하지 못했어요. 분석에 성공한 저장소로 면접을 진행할 수 있어요.',
-  );
-  const seen = await page.evaluate(
-    () => (window as unknown as { alertTexts: string[] }).alertTexts,
-  );
-  expect(seen.filter((text) => text.includes('일시적인 문제'))).toEqual([]);
+  await expect(page).toHaveURL(new RegExp(`/interview/repos/${PARTIAL_RUN}$`));
+  const seen = await page.evaluate(() => (window as unknown as { seenTexts: string[] }).seenTexts);
+  expect(seen.filter((text) => /분석하지 못했어요|일시적인 문제/.test(text))).toEqual([]);
 });
 
-test('부분 실패 run의 결과에 성공한 저장소가 없으면 성공한 저장소 보기 버튼을 보여주지 않는다', async ({
-  page,
-}) => {
-  // 결과 조회는 200이지만 모든 저장소가 실패다. 버튼 조건은 응답 성공이 아니라 succeeded 저장소 유무다.
+test('부분 실패 run의 결과에 성공한 저장소가 없으면 실패 화면에 남는다', async ({ page }) => {
+  // 결과 조회는 200이지만 모든 저장소가 실패다. 이동 조건은 응답 성공이 아니라 succeeded 저장소 유무다.
   await page.addInitScript(() => localStorage.setItem('msw.result', 'all-failed'));
   const result = page.waitForResponse((response) =>
     response.url().endsWith(`/analysis-runs/${PARTIAL_RUN}/result`),
@@ -348,12 +340,12 @@ test('부분 실패 run의 결과에 성공한 저장소가 없으면 성공한 
   await expect(page.getByRole('alert')).toHaveText(
     '분석 중 일시적인 문제가 생겼어요. 다시 시도해주세요.',
   );
-  await expect(page.getByRole('button', { name: '분석에 성공한 저장소 보기' })).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`/interview/failed/${PARTIAL_RUN}$`));
   // BE의 partial run은 L1 분석이 예외 없이 끝나 단계가 모두 completed다(run_support.py batch_outcome).
   await expect(page.locator('li', { hasText: '기술 스택 매칭' }).getByText('✓')).toBeVisible();
 });
 
-test('부분 실패 run의 결과 조회가 실패하면 다시 불러와 성공한 저장소 선택으로 이어진다', async ({
+test('부분 실패 run의 결과 조회가 실패하면 다시 불러와 레포 선택으로 이어진다', async ({
   page,
 }) => {
   // 일시적인 5xx 한 번으로 성공한 저장소 진입로가 사라지면 안 된다. 409 not_ready와 구분한다.
@@ -368,19 +360,17 @@ test('부분 실패 run의 결과 조회가 실패하면 다시 불러와 성공
   ]);
   await page.goto(`/interview/failed/${PARTIAL_RUN}`);
   await expect(page.getByText('분석 결과를 불러오지 못했어요.')).toBeVisible();
-  await expect(page.getByRole('button', { name: '분석에 성공한 저장소 보기' })).toHaveCount(0);
   await page.getByRole('button', { name: '결과 다시 불러오기' }).click();
-  await page.getByRole('button', { name: '분석에 성공한 저장소 보기' }).click();
   await expect(page).toHaveURL(new RegExp(`/interview/repos/${PARTIAL_RUN}$`));
 });
 
-test('결과가 없는 실패 run은 성공한 저장소 보기 버튼을 보여주지 않는다', async ({ page }) => {
+test('결과가 없는 실패 run은 실패 화면에 남는다', async ({ page }) => {
   const result = page.waitForResponse((response) =>
     response.url().endsWith(`/analysis-runs/${FAILED_RUN}/result`),
   );
   await page.goto(`/interview/failed/${FAILED_RUN}`);
-  // 진짜 실패한 run은 결과 조회가 409 not_ready다. 응답을 받은 뒤에도 버튼이 없어야 한다.
+  // 진짜 실패한 run은 결과 조회가 409 not_ready다. 응답을 받은 뒤에도 레포 선택으로 보내지 않는다.
   expect((await result).status()).toBe(409);
   await expect(page.getByRole('alert')).toContainText('공고를 불러오지 못했어요.');
-  await expect(page.getByRole('button', { name: '분석에 성공한 저장소 보기' })).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`/interview/failed/${FAILED_RUN}$`));
 });
