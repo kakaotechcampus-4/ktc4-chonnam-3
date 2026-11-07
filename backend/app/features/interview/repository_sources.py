@@ -39,6 +39,36 @@ class SourceCollection:
     limitations: tuple[str, ...]
 
 
+# 항목 상한에 걸려도 핵심 코드가 먼저 수집되도록 같은 디렉터리 안에서 읽는 순서를 정한다.
+_SOURCE_DIRS = frozenset(
+    {"src", "app", "lib", "server", "backend", "api", "core", "internal", "pkg", "cmd", "main"}
+)
+_LOW_VALUE_DIRS = frozenset(
+    {"test", "tests", "__tests__", "spec", "docs", "doc", "examples", "example", "scripts"}
+)
+_VENDOR_DIRS = frozenset(
+    {"node_modules", "vendor", "dist", "build", "target", "out", "venv", ".venv", "__pycache__"}
+)
+_SOURCE_SUFFIXES = frozenset(
+    {".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".kt", ".go", ".rs", ".rb", ".php", ".cs"}
+    | {".swift", ".scala", ".c", ".cc", ".cpp", ".h", ".hpp", ".vue", ".sql"}
+)
+
+
+def _priority(raw: object) -> int:
+    """낮을수록 먼저 읽는다. 형식이 맞지 않는 항목은 뒤에서 기존 검증이 거절한다."""
+    if not isinstance(raw, dict) or type(raw.get("path")) is not str:
+        return 4
+    name = cast(str, raw["path"]).lower()
+    if raw.get("type") == "tree":
+        if name in _SOURCE_DIRS:
+            return 0
+        if name in _VENDOR_DIRS or name.startswith("."):
+            return 4
+        return 2 if name in _LOW_VALUE_DIRS else 1
+    return 0 if "." + name.rsplit(".", 1)[-1] in _SOURCE_SUFFIXES else 3
+
+
 async def _structure(
     reader: EvidenceReader, root: str, scope: EvidenceScope, settings: Settings
 ) -> tuple[tuple[str, ...], list[str]]:
@@ -67,7 +97,8 @@ async def _structure(
             raise EvidenceReadError("github_invalid_response")
         names: set[str] = set()
         valid: list[object] = []
-        for raw in entries:
+        # sorted는 안정 정렬이라 같은 우선순위 안에서는 GitHub가 준 순서를 유지한다.
+        for raw in sorted(entries, key=_priority):
             if not isinstance(raw, dict) or type(raw.get("path")) is not str:
                 raise EvidenceReadError("github_invalid_response")
             name = cast(str, raw["path"])

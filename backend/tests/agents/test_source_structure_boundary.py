@@ -135,3 +135,34 @@ async def test_oversized_and_non_regular_entries_are_skipped_with_limitations():
         "일반 파일이 아닌 항목은 읽지 않았습니다: link",
         "일반 파일이 아닌 항목은 읽지 않았습니다: vendor",
     ]
+
+
+async def test_entry_cap_reads_source_before_vendor_and_docs():
+    root = "a" * 40
+    entries = [
+        _tree("node_modules", "1" * 40),
+        _blob("LICENSE"),
+        _tree("docs", "2" * 40),
+        _blob("README.md"),
+        _blob("main.py"),
+        _tree("src", "3" * 40),
+    ]
+
+    def handle(request):
+        return httpx.Response(200, json=dict(sha=root, truncated=False, tree=entries))
+
+    config = Settings(_env_file=None, director_prepare_max_entries=3)
+    scope = EvidenceScope(str(UUID(int=1)), 123, "owner/sample", "e" * 40, frozenset())
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        reader = EvidenceReader(
+            http,
+            "owner/sample",
+            max_requests=10,
+            max_response_bytes=131072,
+            max_total_bytes=131072,
+            timeout_seconds=1,
+        )
+        files, limitations = await _structure(reader, root, scope, config)
+    # 상한 3개를 소스 파일·소스 디렉터리·일반 디렉터리가 차지해 의존성 디렉터리는 읽지 않는다.
+    assert files == ("main.py",)
+    assert limitations and "상한" in limitations[0]
