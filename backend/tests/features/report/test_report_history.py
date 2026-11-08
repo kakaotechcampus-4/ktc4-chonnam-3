@@ -238,3 +238,124 @@ async def test_legacy_source_without_location_is_excluded_but_referenced_missing
                 llm=LLM,
                 http_client=None,
                 generator=generator,
+            )
+        assert generator.calls == []
+        return
+    assert (
+        await service.generate_report(
+            app.state.session_factory,
+            interview_id=ctx[0].id,
+            llm=LLM,
+            http_client=None,
+            generator=generator,
+        )
+        == "created"
+    )
+    assert f"historical_source_invalid:{missing.id}" in generator.calls[0]["limitations"]
+
+
+async def test_report_receives_only_referenced_supplemental_text_with_limits(app, db, ctx, prompt):
+    import hashlib
+    from datetime import UTC, datetime, timedelta
+
+    from app.db.models import AnalysisJob, DocumentClaim, InterviewExternalSource, UserDocument
+
+    turn_id, _, _ = await _history(db, ctx)
+    document = UserDocument(
+        user_id=ctx[0].user_id,
+        filename="synthetic.pdf",
+        doc_type="portfolio",
+        mime_type="application/pdf",
+        size_bytes=3,
+        extracted_text="new",
+        extracted_github_urls=[],
+        extract_status="succeeded",
+        is_truncated=False,
+        claims_active_ids=[],
+        source_snapshot={
+            "text_hash": hashlib.sha256(b"new").hexdigest(),
+            "source_hash": "a" * 64,
+            "metadata": {
+                "visual_interpretations": [
+                    {
+                        "page": 1,
+                        "element": "diagram",
+                        "description": "Generated diagram interpretation",
+                    }
+                ]
+            },
+        },
+    )
+    db.add(document)
+    await db.flush()
+    run = await db.get(AnalysisJob, ctx[0].analysis_job_id)
+    run.document_id = document.id
+    claim = DocumentClaim(
+        document_id=document.id,
+        claim_text="old unverified claim",
+        source_text="Original old claim passage",
+        source_version=hashlib.sha256(b"old").hexdigest(),
+        source_location={"page": 1},
+    )
+    db.add(claim)
+    external_id = uuid4()
+    for source_id, content, retrieved in [
+        (external_id, "Actual official passage " * 1000, datetime.now(UTC) - timedelta(days=3)),
+        *((uuid4(), "unasked recent passage " * 1000, datetime.now(UTC)) for _ in range(5)),
+    ]:
+        db.add(
+            InterviewExternalSource(
+                id=source_id,
+                user_id=ctx[0].user_id,
+                interview_session_id=ctx[0].id,
+                query_text="reference",
+                url=f"https://example.org/{source_id}",
+                content=content,
+                content_scope="extracted_page",
+                content_hash=hashlib.sha256(content.encode()).hexdigest(),
+                retrieved_at=retrieved,
+                limitations=[],
+            )
+        )
+    await db.flush()
+    turn = await db.get(InterviewTurn, turn_id)
+    turn.question_contract = {
+        **turn.question_contract,
+        "basis_refs": [
+            {"kind": "document_claim", "id": str(claim.id)},
+            {"kind": "document_visual", "id": f"{document.id}:visual:1:diagram"},
+            {"kind": "external_source", "id": str(external_id)},
+        ],
+    }
+    await db.commit()
+    generator = FakeGenerator()
+    assert (
+        await service.generate_report(
+            app.state.session_factory,
+            interview_id=ctx[0].id,
+            llm=LLM,
+            http_client=None,
+            generator=generator,
+        )
+        == "created"
+    )
+    data = generator.calls[0]
+    sources = data["supplemental_sources"]
+    assert {item["kind"] for item in sources} == {
+        "document_claim",
+        "document_visual",
+        "external_source",
+    }
+    assert len(sources) == 3 and sum(len(item["content"].encode()) for item in sources) <= 16384
+    old = next(item for item in sources if item["kind"] == "document_claim")
+    assert (
+        "Original old claim passage" in old["content"]
+        and "historical_document_claim" in old["limitations"]
+    )
+    web = next(item for item in sources if item["kind"] == "external_source")
+    assert web["source_id"] == str(external_id) and len(web["content"].encode()) <= 4096
+    assert "context_excerpt" in web["limitations"]
+    assert all(
+        item["id"] not in {str(claim.id), str(external_id)}
+        for item in data["turns"][0]["evidences"]
+    )
