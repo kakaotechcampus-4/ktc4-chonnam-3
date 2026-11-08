@@ -95,6 +95,20 @@ def test_claims_are_returned_with_line_number_and_source_line() -> None:
     assert first.source_line == "  Redis 캐시를 도입해 API 응답 시간을 70% 줄였습니다.  "
 
 
+def test_v2_accepts_only_the_same_source_checked_claim_schema() -> None:
+    from dataclasses import replace
+
+    provider = Provider({"claims": [_claim()]})
+    result = _extract(provider, prompt=replace(PROMPT, version="doc_claims_v2"))
+    assert result.failure is None and result.claims[0].source_line in TEXT
+    assert provider.requests[0].prompt.version == "doc_claims_v2"
+    invalid = _extract(
+        Provider({"claims": [_claim(line_id="L999")]}),
+        prompt=replace(PROMPT, version="doc_claims_v2"),
+    )
+    assert invalid.failure.stage == "semantic"
+
+
 def test_no_claims_is_success() -> None:
     result = _extract(Provider({"claims": []}))
     assert (result.claims, result.failure) == ((), None)
@@ -179,7 +193,7 @@ def test_blank_document_does_not_call_model() -> None:
     ("text", "prompt"),
     [
         (TEXT, c.PromptSpec("domain_category", "domain_category_v1", "fixture-model", "t")),
-        (TEXT, c.PromptSpec("doc_claims", "doc_claims_v2", "fixture-model", "t")),
+        (TEXT, c.PromptSpec("doc_claims", "doc_claims_v3", "fixture-model", "t")),
         (None, PROMPT),
     ],
 )
