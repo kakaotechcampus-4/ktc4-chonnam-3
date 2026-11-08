@@ -238,3 +238,40 @@ async def test_concurrent_initializers_activate_the_same_bundle_once(knowledge_d
 
 
 async def test_database_failure_rolls_back_both_knowledge_tables(knowledge_database):
+    sessions, config, selected = knowledge_database
+    engine = sessions.kw["bind"].sync_engine
+
+    def fail_score_insert(connection, cursor, statement, parameters, context, executemany):
+        if "INSERT INTO score_criteria" in statement:
+            raise RuntimeError("isolated failure after domain inserts")
+
+    event.listen(engine, "before_cursor_execute", fail_score_insert)
+    try:
+        with pytest.raises(RuntimeError, match="isolated failure"):
+            await module().configure_knowledge(
+                sessions,
+                config,
+                selected,
+                allow_unreviewed=True,
+                actor="functional-test",
+                apply=True,
+            )
+    finally:
+        event.remove(engine, "before_cursor_execute", fail_score_insert)
+    async with sessions() as db:
+        assert await db.scalar(select(func.count()).select_from(ScoreCriterion)) == 0
+        assert await db.scalar(select(func.count()).select_from(DomainQuestionFrame)) == 0
+
+
+async def test_incomplete_draft_bundle_is_rejected_without_activation(
+    knowledge_database, monkeypatch
+):
+    sessions, config, selected = knowledge_database
+    command = module()
+    monkeypatch.setattr(command, "SCORE_CRITERIA", SCORE_CRITERIA[:-1])
+    with pytest.raises(command.KnowledgeConfigurationError):
+        await command.configure_knowledge(
+            sessions, config, selected, allow_unreviewed=True, actor="functional-test", apply=True
+        )
+    async with sessions() as db:
+        assert await db.scalar(select(func.count()).select_from(ScoreCriterion)) == 0
