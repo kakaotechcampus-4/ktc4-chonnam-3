@@ -359,6 +359,7 @@ class QuestionContract(_Contract):
             raise ContractError("schema", "required_points")
         _unique(tuple(point.key for point in self.required_points), "required_points")
         _unique(self.basis_refs, "basis_refs")
+        _unique(cast(tuple[object, ...], self.evaluation_keys), "evaluation keys")
 
 
 @dataclass(frozen=True)
