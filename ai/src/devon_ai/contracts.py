@@ -954,6 +954,16 @@ class ShallowRepoInput(_Contract):
         _sha(self.head_sha)
         _unique(tuple(item.name for item in self.languages), "languages")
         _unique(cast(tuple[object, ...], self.collection_errors), "collection_errors")
+        _unique(cast(tuple[object, ...], self.structure), "structure")
+        for path in self.structure:
+            # 구조 수집기의 디렉터리 표시만 허용한다. 실제 파일 근거의 경로 규칙은 유지한다.
+            _repository_path(path[:-1] if path.endswith("/") else path)
+        _unique(
+            tuple((item.path, item.read_scope) for item in self.supporting_files),
+            "supporting source scopes",
+        )
+        if any(item.kind != "file" for item in self.supporting_files):
+            raise ContractError("semantic", "supporting file")
         for name in ("commit_count", "user_commit_count"):
             value = getattr(self, name)
             if value is not None:
