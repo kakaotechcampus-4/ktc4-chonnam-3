@@ -277,6 +277,46 @@ class BasisRef(_Contract):
 
 
 @dataclass(frozen=True)
+class SupplementalSource(_Contract):
+    """문서 주장·외부 원문은 저장소 코드 근거와 다른 출처로 보존한다."""
+
+    source_id: str
+    kind: Literal[
+        "document_claim", "document_claim_comparison", "document_visual", "external_source"
+    ]
+    content: str = field(repr=False)
+    location: str
+    version: str
+    limitations: tuple[str, ...]
+    title: str | None = None
+    retrieved_at: str | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if fullmatch(r"[0-9a-f]{64}", self.version) is None:
+            raise ContractError("schema", "supplemental version")
+
+
+@dataclass(frozen=True)
+class ExternalSearchStatus(_Contract):
+    """외부 검색의 실제 실행 상태. 미발견과 오류는 서로 다른 결과다."""
+
+    status: Literal["found", "not_found", "insufficient_analysis", "tool_error"]
+    source_ids: tuple[str, ...]
+    searched_scope: tuple[str, ...]
+    limitations: tuple[str, ...]
+    error_code: str | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _unique(cast(tuple[object, ...], self.source_ids), "external source IDs")
+        if self.status == "found" and not self.source_ids:
+            raise ContractError("semantic", "external found sources")
+        if self.status == "not_found" and self.source_ids:
+            raise ContractError("semantic", "external missing sources")
+
+
+@dataclass(frozen=True)
 class Persona(_Contract):
     persona: PersonaId
     question_responsibilities: tuple[str, ...]
