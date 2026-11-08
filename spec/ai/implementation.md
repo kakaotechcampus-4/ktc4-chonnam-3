@@ -1,5 +1,156 @@
 # AI 구현·검증 기록
 
+## 2026-11-07 — 최종 AI 서비스 통합의 로컬 구현
+
+### 범위와 원본 보존
+
+사용자가 전체 sprint의 최종 서비스로 실행할 수 있도록 AI 파트의 구현을 요청했다.
+`develop@13bd98e4af74c977c2db6e367c232fe6209b979b`에서
+`feature/ai-final-service-20261107`와 별도 worktree를 구성했다.
+선행 #153·#164·#165·#167·#174·#175·#183·#185의 내용을 로컬에서 결합해 연결을 검증하며,
+선행 구현을 이번 신규 작성분이나 이미 develop에 병합된 내용으로 표시하지 않는다.
+이번 요청은 자동 commit·push·PR 생성·다른 PR 병합의 승인으로 확대하지 않았다.
+
+초기 기능·설계·task·testing 문서는 수정하지 않는다.
+추가 정책과 협업 영향은 [ADR 0031 초안](decisions/0031-final-service-runtime-boundaries.md)에,
+현재 구현과 검증 범위는 이 절 한 곳에 기록한다.
+ADR은 Proposed이며 사용자 구현 요청과 FE·BE·AI 전체 팀의 공유 계약 승인은 구분한다.
+
+### 이번 신규 실행 연결
+
+| 구간 | 실제 연결과 보존 경계 | 주요 코드 |
+| --- | --- | --- |
+| 공고 도메인 | 공고 수집 뒤 기존 AI 도메인 분류를 연결한다. 원문 근거를 검사하며 실패·근거 부재의 `etc`를 실제 업종의 확정값으로 해석하지 않는다 | `backend/app/features/analysis/posting_domain.py`, `posting_service.py`, `app/llm_tasks/domain_category.py` |
+| 레포 원문 | 실제 트리에서 읽을 경로를 선정하고 수집한다. 큰 파일은 원래 줄 범위를 가진 구간으로 나누며, 모델·저장·후속 조회에서 같은 버전과 위치를 사용한다 | `backend/app/features/interview/repository_sources.py`, `source_segments.py`, `app/integrations/github/snapshot.py` |
+| 구문 보조 | 전체 Python·JSON·TOML 파일의 정적 구조를 보조한다. 다른 텍스트와 부분 구간은 원문으로 처리하고 전용 해석 부재를 명시한다. 코드를 실행하지 않는다 | `ai/src/devon_ai/source_readers.py`, `llm_tasks/repo_deep.py` |
+| 문서 원문 | preview와 별개인 추출 snapshot, 파일·텍스트 해시, 페이지·줄·가능한 좌표와 한계를 저장한다. Native와 Vision 전사를 병합하고 VLM 생성 설명은 별도 보존한다 | `backend/app/features/documents/source_snapshot.py`, `vision_processing.py`, `service.py`, `app/integrations/extract/pdf.py` |
+| 문서 선택 | 업로드의 `docType`과 분석 요청의 선택적 `coverLetterDocumentId`를 추가해 두 문서를 명시 선택한다. BE는 소유자·종류·추출 실패를 검사하며 자소서 입력 변경을 중복 판정에 반영한다 | `backend/app/features/documents/router.py`, `app/features/analysis/run_schemas.py`, `service.py`, `app/db/models/analysis.py`, `frontend/src/features/analysis/JobInput.tsx` |
+| 문서 Claim | 선택 문서만 면접 준비 중 호출한다. 원문·추출 prompt 버전, 진행·실패·정상 빈 결과를 구분하고 원문 위치를 저장한다. 이전 Claim을 보존하며 현재 입력 집합과 과거 참조 복원을 구분한다 | `backend/app/features/documents/selection.py`, `claims.py`, `app/llm_tasks/doc_claims.py`, `app/db/models/document.py` |
+| 보완 근거 | 문서 Claim·시각 설명·외부 자료를 종류·버전·위치·한계와 함께 Context에 넣는다. 문서별·외부 자료별 입력 예산을 배분하고 과거 질문의 인용 검사에는 별도 archive를 사용한다 | `backend/app/features/interview/supplemental_sources.py`, `agent_context.py`, `answer_context.py`, `ai/src/devon_ai/contracts.py` |
+| 외부 검색 | 검증된 T3 요청을 단일 Director Tool에서 Tavily Search·Extract로 실행한다. 공식 출처 범위, 금지 질의, 작업·면접 예산, 원문과 검색 상태·캐시를 기록한다 | `backend/app/features/interview/external_knowledge.py`, `app/integrations/search/tavily.py`, `app/db/models/external_source.py`, `ai/src/devon_ai/llm_tasks/answer_analysis.py` |
+| 질문·평가 기회 | 확정 질문의 `evaluation_keys`를 추적해 다음 배정을 계산하고 같은 계약을 재검증한다. 질문 배정과 답변 관찰·실제 점수는 구분한다 | `backend/app/features/interview/evaluation_coverage.py`, `question_structure.py`, `director_service.py`, `ai/src/devon_ai/agents/director/runtime.py` |
+| 음성·재청취 | 기존 STT·WS 연결에 확정 질문의 TTS URL과 인증된 음성 조회·캐시를 연결한다. 명시 재청취는 답변 저장·턴 소비와 분리하고 정상 모름 답변은 유지한다 | `backend/app/features/interview/question_audio.py`, `question_replay.py`, `router.py`, `ws.py`, `app/integrations/tts/google.py` |
+| 무료 TTS 예산 | persona별 음성 설정과 프로젝트·월 문자 예약을 사용한다. 실제 잔여량을 확인한 명시 초기화 없이는 합성하지 않으며 Redis 재시작을 무료량 복구로 간주하지 않는다 | `backend/app/features/interview/tts_budget.py`, `backend/scripts/initialize_tts_budget.py` |
+| 리포트·프로필 | 로컬에 결합한 선행 리포트·프로필 경로를 재사용한다. 새 근거·평가 기회와 미관찰 상태의 전달을 보완하며 누락을 임의의 긍정 평가로 채우지 않는다 | `ai/src/devon_ai/llm_tasks/report.py`, `report_score.py`, `backend/app/features/report/service.py` |
+| 평가 실행 | 기존 사례·채점기 자료에 실행기와 BE bridge·CLI를 연결한다. 입력과 정답을 분리하고 검수 상태·실패·시도·해시·token·지연을 기록한다 | `ai/evals/eval_runner.py`, `backend/scripts/ai_eval_bridge.py`, `run_ai_evaluation.py` |
+| 저장·설정 | 문서 근거·자소서 선택·외부 자료를 위한 모델 및 후속 마이그레이션을 추가한다. 선택 공급자의 환경 설정과 LLM reasoning effort 전달을 실제 호출 경계에서 검증한다 | `backend/migrations/versions/0007_ai_source_provenance.py`, `backend/app/core/config.py`, `app/integrations/llm/client.py` |
+
+### 유지한 동작과 새 협업 계약
+
+- `documentId`는 계속 포트폴리오를 뜻한다. 포트폴리오의 레포 추천 URL 힌트에 자소서 URL을 섞지 않는다.
+  자소서를 생략한 기존 요청의 fingerprint 형식도 유지해 진행 중인 기존 작업의 중복 등록을 막는다.
+- FE는 파일 업로드에 `docType=cover_letter|portfolio`를 전달하고, 실패해 제외한 문서의 ID는 분석 요청에 넣지 않는다.
+  기존 화면의 자소서 PDF/DOCX·포트폴리오 PDF 지원은 유지한다.
+  Vision API 경로의 추가 형식 지원을 화면의 공식 지원 확대나 모든 형식 검증 완료로 표현하지 않는다.
+- 문서 Claim과 생성 시각 설명, 검색 자료는 실제 개인 기여·성과의 확정 증거가 아니다.
+  근거 부족·추출 실패·예산 초과는 지원자 능력의 감점 근거로 바꾸지 않는다.
+- 새 공개 계약은 `docType`, `coverLetterDocumentId`, 확정 질문 음성 조회 경로와 관련 WS 필드다.
+  OpenAPI·FE 타입·BE 실행의 로컬 정합성과 팀의 최종 계약 승인을 구분하며 관련 팀 검토가 필요하다.
+- [#195](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/195)의 공개 점수 nullable 확대는 합의 완료로 기록하지 않는다.
+  내부 `not_evaluated` 보존과 공개 응답의 표현 정책은 별도 확인 대상이다.
+
+### 실행 환경과 검사 구분
+
+검증은 원본 서비스 환경을 변경하지 않는 worktree, Python 3.12, 격리 PostgreSQL 17·Redis를 사용한다.
+BE 실행·타입 검사에는 이 worktree의 `backend`·`ai/src`를 명시한다.
+원본 editable AI 패키지를 섞은 검사는 현재 소스 전체의 검증으로 사용하지 않는다.
+FE는 기존 의존성을 재사용하고 공식 배포 해시를 확인한 별도 Node 환경에서 검사한다.
+
+| 종류 | 검증 대상 | 최종 실행 결과 |
+| --- | --- | --- |
+| 결정적 AI 검사 | 계약·근거 검증, source reader, 평가 실행 경계, 리포트·Director 회귀 | 최종 통합 소스의 AI 전체 680 passed |
+| 실제 PostgreSQL·Redis | 선택 문서·Claim·원문·외부 자료 저장, 동시성·소유권·캐시·음성 예산 | BE 전체 2,135개 고유 사례 통과. agents 393, features 836, 공통 905+전용 migration 별도 1. PostgreSQL 17 전용 DB와 Redis DB13/14/15를 분리 |
+| 외부 API 대역 | HTTP transport 대역으로 Tavily·Vision·Google TTS·LLM 요청과 오류를 검증 | BE 검사에 포함. SSE 완료·중단·Unicode·예산 회귀, OAuth quota 프로젝트 헤더 포함. 실제 음질 검사와 구분 |
+| FE 브라우저·MSW | 두 문서의 실제 화면 업로드·분석 요청, 기존 인증·면접·오류 처리 회귀 | 파일 고정·새 서버·1 worker의 전체 135 passed |
+| 정적 검사·build | AI/BE Ruff·format·mypy, FE lint·production build, 공유 계약 검사 | AI/BE Ruff·format·mypy(22/198 source), FE lint/build, Docker build·이미지 내부 manifest 생성 통과. 계약 schema 2개·부분 OpenAPI·fixture 7개 통과 |
+| 실제 공급자 | 실제 LLM·GitHub·STT·Vision·Google TTS·Tavily와 전체 서비스 연결 | Elice LLM 합성 입력 9개 task의 호출·계약 검증 성공. 최종 리포트 확장 뒤 질문·답변·리포트 3사례 재실행 성공(검수 전 품질 분모 0). Tavily Search→Extract 1원문·5,816자 성공. 실제 GitHub·STT·Vision·Google TTS 인증·품질은 이번 실행에서 미검증 |
+
+자소서 API는 먼저 신규 필드 거절을, FE는 문서 종류 누락과 다른 자소서의 캐시 충돌을 재현한 뒤 수정했다.
+실제 PostgreSQL의 선택 ID 저장·소유권·종류·실패 거절·입력 중복 판정과 MSW 화면 흐름은 별도 검사다.
+개발 서버 HMR로 동일 모듈의 인스턴스가 달라진 중간 FE 실행은 최종 회귀 수치에 합산하지 않는다.
+
+통합 검증 중 다음 실제 회귀를 확인해 보완했다.
+
+- SHA를 먼저 확보한 뒤 GitHub 호출 제한·토큰 오류로 중단된 레포가 L1 모델 입력에 들어가
+  원래 수집 오류가 `llm_failed`로 바뀌는 문제를 수정했다. 중단 원인과 확보한 SHA·필드는 보존하고
+  해당 레포의 새 L1 호출은 하지 않는다. 정상 수집 레포의 분석은 계속 진행한다.
+- 기존 저장 경로는 빈 `evaluation_keys`·`external_queries`를 생략해 옛 JSONB 필드 수를 보존한다.
+  새로 선언한 값은 저장하며, 옛 저장값의 decode 복원과 새 확장의 유실 방지를 따로 검증했다.
+- 스트리밍의 잘린 마지막 프레임·모순된 실패 상태를 성공으로 발행하지 않고,
+  JSON 문자열 안의 Unicode 구분자는 SSE 줄 경계로 자르지 않는다.
+- 사용자 OAuth TTS 요청에는 예산 대상 quota 프로젝트 헤더를 전달한다.
+  이 HTTP 대역 검사는 Cloud 권한·음성 품질·실제 무료 잔여량의 검증과 별개다.
+
+최종 Linux 이미지도 별도로 빌드하고, 테스트용 OAuth 설정을 주입한 로컬 컨테이너에서
+`/api/health` 200, 실제 테스트 PostgreSQL `SELECT 1`, Redis `PING`, ARQ worker 기동과
+두 reaper 작업의 실행을 확인했다. 실제 GitHub 로그인이나 유료 공급자 검증으로 해석하지 않는다.
+전용 DB에서 마이그레이션 최초 upgrade, model/schema 차이 없음, 0007 downgrade·재upgrade도 통과했다.
+
+최종 BE XML과 전체 collection의 2,135개 사례를 대조해 누락·추가·미통과가 없음을 확인했다.
+공통 첫 실행의 1 skip은 전용 `task11_migration_test` DB가 없었기 때문이며,
+새 전용 DB에서 해당 사례를 별도로 실행해 통과했다. 전체 XML의 skip과 별도 pass를 구분해 보존했다.
+매 collection마다 `uuid4()`로 생성되는 두 '알 수 없는 ID' 매개변수만 함수·UUID 형식으로 대응시켰다.
+나머지 매개변수 ID는 그대로 대조했다. 중간 실패·중단 결과를 통과 수에 합산하지 않았다.
+
+### 배포·운영 전에 남은 확인
+
+로컬 실행 시 `backend`에서 다음 순서로 설정한다. 명령은 대상 환경 DB·Redis를 사용하므로
+실행 전 `.env`의 연결 대상을 확인한다. 이번 통합에서는 별도의 테스트 DB에서만 수행했다.
+
+1. `uv run alembic upgrade head`로 저장 구조를 반영한다.
+2. 필요한 `score_criteria`·`domain_question_frames`와 모델 prompt를 환경에 준비한다.
+   `uv run python -m scripts.seed_all`의 새 rubric은 비활성 초안이며 자동으로 활성화하지 않는다.
+   검수한 6개 rubric과 도메인 프레임이 실제 활성인지 확인한다. 누락 시 임의 기준을 만들지 않고 실패한다.
+3. `.env`의 실제 모델과 Gateway 제한을 정하고
+   `uv run python -m scripts.configure_ai_runtime --output report/runtime-manifest.json`으로
+   9개 task의 모델·본문·상한 manifest를 먼저 확인한다.
+   해당 버전과 본문을 사용할 환경에서는 같은 명령에 `--apply`를 추가해 DB에 명시 등록·활성화한다.
+   기존 version의 본문·모델이 다르면 충돌이며 덮어쓰지 않고 새 version으로 등록한다.
+4. `uv run uvicorn app.main:app`와 `uv run arq app.workers.arq_app.WorkerSettings`를 같은 설정으로 실행한다.
+   STT·Vision·Tavily는 필요한 주소·키가 있는 기능만 연결한다. 선택 공급자 미설정은 앱 기동 자체를 막지 않는다.
+   STT는 `STT_PROVIDER=mlapi`도 설정하고 실제 서비스의 주소·모델을 사용한다.
+5. TTS는 Cloud의 실제 잔여 무료 문자량·진행 중 요청·같은 프로젝트의 다른 사용량을 확인하고
+   `scripts.initialize_tts_budget --help`의 명시 초기화 절차를 따른다.
+   초기화하지 않으면 유료 합성을 시도하지 않고 질문 텍스트를 유지한다.
+   `TTS_PROVIDER=google_cloud`, 인증 정보, 세 역할의 `TTS_VOICE_MAP`, 프로젝트·월 문자 상한을 명시한다.
+   `.env.example`의 음성 ID는 설정 예시이며 공급자 자동 활성화나 음질 검수의 증거가 아니다.
+6. 평가 실행 예시는
+   `uv run python -m scripts.run_ai_evaluation --cases ../ai/evals/service_examples --manifest report/runtime-manifest.json --output report/ai-smoke.json --dry-run`이다.
+   실제 호출은 `--execute --max-model-attempts 12`로 한도를 명시한다.
+   예시는 합성·미검수 자료라 품질 분모에서 제외한다. #110의 사람 검수와 Judge 교정을 대체하지 않는다.
+
+이번 Elice `gpt-6-luna` 실측에서는 비스트리밍 `max_output_tokens=8192`가 400으로 거절됐고,
+공급자가 비스트리밍 2,000 token 상한과 `stream=true` 대안을 응답했다.
+상한 2,000의 일반 요청과 `LLM_STREAM=true`·8,192 token 예산의 SSE 요청을 각각 검증했다.
+이는 해당 환경의 실행 기록이며 모든 모델·계정에 적용할 고정 제한은 아니다.
+검증용 상한은 원본 `.env`를 변경하지 않고 별도 Settings 인자로 적용했다.
+
+해당 공급자에서 검증한 연결 예시는 다음과 같다. 모델은 실제 계정의 설정값을 사용한다.
+이는 초기 운용 예시이며 대표 서비스 자료의 지연·비용 측정으로 조정한다.
+
+```dotenv
+LLM_STREAM=true
+LLM_REASONING_EFFORT=low
+LLM_TIMEOUT_SECONDS=60
+LLM_MAX_OUTPUT_TOKENS=8192
+LLM_MAX_INPUT_BYTES=262144
+LLM_MAX_RESPONSE_BYTES=1048576
+```
+
+- 환경별 활성 prompt·model 버전과 Gateway 상한, DB 마이그레이션, worker·Redis의 실제 연결을 확인한다.
+  로컬의 미병합 선행 결합 상태와 develop 단독 실행을 혼동하지 않는다.
+- Elice STT·Vision의 사용 가능한 주소·키·모델·요청/응답을 실제 환경에서 검증한다.
+  설정 존재나 대역 응답 통과는 한국어 음성 인식·문서 인식 품질의 검증이 아니다.
+- Google Cloud 권한·실제 무료 조건·persona별 음질·자동재생을 확인하고,
+  같은 프로젝트의 다른 사용량을 반영한 잔여 문자 예산을 명시 초기화한다.
+  내부 카운터가 외부 계정의 비용 0원을 보증한다고 표현하지 않는다.
+- Tavily의 실제 공식 출처 적합성·검색 누락·비용·지연과 서로 다른 레포·문서의 품질을 별도 평가한다.
+  테스트한 언어·형식·크기를 모든 공개 레포·문서의 지원 보증으로 확대하지 않는다.
+- [#110](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/110)의 전체 평가 기준·근거·사람 검수 정답·Judge 교정은
+  실행기 구현과 별도다. 실행 성공을 품질·출시 gate 통과나 평가 체계 전체 설계 완료로 판정하지 않는다.
+- 게시가 요청되면 보존한 통합 원본에서 이번 신규 변경만 분리하고,
+  실제 공통 구현·공유 계약·대응 구현의 의존성과 검증을 각각 명시한다.
+
 ## 2026-11-06 — #180·#182·#191·#193·#194 리뷰 후속과 통합 검증
 
 사용자가 #183을 제외한 다섯 PR의 필수·선택 보완, 리뷰 답변과 병합을 승인했다.
