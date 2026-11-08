@@ -145,9 +145,6 @@ class UserProfileSummary(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         ARRAY(Text), nullable=False, server_default="{}"
     )
     role_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    input_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # 마지막 실제 생성의 상한이다. 동일 입력 재사용 때는 새 설정으로 바꾸지 않는다.
-    generation_limits: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
 
     model: Mapped[str | None] = mapped_column(Text, nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -13,13 +13,10 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
-    Index,
-    Integer,
     Numeric,
     String,
     Text,
     UniqueConstraint,
-    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -73,7 +70,6 @@ class InterviewReport(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     model: Mapped[str | None] = mapped_column(Text, nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(Text, nullable=True)
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    current_revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
 
 
 class ReportScore(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
@@ -99,17 +95,12 @@ class ReportScore(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
 
 
 class ReportDisagreement(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
-    """사용자가 읽은 버전에 대한 이의와 운영자 검토 결정을 보존한다."""
+    """사용자 이의 제기. Sprint 1 은 테이블만 만들고 API·row 생성은 Sprint 2 다."""
 
     __tablename__ = "report_disagreements"
     __table_args__ = (
         # persona 당 1회. 재제출은 already_submitted 로 막는다.
-        UniqueConstraint(
-            "report_id",
-            "source_revision",
-            "persona",
-            name="uq_report_disagreements_revision_persona",
-        ),
+        UniqueConstraint("report_id", "persona", name="uq_report_disagreements_report_persona"),
         CheckConstraint(check_in("persona", PERSONAS), name="persona"),
         CheckConstraint(
             check_in("reason_type", DISAGREEMENT_REASON_TYPES),
@@ -123,65 +114,3 @@ class ReportDisagreement(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
     persona: Mapped[str] = mapped_column(String(20), nullable=False)
     reason_type: Mapped[str] = mapped_column(String(30), nullable=False)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
-    source_revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
-    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="pending")
-    reviewed_by: Mapped[str | None] = mapped_column(Text, nullable=True)
-    review_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    applied_revision: Mapped[int | None] = mapped_column(Integer, nullable=True)
-
-
-class ReportRevision(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
-    """명시 재평가 전후의 결과를 보존한다. 기존 snapshot은 갱신하지 않는다."""
-
-    __tablename__ = "report_revisions"
-    __table_args__ = (
-        UniqueConstraint("report_id", "revision", name="uq_report_revisions_version"),
-        CheckConstraint("revision > 0", name="positive_revision"),
-    )
-    report_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("interview_reports.id", ondelete="CASCADE"), nullable=False
-    )
-    revision: Mapped[int] = mapped_column(Integer, nullable=False)
-    snapshot: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
-
-
-class ReportGenerationRequest(Base, UUIDPrimaryKeyMixin, TimestampMixin):
-    """큐·모델 실행의 소유권과 입력·실패 이력. Redis TTL만으로 실행권을 판단하지 않는다."""
-
-    __tablename__ = "report_generation_requests"
-    __table_args__ = (
-        CheckConstraint(check_in("mode", ("initial", "retry", "reassessment")), name="mode"),
-        CheckConstraint(
-            check_in(
-                "status", ("queued", "running", "succeeded", "failed", "stale", "enqueue_failed")
-            ),
-            name="status",
-        ),
-        CheckConstraint("expected_revision >= 0", name="expected_revision"),
-        Index(
-            "uq_report_generation_active",
-            "interview_session_id",
-            unique=True,
-            postgresql_where=text("status IN ('queued', 'running')"),
-        ),
-    )
-    interview_session_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("interview_sessions.id", ondelete="CASCADE"), nullable=False
-    )
-    mode: Mapped[str] = mapped_column(String(20), nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="queued")
-    expected_revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    disagreement_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("report_disagreements.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    requested_by: Mapped[str] = mapped_column(Text, nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    error_code: Mapped[str | None] = mapped_column(Text, nullable=True)
-    input_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    input_snapshot: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
-    attempts: Mapped[list[dict[str, object]]] = mapped_column(
-        JSONB, nullable=False, server_default="[]"
-    )
