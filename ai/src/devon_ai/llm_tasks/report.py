@@ -61,6 +61,7 @@ def _payload(report_input: c.ReportInput) -> dict[str, object]:
                 "question": turn.question,
                 "answer": turn.answer,
                 "question_contract": asdict(turn.question_contract),
+                "jd_requirement_ids": list(turn.jd_requirement_ids),
                 "follows": turn.follows,
                 "evidence_refs": list(turn.evidence_refs),
                 "analysis": None if turn.analysis is None else asdict(turn.analysis),
@@ -72,6 +73,9 @@ def _payload(report_input: c.ReportInput) -> dict[str, object]:
             {"turn_id": item.turn_id, "result": asdict(item.result)}
             for item in report_input.tool_results
         ],
+        "limitations": list(report_input.limitations),
+        "supplemental_sources": [asdict(item) for item in report_input.supplemental_sources],
+        "source_notes": [asdict(item) for item in report_input.source_notes],
     }
 
 
@@ -192,6 +196,19 @@ def _build_inputs(
     )
     score_turns: list[c.ScoreTurn] = []
     report_turns: list[c.ReportTurn] = []
+    requirements = tuple(
+        c.decode(
+            c.JDRequirement,
+            {
+                **_mapping(raw, "requirement"),
+                "source_field": _mapping(raw, "requirement").get(
+                    "source_field", "jd_requirements.text"
+                ),
+                "tech_tags": [],
+            },
+        )
+        for raw in _items(payload.get("requirements", []), "requirements")
+    )
     evidence: dict[str, c.Evidence] = {}
     for raw_turn in _items(payload.get("turns"), "turns"):
         turn = _mapping(raw_turn, "turn")
@@ -216,6 +233,12 @@ def _build_inputs(
                 "question": turn.get("question"),
                 "answer": answer,
                 "question_contract": turn.get("question_contract"),
+                "jd_requirement_ids": _items(
+                    turn.get("jd_requirement_ids", []), "jd_requirement_ids"
+                ),
+                "jd_requirements": [
+                    {**asdict(item), "tech_tags": list(item.tech_tags)} for item in requirements
+                ],
             },
         )
         parent, analysis = turn.get("parent_turn_no"), turn.get("analysis")
@@ -230,10 +253,29 @@ def _build_inputs(
                 analysis=None if analysis is None else c.decode(c.AnswerAnalysis, analysis),
                 evidence_refs=tuple(refs),
                 question_contract=score_turn.question_contract,
+                jd_requirement_ids=score_turn.jd_requirement_ids,
             )
         )
-    # 근거 조회 결과(ToolResult)는 BE가 저장하지 않아 비워 둔다.
-    report_input = c.ReportInput(tuple(report_turns), tuple(evidence.values()), ())
+    tool_results = tuple(
+        c.decode_strict(c.ReportToolResult, raw)
+        for raw in _items(payload.get("tool_results", []), "tool_results")
+    )
+    limitations = tuple(_items(payload.get("limitations", []), "limitations"))
+    supplemental = tuple(
+        c.decode_strict(c.SupplementalSource, item)
+        for item in _items(payload.get("supplemental_sources", []), "supplemental_sources")
+    )
+    report_input = c.ReportInput(
+        tuple(report_turns),
+        tuple(evidence.values()),
+        tool_results,
+        cast(tuple[str, ...], limitations),
+        supplemental,
+        tuple(
+            c.decode_strict(c.JDSourceNote, item)
+            for item in _items(payload.get("source_notes", []), "source_notes")
+        ),
+    )
     return tuple(score_turns), rubric, report_input
 
 
@@ -328,6 +370,11 @@ async def generate_report(
             rubric=rubric,
             prompt=score_prompt,
             limits=limits,
+            supplemental_sources=report_input.supplemental_sources,
+            limitations=report_input.limitations,
+            evidence=report_input.evidence,
+            tool_results=report_input.tool_results,
+            source_notes=report_input.source_notes,
             model_call=cast(c.ModelCall[report_score.ScoreChecked], model_call_factory()),
         ),
         write_narrative(
