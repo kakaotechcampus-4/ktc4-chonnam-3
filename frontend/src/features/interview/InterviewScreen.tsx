@@ -45,6 +45,10 @@ const TIPS = [
   '답변 끝내기를 누르면 답변이 제출돼요.',
   '질문을 다시 들으려면 면접관에게 다시 들려달라고 답변하셔도 좋아요.',
 ];
+const TEXT_TIPS = [
+  '답변을 작성한 뒤 제출해주세요.',
+  '한 답변은 최대 2,000자까지 입력할 수 있어요.',
+];
 
 type LiveQuestion = {
   persona: Persona;
@@ -123,6 +127,8 @@ export default function InterviewScreen() {
   });
 
   const [liveQuestion, setLiveQuestion] = useState<LiveQuestion | null>(null);
+  // 재연결 때 같은 턴의 미제출 초안을 보존한다. 다음 턴에는 이전 초안을 보내지 않는다.
+  const [textDraft, setTextDraft] = useState<{ turn: number; text: string } | null>(null);
   /** question을 받을 때마다 올린다. 같은 턴이 다시 오면(다시 듣기) 음성을 처음부터 재생한다. */
   const [playKey, setPlayKey] = useState(0);
   /** 전사 대기 확인 조회가 실패했을 때 올려 같은 확인을 한 주기 더 돌린다. */
@@ -148,6 +154,7 @@ export default function InterviewScreen() {
   const [now, setNow] = useState(() => Date.now());
 
   const status = interview?.status;
+  const isTextMode = interview?.answerMode === 'text';
 
   /**
    * 준비 화면에서 막 넘어온 직후에는 캐시의 status가 아직 preparing이다.
@@ -353,7 +360,7 @@ export default function InterviewScreen() {
       ? snapshotQuestion
       : liveQuestion;
 
-  const questionAudio = useQuestionAudio(question?.audioUrl ?? null, playKey);
+  const questionAudio = useQuestionAudio(isTextMode ? null : (question?.audioUrl ?? null), playKey);
 
   /** 지금 턴의 답변 상태. 턴이 바뀌면 듣기부터 시작한다. */
   const liveAnswer: AnswerState =
@@ -414,7 +421,8 @@ export default function InterviewScreen() {
   const elapsedSeconds = recorder.startedAt
     ? Math.floor(Math.min(MAX_ANSWER_MS, now - recorder.startedAt) / 1000)
     : 0;
-  const showText = showQuestionText || questionAudio.state === 'failed';
+  const showText = isTextMode || showQuestionText || questionAudio.state === 'failed';
+  const draft = question && textDraft?.turn === question.turn ? textDraft.text : '';
 
   /**
    * 조건부로 나타나는 요소에 aria-live를 달면 삽입 시점을 놓치는 조합이 있다.
@@ -425,7 +433,9 @@ export default function InterviewScreen() {
     : current.phase === 'recording'
       ? '녹음 중이에요'
       : current.phase === 'transcribing'
-        ? '답변을 정리하고 있어요'
+        ? isTextMode
+          ? '답변 저장을 확인하고 있어요'
+          : '답변을 정리하고 있어요'
         : wsStatus === 'reconnecting'
           ? '연결이 끊겼어요. 다시 연결하는 중이에요'
           : thinking
@@ -433,11 +443,24 @@ export default function InterviewScreen() {
             : '';
 
   function handleStartAnswer() {
-    if (!question || !canStart) return;
+    if (isTextMode || !question || !canStart) return;
     questionAudio.stop();
     recordingTurnRef.current = question.turn;
     setAnswer({ turn: question.turn, phase: 'recording', partial: '', final: null, failure: null });
     void recorder.start();
+  }
+
+  function handleSubmitText() {
+    if (!isTextMode || !question || !canStart || !draft.trim() || draft.length > 2000) return;
+    // 공백·줄바꿈을 포함한 작성 원문을 보낸다. 서버 저장 확인은 음성 모드와 같은 경로를 쓴다.
+    const sent = send({ type: 'answer', turn: question.turn, text: draft });
+    setAnswer({
+      turn: question.turn,
+      phase: sent ? 'transcribing' : 'failed',
+      partial: '',
+      final: draft,
+      failure: sent ? null : 'disconnected',
+    });
   }
 
   function handleRetryAnswer() {
@@ -568,23 +591,25 @@ export default function InterviewScreen() {
               : '다음 질문 준비 중'}
           </span>
           <span className="flex-1" />
-          <label className="flex items-center gap-2">
-            <span className="text-[11px] text-muted">질문 텍스트</span>
-            <input
-              type="checkbox"
-              role="switch"
-              checked={showQuestionText}
-              onChange={(event) => {
-                setShowQuestionText(event.target.checked);
-                try {
-                  localStorage.setItem(QUESTION_TEXT_KEY, String(event.target.checked));
-                } catch {
-                  /* 시크릿 창 등에서 저장이 막히면 이번 세션에만 적용한다. */
-                }
-              }}
-              className="h-6 w-11 shrink-0 appearance-none rounded-full bg-line-soft transition-colors before:ml-0.5 before:block before:h-5 before:w-5 before:translate-y-0.5 before:rounded-full before:bg-surface before:transition-transform checked:bg-accent checked:before:translate-x-5"
-            />
-          </label>
+          {!isTextMode && (
+            <label className="flex items-center gap-2">
+              <span className="text-[11px] text-muted">질문 텍스트</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={showQuestionText}
+                onChange={(event) => {
+                  setShowQuestionText(event.target.checked);
+                  try {
+                    localStorage.setItem(QUESTION_TEXT_KEY, String(event.target.checked));
+                  } catch {
+                    /* 시크릿 창 등에서 저장이 막히면 이번 세션에만 적용한다. */
+                  }
+                }}
+                className="h-6 w-11 shrink-0 appearance-none rounded-full bg-line-soft transition-colors before:ml-0.5 before:block before:h-5 before:w-5 before:translate-y-0.5 before:rounded-full before:bg-surface before:transition-transform checked:bg-accent checked:before:translate-x-5"
+              />
+            </label>
+          )}
         </div>
 
         {showText ? (
@@ -593,7 +618,7 @@ export default function InterviewScreen() {
               {question?.text ?? '다음 질문을 준비하고 있어요'}
             </p>
             {/* 텍스트를 꺼 뒀는데 보이는 이유를 알린다. 토글이 고장 난 것처럼 보이지 않게 한다. */}
-            {!showQuestionText && question && (
+            {!isTextMode && !showQuestionText && question && (
               <p className="mt-2 text-[11px] text-muted">
                 질문 음성을 재생하지 못해 텍스트로 보여드려요
               </p>
@@ -613,7 +638,7 @@ export default function InterviewScreen() {
       <aside className="rounded-card bg-accent-soft px-4 py-3 text-[12px] leading-relaxed text-accent xl:fixed xl:left-[calc(50%+408px)] xl:top-1/3 xl:w-52">
         <b>Tip</b>
         <ul className="mt-1 list-disc space-y-0.5 pl-4">
-          {TIPS.map((tip) => (
+          {(isTextMode ? TEXT_TIPS : TIPS).map((tip) => (
             <li key={tip}>{tip}</li>
           ))}
         </ul>
@@ -653,10 +678,25 @@ export default function InterviewScreen() {
             current.phase === 'recording' ? 'border-error' : 'border-line-soft'
           }`}
         >
-          {current.final !== null ? (
+          {isTextMode && current.phase === 'listening' ? (
+            <textarea
+              aria-label="답변"
+              value={draft}
+              maxLength={2000}
+              rows={5}
+              disabled={!canStart}
+              onChange={(event) =>
+                question && setTextDraft({ turn: question.turn, text: event.target.value })
+              }
+              className="w-full resize-y bg-transparent outline-none disabled:opacity-60"
+              placeholder="답변을 작성해주세요"
+            />
+          ) : current.final !== null ? (
             <>
               <span data-testid="transcript-final">{current.final}</span>
-              <span className="mt-2 block text-[11px] text-muted">최종 전사로 평가해요</span>
+              <span className="mt-2 block text-[11px] text-muted">
+                {isTextMode ? '제출한 답변이에요' : '최종 전사로 평가해요'}
+              </span>
             </>
           ) : current.partial ? (
             <span
@@ -679,7 +719,9 @@ export default function InterviewScreen() {
         </div>
 
         {current.phase === 'transcribing' && (
-          <p className="text-[11px] text-muted">답변을 정리하고 있어요…</p>
+          <p className="text-[11px] text-muted">
+            {isTextMode ? '답변 저장을 확인하고 있어요…' : '답변을 정리하고 있어요…'}
+          </p>
         )}
 
         {current.phase === 'failed' && current.failure && (
@@ -772,11 +814,11 @@ export default function InterviewScreen() {
           ) : current.phase === 'listening' ? (
             <button
               type="button"
-              disabled={!canStart}
-              onClick={handleStartAnswer}
+              disabled={!canStart || (isTextMode && !draft.trim())}
+              onClick={isTextMode ? handleSubmitText : handleStartAnswer}
               className="h-10 rounded-lg bg-accent-soft px-5 text-[13px] font-bold text-accent disabled:bg-line-soft disabled:text-muted"
             >
-              답변 시작
+              {isTextMode ? '답변 제출' : '답변 시작'}
             </button>
           ) : null}
         </div>
