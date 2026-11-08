@@ -131,6 +131,21 @@ async def _build_report(
         _corrupt(report, "feedback_or_coverage")
     turns = await queries.list_turns(db, interview_id=interview.id)
     position = posting.position or ""
+    # 면접 진행·재접속·리포트가 같은 DB depth를 같은 질문 위치로 표시한다.
+    positions = [(t.turn_no, t.depth) for t in turns]
+    response_turns = []
+    for turn in turns:
+        main_index, follow_up_depth = turn_position(positions, turn.turn_no)
+        response_turns.append(
+            ReportTurn(
+                turn=turn.turn_no,
+                persona=turn.persona,
+                question=turn.question_text,
+                answer=turn.answer_text,
+                main_index=main_index,
+                follow_up_depth=follow_up_depth,
+            )
+        )
     return ReportResponse(
         interview_id=interview.id,
         position=position,
