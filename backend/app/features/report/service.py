@@ -233,7 +233,6 @@ async def generate_report(
     generator: ReportGenerator | None = None,
     generation_request_id: uuid.UUID | None = None,
 ) -> GenerateOutcome:
-    """리포트를 생성해 저장한다. 이미 있으면 "exists", 생성 조건이 사라졌으면 "skipped".
 
     DB transaction 은 입력 수집과 저장에 각각 짧게만 쓰고 모델 호출 중에는 열어 두지 않는다.
     실패는 예외로 전파하며 호출자(worker)가 실패 이력과 lock 해제를 맡는다.
