@@ -506,22 +506,6 @@ def failure_code(error: BaseException) -> str:
     return "internal_error"
 
 
-async def record_failure(redis: ArqRedis, interview_id: uuid.UUID, code: str) -> None:
-    """실패 이력을 Redis 에 남긴다. 기록 실패는 로그만 남기고 삼킨다."""
-    try:
-        await redis.set(REPORT_FAIL_KEY.format(interview_id=interview_id), code)
-    except RedisError:
-        logger.error("report_failure_record_failed", interview_id=str(interview_id), code=code)
-
-
-async def release_lock(redis: ArqRedis, interview_id: uuid.UUID) -> None:
-    """report:gen lock 을 푼다. 풀지 못하면 TTL 이 끝날 때까지 202 만 나간다."""
-    try:
-        await redis.delete(f"report:gen:{interview_id}")
-    except RedisError:
-        logger.error("report_lock_release_failed", interview_id=str(interview_id))
-
-
 async def get_interview_user_id(db: AsyncSession, interview_id: uuid.UUID) -> uuid.UUID:
     """profile_summary enqueue 용 소유자 id. 면접이 사라졌으면 예외로 알린다."""
     interview = await db.get(InterviewSession, interview_id)
