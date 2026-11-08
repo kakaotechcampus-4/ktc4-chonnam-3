@@ -238,3 +238,106 @@ class ServiceExecutor:
 
             return tracked
 
+        try:
+            if task == "director":
+                result = await run_director(
+                    data["context"],
+                    prompt=self.prompts[task],
+                    limits=self.limits,
+                    model_call=factory(),
+                    answer_analysis=data.get("answer_analysis"),
+                    reference_texts=data["reference_texts"],
+                    tool_results=data["tool_results"],
+                )
+                if result.failure is not None or result.data is None:
+                    failure = result.failure
+                    raise ExecutionError(
+                        failure.stage if failure else "semantic",
+                        failure.error_code if failure else "no_output",
+                    )
+                return Execution(
+                    {
+                        "decision": asdict(result.data.decision.data),
+                        "question": None
+                        if result.data.question is None
+                        else asdict(result.data.question.data),
+                    },
+                    _attempts(attempts),
+                )
+            if task == "answer_analysis":
+                answer_result = await analyze_answer(
+                    data["context"],
+                    data["question"],
+                    turn_id=data["turn_id"],
+                    answer_text=data["answer_text"],
+                    prompt=self.prompts[task],
+                    limits=self.limits,
+                    model_call=factory(),
+                    tool_results=data["tool_results"],
+                    allowed_locations=data["allowed_locations"],
+                )
+                if answer_result.failure is not None or answer_result.data is None:
+                    failure = answer_result.failure
+                    raise ExecutionError(
+                        failure.stage if failure else "semantic",
+                        failure.error_code if failure else "no_output",
+                    )
+                return Execution(asdict(answer_result.data.data), _attempts(attempts))
+            raw = await generate_report(
+                data["payload"],
+                prompts=self.prompts,
+                limits=self.limits,
+                model_call_factory=factory,
+            )
+            draft = validate_draft(raw)
+            artifacts = None
+            if narrative is not None:
+                # 실제 모델 결과의 검증된 Claim만 보존한다. 공개 문자열에서 참조를 추측하지 않는다.
+                _, _, report_input = _build_inputs(data["payload"])
+                c.validate_narrative(narrative, report_input=report_input)
+                artifacts = _narrative_artifacts(narrative)
+            return Execution(
+                {
+                    "totalScore": draft.total_score,
+                    "scores": [
+                        {"key": key, "score": value.score} for key, value in draft.scores.items()
+                    ],
+                    "headline": draft.headline,
+                    "summary": draft.summary,
+                    "feedbacks": [asdict(item) for item in draft.feedbacks],
+                },
+                _attempts(attempts),
+                artifacts=artifacts,
+            )
+        except ExecutionError as exc:
+            raise ExecutionError(exc.stage, exc.code, _attempts(attempts)) from None
+        except c.ContractError as exc:
+            raise ExecutionError(
+                exc.stage, "service_contract_rejected", _attempts(attempts)
+            ) from None
+        except Exception as exc:
+            raise ExecutionError("executor", type(exc).__name__, _attempts(attempts)) from None
+
+
+def _narrative_artifacts(narrative: c.ReportNarrative) -> dict[str, object]:
+    claims: list[dict[str, object]] = []
+
+    def append(section: str, persona: str | None, entries: tuple[c.NarrativeClaim, ...]) -> None:
+        claims.extend(
+            {
+                "section": section,
+                "persona": persona,
+                "claim_index": index,
+                "text": item.text,
+                "turn_refs": list(item.turn_refs),
+                "evidence_refs": list(item.evidence_refs),
+            }
+            for index, item in enumerate(entries)
+        )
+
+    for name in ("strengths", "gaps", "follow_ups", "practice_actions"):
+        append(f"summary.{name}", None, getattr(narrative.summary, name))
+    for item in narrative.persona_feedbacks:
+        for name in ("strengths", "improvements", "practice_actions"):
+            append(name, item.persona, getattr(item, name))
+    return validate_artifacts({"schema_version": "validated-report-claims.v1", "claims": claims})
