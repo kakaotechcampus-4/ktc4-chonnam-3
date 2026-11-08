@@ -14,7 +14,6 @@ import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
-from functools import partial
 from typing import Literal, NoReturn, cast
 
 import httpx
