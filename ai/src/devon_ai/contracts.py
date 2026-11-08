@@ -1222,11 +1222,22 @@ SCORE_CANDIDATE_KEYS: dict[PersonaId, tuple[ScoreKeyId, ...]] = {
 
 
 @dataclass(frozen=True)
+class LinkedRequirement(_Contract):
+    """질문이 연결한 JD 요구사항. 점수 판정에 보조 정보로만 전달한다."""
+
+    id: str
+    category: str
+    text: str
+
+
+@dataclass(frozen=True)
 class ScoreTurn(_Contract):
     """점수 판정 입력의 확정 문답 한 턴. 질문 당시의 Question Contract를 함께 둔다.
 
     answer가 None이면 질문했지만 지원자가 답하지 않은 턴이다. 질문하지 않은 영역과 다르며,
-    판정은 not_applicable이 아니라 0단계 기준으로 한다.
+    판정은 not_applicable이 아니라 0단계 기준으로 한다. jd_requirements는 질문이 연결한 JD
+    요구사항이며 비어 있을 수 있다. 연결했다는 사실만으로 JD와 경험의 연결을 평가했다고 보지
+    않는다(판단은 question_contract의 purpose·required_points·evaluation_scope로 한다).
     """
 
     turn_id: str
@@ -1234,6 +1245,7 @@ class ScoreTurn(_Contract):
     question: str
     answer: str | None
     question_contract: QuestionContract
+    jd_requirements: tuple[LinkedRequirement, ...] = ()
 
 
 @dataclass(frozen=True)

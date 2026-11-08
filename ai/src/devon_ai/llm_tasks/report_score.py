@@ -60,6 +60,7 @@ def _payload(
                 "question": turn.question,
                 "answer": turn.answer,
                 "question_contract": asdict(turn.question_contract),
+                "jd_requirements": [asdict(item) for item in turn.jd_requirements],
                 "candidate_keys": list(c.SCORE_CANDIDATE_KEYS[turn.persona]),
             }
             for turn in turns

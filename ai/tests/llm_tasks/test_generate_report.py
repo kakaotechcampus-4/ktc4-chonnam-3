@@ -52,7 +52,13 @@ def payload(**changes):
         for n, persona in enumerate(PERSONAS, 1)
     ]
     rubrics = {key: {str(level): f"{key} {level}" for level in range(5)} for key in KEYS}
-    return {"score_keys": list(KEYS), "rubrics": rubrics, "turns": turns, **changes}
+    return {
+        "score_keys": list(KEYS),
+        "rubrics": rubrics,
+        "requirements": [],
+        "turns": turns,
+        **changes,
+    }
 
 
 def score_output(level=3):
@@ -331,3 +337,48 @@ def test_a_bad_report_prompt_stops_everything_before_any_model_call(kit):
             )
         )
     assert called == []
+
+
+def payload_with_requirements(linked):
+    turns = payload()["turns"]
+    turns[3]["jd_requirement_ids"] = linked
+    requirements = [{"id": "jd-1", "category": "required", "text": "Redis 운영 경험"}]
+    return payload(turns=turns, requirements=requirements)
+
+
+def test_linked_requirement_ids_are_resolved_to_text_for_the_score_request(run):
+    _, (score, _) = run(payload_with_requirements(["jd-1"]))
+    assert score.requests[0].payload["turns"][3]["jd_requirements"] == [
+        {"id": "jd-1", "category": "required", "text": "Redis 운영 경험"}
+    ]
+
+
+@pytest.mark.parametrize(
+    "linked", [["jd-missing"], ["jd-1", "jd-1"], [1]], ids=["unknown", "duplicate", "non-str"]
+)
+def test_a_bad_requirement_reference_is_rejected_before_any_model_call(kit, linked):
+    called = []
+    with pytest.raises(c.ContractError) as error:
+        asyncio.run(
+            report.generate_report(
+                payload_with_requirements(linked),
+                prompts=PROMPTS,
+                limits=LIMITS,
+                model_call_factory=lambda: called.append(1),
+            )
+        )
+    assert error.value.field == "jd_requirement_ids"
+    assert called == []
+
+
+def test_duplicate_or_non_str_requirement_ids_are_rejected(kit):
+    for requirements in (
+        [
+            {"id": "jd-1", "category": "required", "text": "A"},
+            {"id": "jd-1", "category": "required", "text": "B"},
+        ],
+        [{"id": 1, "category": "required", "text": "A"}],
+    ):
+        with pytest.raises(c.ContractError) as error:
+            report._build_inputs(payload(requirements=requirements))
+        assert error.value.field == "requirements"
