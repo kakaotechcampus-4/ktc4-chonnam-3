@@ -231,6 +231,7 @@ async def generate_report(
     llm: LLMSettings,
     http_client: httpx.AsyncClient | None,
     generator: ReportGenerator | None = None,
+    generation_request_id: uuid.UUID | None = None,
 ) -> GenerateOutcome:
     """리포트를 생성해 저장한다. 이미 있으면 "exists", 생성 조건이 사라졌으면 "skipped".
 
