@@ -4,6 +4,8 @@
 선행 코드를 다시 복사하지 않으므로 이 PR을 병합하는 것만으로 아래 변경이 실행되지는 않는다.
 직접 게시한 새 모듈도 별도 PR의 계약·실행 설정에 의존할 수 있다. 현재 PR은 Draft다.
 
+패치 소유 PR: #213. 아래 표는 이동 후 소유 범위다.
+
 ## 적용 순서
 
 1. PR 본문에 연결한 선행 PR과 필요한 계약·구현을 develop에 반영한다.
@@ -17,6 +19,7 @@
 patch 안의 앞뒤 문맥은 위치 확인을 위한 것이며 선행 구현 전체를 게시한 것이 아니다.
 기존 파일을 보완하는 다른 PR과 파일이 겹치면 적용 순서와 최종 내용을 함께 검토한다.
 
+
 ## 대상과 지문
 
 | 대상 파일 | patch | 적용 전 SHA256 | 적용 후 SHA256 |
@@ -24,6 +27,7 @@ patch 안의 앞뒤 문맥은 위치 확인을 위한 것이며 선행 구현 �
 | `backend/.env.example` | [361f2d0f55c4-.env.example.patch](361f2d0f55c4-.env.example.patch) | `8c6546d3472f846b53323d391ccf14b3d1b54af9569091aecd3b9f68b098a6ca` | `7d252d0036a99412f2739dd298e788090eb5512ae8b76dbaeded4e86a1516071` |
 | `backend/app/core/config.py` | [c2a439a5efd7-config.py.patch](c2a439a5efd7-config.py.patch) | `de80b7e8e8717d41fc73fab4bacf19a32c5c513807c42003066011a794934e41` | `52e4debf03fa3425d6f8b3036d29a5c4824810a9a8a9ab2cff3fce29758db804` |
 | `backend/app/integrations/stt/client.py` | [9b43f3c23789-client.py.patch](9b43f3c23789-client.py.patch) | `30e6e9a21b340fdec875faacd5b750b7a20a32bf47b0ca1e5bde514efde1326e` | `e67642f113712780ee6c4b5b641dd9e9095e3a3f1d7bd728e4f471a65544596e` |
+| `backend/app/shared/events.py` | [79e828b8ae08-events.py.patch](79e828b8ae08-events.py.patch) | `0a001d691af8a01299b1b94ed3cc45a252b9c8af33c06ec7f8a10863d5bbb89b` | `ae6a3444c191ac8276da61e2f98bdcc71bfc2b591ef393a10c616d01aadba9c7` |
 
 실행 결과와 남은 작업의 원본 기록은 `spec/ai/implementation.md`다.
 PR 본문의 게시본 검증과 과거 로컬 통합 검증을 구분해서 읽는다.

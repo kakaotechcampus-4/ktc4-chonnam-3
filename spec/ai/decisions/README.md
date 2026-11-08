@@ -85,3 +85,4 @@ Director 후속 게시의 코어 경계는 [0023](0023-director-runtime.md), 별
 - [0036 Chirp 3 HD의 서비스 음성 설정](0036-chirp3-service-configuration.md): Accepted, 2026-11-08. 청취한 세 음성의 페르소나 배정과 실제 Cloud 잔여량에 근거한 서비스 활성화 경계를 정의한다.
 - [0037 확인된 전체 사용 이력에 근거한 최초 TTS 예산](0037-tts-complete-history-budget.md): Accepted, 2026-11-08. 같은 결제계정의 이번 달 전체 사용 이력을 확인한 경우의 최초 예산 산정과 공급자 조회의 차이를 정의한다.
 - [0038 최종 서비스의 기준 초기화·작업 전달·검증 경계](0038-final-service-followups.md): Accepted for local development, 2026-11-08. 개발 초안 활성화와 사람 검수 구분, 프로필 outbox, 고정 SHA 보완 조회와 유한 복구·자동 검증의 경계를 정의한다.
+- [0041 게시 PR의 공통 기반과 통합 검사 순서](0041-published-pr-dependency-order.md): Accepted, 2026-11-08. 기존 PR 번호·원본 보존, 공통 기반 선행 배치와 통합 검사 이동, 미병합 선행 및 19개 후속 패치의 실행 제약을 정의한다.
