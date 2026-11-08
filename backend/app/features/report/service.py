@@ -37,8 +37,6 @@ from app.db.models import (
     ReportDisagreement,
     ReportScore,
 )
-from app.db.models.report import SCORE_KEYS
-from app.features.report import queries
 from app.features.report.schemas import (
     AgentFeedback,
     GeneratingResponse,
