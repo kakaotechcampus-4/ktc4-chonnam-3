@@ -1347,6 +1347,8 @@ def parse_deep_analysis(
                 raise ContractError("semantic", "duplicate path")
             matched = source_by_scope.get((area.path, area.scope))
             if matched is None:
+                if any(item.path == area.path for item in source.sources):
+                    raise ContractError("semantic", "read scope mismatch")
                 raise ContractError("semantic", "unread source")
             if matched.read_scope != area.scope:
                 raise ContractError("semantic", "read scope mismatch")
