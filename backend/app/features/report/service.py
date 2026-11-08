@@ -295,17 +295,6 @@ async def generate_report(
                 )
                 return output
 
-    def model_call_factory() -> ModelCall:
-        # task 마다 새 CallBudget 을 묶어 두 task 가 총 2회 시도를 나눠 쓰지 않게 한다.
-        return cast(
-            ModelCall,
-            partial(
-                call_model,
-                api_key=llm.openai_api_key,
-                base_url=llm.llm_base_url,
-                http_client=http_client,
-                budget=CallBudget(),
-            ),
         )
 
     raw = await generate(
