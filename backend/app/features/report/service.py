@@ -378,6 +378,28 @@ async def generate_report(
             if outcome in {"created", "revised"}:
                 from app.features.profile.refresh_outbox import ensure_request
 
+                report = await db.scalar(
+                    select(InterviewReport).where(
+                        InterviewReport.interview_session_id == interview_id
+                    )
+                )
+                assert report is not None and interview is not None
+                # 보고서 commit 뒤 worker가 종료돼도 후속 전달 의도는 같은 DB에 남는다.
+                await ensure_request(
+                    db,
+                    user_id=interview.user_id,
+                    report_id=report.id,
+                    report_revision=report.current_revision,
+                )
+            if request is not None:
+                request.status, request.error_code = "succeeded", None
+        return outcome
+    except BaseException as error:
+        if generation_request_id is not None:
+            await asyncio.shield(
+                generation.fail(sessions, generation_request_id, failure_code(error), attempts)
+            )
+        raise
 
 
 def _build_payload(
