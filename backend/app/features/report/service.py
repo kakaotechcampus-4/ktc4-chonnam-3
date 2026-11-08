@@ -271,6 +271,8 @@ async def generate_report(
             if request is not None:
                 request.input_fingerprint, request.input_snapshot = fingerprint, snapshot
 
+        def model_call_factory() -> ModelCall:
+            budget = CallBudget()
 
     generate = generator or resolve_generator()
 
