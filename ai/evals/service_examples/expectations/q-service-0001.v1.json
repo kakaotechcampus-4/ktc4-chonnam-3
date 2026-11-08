@@ -1,0 +1,24 @@
+{
+  "case_id": "q-service-0001",
+  "version": 1,
+  "allowed": [
+    {
+      "purpose": "Ask one neutral introduction and role question using the assigned evaluation keys."
+    }
+  ],
+  "forbidden": [
+    {
+      "reason": "Do not treat synthetic inputs or missing evidence as verified personal contribution."
+    }
+  ],
+  "grader_controls": [],
+  "review": {
+    "status": "unreviewed",
+    "author": null,
+    "reviewer": null,
+    "reviewed_at": null,
+    "pending_notes": [
+      "Diagnostic service-input example only; human review and grounded scoring criteria are still required."
+    ]
+  }
+}
