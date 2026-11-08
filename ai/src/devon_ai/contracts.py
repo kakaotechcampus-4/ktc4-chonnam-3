@@ -743,9 +743,6 @@ class ToolResult(_Contract):
             raise ContractError("semantic", "searched_scope")
         if self.status == "found" and (not self.items or self.error_code is not None):
             raise ContractError("semantic", "found result")
-        if self.status in ("not_found", "insufficient_analysis") and (
-            self.items or self.error_code is not None
-        ):
             raise ContractError("semantic", "empty result")
         if self.status == "tool_error" and (self.error_code is None or not self.limitations):
             raise ContractError("semantic", "tool error")
