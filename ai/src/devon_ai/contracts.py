@@ -739,7 +739,6 @@ class ToolResult(_Contract):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        if self.status in ("found", "not_found") and not self.searched_scope:
             raise ContractError("semantic", "searched_scope")
         if self.status == "found" and (not self.items or self.error_code is not None):
             raise ContractError("semantic", "found result")
