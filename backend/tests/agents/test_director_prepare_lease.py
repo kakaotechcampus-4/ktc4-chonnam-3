@@ -2,6 +2,7 @@
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from math import nextafter
 from uuid import UUID, uuid4
 
 import httpx
@@ -133,14 +134,18 @@ async def test_replaced_owner_cannot_store_late_director_question(agent_sessions
 
 
 def test_prepare_maximum_allowed_timeouts_fit_actual_worker_budget():
-    prepare_lease.validate_timeout(30, 127.5)
+    # 두 문서·두 레포·Claim 대조까지 포함한 현재 17T 준비 예산의 경계를 확인한다.
+    # 반올림으로 계산 합이 1770.0000000000002가 되지 않도록 경계 안쪽 값을 쓴다.
+    boundary = nextafter((prepare_lease.PREPARATION_DEADLINE_SECONDS - 2 * 30 - 30) / 17, 0)
+    prepare_lease.validate_timeout(30, boundary)
     with pytest.raises(prepare_lease.PreparationTimeoutError):
-        prepare_lease.validate_timeout(30, 127.6)
+        prepare_lease.validate_timeout(30, boundary + 0.001)
+    prepare_lease.validate_timeout(300, 1)
     with pytest.raises(prepare_lease.PreparationTimeoutError):
-        prepare_lease.validate_timeout(300, 1)
+        prepare_lease.validate_timeout(900, 1)
 
 
-@pytest.mark.parametrize("age, expected", [(100, 0), (601, 1)])
+@pytest.mark.parametrize("age, expected", [(100, 0), (prepare_lease.JOB_TIMEOUT_SECONDS + 1, 1)])
 @pytest.mark.parametrize("claimed", [False, True, "malformed"])
 async def test_legacy_claim_has_worker_timeout_grace_and_pending_recovery(
     agent_sessions, ready, age, expected, claimed

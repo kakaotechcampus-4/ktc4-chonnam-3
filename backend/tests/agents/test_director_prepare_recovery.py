@@ -90,6 +90,10 @@ async def test_middle_phase_retry_keeps_prior_success(
 
 
 async def test_actual_deployment_worker_keeps_all_jobs_and_reaper():
+    from app.features.interview.prepare_lease import (
+        JOB_TIMEOUT_SECONDS,
+        PREPARATION_DEADLINE_SECONDS,
+    )
     from app.workers.analysis_app import WorkerSettings
     from app.workers.tasks.interview_prep import interview_prep
 
@@ -105,7 +109,8 @@ async def test_actual_deployment_worker_keeps_all_jobs_and_reaper():
         job.coroutine.__name__ for job in WorkerSettings.cron_jobs
     }
     assert WorkerSettings.max_tries == 1
-    assert WorkerSettings.job_timeout == 600
+    assert WorkerSettings.job_timeout == JOB_TIMEOUT_SECONDS == 1800
+    assert PREPARATION_DEADLINE_SECONDS + 30 == WorkerSettings.job_timeout
 
 
 async def test_changed_criteria_during_director_is_not_stored(agent_sessions, ready):

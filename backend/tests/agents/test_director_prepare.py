@@ -276,6 +276,91 @@ async def test_cached_l2_reads_real_fixed_source_and_starts_actual_director(agen
     assert transport.model_operations == ["plan", "review"]
 
 
+async def test_prepare_persists_tree_neighbor_as_candidate_without_inventing_evidence(
+    agent_sessions, ready
+):
+    from app.features.interview.agent_queries import load_evidence_scope
+
+    transport = Transport(ready)
+
+    async def handle(request):
+        result = await transport(request)
+        if request.url.path.endswith(f"/git/trees/{TREE}"):
+            body = result.json()
+            body["tree"].append(
+                dict(path="nearby.custom", mode="100644", type="blob", sha="d" * 40)
+            )
+            return httpx.Response(200, json=body)
+        return result
+
+    assert await run(agent_sessions, ready, handle)
+    async with agent_sessions() as db:
+        interview = await db.get(InterviewSession, ready["interview_id"])
+        snapshot = interview.context_state["repository_lookup_candidates"][str(ready["repo_id"])]
+        assert snapshot["head_sha"] == ready["sha"] and snapshot["paths"] == [PATH, "nearby.custom"]
+        scope = await load_evidence_scope(
+            db,
+            user_id=ready["owner"],
+            interview_id=ready["interview_id"],
+            repository_id=ready["repo_id"],
+        )
+        assert "nearby.custom" in scope.allowed_paths
+        assert list(await db.scalars(select(Evidence.path))) == [PATH]
+    assert transport.model_operations == ["plan", "review"]
+
+
+async def test_read_file_not_highlighted_by_l2_remains_queryable_only_at_its_sha(
+    agent_sessions, ready
+):
+    from app.features.interview.agent_queries import load_evidence_scope
+
+    second = "read-not-highlighted.custom"
+    async with agent_sessions.begin() as db:
+        await db.execute(
+            update(RepoAnalysis)
+            .where(RepoAnalysis.analysis_level == "l2")
+            .values(status="failed", result=None)
+        )
+    transport = Transport(ready, miss=True)
+    transport.outputs[0] = {"selected_paths": [PATH, second]}
+
+    async def handle(request):
+        if request.url.path.endswith(f"/contents/{second}"):
+            return httpx.Response(
+                200,
+                json=dict(
+                    type="file",
+                    path=second,
+                    sha=BLOB,
+                    size=len(TEXT.encode()),
+                    encoding="base64",
+                    content=base64.b64encode(TEXT.encode()).decode(),
+                ),
+            )
+        result = await transport(request)
+        if request.url.path.endswith(f"/git/trees/{TREE}"):
+            body = result.json()
+            body["tree"].append(dict(path=second, mode="100644", type="blob", sha=BLOB))
+            return httpx.Response(200, json=body)
+        return result
+
+    assert await run(agent_sessions, ready, handle)
+    async with agent_sessions.begin() as db:
+        args = dict(
+            user_id=ready["owner"],
+            interview_id=ready["interview_id"],
+            repository_id=ready["repo_id"],
+        )
+        assert second in (await load_evidence_scope(db, **args)).allowed_paths
+        assert list(await db.scalars(select(Evidence.path))) == [PATH]
+        row = await db.get(InterviewSession, ready["interview_id"])
+        state = json.loads(json.dumps(row.context_state))
+        state["repository_lookup_candidates"][str(ready["repo_id"])]["head_sha"] = "f" * 40
+        row.context_state = state
+        await db.flush()
+        assert second not in (await load_evidence_scope(db, **args)).allowed_paths
+
+
 async def test_missing_active_prompt_fails_explicitly_without_external_io(agent_sessions, ready):
     async with agent_sessions.begin() as db:
         await db.execute(
