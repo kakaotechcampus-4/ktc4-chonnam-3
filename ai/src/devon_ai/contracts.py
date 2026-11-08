@@ -747,6 +747,10 @@ class ToolResult(_Contract):
             raise ContractError("semantic", "empty result")
         if self.status == "tool_error" and (self.error_code is None or not self.limitations):
             raise ContractError("semantic", "tool error")
+        # 읽은 구간의 근거는 남기되 미확인 구간을 조회 성공으로 바꾸지 않는다.
+        if self.status == "insufficient_analysis" and (
+            not self.limitations or self.error_code is not None
+        ):
             raise ContractError("semantic", "analysis limitations")
 
 
