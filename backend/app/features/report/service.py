@@ -65,6 +65,7 @@ from app.llm_tasks.report import (
 from app.shared.enums import Reason
 
 # docs/redis-keys.md: report generation lock. worker 가 끝나기 전에 풀리면 중복 enqueue 가 난다.
+REPORT_LOCK_TTL_SECONDS = generation.LOCK_SECONDS
 # 실패 이력: report_generate worker 가 코드를 남긴다. TTL 이 없어 자동 재생성이 없다.
 REPORT_FAIL_KEY = "report:fail:{interview_id}"
 # AI 모듈이 서술(report)과 점수 판정(report_score) 두 task 를 쓴다. 둘 다 활성이어야 한다.
