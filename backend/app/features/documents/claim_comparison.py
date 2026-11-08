@@ -238,3 +238,243 @@ async def prepare_selected_claim_comparisons(
         cached = list(
             await db.scalars(
                 select(DocumentClaimComparison)
+                .where(
+                    DocumentClaimComparison.interview_session_id == interview_id,
+                    DocumentClaimComparison.input_fingerprint == fingerprint,
+                    DocumentClaimComparison.execution_status.in_(("succeeded", "budget_exhausted")),
+                )
+                .order_by(DocumentClaimComparison.created_at.desc(), DocumentClaimComparison.id)
+            )
+        )
+        batches: dict[UUID, list[DocumentClaimComparison]] = {}
+        for item in cached:
+            batches.setdefault(item.run_id, []).append(item)
+        reusable = next(
+            (batch for batch in batches.values() if len(batch) == len(material.claims)), None
+        )
+        if reusable is not None:
+            overall = (
+                "budget_exhausted"
+                if any(row.execution_status == "budget_exhausted" for row in reusable)
+                else "succeeded"
+            )
+            _state(interview, overall, len(reusable), ids=tuple(str(row.id) for row in reusable))
+            return
+        state = dict(interview.context_state or {})
+        if (
+            state.get("document_claim_comparison_status") == "running"
+            and state.get("document_claim_comparison_job") == str(job_id)
+            and state.get("document_claim_comparison_input") == fingerprint
+        ):
+            return
+        run_id = uuid4()
+        _state(interview, "running", 0)
+        interview.context_state = {
+            **(interview.context_state or {}),
+            "document_claim_comparison_run_id": str(run_id),
+            "document_claim_comparison_job": str(job_id),
+            "document_claim_comparison_input": fingerprint,
+        }
+
+    attempts: list[c.AttemptMetadata] = []
+    execution = "succeeded"
+    selected = material.claims[:MAX_CLAIMS]
+    cancelled = False
+    if not needs_model:
+        result = ClaimComparisonResult(
+            tuple(
+                unverified(
+                    item,
+                    unverified_reason(item, has_code=bool(material.evidences))
+                    or "code_evidence_unavailable",
+                )
+                for item in selected
+            ),
+            None,
+            (),
+        )
+    elif prompt is None or llm is None:
+        execution = "not_available"
+        result = ClaimComparisonResult(
+            None,
+            c.CallFailure(
+                "provider", "claim_comparison_not_configured", "Comparison is not configured."
+            ),
+            (),
+        )
+    else:
+        try:
+            result = await compare_document_claims(
+                selected,
+                material.evidences,
+                prompt=prompt,
+                settings=llm,
+                http_client=http_client,
+                attempt_sink=attempts,
+            )
+        except asyncio.CancelledError:
+            cancelled = True
+            execution = "failed"
+            result = ClaimComparisonResult(
+                None,
+                c.CallFailure("provider", "claim_comparison_cancelled", "Comparison cancelled."),
+                tuple(attempts),
+            )
+    if result.failure and execution == "succeeded":
+        execution = "failed"
+
+    async def store() -> None:
+        async with sessions.begin() as db:
+            interview = await db.scalar(
+                select(InterviewSession)
+                .where(InterviewSession.id == interview_id)
+                .with_for_update()
+            )
+            if interview is None:
+                return
+            record = LLMCallRecord(
+                id=run_id,
+                interview_session_id=interview_id,
+                task_name="claim_code",
+                attempts=[asdict(item) for item in result.attempts],
+                failure=asdict(result.failure) if result.failure else None,
+            )
+            db.add(record)
+            if not owns_preparation(interview, job_id=job_id) or (
+                interview.context_state or {}
+            ).get("document_claim_comparison_run_id") != str(run_id):
+                record.discard_reason = "preparation_changed"
+                return
+            current = await _input(db, interview)
+            if needs_model:
+                try:
+                    active = await load_active_prompt(db, "claim_code")
+                except (PromptNotFoundError, PromptConfigurationError):
+                    active = None
+            else:
+                active = None
+            if cancelled or current.fingerprint(active) != fingerprint:
+                record.discard_reason = "comparison_input_or_preparation_changed"
+                _state(interview, "pending", 0, "comparison_input_changed")
+                return
+            by_id = {item.claim_id: item for item in result.data or ()}
+            stored = []
+            for index, claim in enumerate(material.claims):
+                status = execution if index < MAX_CLAIMS else "budget_exhausted"
+                error = (
+                    result.failure.error_code
+                    if result.failure
+                    else "comparison_claim_budget_exceeded"
+                )
+                comparison = by_id.get(claim.claim_id) or unverified(claim, error)
+                comparison = replace(
+                    comparison,
+                    limitations=tuple(
+                        dict.fromkeys((*comparison.limitations, *material.limitations))
+                    ),
+                )
+                existing = DocumentClaimComparison(
+                    interview_session_id=interview_id,
+                    claim_id=UUID(claim.claim_id),
+                    run_id=run_id,
+                    input_fingerprint=fingerprint,
+                    document_version=claim.source_version,
+                )
+                db.add(existing)
+                existing.claim_source = asdict(claim)
+                existing.code_sources = list(material.code_sources)
+                existing.status, existing.execution_status = comparison.status, status
+                existing.result = asdict(comparison)
+                existing.prompt_version = prompt.version if prompt else None
+                existing.model = prompt.model if prompt else None
+                stored.append(existing)
+            await db.flush()
+            overall = execution if len(material.claims) <= MAX_CLAIMS else "budget_exhausted"
+            _state(
+                interview,
+                overall,
+                len(material.claims),
+                result.failure.error_code if result.failure else None,
+                tuple(str(row.id) for row in stored),
+            )
+
+    if cancelled:
+        await asyncio.shield(store())
+        raise asyncio.CancelledError
+    await store()
+
+
+async def load_claim_comparison_sources(
+    db: AsyncSession,
+    interview: InterviewSession,
+    *,
+    include_historical: bool = False,
+) -> tuple[c.SupplementalSource, ...]:
+    """문서 주장과 대조 해석은 서로 다른 ID·버전으로 보존한다."""
+    documents = {str(item.id): item for item in await selected_documents(db, interview)}
+    if not documents or "document_claim_comparison_active_ids" not in (
+        interview.context_state or {}
+    ):
+        return ()
+    raw_ids = (interview.context_state or {}).get("document_claim_comparison_active_ids", [])
+    if type(raw_ids) is not list or any(type(value) is not str for value in raw_ids):
+        raise c.ContractError("schema", "comparison active ids")
+    active_ids = set(cast(list[str], raw_ids))
+    if not active_ids and not include_historical:
+        return ()
+    evidence_rows = await db.scalars(
+        select(Evidence).where(Evidence.interview_session_id == interview.id)
+    )
+    sources = {str(item.id): item for item in evidence_rows}
+    rows = await db.execute(
+        select(DocumentClaimComparison, DocumentClaim)
+        .join(DocumentClaim, DocumentClaim.id == DocumentClaimComparison.claim_id)
+        .where(
+            DocumentClaimComparison.interview_session_id == interview.id,
+            DocumentClaim.document_id.in_([UUID(item) for item in documents]),
+        )
+        .order_by(DocumentClaimComparison.created_at, DocumentClaimComparison.id)
+    )
+    result = []
+    for comparison, claim in rows:
+        document = documents[str(claim.document_id)]
+        current = (
+            str(comparison.id) in active_ids
+            and comparison.document_version == (document.source_snapshot or {}).get("text_hash")
+            and str(claim.id) in (document.claims_active_ids or ())
+        )
+        if not include_historical and not current:
+            continue
+        limitations = tuple(comparison.result.get("limitations", []))
+        invalid = False
+        for reference in comparison.code_sources:
+            source = sources.get(reference["evidence_id"])
+            if (
+                source is None
+                or source.interview_session_id != interview.id
+                or {
+                    "git_ref": source.git_ref,
+                    "path": source.path,
+                    "content_hash": hashlib.sha256(source.snippet.encode()).hexdigest(),
+                    "start_line": source.start_line,
+                    "end_line": source.end_line,
+                }
+                != {
+                    key: reference[key]
+                    for key in ("git_ref", "path", "content_hash", "start_line", "end_line")
+                }
+            ):
+                invalid = True
+        content = {
+            "claim_id": str(claim.id),
+            "document_version": comparison.document_version,
+            "execution_status": comparison.execution_status,
+            "comparison": comparison.result
+            if not invalid
+            else {"status": "unverified", "reason": "comparison_code_source_unavailable"},
+            "code_sources": comparison.code_sources,
+        }
+        result.append(
+            c.SupplementalSource(
+                source_id=str(comparison.id),
+                kind="document_claim_comparison",
