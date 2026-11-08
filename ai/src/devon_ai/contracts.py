@@ -945,6 +945,9 @@ class ShallowRepoInput(_Contract):
     commit_count: int | None
     user_commit_count: int | None
     collection_errors: tuple[str, ...]
+    structure: tuple[str, ...] = ()
+    supporting_files: "tuple[SourceDocument, ...]" = ()
+    source_limitations: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         super().__post_init__()
