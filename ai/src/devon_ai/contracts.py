@@ -258,7 +258,6 @@ def _unique(values: tuple[object, ...], name: str) -> None:
 
 
 PersonaId = Literal["tech_lead", "hr_manager", "domain_lead"]
-BasisKind = Literal["evidence", "jd_requirement", "job_posting", "answer_turn"]
 
 
 @dataclass(frozen=True)
