@@ -274,6 +274,26 @@ async def generate_report(
         def model_call_factory() -> ModelCall:
             budget = CallBudget()
 
+            async def invoke(
+                request: c.ModelRequest, validator: Callable[[object], object]
+            ) -> c.ModelResult[object]:
+                request = replace(request, limits=llm.call_limits(request.prompt.task_name))
+                output = await call_model(
+                    request,
+                    validator,
+                    api_key=llm.openai_api_key,
+                    base_url=llm.llm_base_url,
+                    http_client=http_client,
+                    budget=budget,
+                )
+                attempts.append(
+                    {
+                        "task": request.prompt.task_name,
+                        "failure": asdict(output.failure) if output.failure else None,
+                        "attempts": [asdict(item) for item in output.attempts],
+                    }
+                )
+                return output
 
     def model_call_factory() -> ModelCall:
         # task 마다 새 CallBudget 을 묶어 두 task 가 총 2회 시도를 나눠 쓰지 않게 한다.
