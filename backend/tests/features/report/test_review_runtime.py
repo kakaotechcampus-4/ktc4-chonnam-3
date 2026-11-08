@@ -238,3 +238,235 @@ async def test_expired_request_requires_explicit_retry_and_keeps_the_old_request
     assert (await client.get(path)).status_code == 202
     old = (await db.scalars(select(ReportGenerationRequest))).one()
     old.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    await db.commit()
+    assert (await client.get(path)).status_code == 409
+    await db.refresh(old)
+    assert old.status == "stale"
+    assert (await client.post(path + "/retry")).status_code == 202
+    assert enqueue.await_count == 2
+
+
+async def test_failed_reassessment_keeps_the_successful_public_report_and_approval(
+    app, db, ctx, prompt, redis, enqueue
+):
+    interview, _ = ctx
+    report = await make_report(db, interview)
+    row = ReportDisagreement(report_id=report.id, persona="tech_lead", reason_type="other")
+    db.add(row)
+    await db.commit()
+    await reviews.decide(
+        db,
+        disagreement_id=row.id,
+        expected_revision=1,
+        reviewer="operator-fixture",
+        reason="근거 확인",
+        approve=True,
+    )
+    await db.commit()
+    request = await generation.enqueue(
+        db,
+        redis,
+        interview_id=interview.id,
+        user_id=interview.user_id,
+        mode="reassessment",
+        disagreement=row,
+    )
+    await generation.claim(app.state.session_factory, interview.id, request.id)
+    with pytest.raises(RuntimeError):
+        await service.generate_report(
+            app.state.session_factory,
+            interview_id=interview.id,
+            llm=LLM,
+            http_client=None,
+            generator=FakeGenerator(error=RuntimeError("fixture")),
+            generation_request_id=request.id,
+        )
+    await db.refresh(report)
+    await db.refresh(row)
+    await db.refresh(request)
+    assert report.current_revision == 1 and report.headline == "헤드라인"
+    assert row.status == "approved" and row.applied_revision is None
+    assert request.status == "failed"
+
+
+async def test_operator_cli_records_approval_then_queues_a_separate_reassessment(
+    app_settings, db, ctx
+):
+    from scripts.review_report import operate
+
+    interview, _ = ctx
+    report = await make_report(db, interview)
+    row = ReportDisagreement(report_id=report.id, persona="tech_lead", reason_type="other")
+    db.add(row)
+    await db.commit()
+    args = Namespace(
+        action="review",
+        disagreement_id=row.id,
+        expected_revision=1,
+        reviewer="operator-fixture",
+        reason="근거와 평가 범위 확인",
+        decision="approve_reassessment",
+        apply=True,
+    )
+    result = await operate(app_settings, args)
+    assert result["status"] == "approved"
+    assert await db.scalar(select(func.count()).select_from(ReportGenerationRequest)) == 0
+    args.action = "reassess"
+    result = await operate(app_settings, args)
+    assert result["mode"] == "queued"
+    request = (await db.scalars(select(ReportGenerationRequest))).one()
+    assert request.mode == "reassessment" and request.status == "queued"
+    assert request.requested_by == "operator-fixture"
+    await db.refresh(report)
+    assert report.current_revision == 1
+
+
+async def test_prompt_change_during_generation_discards_old_results(
+    app, db, ctx, prompt, redis, enqueue
+):
+    from sqlalchemy import update
+
+    from app.db.models import PromptVersion
+
+    interview, _ = ctx
+    request = await generation.enqueue(
+        db, redis, interview_id=interview.id, user_id=interview.user_id
+    )
+    await generation.claim(app.state.session_factory, interview.id, request.id)
+
+    class ChangingGenerator(FakeGenerator):
+        async def __call__(self, *args, **kwargs):
+            value = await super().__call__(*args, **kwargs)
+            async with app.state.session_factory.begin() as other:
+                await other.execute(
+                    update(PromptVersion)
+                    .where(PromptVersion.task_name == "report")
+                    .values(is_active=False)
+                )
+                other.add(
+                    PromptVersion(
+                        task_name="report",
+                        version="next-fixture",
+                        model="report-model",
+                        template="새 검토 기준",
+                        is_active=True,
+                    )
+                )
+            return value
+
+    result = await service.generate_report(
+        app.state.session_factory,
+        interview_id=interview.id,
+        llm=LLM,
+        http_client=None,
+        generator=ChangingGenerator(),
+        generation_request_id=request.id,
+    )
+    assert result == "skipped"
+    await db.refresh(request)
+    assert request.status == "stale" and request.error_code == "report_input_changed"
+    assert await db.scalar(select(func.count()).select_from(InterviewReport)) == 0
+
+
+async def test_cancelled_queue_delivery_does_not_leave_an_active_orphan(db, ctx, redis, enqueue):
+    interview, _ = ctx
+    enqueue.side_effect = asyncio.CancelledError()
+    with pytest.raises(asyncio.CancelledError):
+        await generation.enqueue(db, redis, interview_id=interview.id, user_id=interview.user_id)
+    request = (await db.scalars(select(ReportGenerationRequest))).one()
+    assert request.status == "enqueue_failed"
+    assert await redis.exists(f"report:gen:{interview.id}") == 0
+
+
+async def test_report_records_the_actual_provider_model_instead_of_the_configured_alias(
+    app, db, ctx, prompt, monkeypatch
+):
+    from devon_ai import contracts as c
+
+    async def model_call(request, validator, **kwargs):
+        metadata = c.AttemptMetadata(
+            1,
+            "fixture",
+            "actual-provider-model",
+            request.prompt.version,
+            request.schema_version,
+            1,
+            1,
+            1,
+        )
+        return c.ModelResult({}, None, (metadata,))
+
+    monkeypatch.setattr(service, "call_model", model_call)
+
+    class ObservedGenerator(FakeGenerator):
+        async def __call__(self, payload, *, prompts, limits, model_call_factory):
+            request = c.ModelRequest(
+                prompts["report"], {}, "fixture", "1", {"type": "object"}, limits
+            )
+            await model_call_factory()(request, lambda value: value)
+            return await super().__call__(
+                payload, prompts=prompts, limits=limits, model_call_factory=model_call_factory
+            )
+
+    interview, _ = ctx
+    await service.generate_report(
+        app.state.session_factory,
+        interview_id=interview.id,
+        llm=LLM,
+        http_client=None,
+        generator=ObservedGenerator(),
+    )
+    report = (await db.scalars(select(InterviewReport))).one()
+    assert report.model == "actual-provider-model"
+
+
+async def test_report_tasks_use_and_audit_their_own_time_limits(
+    app, db, ctx, prompt, redis, enqueue, monkeypatch
+):
+    from devon_ai import contracts as c
+
+    observed = {}
+
+    async def model_call(request, validator, **kwargs):
+        observed[request.prompt.task_name] = request.limits.timeout_seconds
+        metadata = c.AttemptMetadata(
+            1,
+            "fixture",
+            request.prompt.model,
+            request.prompt.version,
+            request.schema_version,
+            1,
+            1,
+            1,
+        )
+        return c.ModelResult({}, None, (metadata,))
+
+    monkeypatch.setattr(service, "call_model", model_call)
+
+    class Generator(FakeGenerator):
+        async def __call__(self, payload, *, prompts, limits, model_call_factory):
+            for name in ("report", "report_score"):
+                request = c.ModelRequest(
+                    prompts[name], {}, "fixture", "1", {"type": "object"}, limits
+                )
+                await model_call_factory()(request, lambda value: value)
+            return self.output
+
+    interview, _ = ctx
+    request = await generation.enqueue(
+        db, redis, interview_id=interview.id, user_id=interview.user_id
+    )
+    await generation.claim(app.state.session_factory, interview.id, request.id)
+    llm = LLM.model_copy(update={"llm_task_timeouts": {"report": 17, "report_score": 19}})
+    await service.generate_report(
+        app.state.session_factory,
+        interview_id=interview.id,
+        llm=llm,
+        http_client=None,
+        generator=Generator(),
+        generation_request_id=request.id,
+    )
+    await db.refresh(request)
+    assert observed == {"report": 17, "report_score": 19}
+    assert request.input_snapshot["task_limits"]["report"]["timeout_seconds"] == 17
+    assert request.input_snapshot["task_limits"]["report_score"]["timeout_seconds"] == 19
