@@ -7,6 +7,9 @@
 docs/db-schema.md 리포트 절 / task-16
 """
 
+import asyncio
+import hashlib
+import json
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
