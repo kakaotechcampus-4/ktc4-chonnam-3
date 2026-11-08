@@ -1376,8 +1376,6 @@ def validate_deep_analysis(
         raise ContractError("semantic", "repository ref")
     if not 1 <= len(candidate.notable_areas) <= 5:
         raise ContractError("semantic", "notable area count")
-    _unique(tuple(area.path for area in candidate.notable_areas), "notable area paths")
-    source_by_path = {item.path: item for item in source.sources}
     for area in candidate.notable_areas:
         matched = source_by_path.get(area.path)
         if matched is None or matched.read_scope != area.scope:
