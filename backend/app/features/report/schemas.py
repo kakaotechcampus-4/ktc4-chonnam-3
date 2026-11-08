@@ -10,8 +10,10 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from app.shared.enums import Persona
-from app.shared.schema import CamelResponse
+from pydantic import Field
+
+from app.shared.enums import Persona, ReasonType
+from app.shared.schema import CamelModel, CamelResponse
 
 
 class ScoreItem(CamelResponse):
@@ -47,12 +49,15 @@ class ReportTurn(CamelResponse):
     persona: Persona
     question: str
     answer: str | None
+    main_index: int
+    follow_up_depth: int
 
 
 class ReportResponse(CamelResponse):
     """openapi ReportResponse. 200."""
 
     interview_id: uuid.UUID
+    revision: int = Field(default=1, ge=1)
     position: str
     position_label: str
     total_score: float
@@ -71,3 +76,11 @@ class GeneratingResponse(CamelResponse):
 
     status: Literal["generating"] = "generating"
     retry_after: int
+
+
+class FeedbackDisagreementRequest(CamelModel):
+    persona: Persona
+    reason_type: ReasonType
+    comment: str | None = Field(default=None, max_length=500)
+    # 기존 최초 버전 요청만 생략을 허용하며 새 FE는 항상 읽은 버전을 보낸다.
+    expected_revision: int | None = Field(default=None, ge=1, strict=True)
