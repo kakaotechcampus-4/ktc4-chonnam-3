@@ -233,6 +233,43 @@ async def generate_report(
     generator: ReportGenerator | None = None,
     generation_request_id: uuid.UUID | None = None,
 ) -> GenerateOutcome:
+    """원문 입력은 짧게 읽고 모델을 호출한다. 명시 승인·CAS 없이 성공본을 바꾸지 않는다."""
+    attempts: list[dict[str, object]] = []
+    try:
+        async with sessions.begin() as db:
+            interview = await db.get(InterviewSession, interview_id, with_for_update=True)
+            if interview is None or interview.status != "completed":
+                return "skipped"
+            request = (
+                await db.get(ReportGenerationRequest, generation_request_id, with_for_update=True)
+                if generation_request_id is not None
+                else None
+            )
+            if generation_request_id is not None and (
+                request is None
+                or request.interview_session_id != interview_id
+                or request.status != "running"
+                or request.expires_at <= datetime.now(UTC)
+            ):
+                return "skipped"
+            existing = await queries.get_report(db, interview_id=interview_id)
+            reassessment = request is not None and request.mode == "reassessment"
+            if existing is not None and not reassessment:
+                return "exists"
+            if (
+                request is not None
+                and reassessment
+                and (existing is None or existing.current_revision != request.expected_revision)
+            ):
+                assert request is not None
+                request.status, request.error_code = "stale", "report_revision_changed"
+                return "skipped"
+            if not await queries.count_answered_turns(db, interview_id=interview_id):
+                return "skipped"
+            payload, prompts, turn_ids, coverage = await _read_generation_input(db, interview)
+            fingerprint, snapshot = _input_snapshot(payload, prompts, llm)
+            if request is not None:
+                request.input_fingerprint, request.input_snapshot = fingerprint, snapshot
 
     DB transaction 은 입력 수집과 저장에 각각 짧게만 쓰고 모델 호출 중에는 열어 두지 않는다.
     실패는 예외로 전파하며 호출자(worker)가 실패 이력과 lock 해제를 맡는다.
