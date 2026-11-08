@@ -370,6 +370,13 @@ class Question(_Contract):
     question_contract: QuestionContract
     evidence_refs: tuple[str, ...]
     jd_requirement_ids: tuple[str, ...]
+    question_type: Literal["main", "follow_up"] = "main"
+    parent_turn_id: str | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if (self.question_type == "main") != (self.parent_turn_id is None):
+            raise ContractError("semantic", "question relation")
 
 
 @dataclass(frozen=True)
