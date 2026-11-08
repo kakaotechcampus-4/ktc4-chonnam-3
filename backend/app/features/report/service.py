@@ -157,6 +157,7 @@ async def _build_report(
         scores=scores,
         agent_feedbacks=feedbacks,
         coverage=coverage,
+        turns=response_turns,
         repository_names=await queries.list_repository_names(db, interview_id=interview.id),
         completed_at=interview.completed_at or report.generated_at or datetime.now(UTC),
     )
