@@ -114,7 +114,10 @@ async def test_question_contract_and_metadata_are_durable_and_replay_does_not_ca
     async with agent_sessions() as db:
         turn = await db.get(InterviewTurn, result.turn_id)
         record = await db.get(LLMCallRecord, call_id)
-        assert turn.question_contract == json.loads(json.dumps(asdict(prepared_contract())))
+        expected = json.loads(json.dumps(asdict(prepared_contract())))
+        expected.pop("evaluation_keys")
+        assert turn.question_contract == expected
+        assert c.decode_strict(c.QuestionContract, turn.question_contract) == prepared_contract()
         assert record.turn_id == turn.id and record.task_name == "director"
         assert record.attempts[0]["raw_output"] == output()
         assert record.attempts[0]["model"] == turn.model == "actual-model"
