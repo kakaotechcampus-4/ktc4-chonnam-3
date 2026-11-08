@@ -888,6 +888,10 @@ class Context(_Contract):
     evidence: tuple[Evidence, ...]
     domain_frames: tuple[DomainFrame, ...]
     limits: ContextLimits
+    evaluation_targets: tuple[EvaluationTarget, ...] = ()
+    supplemental_sources: tuple[SupplementalSource, ...] = ()
+    external_searches: tuple[ExternalSearchStatus, ...] = ()
+    supplemental_limitations: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         super().__post_init__()
