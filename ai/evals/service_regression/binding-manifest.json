@@ -1,0 +1,240 @@
+{
+  "format_version": 1,
+  "original_files": {
+    "ai/evals/inputs/e-0001.v1.json": "2e4760e49bf9852af0c89316ca8f3bd375050501fd1b363eda4fa78a3587c61c",
+    "ai/evals/inputs/e-0002.v1.json": "dab9d6f8a1a4d869bb1646f7aacd33862eaa103557c701895e66f7ebada2dc23",
+    "ai/evals/inputs/e-0003.v1.json": "d7c03c42fbd6df2c3029833f67c095aaecfd77df1db19728b688ae5ecd6d8c57",
+    "ai/evals/inputs/e-0004.v1.json": "3c9e4ca02e8e3fc5b42dcb92c0ddde0a177d7ffb2cee3c0b92cb877ed568afdc",
+    "ai/evals/inputs/e-0005.v1.json": "94db3b984a7000bb0e388634fa7d259451d62aba8d05a41655f12348674e6ac6",
+    "ai/evals/inputs/e-0006.v1.json": "74ebb15032221ebc73df1e9c6003d17c9302126ab75240f99dfac767ed5ef3c5",
+    "ai/evals/inputs/f-0001.v1.json": "2c2310acd70ee13324b0de4301d230b04a4061611d76cc4456a667bf3dfb8f8f",
+    "ai/evals/inputs/q-0001.v1.json": "e357b1e35737840f4a0072dc97bede7903fb46669cc1f59842eee1aa5927e0ee",
+    "ai/evals/inputs/q-0002.v1.json": "971d8a73ce36b2f97cf808a4740aa9870ef3ebd9f394ca4f7dba9a5aaf738ee7",
+    "ai/evals/inputs/q-0003.v1.json": "93471d6dc3a0df904930958849828ea804dbc41c70f91d7a9f90f45fd2cd8595",
+    "ai/evals/inputs/q-0004.v1.json": "45219a6364946abd56f713dd89466bae74e99d9eb80a5181e3792500d877a9fc",
+    "ai/evals/inputs/q-0005.v1.json": "aca89f714ce36808598d007ca056b3bff25a542a1ddde3174160300eec183a73",
+    "ai/evals/inputs/q-0006.v1.json": "c180bf5adb72ada537b21ed0aaec9d87cfdbc39f5c9f1e12d9df2b72303c96a6",
+    "ai/evals/inputs/q-0007.v1.json": "0212497237b5aadb33cae8651c0aba020522e813ed26399afa668f5d8f1896d1",
+    "ai/evals/inputs/q-0008.v1.json": "7e1b5ac7634b5ea902cb0b37c0cdfad7d6e79a378472b607708fad38acd1d9ac",
+    "ai/evals/inputs/q-0009.v1.json": "054a2aa83df6e5d69da91bf8733de26de83a477c47a869fcd70e4959b7798d5c",
+    "ai/evals/inputs/q-0010.v1.json": "7c2102a39b72d82a6b8f6531c4d693d01423a609ac974a68b5f3f72136d8b74a",
+    "ai/evals/inputs/r-0001.v1.json": "ab3c5f5da4f47714565724026ee88285e6389aba5936a62e24f96cf784d094a8",
+    "ai/evals/inputs/r-0002.v1.json": "21993e980f6394bd11d3e64aca19537789b36788c51b7aa989fd80f5d7ad3bb8",
+    "ai/evals/inputs/r-0003.v1.json": "07025da38c9ad83517a116c899ca8a1a2c2046171451cfad86b215cd71ed71d4",
+    "ai/evals/inputs/r-0004.v1.json": "1623e7e589b0969c00ff31d3be662c0dfe32de0b03b2c96d6734d1a20c05f862",
+    "ai/evals/inputs/r-0005.v1.json": "1ea9d8d4c50d1864e4f53b242402d03bc59e8b3276af60d362bde9af038f85e6",
+    "ai/evals/inputs/r-0006.v1.json": "9eb25294e748bb9eab0863af0c073578c0a9e6bc61588b263ecb5a21c340e8b1",
+    "ai/evals/inputs/r-0007.v1.json": "98bb9214e54073d7de4cfdf7a41a2a772b98701569cb059846d4eee3cb43f4e9",
+    "ai/evals/inputs/r-0008.v1.json": "899d9ef787f06251e1aaf6fe855904cff7c701a85ac2e6722a27525da2a74ffc",
+    "ai/evals/inputs/r-0009.v1.json": "f1672acf2c574fd0fd1856076d5b5f44477e2f16ab9ade4c864fa6f824b7129a",
+    "ai/evals/inputs/r-0010.v1.json": "6852bba63b78d8db6421e6eff99a8ed6fe327f83cd2c84f288678431c62dc32c",
+    "ai/evals/inputs/r-0011.v1.json": "47a5b2c50f197e38aceb09dbbf334334b2e7d7290469e1396db2574f17047c10",
+    "ai/evals/inputs/r-0012.v1.json": "56bc1be90698acf6424729de57a14923ef4083c94bed1034b2fed7d097ed2bd6",
+    "ai/evals/expectations/e-0001.v1.json": "96633d563927055cf0bbcba61425dc20c49349c0831e4cb9321db682b588fff1",
+    "ai/evals/expectations/e-0002.v1.json": "1854345f0f92850e7037f6416330d15f902b07c0854f3218f9a0cb24d89c06db",
+    "ai/evals/expectations/e-0003.v1.json": "8afb4413a2389f041efa9f3f64c3a93148612d3f57569b5e71a9aa55fb36a32b",
+    "ai/evals/expectations/e-0004.v1.json": "a23383bdb3e903ed4970bac97df740fe0600628531922479cffcacdb2f6b551a",
+    "ai/evals/expectations/e-0005.v1.json": "e554eb33b01daa81c25f45f3a17965d6cc2a8dcec5bcadc64d5c4f604ba12145",
+    "ai/evals/expectations/e-0006.v1.json": "071c0096a03ad9afc2d506df5b648f685aeee28abc4b90fc7b5080862413237d",
+    "ai/evals/expectations/f-0001.v1.json": "a01964d691a53cc7575144e056d6d83f6b05f9051d0b0c9b5d21203b82538984",
+    "ai/evals/expectations/q-0001.v1.json": "77fe0e5bb90e5067d3f30ebdab22ff58fcbc4aa71a359253c2950fc9b099ed17",
+    "ai/evals/expectations/q-0002.v1.json": "0cf15333d06a7a6c50c021a9b41acbd57af9af1a24bf2a062bcb0a13a770b293",
+    "ai/evals/expectations/q-0003.v1.json": "6b383a79e7c5e36a5cf6995a1976066e88d4791182744f16ba77a95a573e75d1",
+    "ai/evals/expectations/q-0004.v1.json": "f53e0063337859ebd9cf7fe5f0ec1eb0f8e0aa58c85a68f32a976c141d384f90",
+    "ai/evals/expectations/q-0005.v1.json": "e7b985e74f56cf1404d14b5423709006b1bfa0f6c30a27e676f32665cfdae7ed",
+    "ai/evals/expectations/q-0006.v1.json": "b0065a5041aa4e61ca6ce4bc959eb0fc4e351ac5cf55d7c2a12273fa2ad43a77",
+    "ai/evals/expectations/q-0007.v1.json": "411814e7f61793e3b2aa3cce34ff7fded04cd9c6a2129def00f092d334ebb306",
+    "ai/evals/expectations/q-0008.v1.json": "4eee3c0964fbb9da99da0e9e8085bfa63d7764bda41c4fa29268ec40fb15877c",
+    "ai/evals/expectations/q-0009.v1.json": "6419cdebb17cdf5c1a1ac5bf569b6666d04ccaea6d6c6a9951c19af874035711",
+    "ai/evals/expectations/q-0010.v1.json": "a014502d56e2b509453cbdb5e850ab35a33d83e0a754c0a5c28480bb67d62c4a",
+    "ai/evals/expectations/r-0001.v1.json": "1b162ad31578d83eb01b978915511a208d9e71f39ad016fd072a94b57bf09c47",
+    "ai/evals/expectations/r-0002.v1.json": "8ebaf9d9bb82407de9f8725f3bd39aa599db89864993f74e57709aecf7949bcf",
+    "ai/evals/expectations/r-0003.v1.json": "969c8cce9f938cc349ae0269f38cd6221908a8e430a096ce7dd498c58c9ef438",
+    "ai/evals/expectations/r-0004.v1.json": "1a37aee0d53a09ce4d6cabc3933134a93a14d0062704a8186e4534835a404e1a",
+    "ai/evals/expectations/r-0005.v1.json": "883f01e368365454c11241c282a279f6405d26cf48f9662202aebfd70ec9c105",
+    "ai/evals/expectations/r-0006.v1.json": "994cfa29dbc387253daa86b15e1db6d1b4058cd9cfdb758e4fca669a0a5a1041",
+    "ai/evals/expectations/r-0007.v1.json": "79bde8f3178085b577c0bf789dc415a3eec46acdbf79c8a39cd20a521d2bbc3d",
+    "ai/evals/expectations/r-0008.v1.json": "2c5d96ba7b914dbe334cbbafd40e5c98ed9b325d91fa525a03f9b1f4e259bf8d",
+    "ai/evals/expectations/r-0009.v1.json": "0bc52de3704d4b70dbd0180c08dd16176b20efb7fbd341d9a14a19780902c409",
+    "ai/evals/expectations/r-0010.v1.json": "2b2a4b2df744bf30784ec86b9043a6cb723152e4d73000a601d626a31bc17d68",
+    "ai/evals/expectations/r-0011.v1.json": "214f1aee274383c5f6eb82b74f6c2d0c077c854e5ae48bcaf35dc71a5f517bc7",
+    "ai/evals/expectations/r-0012.v1.json": "1836976ca46d6efc77784b181f2f7f9d8124fd75fcb0e2eaa34cd5bcc1ba9d4b"
+  },
+  "original_file_hash_format": "utf8_lf",
+  "bindings": [
+    {
+      "case": "e-0001.v2",
+      "source_case": "e-0001.v1",
+      "source_group_id": "sg-r1",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다."
+      ]
+    },
+    {
+      "case": "e-0002.v2",
+      "source_case": "e-0002.v1",
+      "source_group_id": "sg-r1",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다."
+      ]
+    },
+    {
+      "case": "e-0003.v2",
+      "source_case": "e-0003.v1",
+      "source_group_id": "sg-r2",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다."
+      ]
+    },
+    {
+      "case": "e-0004.v2",
+      "source_case": "e-0004.v1",
+      "source_group_id": "sg-r2",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다."
+      ]
+    },
+    {
+      "case": "e-0005.v2",
+      "source_case": "e-0005.v1",
+      "source_group_id": "sg-r1",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다."
+      ]
+    },
+    {
+      "case": "e-0006.v2",
+      "source_case": "e-0006.v1",
+      "source_group_id": "sg-r2",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다."
+      ]
+    },
+    {
+      "case": "f-0001.v2",
+      "source_case": "f-0001.v1",
+      "source_group_id": "sg-r1",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다."
+      ]
+    },
+    {
+      "case": "q-0001.v2",
+      "source_case": "q-0001.v1",
+      "source_group_id": "sg-r1",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다."
+      ]
+    },
+    {
+      "case": "q-0002.v2",
+      "source_case": "q-0002.v1",
+      "source_group_id": "sg-r1",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다."
+      ]
+    },
+    {
+      "case": "q-0003.v2",
+      "source_case": "q-0003.v1",
+      "source_group_id": "sg-r2",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다."
+      ]
+    },
+    {
+      "case": "q-0004.v2",
+      "source_case": "q-0004.v1",
+      "source_group_id": "sg-r2",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다.",
+        "partial+빈missing 모순을 숨기지 않고, 읽지 않은 범위 확인을 새 필수 항목/미충족으로 명시했다."
+      ]
+    },
+    {
+      "case": "q-0005.v2",
+      "source_case": "q-0005.v1",
+      "source_group_id": "sg-r1",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다.",
+        "팀원 작업 정정은 본인 설계 경험 판단 보류로 명시한다. 일반 이해·가정 질문은 금지하지 않는다."
+      ]
+    },
+    {
+      "case": "q-0006.v2",
+      "source_case": "q-0006.v1",
+      "source_group_id": "sg-r2",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다.",
+        "정상 모름 답변을 judged insufficient로 명시했다. 불충분한 서비스 입력의 not_evaluable과 구분한다."
+      ]
+    },
+    {
+      "case": "q-0007.v2",
+      "source_case": "q-0007.v1",
+      "source_group_id": "sg-r1",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다.",
+        "partial+빈missing 모순을 숨기지 않고, 읽지 않은 범위 확인을 새 필수 항목/미충족으로 명시했다."
+      ]
+    },
+    {
+      "case": "q-0008.v2",
+      "source_case": "q-0008.v1",
+      "source_group_id": "sg-r2",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다."
+      ]
+    },
+    {
+      "case": "q-0009.v2",
+      "source_case": "q-0009.v1",
+      "source_group_id": "sg-r2",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다."
+      ]
+    },
+    {
+      "case": "q-0010.v2",
+      "source_case": "q-0010.v1",
+      "source_group_id": "sg-r1",
+      "review_status": "unreviewed",
+      "added_premises": [
+        "명시적 합성 Context·9턴 예산·질문계약·평가키·자료 식별자/원문 좌표를 새로 정의했다.",
+        "v1 검수 승인을 상속하지 않는다. 합성 SHA와 자료는 실제 레포 검증 결과가 아니다.",
+        "제품은 실패한 후보를 재실행하는 복구 API가 아니다. 별도 새 질문 요청이며 recovery enum 정답을 강제하지 않는다."
+      ]
+    },
+    {
