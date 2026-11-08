@@ -976,6 +976,12 @@ class ShallowBasis(_Contract):
         "readme", "description", "languages", "commit_metadata", "structure", "supporting_file"
     ]
     claim: str
+    source_path: str | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.source_path is not None:
+            _repository_path(self.source_path)
 
 
 @dataclass(frozen=True)
