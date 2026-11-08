@@ -69,6 +69,32 @@ def response(text: str = '{"value": 7}', **changes: object) -> dict[str, object]
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("effort", [None, "low"])
+async def test_reasoning_control_reaches_provider_only_when_explicit(effort):
+    sent = []
+
+    def transport(req):
+        sent.append(json.loads(req.content))
+        return httpx.Response(200, json=response())
+
+    item = request()
+    item = replace(item, limits=replace(item.limits, reasoning_effort=effort))
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        result = await client.call_model(
+            item,
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
+        )
+    assert result.data == 7
+    if effort is None:
+        assert "reasoning" not in sent[0]
+    else:
+        assert sent[0]["reasoning"] == {"effort": "low"}
+
+
+@pytest.mark.asyncio
 async def test_missing_base_url_rejects_proxy_token_before_http():
     sent = []
 
