@@ -900,6 +900,13 @@ class Context(_Contract):
             raise ContractError("semantic", "turn range")
         _unique(tuple(item.persona for item in self.persona_counts), "persona_counts")
         _unique(cast(tuple[object, ...], self.allowed_personas), "allowed_personas")
+        _unique(tuple(item.persona for item in self.evaluation_targets), "evaluation personas")
+        if any(item.persona not in self.allowed_personas for item in self.evaluation_targets):
+            raise ContractError("semantic", "evaluation personas")
+        _unique(
+            tuple((item.kind, item.source_id) for item in self.supplemental_sources),
+            "supplemental sources",
+        )
 
 
 def _sha(value: str, name: str = "head_sha") -> None:
