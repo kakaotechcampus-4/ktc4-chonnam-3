@@ -122,7 +122,7 @@ async def extract_claims(
         if (
             type(prompt) is not c.PromptSpec
             or prompt.task_name != "doc_claims"
-            or prompt.version != "doc_claims_v1"
+            or prompt.version not in ("doc_claims_v1", "doc_claims_v2")
         ):
             raise c.ContractError("schema", "doc_claims prompt")
         if type(limits) is not c.CallLimits:

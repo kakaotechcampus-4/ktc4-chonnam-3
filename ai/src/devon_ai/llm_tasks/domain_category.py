@@ -93,7 +93,8 @@ async def classify_domain(
         if (
             type(prompt) is not c.PromptSpec
             or prompt.task_name != "domain_category"
-            or prompt.version != "domain_category_v2"
+            # 모델 배포 태그는 불변 DB 식별자이며 원문 근거를 받는 v2 계약을 바꾸지 않는다.
+            or prompt.version.partition("@")[0] != "domain_category_v2"
         ):
             raise c.ContractError("schema", "domain_category prompt")
         if type(limits) is not c.CallLimits:
