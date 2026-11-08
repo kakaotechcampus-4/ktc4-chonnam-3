@@ -26,6 +26,7 @@ from app.features.analysis.pipeline.run_support import (
 from app.features.analysis.pipeline.steps.repo_analyze import (
     analyze_collected_batch,
 )
+from app.features.analysis.posting_domain import classify_saved_posting
 from app.features.analysis.posting_service import complete_posting, fetch_posting
 
 logger = get_logger(__name__)
@@ -146,11 +147,22 @@ async def run_analysis(ctx: dict[str, Any], run_id: UUID) -> None:
                 reuse_ttl_days=ctx["settings"].jd_reuse_ttl_days,
             )
         async with step(ctx, run_id, "jd_extract"):
-            posting = await complete_posting(ctx["session_factory"], prepared)
+            posting = await complete_posting(
+                ctx["session_factory"],
+                prepared,
+                settings=ctx["settings"],
+                http_client=ctx["http_client"],
+            )
             async with ctx["session_factory"].begin() as db:
                 saved = await db.get(AnalysisJob, run_id)
                 assert saved is not None
                 saved.job_posting_id = posting.id
+            await classify_saved_posting(
+                ctx["session_factory"],
+                posting.id,
+                settings=ctx["settings"],
+                http_client=ctx["http_client"],
+            )
         async with step(ctx, run_id, "repo_analyze"):
             snapshots = await analyze_collected_batch(
                 ctx["session_factory"],

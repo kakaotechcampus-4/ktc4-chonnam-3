@@ -132,6 +132,7 @@ async def read_files(
     searched: list[str] = []
     limitations: list[str] = []
     pending = paths
+    partial_source = False
     try:
         async with asyncio.timeout(limits.timeout_seconds):
             repository = await reader.get("", token=access_token)
@@ -169,7 +170,23 @@ async def read_files(
                 searched.append(path)
                 if blob is None:
                     continue
-                content = await reader.file_text(path, scope.git_ref, blob)
+                size = reader.blob_sizes.get(blob)
+                if size is not None and size * 4 // 3 + 4096 > limits.max_response_bytes:
+                    content, complete = await reader.file_text_prefix(
+                        path,
+                        scope.git_ref,
+                        blob,
+                        max_bytes=min(limits.max_response_bytes, reader.bytes_left),
+                        expected_size=size,
+                    )
+                    if not complete:
+                        partial_source = True
+                        limitations.append(
+                            f"{path}: 앞부분 {len(content.splitlines())}줄을 읽었습니다. "
+                            "나머지 구현과 요청한 사실의 부재는 확인되지 않았습니다."
+                        )
+                else:
+                    content = await reader.file_text(path, scope.git_ref, blob)
                 if not content.strip():
                     limitations.append(f"{path}: 평가에 사용할 텍스트가 없습니다.")
                     continue
@@ -192,7 +209,13 @@ async def read_files(
         limitations.extend(f"{path}: 조회를 완료하지 못했습니다." for path in pending)
         return ToolResult("tool_error", tuple(items), tuple(searched), tuple(limitations), code)
     status: Literal["found", "insufficient_analysis", "not_found"] = (
-        "found" if items else "insufficient_analysis" if limitations else "not_found"
+        "insufficient_analysis"
+        if partial_source
+        else "found"
+        if items
+        else "insufficient_analysis"
+        if limitations
+        else "not_found"
     )
     return ToolResult(status, tuple(items), tuple(searched), tuple(limitations), None)
 
