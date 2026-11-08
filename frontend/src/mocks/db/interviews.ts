@@ -1,4 +1,10 @@
-import type { InterviewLastError, InterviewStatus, InterviewTurn } from '@/types/api';
+import type {
+  AnswerMode,
+  InterviewLastError,
+  InterviewStatus,
+  InterviewTurn,
+  Persona,
+} from '@/types/api';
 import { candidatePages } from '../fixtures/analysis';
 import { TOTAL_TURNS, completedTurns, firstTurn } from '../fixtures/interview';
 import { jdCompanyName, jdPosition } from '../fixtures/jd';
@@ -20,6 +26,8 @@ import {
 export type InterviewRecord = {
   interviewId: string;
   sessionId: string;
+  /** 이전 text fixture도 저장된 모드를 따르며 생략한 새 fixture는 voice다. */
+  answerMode?: AnswerMode;
   runId: string;
   repositoryIds: string[];
   createdAt: number;
@@ -34,6 +42,9 @@ export type InterviewRecord = {
   startedAt?: number;
   /** 리포트 lazy generation 시작 시각. 최초 조회 때 기록한다. */
   reportRequestedAt?: number;
+  reportRevision?: number;
+  reportFailed?: boolean;
+  reportDisagreements?: { revision: number; persona: Persona }[];
   /**
    * WS가 진행시킨 턴. 질문을 보낼 때 추가하고 답변을 받을 때 채운다.
    *
@@ -70,6 +81,7 @@ export function createInterview(runId: string, repositoryIds: string[]) {
   const record: InterviewRecord = {
     interviewId: crypto.randomUUID(),
     sessionId: `sess_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`,
+    answerMode: 'voice',
     runId,
     repositoryIds,
     createdAt: Date.now(),

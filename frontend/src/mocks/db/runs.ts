@@ -1,6 +1,7 @@
 import type {
   AnalysisStep,
   DocumentPreviewResponse,
+  DocumentType,
   RunStatus,
   StepKey,
   StepStatus,
@@ -23,6 +24,7 @@ export type RunRecord = {
   runId: string;
   postingUrl: string;
   documentId: string | null;
+  coverLetterDocumentId: string | null;
   createdAt: number;
   /** seed 레코드처럼 시간과 무관하게 고정할 상태. failed run은 이 값으로만 만든다. */
   fixedStatus?: RunStatus;
@@ -38,24 +40,35 @@ export type RunRecord = {
 };
 
 const runs = new Map<string, RunRecord>();
-const documents = new Map<string, DocumentPreviewResponse>();
+const documents = new Map<string, DocumentPreviewResponse & { docType: DocumentType }>();
 /** `${runId}:${page}` 키의 최초 요청 시각. */
 const candidatePageRequests = new Map<string, number>();
 
 // 분석 run ---------------------------------------------------------------
 
-function fingerprint(postingUrl: string, documentId: string | null) {
-  return `${postingUrl.trim().replace(/\/+$/, '')}::${documentId ?? ''}`;
+function fingerprint(
+  postingUrl: string,
+  documentId: string | null,
+  coverLetterDocumentId: string | null,
+) {
+  return JSON.stringify([postingUrl.trim().replace(/\/+$/, ''), documentId, coverLetterDocumentId]);
 }
 
 /**
  * POST /analysis-runs 중복 요청 감지.
  * 같은 fingerprint의 run이 아직 running이면 기존 run을 reused로 돌려준다.
  */
-export function createRun(postingUrl: string, documentId: string | null) {
-  const target = fingerprint(postingUrl, documentId);
+export function createRun(
+  postingUrl: string,
+  documentId: string | null,
+  coverLetterDocumentId: string | null = null,
+) {
+  const target = fingerprint(postingUrl, documentId, coverLetterDocumentId);
   for (const run of runs.values()) {
-    if (fingerprint(run.postingUrl, run.documentId) === target && runStatus(run) === 'running') {
+    if (
+      fingerprint(run.postingUrl, run.documentId, run.coverLetterDocumentId) === target &&
+      runStatus(run) === 'running'
+    ) {
       return { run, reused: true };
     }
   }
@@ -64,6 +77,7 @@ export function createRun(postingUrl: string, documentId: string | null) {
     runId: crypto.randomUUID(),
     postingUrl,
     documentId,
+    coverLetterDocumentId,
     createdAt: Date.now(),
   };
   runs.set(run.runId, run);
@@ -154,9 +168,16 @@ export function candidatePageReady(runId: string, page: number, now = Date.now()
 
 // 문서 preview -----------------------------------------------------------
 
-export function saveDocument(preview: DocumentPreviewResponse) {
-  documents.set(preview.documentId, preview);
+export function saveDocument(
+  preview: DocumentPreviewResponse,
+  docType: DocumentType = 'portfolio',
+) {
+  documents.set(preview.documentId, { ...preview, docType });
   return preview;
+}
+
+export function getDocument(documentId: string) {
+  return documents.get(documentId);
 }
 
 // seed -------------------------------------------------------------------
@@ -171,6 +192,7 @@ function seedRuns() {
       runId,
       postingUrl: 'https://www.wanted.co.kr/wd/000000',
       documentId: null,
+      coverLetterDocumentId: null,
       // 이미 모든 step이 끝난 상태로 보이게 한다.
       createdAt: Date.now() - STEP_KEYS.length * STEP_DURATION_MS - 1000,
     });
@@ -180,6 +202,7 @@ function seedRuns() {
     runId: SEED_FAILED_RUN_ID,
     postingUrl: 'https://www.wanted.co.kr/wd/999999',
     documentId: null,
+    coverLetterDocumentId: null,
     createdAt: Date.now() - STEP_KEYS.length * STEP_DURATION_MS - 1000,
     fixedStatus: 'failed',
     fixedFailureReason: 'jd_fetch_failed',
@@ -190,6 +213,7 @@ function seedRuns() {
     runId: SEED_TOKEN_INVALID_RUN_ID,
     postingUrl: 'https://www.wanted.co.kr/wd/999999',
     documentId: null,
+    coverLetterDocumentId: null,
     createdAt: Date.now() - STEP_KEYS.length * STEP_DURATION_MS - 1000,
     fixedStatus: 'failed',
     fixedFailureReason: 'token_invalid',
@@ -201,6 +225,7 @@ function seedRuns() {
     runId: SEED_PARTIAL_RUN_ID,
     postingUrl: 'https://www.wanted.co.kr/wd/000000',
     documentId: null,
+    coverLetterDocumentId: null,
     createdAt: Date.now() - STEP_KEYS.length * STEP_DURATION_MS - 1000,
     fixedStatus: 'failed',
     fixedFailureReason: 'no_readme',
@@ -212,6 +237,7 @@ function seedRuns() {
     runId: SEED_RUNNING_RUN_ID,
     postingUrl: 'https://www.wanted.co.kr/wd/888888',
     documentId: null,
+    coverLetterDocumentId: null,
     createdAt: Date.now(),
     fixedStatus: 'running',
   });
