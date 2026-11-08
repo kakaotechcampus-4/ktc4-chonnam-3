@@ -862,6 +862,18 @@ class ContextLimits(_Contract):
 
 
 @dataclass(frozen=True)
+class EvaluationTarget(_Contract):
+    persona: PersonaId
+    keys: "tuple[ScoreKeyId, ...]"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not self.keys:
+            raise ContractError("schema", "evaluation targets")
+        _unique(cast(tuple[object, ...], self.keys), "evaluation targets")
+
+
+@dataclass(frozen=True)
 class Context(_Contract):
     interview_id: str
     current_turn_id: str | None
