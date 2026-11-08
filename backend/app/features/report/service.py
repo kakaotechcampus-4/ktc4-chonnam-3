@@ -148,6 +148,7 @@ async def _build_report(
         )
     return ReportResponse(
         interview_id=interview.id,
+        revision=report.current_revision,
         position=position,
         position_label=" ".join(p for p in (posting.company_name, position) if p),
         total_score=total_score([int(s.score) for s in scores]),
