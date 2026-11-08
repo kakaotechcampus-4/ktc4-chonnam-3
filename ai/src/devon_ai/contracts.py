@@ -1653,6 +1653,13 @@ def validate_report_input(report_input: ReportInput) -> ReportInput:
         raise ContractError("semantic", "tool result turn")
     registered = tuple(i.evidence_id for i in report_input.evidence if i.evidence_id)
     _unique(registered, "evidence_id")
+    source_by_id = {item.evidence_id: item for item in report_input.evidence if item.evidence_id}
+    for tool in report_input.tool_results:
+        if any(
+            item.evidence_id is None or source_by_id.get(item.evidence_id) != item
+            for item in tool.result.items
+        ):
+            raise ContractError("semantic", "tool result evidence")
     for item in report_input.turns:
         _references(item.evidence_refs, frozenset(registered), "turn evidence_refs")
     return report_input
