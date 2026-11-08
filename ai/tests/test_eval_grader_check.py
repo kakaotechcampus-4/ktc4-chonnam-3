@@ -118,3 +118,38 @@ def test_approved_case_without_controls_is_not_counted_as_evaluated():
     assert report["total_cases"] == 2
     assert report["evaluated_cases"] == 1
     assert report["excluded_cases"] == {"no_controls": 1}
+
+
+def test_async_controls_keep_the_same_review_exclusion_and_error_policy():
+    import asyncio
+
+    import grader_check
+
+    assert hasattr(grader_check, "check_grader_async"), "비동기 Judge 교정 경계가 필요하다"
+    seen = []
+
+    async def judge(rubric, output):
+        seen.append((rubric, output))
+        return ANSWERS[output]
+
+    report = asyncio.run(grader_check.check_grader_async([_case(), _case("q-2", "pending")], judge))
+    assert len(seen) == len(KINDS)
+    assert report["excluded_cases"] == {"pending": 1}
+    assert set(_rate(report, "correct").values()) == {1}
+    assert all(set(rubric) == {"allowed", "forbidden"} for rubric, _ in seen)
+    assert all("kind" not in record["judge"] for record in report["controls"])
+
+
+def test_async_judge_failure_keeps_input_hashes_without_exception_body():
+    import asyncio
+
+    import grader_check
+
+    async def broken(rubric, output):
+        raise RuntimeError("private exception body")
+
+    report = asyncio.run(grader_check.check_grader_async([_case()], broken))
+    first = report["controls"][0]["judge"]
+    assert len(first["metadata"]["rubric_sha256"]) == 64
+    assert len(first["metadata"]["candidate_sha256"]) == 64
+    assert "private exception body" not in str(report)
