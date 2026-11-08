@@ -118,7 +118,6 @@ async def _build_report(
     ]
     if {s.key for s in scores} != set(SCORE_KEYS):
         _corrupt(report, "scores")
-    disagreed = await queries.list_disagreed_personas(db, report_id=report.id)
     try:
         feedbacks = [
             AgentFeedback(**item, disagreement_submitted=item.get("persona") in disagreed)
