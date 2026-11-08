@@ -36,6 +36,8 @@ async def get_owned_interview(
             select(InterviewSession, JobPosting)
             .join(JobPosting, JobPosting.id == InterviewSession.job_posting_id)
             .where(InterviewSession.id == interview_id, InterviewSession.user_id == user_id)
+            # 공개 본문과 점수를 읽는 동안 재평가의 버전 교체가 끼어들지 않게 한다.
+            .with_for_update(of=InterviewSession)
         )
     ).first()
     return None if row is None else (row[0], row[1])
@@ -73,10 +75,15 @@ async def list_scores(db: AsyncSession, *, report_id: uuid.UUID) -> list[tuple[s
     return [(key, label, float(score)) for key, label, score in rows]
 
 
-async def list_disagreed_personas(db: AsyncSession, *, report_id: uuid.UUID) -> set[str]:
+async def list_disagreed_personas(
+    db: AsyncSession, *, report_id: uuid.UUID, revision: int = 1
+) -> set[str]:
     """이의를 제출한 persona 집합. Sprint 1 은 row 를 만들지 않아 보통 비어 있다."""
     rows = await db.scalars(
-        select(ReportDisagreement.persona).where(ReportDisagreement.report_id == report_id)
+        select(ReportDisagreement.persona).where(
+            ReportDisagreement.report_id == report_id,
+            ReportDisagreement.source_revision == revision,
+        )
     )
     return set(rows)
 
@@ -186,4 +193,9 @@ async def insert_report(
         return False
     db.add_all(ReportScore(report_id=report_id, **row) for row in scores)
     await db.flush()
+    from app.features.report.revisions import preserve
+
+    report = await db.get(InterviewReport, report_id)
+    assert report is not None
+    await preserve(db, report)
     return True
