@@ -1,8 +1,8 @@
 """목적·질문을 함께 제안하고 별도 모델 시도로 검토하는 단일 Director 실행 경로."""
 
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass, fields
-from typing import Protocol, cast
+from dataclasses import MISSING, asdict, dataclass, fields
+from typing import Protocol, cast, get_args
 
 from devon_ai import contracts as c
 from devon_ai.agents.director.agent import _RECOVERY_CODES, _object_schema, _references
@@ -30,7 +30,7 @@ class _Plan:
     reason_summary: str
 
 
-def _plan_schema() -> dict[str, object]:
+def _plan_schema(coverage: bool = False) -> dict[str, object]:
     text = {"type": "string"}
     texts = {"type": "array", "items": text}
     contract = _object_schema(
@@ -47,12 +47,7 @@ def _plan_schema() -> dict[str, object]:
                     {
                         "kind": {
                             "type": "string",
-                            "enum": [
-                                "evidence",
-                                "jd_requirement",
-                                "job_posting",
-                                "answer_turn",
-                            ],
+                            "enum": list(get_args(c.BasisKind)),
                         },
                         "id": text,
                     }
@@ -61,6 +56,12 @@ def _plan_schema() -> dict[str, object]:
             "evaluation_scope": text,
         }
     )
+    if coverage:
+        cast(dict[str, object], contract["properties"])["evaluation_keys"] = {
+            "type": "array",
+            "items": {"type": "string", "enum": list(get_args(c.ScoreKeyId))},
+        }
+        cast(list[str], contract["required"]).append("evaluation_keys")
     question = _object_schema(
         {
             "persona": {"type": "string", "enum": ["hr_manager", "tech_lead", "domain_lead"]},
@@ -71,6 +72,14 @@ def _plan_schema() -> dict[str, object]:
             "jd_requirement_ids": texts,
         }
     )
+    if coverage:
+        cast(dict[str, object], question["properties"]).update(
+            {
+                "question_type": {"type": "string", "enum": ["main", "follow_up"]},
+                "parent_turn_id": {"type": ["string", "null"]},
+            }
+        )
+        cast(list[str], question["required"]).extend(("question_type", "parent_turn_id"))
     return _object_schema({"question": question, "intent": text, "reason_summary": text})
 
 
@@ -92,19 +101,27 @@ def _review_schema() -> dict[str, object]:
     )
 
 
-def _plan_object(raw: object, expected: set[str], name: str) -> dict[str, object]:
-    if type(raw) is not dict or set(raw) != expected:
+def _plan_object(
+    raw: object, expected: set[str], name: str, optional: frozenset[str] = frozenset()
+) -> dict[str, object]:
+    if type(raw) is not dict or not expected - optional <= set(raw) <= expected:
         raise c.ContractError("schema", name)
     return cast(dict[str, object], raw)
 
 
 def _plan_question(raw: object) -> c.Question:
     # 공통 decode의 부가 필드 무시 정책을 바꾸지 않고 새 planner의 중첩 출력만 엄격히 검사한다.
-    question = _plan_object(raw, {item.name for item in fields(c.Question)}, "Question")
+    question = _plan_object(
+        raw,
+        {item.name for item in fields(c.Question)},
+        "Question",
+        frozenset(item.name for item in fields(c.Question) if item.default is not MISSING),
+    )
     contract = _plan_object(
         question["question_contract"],
         {item.name for item in fields(c.QuestionContract)},
         "QuestionContract",
+        frozenset(item.name for item in fields(c.QuestionContract) if item.default is not MISSING),
     )
     for name, expected in (
         ("required_points", {item.name for item in fields(c.RequiredPoint)}),
@@ -122,8 +139,9 @@ def _validate_candidate(
     candidate: c.Question,
     context: c.Context,
     sources: Mapping[c.BasisRef, str],
+    coverage: bool = False,
 ) -> c.Question:
-    return c.validate_question_candidate(
+    c.validate_question_candidate(
         candidate,
         allowed_personas=context.allowed_personas,
         evidence_refs=frozenset(
@@ -134,6 +152,22 @@ def _validate_candidate(
             ref.id for ref in candidate.question_contract.basis_refs if ref.kind == "jd_requirement"
         ),
     )
+    if candidate.parent_turn_id is not None:
+        parent = next(
+            (item for item in context.history if item.turn_id == candidate.parent_turn_id), None
+        )
+        if parent is None or parent.persona != candidate.persona:
+            raise c.ContractError("semantic", "question parent")
+    if coverage:
+        expected = next(
+            (item.keys for item in context.evaluation_targets if item.persona == candidate.persona),
+            (),
+        )
+        if not expected or set(candidate.question_contract.evaluation_keys) != set(expected):
+            raise c.ContractError("semantic", "question evaluation keys")
+        if "company_job_fit" in expected and not candidate.jd_requirement_ids:
+            raise c.ContractError("semantic", "job fit JD references")
+    return candidate
 
 
 def _assessment(raw: object, candidate: c.Question) -> c.QuestionReview | c.CandidateRecovery:
@@ -205,8 +239,21 @@ def _input_payload(
             if type(checked) is not c.ContractChecked or type(checked.data) is not c.AnswerAnalysis:
                 raise c.ContractError("schema", "checked prior analysis")
             previous[turn_id] = c.to_data(checked)
+    current_answer = None
+    if context.current_turn_id is not None:
+        # 직전 발언을 분석 요약·다른 턴과 섞지 않고 두 모델 시도에 같은 원문으로 제공한다.
+        current = tuple(turn for turn in context.history if turn.turn_id == context.current_turn_id)
+        if len(current) != 1 or context.current_question_contract is None:
+            raise c.ContractError("semantic", "current answered turn")
+        current_answer = {
+            "turn_id": current[0].turn_id,
+            "question": current[0].question,
+            "answer": current[0].answer,
+            "question_contract": asdict(context.current_question_contract),
+        }
     return {
         "context": asdict(context),
+        "current_answer": current_answer,
         "reference_texts": [
             {"kind": ref.kind, "id": ref.id, "text": text} for ref, text in sources.items()
         ],
@@ -264,10 +311,14 @@ async def run_director(
             (),
         )
 
+    # 구형 출력 계약만 보존하고 새 버전·배포 suffix에서는 평가 기회 검증을 유지한다.
+    legacy = prompt.version.partition("@")[0] in {"director_v1", "director_v2"}
+    coverage = bool(context.evaluation_targets) and not legacy
+
     def validate_plan(raw: object) -> _Plan:
         if type(raw) is not dict or set(raw) != {"question", "intent", "reason_summary"}:
             raise c.ContractError("schema", "DirectorPlan")
-        candidate = _validate_candidate(_plan_question(raw["question"]), context, sources)
+        candidate = _validate_candidate(_plan_question(raw["question"]), context, sources, coverage)
         # 자유 텍스트인 의도·사유도 기존 결정 계약의 타입 검사로 검증한다.
         proposal = c.DirectorDecision(
             "ask",
@@ -284,8 +335,8 @@ async def run_director(
             prompt,
             {**payload, "operation": "plan"},
             "DirectorPlan",
-            "director-plan.v1",
-            _plan_schema(),
+            "director-plan.v2" if coverage else "director-plan.v1",
+            _plan_schema(coverage),
             limits,
             max_attempts=1,
         ),
@@ -297,7 +348,7 @@ async def run_director(
     if type(plan) is not _Plan:
         raise TypeError("ModelCall did not return a validated Director plan")
     try:
-        _validate_candidate(plan.question, context, sources)
+        _validate_candidate(plan.question, context, sources, coverage)
     except c.ContractError as exc:
         return c.ModelResult(
             None,
@@ -382,6 +433,17 @@ async def run_director(
             attempts,
         )
     return c.ModelResult(DirectorOutcome(decision, checked, generated.attempts[-1]), None, attempts)
+
+
+def external_verification_queries(
+    context: c.Context, analysis: c.ContractChecked[c.AnswerAnalysis]
+) -> tuple[c.ExternalQueryRequest, ...]:
+    """검증된 현재 답변의 보완 요청만 외부 Tool 후보로 넘긴다. 검색 실행은 BE 책임이다."""
+    if type(context) is not c.Context or context.current_turn_id is None:
+        raise c.ContractError("semantic", "external query turn")
+    if type(analysis) is not c.ContractChecked or type(analysis.data) is not c.AnswerAnalysis:
+        raise c.ContractError("schema", "checked analysis")
+    return analysis.data.external_queries if analysis.data.needs_verification else ()
 
 
 def verification_decision(

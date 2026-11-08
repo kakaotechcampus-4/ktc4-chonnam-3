@@ -76,6 +76,8 @@ def _references(
         add(c.BasisRef("jd_requirement", requirement.id), requirement.text)
     for turn in context.history:
         add(c.BasisRef("answer_turn", turn.turn_id), turn.answer)
+    for supplemental in context.supplemental_sources:
+        add(c.BasisRef(supplemental.kind, supplemental.source_id), supplemental.content)
     for ref, text in extra.items():
         if type(ref) is not c.BasisRef or type(text) is not str or not text.strip():
             raise c.ContractError("schema", "source text")
@@ -164,6 +166,9 @@ async def generate_question(
         # 표현을 생성하는 단계에서 이미 정한 목적·확인내용·근거를 다른 계획으로 바꿀 수 없다.
         if candidate.question_contract != question_contract:
             raise c.ContractError("semantic", "prepared question contract")
+        # 이 구형 진입점은 부모 관계를 계획하지 않는다. 자동 Director의 관계 계약을 우회하지 않는다.
+        if candidate.question_type != "main" or candidate.parent_turn_id is not None:
+            raise c.ContractError("semantic", "prepared question relation")
         return c.validate_question_candidate(
             candidate,
             allowed_personas=context.allowed_personas,
@@ -174,7 +179,8 @@ async def generate_question(
 
     def validate(raw: object) -> c.Question:
         fields = {"persona", "text", "topic_code", "evidence_refs", "jd_requirement_ids"}
-        if type(raw) is not dict or set(raw) != fields:
+        optional = {"question_type", "parent_turn_id"}
+        if type(raw) is not dict or not fields <= set(raw) <= fields | optional:
             raise c.ContractError("schema", "DirectorQuestion")
         evidence_refs = raw["evidence_refs"]
         jd_requirement_ids = raw["jd_requirement_ids"]
@@ -189,6 +195,8 @@ async def generate_question(
             question_contract=question_contract,
             evidence_refs=cast(tuple[str, ...], tuple(evidence_refs)),
             jd_requirement_ids=cast(tuple[str, ...], tuple(jd_requirement_ids)),
+            question_type=cast(Literal["main", "follow_up"], raw.get("question_type", "main")),
+            parent_turn_id=cast(str | None, raw.get("parent_turn_id")),
         )
         return validate_candidate(candidate)
 
