@@ -168,7 +168,6 @@ def _corrupt(report: InterviewReport, part: str) -> NoReturn:
     raise AppError(Reason.INTERNAL_ERROR)
 
 
-type GenerateOutcome = Literal["created", "exists", "skipped"]
 
 
 async def generate_report(
