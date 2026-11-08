@@ -1212,6 +1212,8 @@ class SourceDocument(_Contract):
     kind: Literal["file", "directory"]
     content: str
     read_scope: str
+    start_line: int = 1
+    end_line: int | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
