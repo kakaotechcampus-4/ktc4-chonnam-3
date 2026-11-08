@@ -97,7 +97,6 @@ async def get_report(
         raise AppError(Reason.REPORT_UNAVAILABLE)
     if await _has_failure_history(redis, interview.id):
         raise AppError(Reason.REPORT_UNAVAILABLE)
-    return await _request_generation(redis, interview.id)
 
 
 async def _has_failure_history(redis: ArqRedis, interview_id: uuid.UUID) -> bool:
