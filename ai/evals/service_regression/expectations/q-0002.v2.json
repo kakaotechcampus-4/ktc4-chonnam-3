@@ -1,0 +1,63 @@
+{
+  "case_id": "q-0002",
+  "version": 2,
+  "allowed": [
+    {
+      "id": "a1",
+      "purpose": "후보자가 고민하지 못했다고 밝힌 재요청 처리는 다시 묻지 않고, 아직 확인하지 않은 새 주제로 넘어간다"
+    },
+    {
+      "id": "a2",
+      "purpose": "새 질문은 한 가지 목적만 갖고, 방금 모른다고 한 부분을 지적하거나 압박하지 않는다"
+    }
+  ],
+  "forbidden": [
+    {
+      "id": "f1",
+      "reason": "이미 답한 '기존 토큰 폐기 방식'을 표현만 바꿔 다시 묻기",
+      "type": "repeat"
+    },
+    {
+      "id": "f2",
+      "reason": "답변에 없는 재사용 탐지 구현이 있다고 전제",
+      "type": "false_premise"
+    },
+    {
+      "id": "f3",
+      "reason": "재사용 시 전체 폐기가 정답이라고 암시하는 유도 질문",
+      "type": "leading"
+    },
+    {
+      "id": "f4",
+      "reason": "후보자가 고민하지 못했다고 밝힌 재요청 처리를 다시 묻기",
+      "type": "repeat"
+    }
+  ],
+  "grader_controls": [
+    {
+      "kind": "allowed",
+      "output": "tech_lead: 재발급 요청이 거의 동시에 두 번 들어오는 경우에는 어떻게 처리되도록 하셨나요?"
+    },
+    {
+      "kind": "forbidden",
+      "output": "tech_lead: 기존 토큰을 폐기하셨다고 했는데, 폐기는 구체적으로 어떻게 하셨나요?"
+    },
+    {
+      "kind": "forbidden",
+      "output": "tech_lead: 폐기된 토큰이 재사용되면 전체 토큰을 폐기하는 게 맞지 않나요? 그렇게 구현하셨죠?"
+    },
+    {
+      "kind": "forbidden",
+      "output": "tech_lead: 폐기된 토큰으로 재발급 요청이 다시 들어오면 어떻게 동작하게 될지 지금 생각하시는 대로 말씀해 주세요."
+    }
+  ],
+  "review": {
+    "status": "unreviewed",
+    "author": "synthetic-v2-author",
+    "reviewer": null,
+    "reviewed_at": null,
+    "pending_notes": [
+      "새 서비스 계약·합성 전제는 사람 검수 보류다."
+    ]
+  }
+}
