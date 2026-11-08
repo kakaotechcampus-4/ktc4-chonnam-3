@@ -295,6 +295,13 @@ async def generate_report(
                 )
                 return output
 
+            return invoke
+
+        raw = await (generator or resolve_generator())(
+            payload,
+            prompts=prompts,
+            limits=llm.call_limits(prompts["report"].task_name),
+            model_call_factory=model_call_factory,
         )
 
     raw = await generate(
