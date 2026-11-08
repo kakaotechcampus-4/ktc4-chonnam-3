@@ -274,7 +274,6 @@ async def generate_report(
         def model_call_factory() -> ModelCall:
             budget = CallBudget()
 
-    generate = generator or resolve_generator()
 
     def model_call_factory() -> ModelCall:
         # task 마다 새 CallBudget 을 묶어 두 task 가 총 2회 시도를 나눠 쓰지 않게 한다.
