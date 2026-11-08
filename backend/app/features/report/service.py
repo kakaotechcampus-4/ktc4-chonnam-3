@@ -34,6 +34,8 @@ from app.db.models import (
     InterviewTurn,
     JdRequirement,
     JobPosting,
+    ReportDisagreement,
+    ReportScore,
 )
 from app.db.models.report import SCORE_KEYS
 from app.features.report import queries
