@@ -168,6 +168,60 @@ def _corrupt(report: InterviewReport, part: str) -> NoReturn:
     raise AppError(Reason.INTERNAL_ERROR)
 
 
+type GenerateOutcome = Literal["created", "revised", "exists", "skipped"]
+
+
+async def _read_generation_input(
+    db: AsyncSession,
+    interview: InterviewSession,
+) -> tuple[dict[str, object], dict[str, c.PromptSpec], dict[int, uuid.UUID], dict[str, object]]:
+    turns = await queries.list_report_turns(db, interview_id=interview.id)
+    posting = await db.get(JobPosting, interview.job_posting_id)
+    requirements = await queries.list_requirements(db, posting_id=interview.job_posting_id)
+    evidences = await queries.list_turn_evidences(db, interview_id=interview.id)
+    prompts = {name: await load_active_prompt(db, name) for name in REPORT_PROMPT_TASKS}
+    rubrics = await queries.list_active_rubrics(db)
+    if set(rubrics) != set(SCORE_KEYS):
+        raise ReportRubricUnavailableError(",".join(sorted(rubrics)))
+    payload = await enrich_report_history(
+        db, interview, turns, _build_payload(posting, turns, evidences, requirements, rubrics)
+    )
+    answered = await queries.list_answered_turns(db, interview_id=interview.id)
+    return payload, prompts, {t.turn_no: t.id for t in turns}, _coverage(requirements, answered)
+
+
+def _input_snapshot(
+    payload: dict[str, object], prompts: dict[str, c.PromptSpec], llm: LLMSettings
+) -> tuple[str, dict[str, object]]:
+    snapshot = {
+        "payload": payload,
+        "prompts": {name: asdict(p) for name, p in prompts.items()},
+        "task_limits": {name: asdict(llm.call_limits(name)) for name in prompts},
+    }
+    encoded = json.dumps(snapshot, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(encoded.encode()).hexdigest(), json.loads(encoded)
+
+
+def _draft_values(
+    draft: ReportDraft, coverage: dict[str, object], prompts: dict[str, c.PromptSpec]
+) -> dict[str, object]:
+    return {
+        "headline": draft.headline,
+        "summary": draft.summary,
+        "total_score": draft.total_score,
+        "feedback_json": [
+            {
+                "persona": f.persona,
+                "tags": list(f.tags),
+                "strengths": list(f.strengths),
+                "improvements": list(f.improvements),
+            }
+            for f in draft.feedbacks
+        ],
+        "coverage_json": coverage,
+        "model": prompts[REPORT_PROMPT_TASKS[0]].model,
+        "prompt_version": "+".join(prompts[name].version for name in REPORT_PROMPT_TASKS),
+    }
 
 
 async def generate_report(
