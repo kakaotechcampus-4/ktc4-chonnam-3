@@ -419,7 +419,6 @@ def _build_payload(
         "position": posting.position if posting else None,
         "company_name": posting.company_name if posting else None,
         "requirements": [
-            {"id": str(r.id), "category": r.category, "text": r.text} for r in requirements
         ],
         "turns": [
             {
