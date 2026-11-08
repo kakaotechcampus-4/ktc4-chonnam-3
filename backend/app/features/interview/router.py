@@ -9,24 +9,29 @@ docs/layer-rules.md 1절 / task-13
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import current_user
 from app.core.errors import AppError
+from app.core.logging import get_logger
 from app.db.models.user import User
 from app.db.session import get_db
 from app.features.interview import service
+from app.features.interview.question_audio import QuestionAudioService, load_question
 from app.features.interview.schemas import (
     CreateInterviewRequest,
     CreateInterviewResponse,
     InterviewDetailResponse,
 )
+from app.features.interview.tts_budget import RedisCharacterBudget
+from app.integrations.tts.google import BudgetedSpeechSynthesizer, GoogleTTSClient, TtsError
 from app.shared.enums import Reason
 
 router = APIRouter(prefix="/interviews", tags=["interviews"])
 Database = Annotated[AsyncSession, Depends(get_db)]
 CurrentUser = Annotated[User, Depends(current_user)]
+logger = get_logger(__name__)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=CreateInterviewResponse)
@@ -55,6 +60,66 @@ async def get_interview(
     )
 
 
+@router.get("/{interview_id}/turns/{turn_no}/question-audio", response_class=Response)
+async def get_question_audio(
+    interview_id: str, turn_no: int, request: Request, db: Database, user: CurrentUser
+) -> Response:
+    """확정된 본인 질문만 합성한다. 음성 실패는 질문·답변·면접 상태를 바꾸지 않는다."""
+    user_id = user.id
+    source = await load_question(
+        db, user_id=user_id, interview_id=_parse_id(interview_id, Reason.NOT_FOUND), turn_no=turn_no
+    )
+    # 합성 대기 동안 읽기 트랜잭션을 유지하지 않는다. 게시 직전에 원본·소유권을 다시 확인한다.
+    await db.rollback()
+
+    async def still_current() -> bool:
+        try:
+            latest = await load_question(
+                db, user_id=user_id, interview_id=source.interview_id, turn_no=source.turn_no
+            )
+            return latest == source
+        except AppError:
+            return False
+        finally:
+            await db.rollback()
+
+    try:
+        settings = request.app.state.settings.require_tts()
+        if settings.monthly_character_limit is None or not settings.budget_project:
+            raise TtsError("budget_unconfigured")
+        budget = RedisCharacterBudget(
+            request.app.state.redis,
+            project=settings.budget_project,
+            monthly_limit=settings.monthly_character_limit,
+        )
+        injected = getattr(request.app.state, "tts_client", None)
+        synthesizer = (
+            GoogleTTSClient(settings, budget=budget)
+            if injected is None
+            else BudgetedSpeechSynthesizer(injected, settings, budget)
+        )
+        audio = await QuestionAudioService(request.app.state.redis, synthesizer, settings).get(
+            source, check_current=still_current
+        )
+        if not await still_current():
+            raise TtsError("source_changed")
+    except (TtsError, ValueError) as exc:
+        logger.warning(
+            "question_audio_unavailable",
+            interview_id=str(source.interview_id),
+            turn=turn_no,
+            exception_type=type(exc).__name__,
+        )
+        raise AppError(
+            Reason.NOT_READY, message="질문 음성을 재생할 수 없습니다. 질문 텍스트를 확인해 주세요."
+        ) from None
+    return Response(
+        audio.data,
+        media_type=audio.mime_type,
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
+
+
 @router.post("/{interview_id}/prepare/retry", status_code=status.HTTP_204_NO_CONTENT)
 async def retry_prepare(
     interview_id: str, request: Request, db: Database, user: CurrentUser
@@ -64,6 +129,18 @@ async def retry_prepare(
         request.app.state.redis,
         user_id=user.id,
         interview_id=_parse_id(interview_id, Reason.SESSION_EXPIRED),
+    )
+
+
+@router.post("/{interview_id}/abandon", status_code=status.HTTP_204_NO_CONTENT)
+async def abandon_interview(
+    interview_id: str, request: Request, db: Database, user: CurrentUser
+) -> None:
+    await service.abandon_interview(
+        db,
+        request.app.state.redis,
+        user_id=user.id,
+        interview_id=_parse_id(interview_id, Reason.NOT_FOUND),
     )
 
 
