@@ -434,6 +434,8 @@ def _build_payload(
                 "turn_no": t.turn_no,
                 "persona": t.persona,
                 "question": t.question_text,
+                # 질문했으나 답하지 않은 턴은 null로 보낸다. 미질문과 구분해 0단계로 판정한다.
+                "answer": t.answer_text if t.answer_text and t.answer_text.strip() else None,
                 "question_contract": t.question_contract,
                 "analysis": t.analysis,
                 "parent_turn_no": t.parent_turn_no,
