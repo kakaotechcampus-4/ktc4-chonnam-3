@@ -238,3 +238,70 @@
                 "description": "Explain the conditions under which an alternative would be preferable."
               }
             ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "Explain the conditions under which an alternative would be preferable.",
+            "evaluation_keys": [
+              "technical_reasoning",
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 8,
+          "persona": "domain_lead",
+          "question": "Explain a domain concept clearly for an unfamiliar colleague.",
+          "answer": "This is a synthetic answer for pipeline smoke validation, without verified repository facts.",
+          "question_contract": {
+            "purpose": "Explain a domain concept clearly for an unfamiliar colleague.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "Explain a domain concept clearly for an unfamiliar colleague."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "Explain a domain concept clearly for an unfamiliar colleague.",
+            "evaluation_keys": [
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 9,
+          "persona": "domain_lead",
+          "question": "Clarify the limits and assumptions of your previous explanation.",
+          "answer": "This is a synthetic answer for pipeline smoke validation, without verified repository facts.",
+          "question_contract": {
+            "purpose": "Clarify the limits and assumptions of your previous explanation.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "Clarify the limits and assumptions of your previous explanation."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "Clarify the limits and assumptions of your previous explanation.",
+            "evaluation_keys": [
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        }
+      ]
+    }
+  }
+}
