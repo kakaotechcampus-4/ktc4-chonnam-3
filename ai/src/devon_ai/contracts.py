@@ -1533,6 +1533,7 @@ class ReportTurn(_Contract):
     analysis: AnswerAnalysis | None
     evidence_refs: tuple[str, ...]
     question_contract: QuestionContract
+    jd_requirement_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
