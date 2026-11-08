@@ -1912,3 +1912,243 @@ BE의 [설정](../../backend/app/core/config.py)과 [GitHub 조회 연결](../..
 - 실제 GitHub·LLM 호출, 운영 상한 실측, DB/Redis·서비스 E2E·배포는 이번 범위에서 실행하지 않았다.
 
 #109의 `implementation.md` 공유 편집 구조와 BE·FE·shared 문서 정리는 여전히 후속 범위다. 이번 표현 보완을 실제 서비스 검증이나 #109 전체 완료로 확대하지 않는다.
+
+<a id="live-ai-validation-20261107"></a>
+
+## 2026-11-07 — 실제 공급자·원문을 사용한 AI 기능 검증과 발견 사항
+
+사용자 요청에 따라 STT·TTS를 제외하고 실제 GitHub·Elice MLAPI·Vision·Tavily를 사용했다.
+브라우저 로그인·마이크를 사용자에게 요구하는 검사가 아니라 내부 서비스와 실제 모델의 자동 기능 검사다.
+원본 `.env`와 업무 DB는 수정하지 않았다. `feature/ai-final-service-20261107`의 로컬 통합 작업이며 미게시다.
+동일 작업의 선행 코드·새 구현·전체 서비스 완료 여부는 이 기록의 이전 범위와 구분한다.
+
+### 실행 환경과 판정 경계
+
+- DB는 로컬 PostgreSQL의 새 `task10_test_ai_actual_20261107_test`로 분리하고 0007까지 마이그레이션했다.
+  사용자는 합성 사용자이며, 공고·지원자 답변·별도 리포트 문답도 합성 입력임을 기록했다.
+- 레포는 실제 Public `kakaotechcampus-4/ktc4-chonnam-3`의 `13bd98e4af74c977c2db6e367c232fe6209b979b`다.
+  전체 언어·레포 규모·파일 배치에 대한 품질 검증으로 확대하지 않는다.
+- 실제 LLM 호출의 검증 override는 timeout 60초, 출력 8192, 입력 262144바이트, 응답 1048576바이트,
+  `stream=True`, `reasoning_effort=low`다. 원본 환경의 기본값이나 확정된 작업별 품질 정책이 아니다.
+- 키·공급자 전체 주소를 결과에 출력하지 않았다. 상세 입력·출력·실패 이력은 Git 제외
+  `.claude/scratch/live-ai-check-20261107/`에 보존한다. MLAPI 원시 probe는 원본 저장소의 같은 scratch 경로다.
+
+### 실제 결과
+
+| 기능 | 확인한 결과와 제한 |
+| --- | --- |
+| L1 기본 분석 | 실제 GitHub 메타데이터·고정 SHA·구조 97항목·보조 파일 4개와 실제 모델로 분석. 구조 깊이·요청 상한 이후의 미확인 범위를 보존했다. |
+| L2 정밀 분석 | 실제 AI가 고른 8파일을 같은 SHA의 로컬 Git에서 읽고 실제 모델로 관찰 5개 생성. GitHub tree blob·로컬 Git object·원문 blob 해시를 모두 대조했다. GitHub 익명 quota로 수정 후 전체 수집 재실행은 못 했으며, 이 우회를 원격 수집 성공으로 표시하지 않았다. |
+| GitHub 수정 후 원문 조회 | 제품 `EvidenceReader.file_text`로 고정 SHA의 `ai/pyproject.toml` 663바이트·30줄을 실제 HTTP 200으로 확인했다. 전체 수집기의 재검증과는 구분한다. |
+| Vision | 합성 PNG 1건, 제출 1회·조회 3회 모두 HTTP 200. 9.672초에 OCR 751자·원문 블록 5개·도식 설명 1개. 미전사 영역을 `partial`로 유지하고 전사·생성 설명을 분리했다. |
+| 문서 Claim | 실제 Vision snapshot을 재사용해 제품 Claim 추출·저장을 실제 LLM으로 실행했다. 주장 1개와 원문 위치를 저장했으며 주장의 진위를 확정하지 않는다. |
+| 공고 도메인 | 합성 공고의 실제 분류 응답은 `etc`, 호출 실패 없음. 이 단독 검사에서 분류 결과를 새 공고에 저장해 frame을 고르는 전체 자동 연결까지 검증하지는 않았다. |
+| 외부 자료 | 명시적 Tool 점검으로 Tavily 검색·원문 수집 및 자료 3개 DB 저장 성공. AI가 스스로 검색을 요청한 분기의 통과로 계산하지 않는다. |
+| 연속 Director·T3 | 첫 HR와 다음 기술 질문, 답변 분석 2개를 저장했다. 1턴은 sufficient, 2턴은 partial이며 코드와 충돌한 주장은 conflicting·근거 충돌 2행으로 남았다. 다음 질문 후보는 rewrite 1회·replan 2회 거절. 마지막 1회는 별도 진단 작업에서도 재현됐다. 원 면접은 2턴에서 in_progress이며 9턴 완주 실패다. |
+| 별도 리포트·프로필 | Director와 분리한 합성 9문답을 DB에 넣고 실제 서비스로 리포트 점수 6개·Persona 피드백 3개·프로필 1개를 저장했다. 모델 호출은 리포트 2회+프로필 1회. 재호출은 각각 exists·role_kept이며 추가 모델 호출 0회다. |
+
+별도 리포트 입력에는 T3 분석·코드 Evidence·Tool 결과·보완 자료가 없다. 따라서 위 성공은
+문답→리포트·프로필→DB·동일 입력 재사용 범위다. 실제 면접의 T3·코드·Claim·외부 근거가 최종 리포트에
+전파되는 연결, 새 답변·새 면접·새 prompt의 캐시 무효화까지 검증했다고 주장하지 않는다.
+저장된 서술과 프로필은 합성 사례·실제 기여 미확인·성과 수치 미측정을 유지했다.
+
+### 원본 설정과 #196 비교
+
+원본 `.env`의 유효 LLM 연결은 `CHAT_PROXY_URL`·`PROXY_TOKEN`, 실제 모델은 `gpt-6-luna`다.
+기본 호출 설정은 출력 1024, timeout 30초, 입력 32768바이트, 응답 131072바이트,
+비스트리밍, 추론 강도 미지정이다. 같은 합성 9문답의 리포트를 이 설정으로 호출한 비교는 실패했다.
+4번의 provider 시도 모두 출력 1024를 사용했고 `llm_failed`로 완료형 결과를 얻지 못했다.
+위 스트리밍 override로 저장에 성공한 검사와 구분하며, 원본 `.env`를 변경하지 않았다.
+
+현재 endpoint에 짧은 `OK` 응답을 요청한 원시 HTTP 비교도 별도로 수행했다.
+
+| 요청 | 실제 응답 |
+| --- | --- |
+| 비스트리밍·출력 2000·low | HTTP 200·completed |
+| 비스트리밍·출력 8192·low | HTTP 400, 비스트리밍 2000 이하 또는 streaming 사용 안내 |
+| 비스트리밍·출력 8192·추론 미지정 | 같은 HTTP 400 |
+| 스트리밍·출력 8192·low | HTTP 200·response.completed |
+
+이는 [#196](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/196)의 **해당 서버 비스트리밍 제한**을 재확인한다.
+MLAPI 전체나 모델의 보편적 출력 한도가 2000이라는 뜻은 아니다. `OK` probe가 실제 8192토큰 생성이나
+그 이상의 최대 한도·판정 품질을 검증한 것도 아니다. 작업별 추론·출력 설정과 품질 비교는 후속 범위다.
+
+### 실제 실패에서 수정한 코드
+
+- GitHub 일반·직접 요청의 공통 `User-Agent`: `integrations/github/base.py`, `client.py`, `evidence.py`.
+- 구조 목록의 디렉터리 끝 `/`와 파일 경로 규칙을 구분: `ai/src/devon_ai/contracts.py`.
+- 구조 조회가 파일 수집 요청·바이트를 모두 소진하지 않도록 예약: `features/interview/repository_sources.py`, reader 예산 경계.
+- 기존 Vision 설정명과 `/v1` 접미사 호환, 명시 endpoint의 자격증명 우선순위: `core/config.py`, 문서 router, Vision 어댑터.
+- 실제 `bounding_box`의 좌표 보존: Vision 어댑터. 최초 결과는 보존하고 같은 실제 응답만 재정규화해
+  원문·텍스트 해시·파일 해시 불변과 원문 5개·도식 1개의 좌표를 확인했다. 추가 Vision 추론 호출은 없다.
+
+결정·이유·영향은 [0032](decisions/0032-provider-compatibility-and-source-budgets.md)에 분리했다.
+STT 설정은 기존 `Whisper_Large_v3_PROXY_URL`이 있으나 현행 `STT_BASE_URL`·`STT_API_KEY`와 자동 연결되지 않는다.
+이번 요청에서 STT·TTS는 제외했으므로 연결 변경이나 실제 음성 요청은 하지 않았다.
+
+### 회귀 검사와 남은 범위
+
+- 이번 최종 AI 전체 검사: **687 passed**, `ai/report/live-verification-ai.xml`.
+- GitHub·원문 관련 BE 122개, 관련 AI 65개, PostgreSQL 준비·캐시 52개 통과·1개 환경 skip.
+  마지막 핵심 PG 4개 재검사는 52개와 중복이다. skip은 TEST_REDIS_URL 미설정의 REST retry 검사다.
+- Vision 설정·정규화·preview·snapshot 관련 42개 통과. 변경 파일 Ruff·format·mypy 통과.
+  위 수치는 중복 범위가 있으므로 합산하지 않는다. 대역 회귀는 실제 외부 호출과 별도로 기록한다.
+- 실제 남은 작업은 후보 거절 사유를 반영하는 생성·복구의 제한된 실행 정책과 품질 보완,
+  운영 작업별 호출 설정, 인증된 GitHub에서 전체 수집기 재검증, 실제 전체 면접의 최종 리포트 근거 전파다.
+  이번 검증 도구의 별도 질문 작업을 제품의 자동 복구로 간주하지 않는다.
+- 핵심 산출물: `repository/report.json`, `repository/validation.json`, `vision/live-summary.json`,
+  `vision/source-snapshot.v2.json`, `interview/result.json`과 보존된 attempt-01·02,
+  `interview/report-profile-components/result.json`, `interview/env-report-comparison/result.json`,
+  `database-audit.json`. 실제 출력·저장·미실행을 구분하며 서비스 전체 완료를 선언하지 않는다.
+
+<a id="stt-live-validation-20261107"></a>
+
+## 2026-11-07 — STT 설정 호환과 실제 한국어 전사 확인
+
+사용자의 후속 요청으로 STT를 실제 호출했다. 기존 기록의 STT 미확인은 그 시점의 결과이며,
+이번 기록에서 확인한 범위로 갱신한다. TTS 서비스 연결과 전체 음성 면접 완주는 별도 범위다.
+
+### 연결 보완
+
+- `backend/app/core/config.py`가 기존 `Whisper_Large_v3_PROXY_URL`을 읽게 했다.
+  전용 STT 주소·키를 우선하며, 기존 프록시 경로에서만 공통 `PROXY_TOKEN`을 재사용한다.
+- 전사 클라이언트가 붙이는 경로와 중복하지 않도록 끝의 `/v1`을 정규화한다.
+  모델·언어·공급자·HTTPS·키 검증과 명시 endpoint의 자격증명 경계는 유지한다.
+- 현재 작업본에서 원본 `backend/.env`를 그대로 읽은 `require_stt()`가 성공했고,
+  실제 전사도 같은 설정으로 실행했다. 요청 설정 override와 원본 환경 파일 변경은 없다.
+- [0033](decisions/0033-stt-proxy-configuration-compatibility.md)에 이유와 영향을 기록했다.
+  STT 공급자 프로토콜과 기존 `MlapiSttClient` 사이의 불일치는 없어 전사 클라이언트는 수정하지 않았다.
+
+### 실제 API 확인
+
+구성된 공급자의 `/openapi.json`에서 전사 경로와 multipart 입력을 확인했다.
+`/docs.json`은 404였으며 이 문서 경로의 부재를 STT 장애로 해석하지 않았다.
+알려진 한국어 문장을 로컬 Windows 음성 합성으로 준비하고 ffmpeg로 WebM/Opus를 만들었다.
+사용자 마이크 녹음·개인정보 입력·외부 TTS 호출·DB 쓰기는 없다.
+
+| 입력 | 실제 결과 |
+| --- | --- |
+| 한국어 WAV, 16kHz·mono·PCM16, 16.91초 | HTTP 200, 클라이언트 완료까지 2.297초. 공백·문장부호 제외 원문 일치 |
+| 같은 음성의 WebM/Opus, FE와 같은 `audio/webm;codecs=opus` | HTTP 200, 1.016초. 공백·문장부호 제외 원문 일치 |
+| 무음 WAV 3초 | 공급자 HTTP 200과 `감사합니다.`·usage.seconds=3. 기존 클라이언트가 `empty_transcript`로 거절 |
+
+기존 제품 `MlapiSttClient`를 사용한 실제 POST는 3회이며, 합계 3.843초다.
+두 형식은 같은 합성 음성 한 건의 변환본이다. 원문 일치를 일반 사용자 인식 정확도 100%로 표현하지 않는다.
+실제 마이크·배경 소음·억양·장시간 답변의 품질이나 브라우저부터 실제 DB·Director까지의 완주를 검증한 것은 아니다.
+무음 검사도 이번 3초 샘플과 알려진 환각 문구에 대한 확인이다.
+
+### 회귀·보존과 남은 작업
+
+- 신규 설정 검사 21개 통과. 수정 전 7개가 실패하는 것을 확인했다.
+- STT·Vision·LLM·설정 관련 회귀 271개 통과. 변경 파일 Ruff·format·mypy 통과.
+- 별도 음성 WS·오디오 버퍼·공통 음성 계약 검사 56개 통과.
+  이 56개는 외부 전사·일부 처리 경계를 대역으로 둔 회귀이며 실제 API 3회와 구분한다.
+- 원본 `.env`와 이전 실제 검증 결과를 보존했다. 오디오·공급자 응답·비민감 확인 정보는
+  Git 제외 `.claude/scratch/stt-live-check-20261107/`에 보존했다.
+  실제 결과는 `run-20261107T040703583086Z/result.json`, 입력은 `fixtures/manifest.json`,
+  회귀는 `backend/report/stt-config-compatibility.xml`과 `stt-live-service-regression.xml`이다.
+- 토큰 문제의 해결 방향은 앞서 실제 확인한 스트리밍·충분한 출력 예산·응답 바이트·시간 설정의 조합이다.
+  이번에는 원본 LLM 설정을 변경하지 않았으며 아직 비스트리밍·출력 1024다.
+- 외부 연결 기준으로 LLM·Vision·Tavily·STT의 실제 호출을 확인했다. TTS는 미검증이다.
+  Director의 후보 거절 후 진행 보완, 실제 연속 9턴과 최종 리포트 근거 전파는 계속 별도 남은 범위다.
+
+<a id="llm-xhigh-limit-20261107"></a>
+
+## 2026-11-07 — 사용자 지정 xhigh·최대 출력 설정과 실제 재검증
+
+사용자가 원본 `.env`의 추론 강도를 `xhigh`, 출력 예산을 최대 상한으로 변경하도록 명시 요청했다.
+공식 `gpt-6-luna` 사양의 출력 한도 128,000토큰을 확인하고 같은 Elice endpoint의 작은 요청으로
+`stream=true`·`xhigh`·`max_output_tokens=128000` 수락 및 정상 완료를 확인했다.
+큰 정수도 수락되므로 프록시의 요청 파라미터 validation을 모델의 실제 출력 한도라고 해석하지 않았다.
+확인 근거는 [공식 모델 사양](https://developers.openai.com/api/docs/models/gpt-6-luna)과
+Git 제외 `.claude/scratch/llm-max-settings-20261107/run-20261107T041656505540Z/result.json`이다.
+최대 분량 생성을 요구한 검사는 없으며 작은 경계 probe의 실제 출력은 요청당 15토큰이다.
+
+### 실제 적용
+
+원본 `ktc4-chonnam-3/backend/.env`에서 아래 6개 필드만 수정했다.
+
+| 필드 | 변경 전 | 변경 후 |
+| --- | --- | --- |
+| LLM_REASONING_EFFORT | 미지정 | xhigh |
+| LLM_STREAM | false | true |
+| LLM_MAX_OUTPUT_TOKENS | 1024 | 128000 |
+| LLM_TIMEOUT_SECONDS | 30 | 50 |
+| LLM_MAX_INPUT_BYTES | 32768 | 262144 |
+| LLM_MAX_RESPONSE_BYTES | 131072 | 67108864 |
+
+자격증명·다른 공급자 설정·주석을 포함한 비대상 행을 바이트 단위로 보존했다.
+저장 직전 동시 수정 여부를 검사하고 임시 파일로 교체했으며, 저장 후 Settings로 다시 읽어 적용값을 대조했다.
+환경 파일 자체는 버전 관리에 추가하지 않았다. 실행 중인 API·worker에는 설정 재읽기가 필요하다.
+설정의 이유와 유한한 실행 가드는 [0034](decisions/0034-local-llm-xhigh-output-limit.md)에 기록했다.
+
+### 최신 원본 설정 그대로의 실제 리포트 재검증
+
+이전에 원본 설정에서 잘렸던 같은 합성 9문답으로 점수 판정과 서술 생성을 실행했다.
+설정 override 없이 최신 원본 `.env`를 사용했고, 테스트 DB는 `transaction_read_only=on`으로 확인했다.
+
+| task | 실제 결과 |
+| --- | --- |
+| report_score | HTTP 200·response.completed·제품 validator 통과. 입력 5837, 출력 4049 중 추론 3809토큰. 43.625초, SSE 246000바이트 |
+| report | HTTP 200·response.completed·제품 validator 통과. 입력 4821, 출력 5371 중 추론 3624토큰. 40.969초, SSE 702405바이트 |
+
+병렬 실제 HTTP 호출은 2회, 전체 44.015초이며 점수 6개·Persona 피드백 3개를 검증했다.
+기존 실패 결과를 보존했고, 이번에는 제품 코드·DB 쓰기·STT·TTS 호출을 하지 않았다.
+설정 변경 후 실제 호출 중 환경 파일 해시도 동일했다.
+상세 결과는 `.claude/scratch/llm-max-settings-20261107/report-20261107T041920204799Z/`에 보존했다.
+변경 전후의 비민감 설정과 보존 확인은 같은 상위 디렉터리의 `environment-change.json`에 있다.
+
+### 완료 판단의 범위
+
+외부 공급자 LLM·Vision·Tavily·STT의 실제 호출과 대표 기능 실행은 확인했다.
+그러나 이를 **TTS를 제외한 서비스 전체 검증 완료**로 확대하지 않는다.
+
+- 기존 실제 Director 흐름은 2턴 답변 분석 뒤 다음 질문 후보 검수에서 중단됐다. 정상 연속 9턴 완주가 아니다.
+- 이번 성공 리포트는 별도 합성 9문답이며 T3 분석·코드·Claim·검색 근거가 비어 있는 입력이다.
+  실제 면접의 전체 근거가 최종 리포트로 전달되는 통합 검증을 대신하지 않는다.
+- 이전 프로필·레포·문서·T3의 성공 측정을 새 전역 `xhigh` 설정의 재검증으로 옮기지 않는다.
+  이번 새 설정에서는 출력 경계 probe와 합성 리포트 두 task만 실제 실행했다.
+- 128,000은 공식 모델 출력 예산이다. 50초·64MiB 등 실행 가드는 계속 적용되며,
+  모든 입력에서 그 분량 전체를 생성하거나 완료할 수 있음을 증명한 검사가 아니다.
+
+<a id="issue196-followup-20261107"></a>
+
+## 2026-11-07 — #196 실측 공유와 실행 제한의 근거 정리
+
+사용자 요청에 따라 [#196 댓글](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/196#issuecomment-6702412478)에
+비스트리밍 제약 재현, 스트리밍·명시적 추론 강도 지원, 실제 리포트 결과와 미실행 범위를 게시했다.
+본문은 UTF-8 파일로 준비하고 독립 대조 후 게시했으며 원격 댓글 원문과 파일의 정확한 일치를 확인했다.
+연결된 GitHub 앱은 이슈 쓰기가 403으로 거절돼, 기존 로컬 Git Credential Manager의 같은 사용자
+`gdh0730` 인증을 확인한 뒤 GitHub API로 한 번 게시했다. 토큰은 메모리에서만 사용했다.
+이슈 상태는 변경하지 않았으며 로컬 미게시 구현을 공유 브랜치·운영 반영 완료로 설명하지 않았다.
+
+### 50초와 64MiB의 의미
+
+- 50초는 모델 HTTP 시도 1회의 전체 수신 제한이다. 재시도·대기·큐·면접 전체 제한과 다르다.
+  실제 최신 호출 43.625초·40.969초는 이 안에서 성공했지만, 두 측정으로 p95/p99나 최적값을 판단하지 않는다.
+- 기존 준비 worker 600초, 리포트 잠금 300초 등 실행 경계도 함께 고려했다.
+  문서 Claim·primary 수집·L2·Director를 포함한 590초 계산은 호출 예산 추정이다.
+  DB·큐·JSON 처리·취소 정리까지 엄밀히 제한한 전체 완료 보장식으로 해석하지 않는다.
+- 응답 바이트에는 최종 JSON뿐 아니라 SSE 이벤트·delta·완료 응답이 포함된다.
+  실측 246000·702405바이트는 이전 128KiB 상한도 초과하므로 상향 근거가 있다.
+- 64MiB 자체는 통계적으로 도출된 최적값이 아니라, 출력 예산 확대에 맞춰 둔 넉넉하고 유한한 보호선이다.
+  실측 최대의 약 95.5배이며 그 크기를 미리 할당하지는 않는다. 수신·문자열 변환·파싱 중 복사로
+  피크 메모리는 실제 수신량보다 커질 수 있어 동시 호출을 포함해 별도 측정해야 한다.
+- 후속 조정은 task·모델·추론 강도·입력 규모별 지연과 응답 크기 분포, timeout·재시도율,
+  동시 실행 메모리를 측정하고 사용자 대기·worker·잠금 예산에 맞춰 수행한다.
+
+### 환경 예제와 모델 우선순위
+
+작업본 `backend/.env.example`의 LLM 관련 값만 현재 원본 `.env`에 맞췄다.
+`OPENAI_MODEL=gpt-6-luna`, 추론 `xhigh`, 스트리밍, 출력 128000, 시간 50초,
+입력 262144바이트, 응답 67108864바이트의 실제 적용값 일치를 확인했다.
+실제 키·토큰·비공개 공급자 주소는 복사하지 않았다. 원본 저장소의 develop 작업 파일과 원본 `.env`는 변경하지 않았다.
+
+비교는 `Settings`의 기본 필드가 아니라 실제 소비 경로 `require_llm()`을 기준으로 했다.
+기본 `LLM_DEFAULT_MODEL=gpt-5.6-luna`보다 명시한 `OPENAI_MODEL`이 우선하므로,
+현재 실제 모델은 계속 `gpt-6-luna`이며 환경 파일 전체 해시도 이전 설정 변경 직후와 동일했다.
+현재 모델 목록 조회와 작은 실제 Responses 요청으로도 요청·응답 모델 `gpt-6-luna`를 확인했다.
+명세의 다른 모델을 검증했다고 확대하지 않는다.
+
+공급자 LLM·Vision·Tavily·STT의 실제 연결·대표 호출 확인과 전체 Director 연속 9턴·최종 근거 리포트 검증은 계속 구분한다.
+댓글 원본·게시 결과·예제 대조·작은 모델 확인은 Git 제외 `.claude/scratch/issue196-followup-20261107/`에 보존했다.
