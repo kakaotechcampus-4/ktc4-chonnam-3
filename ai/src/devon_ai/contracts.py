@@ -1066,6 +1066,8 @@ def validate_shallow_batch(
                 "readme": source.readme_text is not None,
                 "description": source.description is not None,
                 "languages": bool(source.languages),
+                "structure": bool(source.structure),
+                "supporting_file": bool(source.supporting_files),
                 "commit_metadata": (
                     source.commit_count is not None or source.user_commit_count is not None
                 ),
