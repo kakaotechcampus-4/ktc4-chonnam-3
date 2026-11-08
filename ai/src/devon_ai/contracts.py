@@ -1381,8 +1381,6 @@ def validate_deep_analysis(
     )
     source_by_scope = {(item.path, item.read_scope): item for item in source.sources}
     for area in candidate.notable_areas:
-        matched = source_by_path.get(area.path)
-        if matched is None or matched.read_scope != area.scope:
             raise ContractError("semantic", "notable area source scope")
     return _checked(candidate)
 
