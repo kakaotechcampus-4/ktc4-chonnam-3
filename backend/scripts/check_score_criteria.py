@@ -2,17 +2,28 @@
 
 backend 에서 ``python -m scripts.check_score_criteria`` 로 실행한다. DB·Redis 를 쓰지 않고
 읽기만 하므로 개발·스테이징·운영 어디서든 실행해 같은 형식의 결과를 이슈에 붙일 수 있다.
-활성 행이 SCORE_KEYS 6개와 정확히 같고 rubric 이 "0"~"4" 키를 가질 때만 exit 0 이다.
+활성 행이 SCORE_KEYS 6개와 정확히 같고 rubric 이 "0"~"4" 키를 가지며 각 단계 값이
+비어 있지 않은 문자열일 때만 exit 0 이다(AI 계약 RubricLevel 이 거절하는 값을 통과시키지 않는다).
 report:fail:* 는 활성화 전에 실패한 면접의 재시도 대상이며 삭제하지 않는다.
 
-활성화 절차(환경별로 같다. 시점은 평가 담당이 검수 후 정한다):
-1. ``python -m scripts.seed_all`` 로 rubric 문구를 적용한다(신규 행은 is_active=FALSE).
+활성화 절차(시점은 평가 담당이 검수 후 정한다). 먼저 활성 행이 있는지 이 스크립트로 확인한다.
+
+[활성 행이 없는 DB — 신규·비활성]
+1. ``python -m scripts.seed_all`` 로 rubric 초안을 등록한다(신규 행은 is_active=FALSE).
 2. 문구를 검수한다.
 3. 6행을 한 트랜잭션에서 한 번에 켠다. 일부만 켜면 리포트 생성이 실패한다.
    UPDATE score_criteria SET is_active = TRUE, updated_at = now()
    WHERE score_key IN ('project_understanding', 'technical_reasoning', 'problem_solving',
                        'communication', 'contribution_clarity', 'company_job_fit');
 4. 이 스크립트를 실행해 ok=true 와 활성 6개를 확인하고 결과를 #206 에 남긴다.
+
+[이미 활성 행이 있는 DB]
+seed_all 을 먼저 실행하지 않는다. 충돌 시 is_active 를 유지한 채 rubric·label·description 을
+seed 초안으로 덮어쓰고 커밋하므로, 검수 전에 활성 문구가 바뀐다. 도메인 질문 프레임
+(domain_question_frames)도 함께 갱신되며 이는 점수 기준 점검과 별도 범위다.
+1. DB 의 현재 문구와 seed 의 후보 문구를 비교해 검수한다.
+2. 승인한 변경만 적용한다.
+3. 이 스크립트로 ok=true 를 확인하고 결과를 #206 에 남긴다.
 """
 
 import asyncio
@@ -41,6 +52,10 @@ def find_problems(active: Mapping[str, object]) -> list[str]:
         rubric = active[key]
         if not isinstance(rubric, dict) or set(rubric) != LEVELS:
             problems.append(f"rubric levels of {key} are not exactly 0..4")
+        elif bad := sorted(
+            level for level, text in rubric.items() if not isinstance(text, str) or not text.strip()
+        ):
+            problems.append(f"rubric text of {key} levels {bad} is not a non-empty string")
     return problems
 
 

@@ -1,3 +1,5 @@
+import pytest
+
 from app.db.models.report import SCORE_KEYS
 from scripts.check_score_criteria import LEVELS, find_problems
 from scripts.seed_score_criteria import SCORE_CRITERIA
@@ -23,3 +25,11 @@ def test_bad_rubric_levels_are_reported() -> None:
         f"rubric levels of {SCORE_KEYS[0]} are not exactly 0..4"
     ]
     assert find_problems({**GOOD, SCORE_KEYS[0]: "text"})
+
+
+@pytest.mark.parametrize("value", [None, "", "   ", 3, {"x": "y"}])
+def test_non_text_rubric_values_are_reported(value: object) -> None:
+    broken = {**GOOD[SCORE_KEYS[0]], "2": value}
+    assert find_problems({**GOOD, SCORE_KEYS[0]: broken}) == [
+        f"rubric text of {SCORE_KEYS[0]} levels ['2'] is not a non-empty string"
+    ]
