@@ -331,6 +331,26 @@ def test_pair_history_turn_needs_all_fields(tmp_path, missing):
         load_cases(tmp_path)
 
 
+def test_pair_history_turn_numbers_must_be_unique(tmp_path):
+    cases = []
+    for case_id, answer in (("r-1", "대안을 비교했습니다"), ("r-2", "많이 써서요")):
+        inp = _report_input(case_id, answer)
+        turn = inp["payload"]["history"][0]
+        inp["payload"]["history"] = [turn, {**turn, "answer": "다른 답"}]  # 둘 다 turn 1
+        cases.append(inp)
+    _write_report_pair(tmp_path, *cases)
+    with pytest.raises(CaseError, match="unique"):
+        load_cases(tmp_path)
+
+
+def test_negative_persona_left_is_rejected_even_when_the_sum_matches(tmp_path):
+    history = ["tech_lead"] * 7 + ["hr_manager"]  # 기술 질문이 정원 6을 넘은 이력
+    left = {"tech_lead": -1, "domain_lead": 2, "hr_manager": 0}
+    _pair(tmp_path, _quota_case(history, left))
+    with pytest.raises(CaseError, match="tech_lead"):
+        load_cases(tmp_path)
+
+
 def _quota_case(history, left):
     inp = _input()
     turns = enumerate(history, 1)

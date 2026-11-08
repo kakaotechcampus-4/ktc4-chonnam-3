@@ -168,6 +168,11 @@ def _history(case: Case) -> list[dict[str, Any]]:
             raise CaseError(
                 f"{case.case_id}: history needs int turn and str persona/question/answer"
             )
+    numbers = [turn["turn"] for turn in history]
+    if len(set(numbers)) != len(
+        numbers
+    ):  # 비교 시트가 turn 번호로 답변을 모으므로 중복은 덮어쓴다.
+        raise CaseError(f"{case.case_id}: history turn numbers must be unique, got {numbers}")
     return list(history)
 
 
@@ -218,7 +223,7 @@ def _check_persona_quota(case: Case) -> None:
     for persona, quota in PERSONA_QUOTA.items():
         done = sum(1 for t in history if isinstance(t, dict) and t.get("persona") == persona)
         remaining = left.get(persona, 0)
-        if type(remaining) is not int or done + remaining != quota:
+        if type(remaining) is not int or remaining < 0 or done + remaining != quota:
             raise CaseError(
                 f"{case.case_id}: {persona} asked {done} + left {remaining} must equal {quota}"
             )
