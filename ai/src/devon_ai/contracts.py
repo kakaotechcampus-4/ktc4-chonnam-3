@@ -775,6 +775,50 @@ class JDRequirement(_Contract):
 
 
 @dataclass(frozen=True)
+class JDSourceNote(_Contract):
+    """공고 이미지의 저장된 전사이며 지원자의 코드·개인 기여 Evidence가 아니다."""
+
+    requirement_id: str
+    block_id: str
+    source_field: Literal["job_posting.source_blocks"]
+    content: str
+    location: str
+    text_hash: str
+    image_hash: str
+    limitations: tuple[str, ...]
+    read_scope: Literal["entire_block", "prefix_excerpt"] = "entire_block"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        from hashlib import sha256
+
+        if any(
+            fullmatch(r"[0-9a-f]{64}", value) is None for value in (self.text_hash, self.image_hash)
+        ):
+            raise ContractError("schema", "JD source hash")
+        if (
+            self.read_scope == "entire_block"
+            and sha256(self.content.encode()).hexdigest() != self.text_hash
+        ):
+            raise ContractError("semantic", "JD source content hash")
+        if (
+            self.read_scope == "prefix_excerpt"
+            and "jd_source_context_excerpt" not in self.limitations
+        ):
+            raise ContractError("semantic", "JD source excerpt limitation")
+
+
+def validate_jd_source_notes(
+    notes: tuple[JDSourceNote, ...], *, requirement_ids: frozenset[str]
+) -> None:
+    if type(notes) is not tuple or any(type(item) is not JDSourceNote for item in notes):
+        raise ContractError("schema", "JD source notes")
+    _unique(tuple((item.requirement_id, item.block_id) for item in notes), "JD source notes")
+    if any(item.requirement_id not in requirement_ids for item in notes):
+        raise ContractError("semantic", "unasked JD source")
+
+
+@dataclass(frozen=True)
 class ContextRepository(_Contract):
     repository_id: str
     git_ref: str
