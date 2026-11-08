@@ -1,6 +1,6 @@
 # task-12 - 평가 체계 준비
 
-상태: 구현 가이드. 현재 실제 평가자료와 loader·harness·채점기는 미구현이다.
+상태: 구현 가이드. 평가 도구·자료·실행의 실제 구현·검증 범위는 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
 
 ## 목표
 
@@ -8,8 +8,8 @@
 경계를 구현한다. 이 가이드 작성만으로 실제 사용자 자료나 holdout 정답을 추가하거나 현재
 AI 기능의 품질 통과를 선언하지 않는다.
 
-현재 loader·harness 파일은 없지만, 향후 구현에서는 합성·비식별 fixture와 후보 로컬
-loader·harness로 분리·누출·채점기 검사를 먼저 만들 수 있다. 실제 자료는 0018의 내부
+합성·비식별 fixture와 로컬 loader·채점기 대조 검사로 자료 분리·누출 방지를 먼저 검증한다.
+도구 구현과 실제 사례 작성·독립 검수·모델 실행은 각각 구분한다. 실제 자료는 0018의 내부
 사용·보관 정책에 맞춰 권한·저장 연결을 확인한다. 수치 수용 기준은 구현·측정에서 구체화하며 외부 출시 기준은 후속 운영 검토 범위다.
 
 전체 순서는 [AI 구현 파이프라인](pipeline.md)을 따른다. 기능별 policy fixture가 준비된 뒤
@@ -25,7 +25,7 @@ loader·harness로 분리·누출·채점기 검사를 먼저 만들 수 있다.
   검수 불일치·grader 검증과 통제 비교 방법을 따른다.
 - [AI 검증 기준](../../spec/ai/verification.md)의 모델 평가 자료 정책과 평가 설계 정책 확인을
   실행 기준으로 삼는다.
-- [평가 workspace 안내](../evals/README.md)는 현재 빈 작업 위치와 자료 보호 경계를 설명한다.
+- [평가 workspace 안내](../evals/README.md)는 로컬 도구 사용법과 자료 보호 경계를 설명한다.
 - [AI 후속 기능 경계](../../spec/ai/features/extensions.md)의 Sprint 2 항목을 Sprint 1 평가
   완료 조건으로 끌어오지 않는다.
 
@@ -34,17 +34,17 @@ loader·harness로 분리·누출·채점기 검사를 먼저 만들 수 있다.
 - [ ] 평가할 기능과 승인된 의미 정책, 허용 결과와 금지 결과의 근거를 식별한다.
 - [ ] 0011에서 확정한 OpenAI `gpt-5.6-luna`의 연결·계정 접근·task 적합성을 AI-L01에서 검증하고 실제 사용한 모델·version을 기록한다.
 - [ ] 실제 자료는 [0018의 후속 내부 비교용 재사용 범위](../../spec/ai/decisions/0018-existing-baseline-bulk-resolution.md#ai-l18-후속-내부-비교-검증-자료)를 따른다. 최종 내부 비교 검증 뒤에도 보관하며 별도의 자동 삭제 기한은 두지 않는다. 사용 권한·참여자 안내·팀 접근 제한과 실제 저장·보관 연결이 갖춰진 뒤 사용한다. 정책 선택을 실제 자료 수집·재사용 완료로 표시하지 않는다.
-- [ ] 실제 사례 수·비율·수치 목표·출시 기준은 AI-L19 합의 전 고정하지 않는다.
-- [ ] 현재 [inputs](../evals/inputs/)와 [expectations](../evals/expectations/)는 `.gitkeep`만
-  둔 빈 디렉터리임을 확인한다.
+- [ ] 실제 사례 수·비율·수치 목표는 AI-L19의 근거·검수·측정으로 구체화하고 임의로 고정하지 않는다. 외부 출시 기준은 후속 운영 검토 범위다.
+- [ ] [inputs](../evals/inputs/)와 [expectations](../evals/expectations/)에 합성 로컬 사례의
+  실행 입력과 기대·검수 정보를 분리한다. 실제 사용자 자료나 비공개 holdout 정답은 커밋하지 않는다.
 
 ## 대상 파일과 책임
 
 - [평가 workspace](../evals/README.md): 모델 입력 가능 자료와 기대·금지 결과를 분리한다.
-- `ai/evals/inputs/`: 향후 승인된 실행 입력 위치다. 검수 정답이나 비밀정보를 넣지 않는다.
-- `ai/evals/expectations/`: 향후 기대·금지 결과와 검수 메모 위치다. 모델 입력에서 격리한다.
-- 향후 후보 로컬 loader·harness: 합성·비식별 JSON 쌍으로 입력 격리, source group/split,
-  전체 결과 상태와 채점기 대조를 검사할 수 있다. 정확한 운영 schema·저장·배포 형식은 미정이다.
+- `ai/evals/inputs/`: 승인된 실행 입력 위치다. 검수 정답이나 비밀정보를 넣지 않는다.
+- `ai/evals/expectations/`: 기대·금지 결과와 검수 메모 위치다. 모델 입력에서 격리한다.
+- 로컬 loader·채점기 대조 검사: 합성·비식별 JSON 쌍으로 입력 격리, source group/split과
+  전체 결과 상태를 검사한다. 실제 모델 실행 harness와 정확한 운영 schema·저장·배포 형식은 별도 검토·검증 대상이다.
 - production DB: 이 가이드만으로 `eval_cases`나 `eval_runs` 테이블을 추가하지 않는다.
 
 ## 작업
@@ -89,7 +89,8 @@ loader·harness로 분리·누출·채점기 검사를 먼저 만들 수 있다.
 
 ## 검증
 
-추가 예정, 현재 없음: `ai/tests/test_eval_data_boundaries.py`.
+검증 대상: `ai/tests/test_eval_data_boundaries.py`, `ai/tests/test_eval_grader_check.py`.
+실제 실행 범위와 결과는 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
 
 - [ ] source group 중복과 split 누출을 의도적으로 넣은 fixture를 거절하는지 검사한다.
 - [ ] mismatch, duplicate, orphan fixture 쌍을 모두 거부하는지 검사한다.
@@ -116,10 +117,12 @@ loader·harness로 분리·누출·채점기 검사를 먼저 만들 수 있다.
 
 ## 결정 대기와 재개 조건
 
+자료 보호·독립 검수·입력 격리 방향은 채택됐다. 아래 표는 [문서 상태 안내](../README.md#ai-document-status)에 따라 실제 평가 조건과 수용 기준의 구체화를 구분하며, 자료 부족으로 판정을 보류하는 의미를 유지한다.
+
 | 항목 | 지금 가능한 작업 | 실제 평가 재개 조건 |
 | --- | --- | --- |
 | AI-L01 provider | provider 독립 fixture 설계 | 선택 모델의 실제 연결·계정 접근·task 적합성과 사용값·version 기록 검증 |
 | AI-L18 자료 운영 | 합성 fixture와 비밀 제외 검사, 채택한 내부 재사용·보관 유지 범위 확인 | 실제 자료 권한·안내·팀 접근·마스킹·저장·파생 자료/복사본 관리 검증 |
-| AI-L19 수용 기준 | 0009의 로컬 JSON 쌍, 후보 loader·harness, 격리·grader·통제 비교 검사 | 실제 사례 수·검수자·조정 결과·control 자료, 최종 수치 목표와 출시 기준 합의 |
+| AI-L19 수용 기준 | 0009의 로컬 JSON 쌍, loader·grader·통제 비교 검사 | 실제 사례 수·검수자·조정 결과·control 자료, 수치 목표의 근거·검수·측정; 외부 출시 기준은 후속 운영 검토 |
 
 채택한 방향은 [AI 결정 기록](../../spec/ai/decisions/README.md), 남은 실제 작업은 [구현·검수 인계](pipeline.md#기존-id별-구현검수-인계)에서 확인한다.

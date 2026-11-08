@@ -1,6 +1,6 @@
 # task-09 - 답변 정성 분석
 
-상태: 구현 가이드. 단발 분석 task(`analyze_answer`)와 mock 기반 대조 사례 테스트를 구현했다. 실제 모델 품질·저장·복구·후속 보완의 최종 피드백 연결은 아직 검증하지 않았다. 기록은 [구현·검증 기록](../../spec/ai/implementation.md)을 따른다.
+상태: 구현 가이드. 현재 구현·검증 범위와 남은 연결은 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
 
 ## 목표
 
@@ -29,7 +29,7 @@
 ## 대상 파일과 책임
 
 - [AI answer_analysis](../src/devon_ai/llm_tasks/answer_analysis.py): 단발 분석 후보 생성과 의미 검증을 소유한다.
-- [AI 계약 자리](../src/devon_ai/contracts.py): 채택 후 입력·출력 타입을 두며 현재 실제 클래스가 없다.
+- [AI 계약 원본](../src/devon_ai/contracts.py): 채택된 입력·출력 타입과 순수 검증을 둔다.
 - [BE turn service](../../backend/app/features/interview/turn_service.py): 확정 답변과 분석·결정의 저장 순서를 소유한다.
 - [BE Director adapter](../../backend/app/agents/director/agent.py): 검증된 분석을 다음 행동 후보에 전달한다.
 - BE는 DB 상태, Tool 실행, 서비스 상태·공개 흐름 복구, WS/API 변환과 원문 보존을 소유한다.
@@ -81,6 +81,8 @@
 - [ ] 상세 저장·복구·공개 변환의 구현·검증 미완료를 runtime 완료로 표시하지 않는다.
 
 ## 결정 대기와 재개 조건
+
+세 축의 의미와 보존 정책은 채택됐다. 아래 항목은 [문서 상태 안내](../README.md#ai-document-status)에 따른 상세 계약·저장·호출의 구현·검증 조건이며, 자료 부족으로 평가 판단을 보류하는 의미와 구분한다.
 
 - AI-L02: [0014](../../spec/ai/decisions/0014-minimal-change-revision.md)에 따라 질문의 다섯 필드·분석/판단의 기존 평면 필드와 명시한 값·JSONB 위치를 유지한다. 축별 한계는 기존 판단 필드·limitations에 기록한다. 상세 객체·근거 참조·미채택 null·실패 기록의 영구 저장 경계를 기존 구조 안에서 정한 뒤 타입과 저장 변환을 고정한다.
 - 질문 후보의 rewrite/replan/failure 선택은 ADR 0008에 따라 검사한다. AI-L09는 0018의 기존 미저장 답변 재제출·저장 답변 보완·오류 안내·명시적 나가기를 실제 반환·전송에 연결하고 검증한다.

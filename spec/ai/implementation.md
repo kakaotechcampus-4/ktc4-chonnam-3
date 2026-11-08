@@ -1,9 +1,246 @@
 # AI 구현·검증 기록
 
+## 2026-10-25 — 미게시 면접 실행과 후속 보완의 Draft 게시
+
+### 원본과 신규 범위
+
+- 원본 tree `c8f2cb5d`와 실제 worktree·index를 보존했다.
+  `backup/director-unpublished-before-pr-20261025`는 원본 tree를 보존한 commit을 가리킨다.
+- 선행 통합 tree `a4d7c1bf` 대비 원본 신규 36파일을 대조했다. 기게시 신규분 10파일,
+  일부 게시 11파일, 전부 미게시 13파일, #131 담당으로 제외·보존한 seed 2파일이다.
+  파일 수만이 아니라 함수·수정 구간과 테스트 사례까지 대응시켰다.
+- 게시 기준은 `develop@dbd7f890`이다. 기존 #124~#127, #131과 다른 선행 PR은 변경·병합하지 않았다.
+  초기 설계는 보존하고 실행 명세는 [#132](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/132),
+  미적용 Context·L2 보완은 [#133](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/133)으로 분리했다.
+
+| 구간 | 이번 게시의 배치 |
+| --- | --- |
+| 준비·Director 실행·WS·앱/worker | 신규 실행 코드와 회귀 검사를 이 구현 PR에 게시 |
+| 현재 답변 Context·9번째 답변·수집 한계 | #133의 `agent_context.py`, `answer_context.py` 미적용 패치 |
+| L2 예산·호출 기록·base URL·한계 | #133의 `repo_deep.py` 미적용 패치 |
+| 기존 Director 생성기의 base URL 한 줄 | #133의 어댑터 미적용 패치 |
+| 수집 상한 | #126의 8개 설정은 재게시하지 않고 남은 진행 중 조회 3개와 검증만 추가 |
+| 준비 테스트 | #126에 옮긴 2함수·3사례를 제외하고 나머지 함수 AST를 보존 |
+| WS·준비·현재 답변의 통합 회귀 | 실행 서비스에 의존하므로 이 구현 PR에 함께 게시 |
+| seed 실행·추가 seed 검사 | 이번 변경에서 제외. #131 전담과 로컬 원본 보존 유지 |
+
+#133은 일반 Python 파일에 아직 적용하지 않은 검토 자료다. 패치만 병합해도 기능은 활성화되지
+않으며 앱·빌드·CI에서 자동 적용하지 않는다. 정확한 선행 base에서 일반 코드에 적용하고
+재검증해야 한다. 선행 구현·DB 모델·migration·의존성·기게시 함수 전체를 복사하지 않았다.
+
+### 게시본 단독 검사
+
+| 검사 | 실제 결과 |
+| --- | --- |
+| 명세 #132의 부분 계약 검사 | schema 2개·부분 OpenAPI·fixture 7개 통과 |
+| 실행 게시본 Ruff·format | 통과, format 260파일 |
+| 실행 게시본의 조회 상한 검사 | 3 passed |
+| 실행 게시본 전체 pytest | 수집 오류 9건. #82의 모델·#120의 router 등 선행 부재와 기존 seed import 오류 |
+| 실행 게시본 mypy | 4파일 30오류, 134 source 검사. 선행 어댑터·모델·Context·REST 타입 부재 |
+| 패치 4개 | SHA-256·base/result blob 일치, 정확한 선행에서 적용 검사·적용 후 원본 blob 대조 통과 |
+| 원본 보존·범위 | 원본 36파일·index 동일, 신규 PR 간 파일 중복 없음, seed·DB 모델·선행 migration 미포함 |
+
+### 별도 로컬 통합 검증
+
+원본 선행 통합과 이번 코드·패치를 결합한 별도 환경을 사용했다. runtime 함수와 분리한 테스트는
+원본 AST와 대조했다. 설정 3개와 #126의 나머지 설정도 원본과 일치한다. seed 오류 해결은
+게시하지 않고 #131의 seed 두 파일을 검증 환경에만 연결했다. 외부 모델·GitHub는 대역이며
+실제 외부 모델·서비스 DB·사용자 자료에 접근하지 않았다.
+
+- 기존 Python 3.12.14, 새 전용 PostgreSQL 15.19·Redis 7.4.11을 사용했다.
+- BE 첫 전체 실행: 1,231 passed·74 setup errors·경고 2개. 74건 모두 분석 fixture의
+  `task10_test` DB 이름 조건 위반이며 기능 실패는 없었다. 통과·오류를 합쳐 전체 통과로 쓰지 않는다.
+- AI 전체 실행: 295 passed. BE/AI Ruff·format·mypy 통과이며 각각 format 292/52파일,
+  type 검사 141/12 source다.
+- 올바른 새 `task10_test` DB에서 정확히 그 74개 오류 사례만 재실행해 74 passed를 확인했다.
+  첫 전체 445.54초·exit 1과 재실행 108.78초·exit 0을 구분하며, 서로 다른 고유 BE 사례
+  1,305개를 검증했다. 한 번의 전체 실행이 모두 통과했다고 표시하지 않는다.
+- 각 실행 전후 통합 Python 소스 해시는 같았다. 생성한 두 테스트 DB 삭제·임시 schema 0개·
+  연결 0개·DB 목록 복원·Redis/PG 종료와 포트 해제를 확인했다. 기존 서비스는 변경하지 않았다.
+
+검증 보조 스크립트의 첫 Redis 기동은 Cygwin의 config 경로 해석으로 중단됐으며 생성 DB·서버를
+정리하고 상대 config 경로로 재실행했다. DB 명명 문제도 보조 환경만 수정했으며 Python 소스는
+변경하지 않았다. 실제 결과와 오류 목록은 원본 저장소의
+`.claude/scratch/director-remaining-publication-20261025/validation-runtime/`에 보존한다.
+
+### 병합 전 조건과 남은 범위
+
+- Draft다. 필요한 선행·#132 명세·#133 후속 패치의 일반 코드 반영 뒤 최신 base에서 통합 재검증한다.
+- #124/#125/#127과 공유하는 계약·설정·결정 색인·구현 기록은 각 신규 구간을 합쳐 보존한다.
+  이번 PR의 파일 전체로 다른 PR의 추가 구간을 덮어쓰지 않는다.
+- 준비 이벤트·preparing WS 유지·정확한 단계 재개·명시적 이탈 wire·일반 lease/reaper는 미완료다.
+  Report·음성·다언어/대형 레포의 의미 품질·실제 모델 평가·배포도 이번 완료 범위가 아니다.
+
+## 2026-10-26 — #134를 BE Task 13·14·15로 분할
+
+### 범위 보존과 배치
+
+- 사용자가 #134를 task별로 나누도록 요청했다. 원격 head `f2da245f`와 기존 브랜치를 보존하고
+  `backup/pr134-before-task-split-20261026`을 만들었다. 게시본은 모두 `develop@dbd7f890` 기준이다.
+- Task 13은 준비·worker·REST 앱 등록과 기존 준비/등록 검사를, Task 14는 Director·답변 분석·
+  근거 조회 상한과 서비스/Context 검사를, Task 15는 WS·연결 인계와 WS 앱 등록/검사를 담당한다.
+- 실행 ADR0026과 단일 구현 기록은 Task 14, WS ADR0024와 결정 색인은 Task 15에만 둔다.
+  원본 18파일을 빠짐없이 배치하고 일반 파일을 중복 게시하지 않았다.
+- `main.py`만 REST 등록 2행과 WS 등록 2행으로 나눴다. Task 14 → Task 13 → Task 15 순서로
+  반영하며, 공유 삽입 구간의 충돌은 두 등록을 모두 유지해 해결해야 한다. 합성 결과는 원본과 같다.
+- 기존 함수·fixture·decorator·설정·테스트를 보존했다. 원본 6개 테스트 파일의 59사례는 그대로며
+  Task 15에 실제 앱의 WS 매칭/이름 경로를 검사하는 1사례만 추가했다.
+
+### 이번 실행과 이전 기록의 구분
+
+위 2026-10-25 절은 원본 #134의 검증 이력이다. 당시 전체 1,305개·AI 295개 결과를 이번 분할본의
+새 전체 검사 통과로 사용하지 않는다. 이번에는 분할 합성본의 직접 관련 사례와 등록을 재검증한다.
+
+| 범위 | 실제 검사 결과 |
+| --- | --- |
+| Task 13 게시본 | Ruff·format 255파일 통과. 전체 pytest 수집 6오류·mypy 2파일 10오류, 선행 모델/라우터/서비스 부재와 기존 seed 오류 |
+| Task 14 게시본 | Ruff·format 257파일·조회 상한 3사례 통과. 전체 pytest 수집 3오류·mypy 1파일 15오류, 선행 부재 |
+| Task 15 게시본 | Ruff·format 255파일 통과. 전체 pytest 수집 6오류·mypy 1파일 7오류, 선행 부재 |
+| 새 선행 결합본 | 원본 59사례+새 WS 등록 1사례, 60 passed·2 warnings·102.52초·exit 0. 원본 6개 테스트 파일 byte 동일 |
+| 실제 앱 등록 | REST 4경로·WS 1경로의 공개 매칭 API와 WS 이름 경로 확인. 빈 앱에서 새 검사가 실패하는 negative probe 확인 |
+| 결합본 정적 검사 | BE Ruff·format 293파일·mypy 141 source, AI Ruff·format 52파일·mypy 12 source 모두 통과 |
+| 공개 계약 형식 | 세 게시본의 계약 파일은 동일·무변경. backend venv는 검사 의존성 부재로 미실행 후 기존 전용 venv 재사용, schema 2개·부분 OpenAPI·fixture 7개 통과. 전체 API 호환성 검증은 아님 |
+| 실행 후 정리 | 생성 DB 삭제·임시 schema/연결 0개·DB 목록 복원·PG/Redis 종료·16094/16095 포트 해제 확인 |
+
+첫 결합 검사는 공통 설정 파일 전체 교체로 선행 설정이 누락돼 실행 전 중단됐다. 설정은 선행과
+신규 구간을 함께 보존하도록 바로잡았다. 다음 등록 probe는 설치 FastAPI의 포함-router 표현을
+평탄한 경로 목록으로 가정해 중단됐다. 실제 등록은 정상이며 공개 matches/이름 경로 API로 검사와
+추가 테스트를 정리했다. 원본 서비스 코드는 바꾸지 않았다.
+
+검증 복사 필터가 기존 `features/report` 골격 5파일을 제외한 것도 확인했다. 이전 통합본과 byte가
+같은 5파일을 복원하고 BE 정적 검사만 재실행했다. 앞서 실행한 450파일은 그대로이며, 복원 후
+455파일도 정적 검사 전후 hash가 같다. 관련 60사례를 전체 1,305개 재실행으로 표시하지 않는다.
+실제 모델 호출·AI 전체 테스트는 이번에 실행하지 않았다. 이번 로그와 최종 메타는 원본 저장소의
+`.claude/scratch/pr134-task-split-20261026/validation-runtime/`에 보존한다.
+
+### 게시와 후속 조건
+
+세 PR은 모두 Draft이며 선행·#132 명세·#133 미적용 후속 패치의 일반 코드 반영 뒤 재검증해야 한다.
+새 PR의 실제 원격 범위를 확인한 뒤 #134와 상호 연결하고 기존 PR만 닫는다. 원본 브랜치는 삭제하거나
+재작성하지 않는다. seed·#131, 다른 선행 PR, 기존 미완료 범위는 이번 분할로 변경하지 않는다.
+
+## 2026-10-30 — #135 실행 경계의 새 리뷰 반영
+
+- 원본 `b262298`과 별도 로컬 통합본을 보존했다. 신규 실행 보완만 후속 커밋으로 추가하며
+  선행 Context와 공통 설정 필드를 복사하지 않는다. 공유 byte 상한 설명은 공통 PR에 둔다.
+- `process_answer`의 답변 저장·T3 성공 후 정상 완료 책임을 명시했다. 기존 WS 송신 경계가
+  처리하는 예상 I/O 오류와 예상 밖 콜백 예외·실제 취소를 구분한다. 이미 확정한 답변을
+  재전송했다고 모델 작업을 자동 재실행하지 않는다. 종료 비교는 기존 9턴 상수를 재사용한다.
+- 내부 scope가 없으면 외부 조회 전에 `evidence_scope_invalid`로 거절한다. 준비 호출자는
+  같은 DB 세션과 잠근 최신 면접 행을 받는 비동기 guard를 주입한다. 호출 전과 저장 직전에
+  소유권·입력 snapshot을 검사하며 외부 HTTP를 실행하지 않는다. 기본 None 경로는 유지한다.
+- 테스트 helper 7개를 공용 모듈로 옮겼다. 기존 테스트 14함수·helper 7개의 AST 본문과
+  Settings AST를 보존했고, 설정 문단 제목만 담당 구간에서 정리했다.
+
+| 이번 검증 구성 | 결과 |
+| --- | --- |
+| 최신 develop + #135 + 정확한 Context01/02, 누락 scope·콜백·취소 | RED 1 failed/4 passed → GREEN 5 passed |
+| 최종 비동기 DB guard의 두 저장 경계 | RED 2 failed → GREEN 2 passed, skip0 |
+| 최종 API의 기존 None 경로 | 별도 28 passed, skip0 |
+| 같은 최종 소스의 BE Ruff·format·Mypy | 통과, format 348파일·type 160 source |
+
+위 2개+28개는 서로 다른 집중 사례다. 앞선 동기 guard 구성의 30개와 mutation 검사는
+이전 단계의 이력이며 최종 API의 검증 수치에 더하지 않는다. 전체 결합 결과는 같은 기록의
+[공통 검증](#director-review-integration-20261030)에서 관리한다. 외부 모델·운영 배포를 검증한
+결과가 아니며 필요한 공통 선행 코드가 develop에 반영되기 전에는 Draft를 유지한다.
+
+## 2026-10-30 — #137 준비 상태와 실제 WS 등록 리뷰 반영
+
+- 원본 `109b8e0`과 별도 로컬 통합본을 보존했다. 준비 중에는 commit된 DB 단계 snapshot과
+  변경분을 전달하고, 저장 질문과 `in_progress`를 확인한 뒤 `prepareCompleted`와 질문을 보낸다.
+  재연결은 worker나 모델을 다시 실행하지 않는다. 짧은 중간 상태는 조회 간격 안에 합쳐질 수 있다.
+- 준비 동안 수신 task를 유지해 조회 timeout 취소로 프레임을 잃지 않게 했다. 첫 질문 전 답변은
+  거절한다. stale 답변 검사는 LLM 설정 검사보다 먼저 하며, 설정 로그는 비밀값 없이 필드명만 남긴다.
+- realtime 키의 공개 helper는 이미 develop에 있는 service를 수정하는 공통 PR에 둔다.
+  이 PR은 그 함수를 사용하며 선행 REST 구현을 복사하지 않는다. 실제 앱 등록 fixture를 사용하고
+  REST·WS 등록을 함께 보존한다. 9턴 상수와 기존 ACK 전송 오류 보호도 유지한다.
+
+| 별도 로컬 결합에서 이번 검증 | 결과 |
+| --- | --- |
+| 준비·재접속·실패·설정 회귀 | 기존 구현에서 5 failed → 같은 5 passed, 실패 복원 1개 추가 |
+| 기존 WS·ACK 오류 3종·준비 6개·실제 등록 | 29 passed, skip0 |
+| 실제 Uvicorn TCP + Redis의 죽은 owner 잠금 | 1 passed, handshake 30.406초, 명시적인 client 제한 35초 |
+| 기존 REST 조회·생성·재시도 | 별도 48 passed, skip0 |
+| 최종 proxy token-only·URL-only와 기존 설정 누락 | RED 2 failed/1 passed → GREEN 3 passed, 기존 29개와 일부 중복 |
+| Mypy / 변경 Python Ruff·format | 160 source / 5파일 통과 |
+
+선행을 결합한 결과이며 게시본 단독 통과를 뜻하지 않는다. 최종 결합 결과는 같은 기록의
+[공통 검증](#director-review-integration-20261030)에서 관리한다. Caddy·브라우저 전체 경로는
+미실행이고 nonce를 강제로 덮지 않는다. 명시적 abandon과 열린 소켓 종료·늦은 결과 차단은
+공통 ADR0009 및 #143 후속이다. 실제 모델 품질·운영 배포·면접 전체 완료로 확대하지 않는다.
+
+## 2026-10-30 — #136 준비 재개·회수 리뷰 반영
+
+- 준비 네 단계의 완료 입력·L2/Evidence 산출물을 DB checkpoint로 묶는다. 실패 단계부터
+  재개하며 완료된 원문 수집·분석을 다시 실행하지 않는다. 선택 run의 bound L1과 고정 SHA를
+  비교하고 다른 SHA의 새 분석은 현재 면접을 무효화하지 않는다. 실제 기준 입력 변경은 거절한다.
+- 새 owner는 90초 lease를 20초마다 갱신한다. 독립 cron이 만료 작업을 회수하며, lease나
+  claim이 없는 이전 행에는 마지막 수정 이후 600초를 둔다. 새 메시지 없는 고착도 실패로
+  전환해 REST 재시도를 허용하고 늦은 owner의 질문·준비 결과 저장을 막는다.
+- reaper는 Director와 같은 record→interview 순서로 잠근다. 실제 PG의 이전 역전을 재현한
+  뒤 최종 코드에서 제거됨을 대조했다. 입력 guard의 SHARE→UPDATE 승격 경합도 최초 UPDATE와
+  공통 Context의 Posting→Frame 순서로 보완한다. 준비 설정 오류는 비재시도이며 값 없이 필드명만 기록한다.
+- 준비 reaper의 실제 등록은 #136 부모 설정에 둔다. 이미 develop에 있는 배포 analysis worker의
+  선택적인 부모 cron 계승은 공통 PR에 둬 선행 worker 전체나 준비 모듈을 복사하지 않는다.
+  실제 배포 worker의 함수·cron·max_tries=1·job_timeout=600을 검사한다.
+
+| 이번 집중 검증 | 결과 |
+| --- | --- |
+| 기존 준비·설정·재개·lease·legacy·동시 실행 | 41 passed, skip0, 119.65초 |
+| 최종 reaper의 독립 PG 잠금 대조 | 교차 선점 제거, 회수 1건 |
+| BE Ruff·format·Mypy / 부분 계약 검사 | 통과, 163 source / schema 2개·fixture 7개 |
+
+41개는 로컬 explicit-child cron 구성의 검증이다. 게시용 부모 cron 계승과 공통 잠금 보완을
+결합한 결과는 [공통 검증](#director-review-integration-20261030)에서 별도로 기록한다.
+초기 설계·API·DB 모델은 바꾸지 않는다. 실제 외부 API·배포·SIGKILL 실험을 수행한 결과는 아니다.
+
+## 2026-10-28 — #124 후속 검토의 미실행 조회 범위 보존
+
+- #124의 [새 리뷰](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/124#issuecomment-6447685428)에 대응하는
+  실행 보완은 #135에 둔다. #124는 계약 문단 위치만 정리하며 선행 service를 복사하지 않는다.
+- 기존 정상 경로에는 이미 나머지 요청을 한 라운드 제한으로 실행하지 않았다는 공통 이유가 있었다.
+  이번에는 생략한 허용 요청마다 repo·고정 SHA·path와 턴당 1개 제한 사유를 기록한다.
+- 실제 I/O는 첫 요청 하나만 실행한다. 해당 실행의 status·items·searched_scope·error_code는 유지하고,
+  생략 범위는 ToolResult.limitations와 저장 요약에 더해 보강 T3·후속 T4에 전달한다.
+  조회 시작·취소·도구 오류·보강 실패·다음 질문 확정 뒤에도 이 설명을 보존한다.
+- 기존 생성기의 `agent.py`를 유지하는 #126의 별도 `runtime_adapter.py`에서 신규 실행자를 import한다.
+  새 API·DB 필드·테이블·조회 loop나 예산 초기화는 추가하지 않는다.
+
+| 구성 | 이번에 직접 실행한 검사 | 결과 |
+| --- | --- | --- |
+| 수정 전 service와 신규 다중 요청 회귀 | 정상 미발견·도구 오류·보강 실패·취소 | 4 failed, 모두 생략 path 누락 재현 |
+| develop `09a6f77` + #125 `23873ef` + #126 실행 연결 + #135 + 로컬 Context 후속 | PostgreSQL service·Context 한계·조회 상한 | 23 passed, skip 0, 최종 별도 adapter 연결 후 99.36초 |
+| 같은 최종 로컬 결합 | Mypy app·변경한 Python 4파일 Ruff·format | 152 source 및 4파일 통과 |
+| #135 단독 게시 소스 | BE Ruff·format·조회 상한 | 통과, format 257파일·3 passed |
+| 같은 단독 게시 소스 | Mypy app | 선행 없는 원래 base 기준 1파일 15오류, 134 source |
+
+로컬 Context 보완은 #133 patch01·02의 정확한 base/result blob과 SHA를 확인해 적용했다.
+다른 미적용 패치나 선행 코드는 게시본에 복사하지 않았다. 최종 별도 adapter는 #126 후속 수정본을 사용했다.
+게시본과 로컬 결합의 service·신규 회귀 bytes는 같으며 기존 service 테스트·도우미의 AST도 보존했다.
+기록의 공용 파일 끝 충돌은 기존 실행 기록 내용을 보존한 배치와 이미 병합된 고정 배분 안내만 정리했다.
+최신 develop과 게시 head의 실제 merge-tree는 충돌이 없다. 필요한 #125·#126과 Context 후속의 일반 코드
+반영 및 실제 게시본 재검증 전에는 단독 실행 완료로 보지 않는다. 위 검사는 새 집중 검사이며 이전
+전체 BE·AI 결과나 실제 외부 모델·GitHub·배포·전체 WS 검증 수치를 재사용하지 않는다.
+
+## 기록 관리 기준
+
 AI 작업의 구현·수정 내역, 코드 위치, 실행 결과와 남은 작업을 관리하는 원본이다.
 기능 요구사항·초기 설계·검증 방법은 각 명세에, 지속할 결정의 맥락·이유·영향은
 [decisions](decisions/README.md)에 보존한다. 문서 역할은
 [ADR 0020](decisions/0020-implementation-record-policy.md)을 따른다.
+
+## 2026-10-29 — #126 병합 후 최신 코드의 CI 검증 경로 보완
+
+- 기준 develop은 `e58fff86ef8c876edb220b5e67dd73b4de01c0db`다. #125·#126·#127·#133이 반영돼 있다.
+- 과거 Backend CI `40589589648`은 `09a6f77+d0293ec`의 합성 commit `3db9a486`에서
+  #125 runtime 부재의 Mypy2오류로 중단됐고 pytest는 미실행이었다. 해당 실패 이력은 보존한다.
+- 현재 두 workflow는 PR만 검사해 병합 뒤 develop의 새 결과가 남지 않았다. 기존 검사·권한·DB를
+  유지하며 리뷰 준비 완료 이벤트, develop push, 수동 실행과 이벤트·PR/ref별 동시 실행을 추가한다.
+- 최신 소스의 새 격리 venv에서 Mypy159 source·기존/신규 adapter와 예산·패키지 연결10건이 통과했다.
+  actionlint1.7.12의 두 workflow 검사와 독립 검토도 통과했다. 독립 검토에서 jobs 원문 일치를 확인했다.
+- 새 원격 결과는 후속 CI PR의 실제 head·merge SHA 및 실행 링크로 별도 확인한다. 위 로컬 결과를
+  원격 CI 통과로 보고하지 않으며 수동·push 경로는 기본 develop에 변경이 반영된 뒤 사용할 수 있다.
+- 이번 범위는 CI 검증 경로다. 수집기 경계 결함·미적용 Context/L2·후속 실행 연결의 결과로 확대하지 않는다.
 
 ## 2026-10-26 — 사용자 요청에 따라 PR #107 번호 유지
 
@@ -280,6 +517,97 @@ Windows, Python 3.12, 격리 worktree의 locked 환경에서 확인했다.
 
 모델 경계는 mock provider로 검증했다. 실제 모델 품질·외부 Wanted API·전체 서비스 연결을
 이번 실행에서 새로 검증한 것은 아니다. 공통 계약 검사는 부분 형식 검사다.
+
+## 2026-10-26 — PR #125 리뷰 보완과 독립·최신 결합 검증
+
+- 기준은 #125 원본 `70c1dbf`, 최신 결합 기준은 develop `d063d8d`다. 원본 head를
+  `backup/pr125-before-review-20261026`에 보존하고 후속 커밋만 추가했다.
+- 총 2회·생성/독립 검토 각 1회와 실패·거절 후 중단을 유지한다. 검토의 자유 텍스트 사유는
+  일반 CallFailure에서 고정 요약으로 바꾸고 보호된 attempt.raw_output에는 그대로 보존한다.
+- 새 planner의 question·contract·required point·basis ref 부가 필드는 호출 경계에서 거절한다.
+  공통 decode의 기존 동작, 기존 generate_question, 공개 wire·DB·의존성은 바꾸지 않았다.
+- 수정 전 신규 회귀에서 실패 사유 복사 1건과 중첩 부가 필드 4건이 실패했다. 보완 후 runtime
+  38건이 통과하며 유효한 부분 Tool item·Context 등록 필요·단계 timeout 중단도 함께 검사한다.
+- 원 게시본은 AI Ruff·format 43파일 통과, mypy는 기존 #103의 `_RECOVERY_CODES` 부재 1오류,
+  전체 pytest는 `candidate_recovery` import 수집 오류 1건이다. 선행을 복사해 숨기지 않는다.
+- 별도 최신 develop + 이 코어 3파일 결합본은 AI 전체 347 passed, Ruff·format 55파일·mypy
+  13 source가 통과했다. 기존 Python 3.12 환경에 해당 worktree의 ai/src를 명시했다.
+- 이번 347건은 새로 실행한 결합 결과이며 게시본 단독의 성공이 아니다. 실제 모델·원격 GitHub,
+  DB·WS·worker·면접 완주·자연어 검토 품질·비용은 미실행이다.
+- 10월 23일의 분리 게시 원문은 아래에 그대로 보존한다. 파일 끝의 공통 추가 충돌을 피하려
+  #50 기록 앞에 재배치했으며 다른 PR의 기록을 복사·삭제하지 않았다.
+
+## 2026-10-23 — Director 신규 변경의 분리 게시 검증
+
+### 기준과 게시 범위
+
+- 최신 원격 develop `bbe01213`에서 코어·연결 기반·BE 공통 보완·명세의 별도 게시 브랜치를 구성했다.
+- 미병합 선행 #82/#102/#103/#107/#114/#119/#120을 결합했던 원본 통합 worktree는 보존했다.
+  원본 tree는 `c8f2cb5d`, 선행 결합 기준 tree는 `a4d7c1bf`다. 해당 원본의 신규 차이는
+  36파일 +6025/-58이며 아래 게시본의 최종 diff와는 다르다.
+- 선행 구현·기존 테스트·패키지 의존성은 게시본에 복사하지 않는다. 모든 PR base는 develop이다.
+  코어·연결·공통은 필요한 선행 구현이 없어 단독 검증이 제한되며 Draft로 검토한다.
+- 코어는 `ai/.../director/runtime.py`·prompt·테스트를 원형으로 보존한다.
+  연결 기반은 새 adapter·원문/과거 분석 복원·실제 tree 수집과 소비하는 8개 설정을 게시한다.
+  공통은 seed CLI 수명·migration head 연결·검사 subprocess의 worktree 고정만 보완한다.
+- 실제 계약/설계는 별도 명세 PR에, 결정은 0023·별도 연결 PR의 0025·BE 공통 ADR에 둔다.
+  이 기록은 세 구현 PR의 결과를 모으는 한 곳이며 각 PR에 같은 현황을 복제하지 않는다.
+
+### 게시본 단독 실행
+
+기존 환경의 Python 3.12와 설치된 도구를 사용했다. 각 worktree의 backend 및 ai/src를
+PYTHONPATH로 명시했으며 새 패키지 설치나 실제 모델·GitHub 호출은 하지 않았다.
+
+| 작업 디렉터리 | 명령·범위 | 실제 결과 |
+| --- | --- | --- |
+| 코어 ai | ruff check / ruff format --check | 통과, format 43파일 |
+| 코어 ai | mypy | 실패 1건: #103의 `_RECOVERY_CODES` 부재 |
+| 코어 ai | pytest | 수집 실패 1건: #103의 `candidate_recovery` import 불가 |
+| 연결 backend | pytest tests/test_config.py tests/core/test_director_limits.py | 10 passed |
+| 연결 backend | 수집기·어댑터 런타임 pytest | 수집 실패: 미게시 코어·선행 모듈 부재 |
+| 연결 backend | ruff check app tests / ruff format --check app tests | 통과 |
+| 연결 backend | mypy app | 실패 19건: 코어 및 #82/#102/#114/#119 입력·모델·API 부재 |
+| 공통 backend | seed 및 LLM 설정 pytest | 49 passed |
+| 공통 backend | ruff check / format / mypy app | 통과, format 254파일·mypy 133파일 |
+| 공통 backend | alembic heads | 실패: #82의 `0002_agent_storage` parent 부재 |
+| 명세 루트 | .claude/scripts/check_contracts.py | 2 schemas·partial OpenAPI·7 fixtures 통과 |
+
+공통 seed 검증은 주입 세션을 그대로 쓰는 경로와 CLI 자체 연결의 성공·실패 정리를 확인한다.
+연결 검증에는 원래 수집기의 구조 상한 1사례·binary/timeout 부분 실패 2사례를 그대로 옮겼고,
+실제 provider 경계의 어댑터·호출 예산·저장 질문 복원 3사례를 추가했다.
+
+### 게시 코드와 선행 구현의 별도 로컬 결합 실행
+
+아래 결합은 무시된 검증 디렉터리에서만 수행했으며 PR diff에는 선행 코드가 없다.
+준비 실행·worker·Director 서비스·WS 활성화도 이 결합에 추가하지 않았다.
+
+| 결합 범위 | 실제 실행 결과 |
+| --- | --- |
+| 코어 게시본 + #103 agent.py 한 파일 | 신규 28 passed, AI 전체 221 passed, mypy 12파일 통과 |
+| 연결 게시본 + 선행 tree + 코어 3파일 | 관련 36 passed, mypy app 140파일 통과 |
+| 네 게시 범주 + 선행 tree | AI 전체 295 passed, BE 관련 6파일 89 passed |
+| 위 결합의 모듈 위치 | 9개 실행 모듈이 모두 해당 overlay에서 로드됨을 확인 |
+| 공통 게시본 + #82 migration 한 파일 | 실제 PostgreSQL 새 DB에서 upgrade head 통과 |
+| 같은 PostgreSQL DB의 seed CLI 2회 | 평가 기준6·도메인 frame21, 중복 없음·비활성 유지 |
+| 같은 PostgreSQL DB | downgrade base 통과, 생성 DB만 삭제·전용 PostgreSQL 종료 확인 |
+
+DB 검사는 SQLite로 대체하지 않았다. 기존 DB·schema·table 목록이 전후 일치하며
+추가로 사용한 16086 포트도 해제했다. 원문·모델 provider는 mock으로 검증했다.
+위 수치는 이번 게시본으로 새로 실행한 결과이며 원본 통합본의 BE 1302건을 재사용하지 않았다.
+계약 검사는 부분 형식 검사이며 runtime·TypeScript·전체 API 호환성 검증이 아니다.
+
+### 보존한 후속과 미검증 범위
+
+- `agent_context.py` 현재 질문·한계 전달 보완 및 `repo_deep.py` 예산·한계 전달 보완은
+  선행 구현에 붙는 후속이므로 원본 패치로 보존한다. 선행 반영 뒤 연결·재검증해야 한다.
+- 이 보완을 요구하는 `load_answer_context`·반환형, 기존 `generate_question`의 base_url 수정,
+  L2 한계 전달 및 Context 서비스 통합 검증도 보류한다. 우회 함수·복제 구현은 만들지 않는다.
+- 준비 실행·ARQ 등록·WS·턴 저장/상태 제어·앱 활성화와 전용 테스트, WS ADR0024는 원본에 남긴다.
+  BE 실행 전용 3개 상한·quota 예제와 이에 해당하는 테스트·통합 문서 구간도 게시 범위에서 뺀다.
+- 공개 OpenAPI·FE·WS wire, 패키지/lockfile, DB 모델은 변경하지 않는다.
+  운영 prompt 검수·활성화, 실제 모델 의미 품질·지연·비용, 다언어·대형 파일 전반은 미검증이다.
+- 원본·게시·보류·게시용 테스트/문서 조정의 대응표와 패치는 원본 저장소의
+  `.claude/scratch/director-publish-20261023`에 보존한다. 선행 병합·보류 보완 후 다시 검증한다.
 
 ## 2026-09-27 — PR #50 계약 검증 재검토 반영
 
@@ -607,6 +935,191 @@ HTTP 2회 상한이 통과했다. 과거의 AI 224·별도 결합 309/163을 이
 - 기존 설계와 `testing.md`의 과거 기록을 이번 통합에서 일괄 재작성하지 않는다.
   이후 구현 현황과 실행 결과는 이 파일을 갱신한다.
 
+## 2026-10-25 — #127 seed 범위 제외와 공통 보완 재검증
+
+### 게시 범위와 원본 보존
+
+- 사용자가 seed 오류 수정을 #131에 맡기고 #127에서 제외하도록 요청했다.
+  #131을 병합하거나 수정하지 않고, `develop@dbd7f890`에서 남은 신규 변경만 구성했다.
+- 기존 #127의 `eaea0e4b`는 `backup/pr127-before-seed-review-20261025`와 원본 worktree에
+  보존했다. 제외한 seed 실행 코드·추가 테스트도 이 원본에서 확인할 수 있다.
+- `backend/scripts/seed_all.py`, `backend/tests/test_seed_all.py`는 develop과 동일하다.
+  #131의 질문 저장 변경 세 파일도 가져오지 않았다. 이 다섯 파일은 기준선과 내용이 같은지 검사했다.
+- 남은 구현은 DDL 없는 `0003_director_runtime` merge revision과 검사 subprocess의
+  현재 worktree BE·AI 소스 경로 지정이다. 공개 계약·seed 데이터·활성화 정책은 변경하지 않는다.
+- seed 제외와 선행 의존은 [BE ADR](../backend/decisions/0008-director-foundation-publication.md)에
+  기록한다. 이전 통합본의 seed 실행 결과를 이번 게시본의 검증 결과로 사용하지 않는다.
+
+### 실제 실행 결과
+
+기존 Windows Python 3.12.14 환경을 사용했다. 아래 단독 검사는 실제 게시용 worktree에서 실행했다.
+
+| 범위 | 검사 | 결과 |
+| --- | --- | --- |
+| 게시본 backend | `pytest tests/core/test_llm_config.py -q` | 46 passed |
+| 게시본 backend | `ruff check .`, `ruff format --check .`, `mypy app` | 통과, format 254파일·mypy 133파일 |
+| 게시본 backend | 전체 `pytest -q` | 실패, 기존 `tests/test_seed_all.py`의 삭제된 `dispose_engine` import로 수집 중단 |
+| 게시본 backend | `alembic heads` | 실패, #82의 `0002_agent_storage` parent 부재 |
+| 별도 로컬 결합 | 게시본 + #82 migration 한 파일, PostgreSQL 15.19 | 단일 head `0003_director_runtime` 확인 |
+| 같은 결합 환경 | 초기 revision → 기존 사용자 행 추가 → `upgrade head` | 통과, 기존 행·추가 테이블과 컬럼 확인 |
+| 같은 결합 환경 | `downgrade base` → `upgrade head` | 통과 |
+
+로컬 결합은 #82 `0e973f33`의 `0002_agent_storage.py` 한 파일만 사용했고 seed·#131 코드는
+결합하지 않았다. 새 전용 cluster·테스트 DB를 사용했으며 생성 DB 삭제·DB 목록 보존·서버 종료를
+확인했다. 첫 실행 보조 스크립트는 Windows 자식 프로세스의 pipe 대기로 중단됐고, 해당 전용 서버를
+종료한 뒤 파일 로그 방식과 새 cluster로 재실행했다. 위 PostgreSQL 결과는 재실행에서 확인했다.
+
+### 미완료와 병합 조건
+
+- seed import 오류는 #131의 별도 범위다. 이번 변경이 seed 실행을 해결했다고 보고하지 않는다.
+- #82가 없는 게시본은 migration graph를 해석할 수 없으므로 Draft로 유지한다.
+  선행 반영 후 실제 graph에서 merge 필요성을 다시 확인하고 PostgreSQL에서 재검증한다.
+- migration 한 파일의 결합 검증은 #82 전체 모델·서비스 통합이나 전체 pytest 통과가 아니다.
+  실제 면접 실행·외부 모델 호출·seed 활성화 검증은 이번 범위가 아니다.
+
+## 2026-10-27 — #127 기존 DB 이력 보존과 최종 합류 검증
+
+### 수정과 선행
+
+- `0003_director_runtime`과 #82·#108의 기존 revision ID·부모·DDL을 보존한다.
+  #82의 신규 `0003_agent_storage_merge`, 기존 Director merge, #108 분석 실행을
+  DDL 없는 `0004_interview_foundation_merge`에서 합친다.
+- 신규 graph 검사는 최종 head 하나와 저장·공고·분석·Director의 기존 이력을 확인한다.
+  선행 파일을 테스트에 복사하거나 가짜 revision으로 대체하지 않는다.
+- BE ADR은 기존 Task 9의 0002와 구분해 [0008](../backend/decisions/0008-director-foundation-publication.md)로
+  연결하고 색인에 추가했다. 원래 #127의 고유 실행 기록은 위에 보존하고 위치만 분리했다.
+- #131 반영 이후 seed import 수집 오류는 현재 실패 원인이 아니다. 당시 실패 기록과
+  최신 상태를 구분하며 seed 구현은 이번 게시본에 추가하지 않았다.
+- Director 분리 게시·통합 검증의 원본은 AI 기록에 유지한다. BE ADR은 이 기록을 참조하며
+  현황을 중복 작성하지 않는다. 이는 루트 CLAUDE 문서 원칙과 AI ADR 0020을 따른다.
+
+### 이번 실행 결과
+
+Windows Python 3.12, `develop@d063d8d` 기준이다. PostgreSQL은 새 전용 로컬 cluster를 사용했다.
+
+| 범위 | 검사 | 결과 |
+| --- | --- | --- |
+| 최신 develop + #127 | `pytest tests/core/test_llm_config.py -q` | 50 passed |
+| 같은 게시 범위 | Ruff·format·mypy app | 통과, format 279파일·mypy 136 source |
+| 같은 게시 범위 | `alembic heads`·신규 graph 검사 | 선행 #82 부재로 실패, `0002_agent_storage` 없음 |
+| 로컬 #81·#82·#108·#127 결합 | 설정 + 신규 graph pytest | 51 passed |
+| 같은 결합의 실제 PostgreSQL | 초기·공고·Agent·Agent merge·기존 Director merge·분석 실행의 6개 출발점 → head | 모두 단일 `0004_interview_foundation_merge`, 기존 사용자 행 보존 |
+| 같은 6개 DB | 명시한 출발 revision으로 downgrade → upgrade head | 모두 통과, 기존 사용자 행·호출 기록 테이블·분석 지표 컬럼 확인 |
+| 초기 출발 DB | `downgrade base` → `upgrade head` | 통과 |
+| 검증 자원 | 경로별 전용 DB 생성·삭제 | 6개 모두 정리 |
+
+DB 경로 검사의 코드 tree는 `afd5adf1ceb4f27e237e0836d6ffe233fa1ecd71`이다.
+이 로컬 결합에서 #108 main의 충돌은 문서 router와 분석 router 등록을 모두 보존해 해소했다.
+이는 #108의 원격 코드 수정이나 해당 PR 전체 검증 결과가 아니다.
+
+처음 사용한 상대 `downgrade -1`은 합류 경로가 모호해 실패했다. 대상 revision을 명시하여
+다시 검사한 위 결과와 구분한다. 과거 리뷰어의 전체 pytest 수치를 이번 결과로 사용하지 않았다.
+
+### 최종 PR 조합의 추가 확인
+
+#81·#82·#108·#124·#125·#126·#127·#132를 최신 develop에 로컬 결합했다.
+검증 tree `742d924a39480a118607487c589f8901ecca10d7`에서 AI 전체 347 passed,
+BE의 저장·예산·gateway·설정·graph·분석 API/worker 집중 검사 423 passed·1 skipped였다.
+AI Ruff·format 57파일·mypy 13 source와 BE Ruff·format 331파일·mypy 158 source,
+부분 계약 2개·fixture 7개 및 단일 Alembic head를 확인했다. 검사 전후 Python 원문 hash는 같고
+실제 import 경로도 해당 결합 worktree의 AI·BE 소스였다. BE 전체 pytest 수치는 아니다.
+
+제외된 #108 migration 검사는 이름이 고정된 별도 DB를 요구했다. 전용 DB로 실행하니
+`alembic_version` 첫 행만 비교하는 기존 단일 가지 가정이 드러났다. #108에서 실패 전후
+revision 전체 집합·기존 자료·위험 downgrade 차단을 보존하도록 고친 뒤 같은 누적 코드의
+전용 PostgreSQL 검사 1 passed와 health 5 passed를 확인했다. analysis·documents·me·health
+등록도 함께 확인했고 전용 DB는 삭제했다. #108 자체 source는 #81이 없으면 import할 수 없으므로
+이 결과를 단독 완료로 보고하지 않는다. 최종 보완은 migration DDL을 바꾸지 않는다.
+
+#126 결합에서는 기존 `generate_question`과 새 `execute_director`를 모두 보존했다.
+두 함수는 각 게시본과 AST가 같음을 독립 대조했고, 공통 gateway의 주소·timeout·시도 기록도
+유지했다. 이 해소본은 로컬 검증에만 사용하며 선행 구현을 다른 게시본에 복사하지 않았다.
+
+### 병합 조건
+
+#82·#108이 없는 게시본은 graph를 실행할 수 없으므로 develop base의 Draft로 검토한다.
+두 선행 반영 후 그 시점의 실제 graph·기존 자료·전체 BE 회귀와 CI를 다시 확인해야 한다.
+이 검증은 외부 모델 품질·면접 완주·운영 DB 배포 확인을 포함하지 않는다.
+
+## 2026-10-27 — #127 순차 게시 graph의 누락 보완과 자료 보존 재검사
+
+### 실제 결함과 수정
+
+앞선 6개 출발점과 최종 PR 조합 검증은 #127까지 결합한 graph의 결과였다.
+develop → #82 → #108만 반영한 중간 snapshot에 두 head가 남는 문제를 놓쳤다.
+이전 실행 기록을 보존하고 순차 게시 단계 자체를 새 회귀 범위로 추가한다.
+
+- #108 `ef237c56`의 신규 `0004_analysis_storage_merge`가 저장·분석 이력을 먼저 합친다.
+  최종 #108 `d0704b97`에서도 해당 migration 원문은 같다.
+- #127 `78d39238`은 그 신규 합류와 기존 `0004_interview_foundation_merge`를 부모로 하는
+  DDL 없는 `0005_director_foundation_merge`를 추가한다. 기존 migration ID·부모·DDL은 보존한다.
+- 최종 head 검사와 기존 이력 검사를 유지하고, 실제 Script의 ID·부모 metadata로
+  develop·#82·#108·#127 네 snapshot의 head를 각각 확인한다. 선행 코드는 게시본에 복사하지 않는다.
+- [BE ADR 0008](../backend/decisions/0008-director-foundation-publication.md)의 새 절에
+  현재 목표 0005와 이전 최종 0004의 관계를 기록한다. Proposed 상태는 유지한다.
+
+### 이번 실행 결과
+
+Windows Python 3.12, `develop@d063d8d` 기준이다. 결합 migration source tree는
+`00996aa3ae9f572ff7c67275930c291e3bb36ee7`이며, 새 전용 PostgreSQL DB에서 합성 자료를 사용했다.
+아래 수치는 앞선 통합 검증 수치를 재사용한 것이 아니다.
+
+| 범위 | 검사 | 결과 |
+| --- | --- | --- |
+| 새 #108 + 기존 #127 결합, 신규 회귀 | 수정 전 graph 검사 | 2 failed·3 passed, 실제 두 head와 0005 부재 확인 |
+| 새 #108 + 보완 #127 결합 | `pytest tests/core/test_director_migration_graph.py -q` | 5 passed, 기존 Alembic 설정 경고 5개 |
+| 같은 결합의 최신 설정 검사 포함 | 설정 + graph pytest | 55 passed, 5 warnings |
+| 변경한 Python 두 파일 | Ruff·format | 통과, 2 files already formatted |
+| 최신 develop + #127 게시 범위 | 설정 pytest | 50 passed |
+| 같은 게시 범위 + 신규 graph 회귀 | graph pytest | 5 failed, 모두 선행 `0002_agent_storage` 부재 |
+| 실제 PostgreSQL 순차 게시 | 공고 → #82 merge → #108 merge → head | 각 게시 단계 단일 head, 최종 0005, 기존 모든 fixture 행 보존 |
+| 기존 branch의 두 적용 순서 | Agent → Director → Analysis, Analysis → Director → Agent → 신규 merge들 | 두 경로 모두 최종 0005, 모든 fixture 행 보존 |
+| 위 세 경로 각각 | 활성 분석 작업 3개 상태에서 `downgrade 0002_posting_versions` | 기존 분석 downgrade 차단, version 전체 집합과 모든 fixture 행 보존 |
+| 위 세 경로 각각 | 명시한 #108 merge로 downgrade → head 재적용 | 통과, sibling 기존 #127 merge 이력과 모든 fixture 행 보존 |
+| 검사 자원·원문 | 세 경로 후 base 정리, migration SHA-256 전후 대조 | 전용 DB public 테이블 0개로 복원, 원문 hash 동일 |
+
+fixture는 사용자·공고 원문 JSON·작업 steps·질문 Contract·호출 raw·후보 페이지 지표를 포함한다.
+전진·실패 rollback·merge-only 왕복에서 해당 테이블의 전체 행 JSON을 대조했다.
+위험 downgrade의 첫 probe는 저장 merge를 대상으로 삼아 분석 branch를 내리지 않았다.
+공통 조상으로 대상을 교정해 실제 분석 차단을 호출한 뒤 위 세 경로를 새로 실행했다.
+
+이 결과는 #82·새 #108을 로컬 결합한 검증이며, 미병합 선행을 포함하지 않는 단독 CI 통과가 아니다.
+#127은 develop base의 Draft를 유지한다. 선행 반영 후 실제 게시 순서와 최종 BE 회귀·CI를 다시
+확인해야 한다. 외부 모델·면접 완주·운영 DB 적용과 전체 BE pytest는 이번 검사에 포함하지 않았다.
+
+## 2026-10-28 — #127 선행 병합 후 이력 보존과 검증 기록 정리
+
+- 기준 develop은 `4e511a992d7954fa310146bcba2f2d4c6358fb69`다. #82와 #108은 모두 반영됐고,
+  현재 develop+#127의 실제 graph는 `0005_director_foundation_merge` 단일 head다.
+  10월28일11:20 KST 리뷰의 #108 미병합 조건은 같은 날16:15 병합 이후 해소됐다.
+- 원본 #127 `d580863`을 `backup/pr127-before-review-fix-20261028`에 보존했다.
+  이번 보완은 설명·검증 기록만 정리하며 기존 migration 파일 전체의 Git blob을 유지한다.
+- 같은 부모를 가진 `0003_director_runtime`은 기존 경로의 이력을 보존한다. 실제 개발자·공유·운영 DB의
+  전수 적용 이력은 확인하지 못했으므로 적용된 DB가 없다고 단정하지 않는다. 부모에서만 제거하면
+  별도 head가 남고 파일까지 없애면 그 revision을 가리키는 DB의 이력 해석을 깨뜨릴 수 있다.
+- [BE ADR0008](../backend/decisions/0008-director-foundation-publication.md)은 Proposed·날짜 이력,
+  기존 ID·부모·DDL 보존 이유, 현재 합류 관계와 rollback 보호 조건을 유지했다.
+  검증 실수의 반복 서술은 줄이고 상세 실행 결과는 이 기록을 원본으로 삼는다.
+
+| 구성 | 이번에 직접 실행한 검사 | 결과 |
+| --- | --- | --- |
+| 최신 develop+#127 | 설정·실제 Script graph pytest | 55 passed, skip0, 34.67초, 기존 Alembic 경고5개 |
+| 같은 구성 | BE Ruff·format·Mypy app | 통과, format330파일·156 source |
+| 같은 구성 | 부분 계약 검사 | schema2개·fixture7개 통과. 전체 API 호환성 검증은 아님 |
+| 별도 전용 DB와 격리 schema | 기존 위험 downgrade 회귀·두 선행 적용 순서 회귀 | 3 passed, skip0, 53.27초 |
+| 전용 PostgreSQL15.19 | 순차 게시·Agent→Director→Analysis·역순의 세 경로 | 모두0005, 기존 fixture 전체 행 보존 |
+| 위 세 경로 각각 | 중복 active 분석이 있는 위험 downgrade | 기존 guard로 차단, 자료와 version 전체 집합 보존 |
+| 위 세 경로 각각 | 명시0004_analysis_storage_merge로 downgrade→head | 기존 sibling 이력과 fixture 행 보존 |
+| 같은 전용 DB | base→head 재적용 후 base 정리 | 통과, 마지막 public 테이블0개·migration 원문 hash 동일 |
+
+DB fixture는 사용자·공고 원문 JSON·분석 steps·질문 Contract·호출 raw·페이지 지표를 포함한다.
+수치와 DB 결과는 이번 최신 develop 결합에서 새로 실행했으며 이전 전체1438/347 결과를 재사용하지 않았다.
+리뷰에서 보고한 설정 검사 간헐 실패는 이번55개 실행에서 재현되지 않았다. 최초 실패명·traceback이 없어
+원인이나 해결 여부를 확정하지 않으며 재실행 통과를 오류 수정으로 보고하지 않는다.
+최신 base의 원격 CI는 게시 후 별도로 확인하고 통과 전에는 Draft 해제나 병합 가능 상태로 단정하지 않는다.
+전체BE·AI·외부 모델·운영 DB·배포·면접 완주 검증은 이번 집중·합성 자료 검사의 범위 밖이다.
+이전 절의 seed 오류·선행 부재·예전 목표 head는 당시 기준의 기록으로 보존한다.
+
 ## 2026-09-27 — task-04 L1 호출·재요청과 캐시 판정
 
 ### 기준과 변경
@@ -656,6 +1169,150 @@ HTTP 2회 상한이 통과했다. 과거의 AI 224·별도 결합 309/163을 이
 - AI-L03은 0018로 기존 저장 위치·프로젝트 요약 의미가 채택됐다. BE adapter
   (`backend/app/llm_tasks/repo_shallow.py`)와 `repo_analyze`의 저장 매핑·캐시 조회 구현은 이번 범위
   밖이며 후속 작업이다. L0-b 입력 수집은 BE PR #45 범위다.
+
+<a id="pr156-review-followup-20261031"></a>
+
+## 2026-10-31 — PR #156 리뷰 후속의 cron·답변 Context 경계 보완
+
+- 원본 head `fa217cd`를 `backup/pr156-before-review-fix-20261031`에 보존하고 후속 커밋만 추가했다.
+  단독 게시본과 최신 develop `fa13526`을 합친 검증을 구분한다. #135·#136·#137 구현을 복사하지 않았다.
+- 부모 `cron_jobs=None`만 빈 sequence로 정규화했다. list·tuple·설정 부재·기존 분석 reaper의 1회 등록을
+  보존하고 잘못된 숫자 설정을 조용히 숨기지 않는다. 공개 `answer_turn_no` 키워드와 호출부를 맞추고
+  asked/answered·현재 질문의 history 제외·저장 전 None·bool 거절의 의미를 설명했다.
+- 두 Context 파일은 키워드명·docstring 정규화 후 원본과 AST가 같다. 잠금·실패 분류·답변 로직을 바꾸지 않았다.
+- #136과 수집 한계 key·저장소 ID·문자열 목록 형태를 대조하고 소비 경계 5사례를 추가했다. 실제 writer→DB→
+  worker 전체 통합 검사와 단독 소비 검사는 구분한다. 과거 패치 파일·SHA·base/result·적용 이력은 보존하고
+  manifest의 현재 blob과 후속 변경만 갱신했다.
+
+| 이번에 직접 실행한 검사 | 결과 |
+| --- | --- |
+| cron 수정 전 → 후 회귀 | 1 failed / 6 passed → 7 passed |
+| 공개 답변 키워드 수정 전 → 후 | 4 failed / 3 passed → 기존 PG 7개와 소비 경계 5개, 12 passed |
+| 게시본 전체 BE, 전용 PostgreSQL15·Redis7 | 1507 passed, skip0, 9 warnings |
+| 게시본 AI 전체 | 347 passed, skip0 |
+| 최신 develop + 수정본 AI 전체 | 372 passed, skip0 |
+| 최신 develop 결합본 BE package import·기존 계약 검사 | 55 passed |
+| BE / 게시본 AI / 결합본 AI Ruff·format·Mypy | 모두 통과. format348/57/60 files, Mypy159/13/14 source files |
+| 공통 계약 부분 검사 | schema2·부분 OpenAPI·fixture7 통과. 전체 API 호환성 검증은 아님 |
+
+BE 전체에는 전용 migration 검사도 포함돼 별도 1개를 더해 합산하지 않는다. 검사 전후 Python source hash가
+같고 최신 develop 결합본의 BE 앱·테스트는 게시본과 같다. 두 Context 파일의 호출자는 공개 키워드로 맞췄다.
+로컬 전체 검사 도중 전용 DB의 신규 연결은 `synchronous_commit=off`로 조정했다. SQL 가시성·잠금 검증이며
+정전 복구 내구성 검증이 아니다. 원격 CI의 별도 기본 PostgreSQL 환경과 구분한다. 관측 경고는 기존 Alembic
+설정과 pytest `record_property`/xunit2이며 통과 수에서 숨기지 않았다.
+
+현재 소스로 redirect 11사례, 실제 Gateway의 공유 예산·timeout/schema·선택→L2 3시나리오와 cron 6입력을
+확인했다. 동일 budget의 총2회는 저장소 작업 단위이며 준비 run 전체 상한으로 확대하지 않는다. 실제 #136의
+소유권/checkpoint 원문 일부를 사용한 제한 PG 대조에서 User 잠금을 포함한 경로는 정상이고, 보호를 인위적으로
+제외한 반례만 교착이었다. 이는 현재 경로의 장애나 준비 worker 전체 통과로 보고하지 않는다.
+
+운영 DB의 활성 prompt 본문·실제 GitHub 자격/잔여 quota·실모델 품질·전체 면접 서비스·운영 배포는 미검증이다.
+#156 이후 #135→#136→#137 반영과 최신 CI·REST/WS 양쪽 등록의 재검증 조건을 유지한다. 이전 리뷰의 1498개나
+과거 네 PR 결합의 1601/347개를 이번 수치로 재사용하지 않았다. 정확한 명령·XML·source hash·환경·미실행 범위는
+`.claude/scratch/pr156-review-fix-20261031/`에 보존한다.
+
+<a id="director-review-integration-20261030"></a>
+
+## 2026-10-30 — Director 선행 패치의 실제 코드 적용과 수집 경계 보완
+
+- 기준은 `develop@2fc0103`이다. #126·#133·#155 병합 상태와 패치 1·2·3의 정확한
+  base/result blob·원문 SHA-256을 대조했다. 현재 답변 Context·9번째 답변·L2 공유 예산·
+  완료 시도 기록·수집 한계 전달을 일반 Python 코드에 수동 반영했다. 패치 4는 이미 구현된
+  과거 자료로 보존하며 다시 적용하지 않는다. manifest에 적용 커밋을 기록했다.
+- 원문 수집기가 정확히 항목 상한에 도달했을 때 미방문 디렉터리가 남으면 확인하지 못한
+  범위를 명시한다. 상한에서 전체 구조를 다 읽은 경우에는 한계를 붙이지 않는다.
+- 공개 저장소 수집에는 기존 OAuth App ID/secret의 공개 데이터 전용 Basic 인증을 사용한다.
+  사용자 token의 파일 조회 권한을 확대하지 않는다. 명시적인 GitHub 요청만 만들며 client의
+  기본 인증·쿠키·redirect를 상속하지 않는다. 인증값 한쪽만 있는 설정은 익명으로 강등하지 않는다.
+  근거: [GitHub 공식 OAuth App rate limit 문서](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#primary-rate-limit-for-oauth-apps).
+- REST 발급과 WS 검사가 쓰는 realtime 키 함수는 기존 service에서 공개 이름 하나로 공유한다.
+  이미 develop에 있는 공통 파일의 변경이며 #137에 선행 REST 구현을 복사하지 않는다.
+
+| 이번 새 집중 검증 | 결과 |
+| --- | --- |
+| 현재 질문/이력·1/9턴의 저장 전후·잘못된 턴 | RED 7 failed → GREEN 7 passed, 기존 배분 검사와 합계 31 passed |
+| L2 예산·sink·source limitations·취소 | RED 2 failed → 기존 adapter와 합계 20 passed |
+| 정확한 구조 상한 2/512·미방문/완료/초과 | RED 2 failed/4 passed → 기존 수집 검사와 합계 9 passed |
+| 공개 앱 인증·비공개 전환·오류·비밀값 보호 | 신규 reader 11·collector 9사례의 RED 후 기존 도구 포함 78 passed, skip0 |
+
+추가 독립 검토에서 서로 다른 사용자의 준비와 기존 Context가 공유 공고·Frame을 반대로
+잠그는 SQLSTATE 40P01을 실제 PostgreSQL로 재현했다. `lock=True`에서 공고를 먼저 잠가
+순서를 통일했다. 신규 회귀 RED 1 failed/1 passed 후 기존 Context·storage 포함 91 passed,
+skip0을 확인했다. 앞선 공통 후보 241 passed는 이 잠금 보완 전 결과이며 최신 전체 결합·
+원격 검사는 별도로 기록한다. read-only 경로와 기존 Context AST는 추가 블록 외에 같다.
+
+위 결과는 전용 PostgreSQL 15와 외부 HTTP mock 기준이다. 실제 모델 품질·운영 GitHub 호출·배포
+성공을 뜻하지 않는다. #135~#137의 실행 연결은 각 후속 PR에만 두고 공통 PR에 복사하지 않는다.
+배포 worker의 선택적인 부모 cron을 계승하며 기존에 cron 설정이 없으면 ARQ의 빈 기본값을 유지한다.
+부모 작업 보존·빈 목록·설정 부재의 3개 회귀와 실제 배포 등록을 검사했다.
+
+### 최종 게시 소스를 결합한 새 전체 검증
+
+공통 게시본과 #135·#136·#137의 실제 게시 소스를 `develop@2fc0103` 위에 결합했다.
+검증용 로컬 head는 `7eb6a929cc2a`이며 원격 PR base는 모두 develop이다.
+REST·WS의 두 등록을 모두 보존하고, 부모 준비 cron을 실제 analysis worker가 계승하는 구성이다.
+
+| 새 전체 검사 | 결과 |
+| --- | --- |
+| PostgreSQL15·Redis7의 전체 BE pytest | 1601 passed, skip0, 1038.2초 |
+| AI 전체 pytest, 최종 AI source hash 동일 | 347 passed, skip0 |
+| 별도 DB의 Alembic upgrade/downgrade | 1 passed; 전체 BE에도 포함되므로 고유 건수에 더하지 않음 |
+| 실제 통합 DB의 Alembic upgrade head·check | 통과, No new upgrade operations detected |
+| BE / AI Ruff·format·Mypy | 모두 통과, format 367/57파일·type 163/13 source |
+| 부분 계약 검사 | schema 2개·부분 OpenAPI·fixture 7개 통과 |
+| 소스·게시 분리 | 실행 전후 Python 347파일 hash 동일, 소유 파일40개와 통합 소스 일치 |
+
+중단된 이전 전체 실행과 그 이전 집중 검사 수치는 이번 전체 통과로 재사용하지 않았다.
+전체 BE의 경고12개는 라이브러리의 기존 안내와 JUnit record_property 계측 경고이며 실패·skip과 구분한다.
+원격 CI는 각 PR 본문의 해당 head별 검사 링크로 확인한다. 선행 미병합으로 생기는 단독 CI
+실패를 이 로컬 결합의 통과와 구분한다. 실제 외부 모델·GitHub·Caddy/브라우저·운영 배포와
+abandon 후속은 검증하지 않았다. 기존 정책·보류 계약을 임의 확정하지 않는다.
+
+
+## 2026-10-28 — PR #126 기존 어댑터 보존과 수집 한계 지침
+
+- 원본 `68c088f`를 `backup/pr126-before-review-fix-20261028`에 보존했다. 기존 `agent.py`는
+  develop `09a6f77` 원문으로 유지하고 신규 `execute_director`는 `runtime_adapter.py`로
+  분리했다. 기존 함수는 전체 파일 blob, 신규 함수는 원문 AST가 같다. 신규 두 테스트의 import와
+  패키지 import 검사를 갱신하고 실제 소비자인 #135의 import 경로를 함께 조정한다.
+- `repo-deep-runtime-v1.md`는 입력 `source_limitations`의 미확인 범위를 확인한 것처럼
+  설명하지 않고 관찰·결과의 한계에 반영하도록 명시한다. 이 지침은 모델 응답을 코드로 강제하는
+  보장이 아니다. 수집 메타데이터의 별도 보존과 모델 출력의 한계를 구분한다.
+- 최신 develop `09a6f77`, 이번 변경과 미병합 #125 `23873ef` runtime을 별도 로컬 사본에서
+  결합했다. 기존·신규 adapter, gateway, 예산, 원문 수집·패키지 집중 검사는 104 passed, skip 0이었다.
+  생성·검토 각각에서 실제 task를 취소하는 새 2사례는 취소 전파와 완료된 plan 기록만 보존함을
+  확인한다. AI runtime은 38 passed, BE mypy 151 source·Ruff·format 312파일이 통과했다.
+- 게시본에는 #125 runtime을 복사하지 않는다. 최신 develop 결합에서 #125를 제외하면
+  runtime import와 파생 Any 반환의 mypy 2오류가 남는다. 이전 d063d8d 기준 CI의 11오류와
+  이번 결과를 구분한다. #125 반영 후 실제 게시본을 다시 검사하기 전에는 Draft다.
+- 최신 develop와 최종 게시 head의 merge-tree는 충돌 없이 병합된다. 대형 develop merge commit을
+  게시하지 않고 소규모 후속만 추가했으며 신규 구현·검증·문서 커밋은 각각 추가+삭제 300줄 이하다.
+- #133 patch03은 아직 일반 Python에 적용하지 않은 자료다. #136의 수집 한계가 실제 모델 입력에
+  전달되는 실행 연결은 해당 일반 코드 반영 후 다시 검증한다. 이번에 실제 모델·외부 GitHub,
+  PostgreSQL 전체 검사·면접 완주·운영 배포는 실행하지 않았다.
+
+## 2026-10-27 — PR #126 실제 예산 경계와 선행 결합 검증
+
+- #126 원본 `e29c8f9`를 `backup/pr126-before-budget-review-20261026`에 보존하고 후속만 추가했다.
+  게시본에는 미병합 #82의 저장·도구 구현과 #125 코어를 복사하지 않는다.
+- CallBudget의 읽기 전용 remaining_attempts·terminal_failure를 통해 BE가 실제 잔여량과
+  종료 상태를 확인한다. Context와 실제 예산 중 작은 값을 전달하며 두 시도가 없으면
+  plan 요청 전에 중단한다. 조회는 예약이 아니므로 한 예산을 다른 작업·동시 실행과 공유하지 않는다.
+- 실제 gateway를 먼저 소모하는 새 회귀에서 수정 전 2 failed·2 passed를 재현했다.
+  수정 후 새 예산·gateway 회귀 77건과 게시본 단독의 설정·gateway 회귀 79건이 통과했다.
+- 게시본 단독 전체 pytest는 #125 runtime 2건·dispose_engine 1건의 수집 오류이고,
+  mypy는 선행 모듈·API 부재 19오류다. Ruff·format 259파일은 통과했다.
+- 별도 로컬 환경에 develop `d063d8d`, #82 `c38d655`, 수정 #125 `23873ef`와 #126을 결합했다.
+  새 예산·기존/새 adapter·gateway 경계 95 passed, AI 전체 347 passed, AI Ruff·format 57파일·
+  mypy 13 source와 BE mypy 143 source가 통과했다. BE 전체는 전용 PostgreSQL·Redis에서
+  새로 실행해 1,302 passed, 0 skipped(676.97초)였다. BE Ruff·format 299파일도 통과했다.
+- 결합 adapter의 generate_question은 #82, execute_director는 #126 원문과 AST가 같다.
+  공통 gateway의 기존 정의는 develop+#82 결합본과 동일하며 예산 조회 속성 두 개만 추가했다.
+  base_url·deadline·attempt_sink와 #97 고정 배분을 보존한다. 준비 상한의 env 블록은
+  면접 정책 끝의 동시 수정과 분리했다. adapter는 선행 #82와 합쳐 두 함수를 모두 보존해야 한다.
+- 이 결과는 결합본의 새 검사이며 게시본 단독 성공이 아니다. 직접 선행 #82·#125와 명세를
+  반영하고 최종 호출 경로를 다시 검사하기 전에는 Draft다. 준비·worker·WS 활성화, 면접 완주,
+  실제 모델 품질·외부 GitHub는 이번 검증에 포함하지 않았다.
 
 ## 2026-09-28 — task-04 L1 BE adapter
 
@@ -814,3 +1471,124 @@ HTTP 2회 상한이 통과했다. 과거의 AI 224·별도 결합 309/163을 이
 실제 분류 품질은 검증하지 않았다. 로그는 `.claude/scratch/ai-pr-reviews-20261026/pr99-concurrent/`에
 보존한다. 이전 v1·로컬 v2 후보·팀원 원본의 검증 수치를 이번 보완본의 새 결과로 합치지 않는다.
 다른 PR과 새로 결합한 결과 및 실제 게시 head는 후속 게시·재검증에서 구분해 기록한다.
+
+## 2026-10-26 — 포트폴리오 문서 Claim 추출 (0029)
+
+### 기준과 변경
+
+- 작업 브랜치: `feature/doc-claims`, 기준 develop `fca606a`(#99 머지 후). AI-L22 중 AI 추출 모듈 범위.
+- `ai/src/devon_ai/llm_tasks/doc_claims.py`: `extract_claims`가 추출 텍스트의 비어 있지 않은 줄에 `L<순번>` ID를
+  붙여 한 번 호출하고 `{claims: [{claim_text, claim_type, tech_tags, line_id}]}`를 받는다. 요청별 줄 표로 만든
+  validator가 schema·semantic(없는 줄 ID)을 검사하고 줄 번호(`paragraph_no`)와 원문 줄을 복원한다. 실패하면
+  Claim 없이 실패 정보를 돌려준다. 원문이 비면 호출하지 않고, prompt·limits·입력 타입 오류는 호출 전에 거절한다.
+- `ai/prompts/doc-claims-v1.md`: 검수 전 prompt 초안. Claim 4종 정의, 뽑지 않는 것, 원문에 없는 기술·수치 추가 금지.
+- `ai/tests/llm_tasks/test_doc_claims.py`: 줄 번호 부여(빈 줄 제외·CRLF 분리·양 끝 공백 유지), 줄 번호·원문 복원과 태그
+  중복 제거, 빈 결과 성공, 없는 줄 ID 3종의 semantic 기록·무재시도, schema 위반 9종, provider 실패, 빈 문서
+  비호출, 입력 거절 3종(다른 task prompt, `doc_claims_v1`이 아닌 version, 문자열이 아닌 입력).
+
+### 실행 결과 (2026-10-26)
+
+환경: Windows, uv. `ai`에서 `ruff check .`·`ruff format --check .`·`mypy`(12개 파일) 통과, `pytest -q` 213 passed.
+`backend`에서 `tests/agents/test_ai_package_imports.py` 1 passed.
+
+실제 BE `call_model` + `httpx.MockTransport`(외부 호출 없음)로 확인했다. gateway가 보내는 schema는 `strict: true`이며
+모든 object 단계에서 `required`가 전체 속성과 같고 `additionalProperties: false`다.
+
+| 모델 응답 | claims | failure | attempt 오류 | HTTP 호출 |
+| --- | --- | --- | --- | --- |
+| 정상 Claim 2개 | 2개(줄 번호 1·2) | 없음 | 없음 | 1 |
+| 1개가 없는 줄 ID | 없음 | semantic | (semantic, llm_failed) | 1 |
+| 없는 `claim_type` | 없음 | schema | (schema, llm_failed) | 2 (gateway schema 재시도) |
+| `claims: []` | 없음 | 없음 | 없음 | 1 |
+
+### 검증 한계와 후속 작업
+
+- 실제 provider 호출과 추출 품질 평가는 미실행이다(API 키 없음). 실행 시 포트폴리오 표본·모델 버전·비용과
+  누락·과잉 추출·원문에 없는 내용 추가를 함께 기록한다.
+- BE 연결과 Director 사용은 범위 밖이다: `doc_extract` 단계 호출, BE adapter와 `document_claims` 저장,
+  `seed_prompt_versions.py`의 `doc_claims` 등록, `claim_type` CHECK 여부, `Context`의 Claim 전달과
+  `interview_turns.claim_ids` 기록(0029 영향 절).
+
+## 2026-10-30 — PR #146 리뷰 후속: 검증 순서와 연결 범위 정정
+
+### 기준과 변경
+
+- 원본 PR head `099e7f3`를 `backup/pr146-before-review-fix-20261030`에 보존하고 후속 커밋만 추가했다.
+  단독 검증과 최신 develop `2fc0103`에 합친 검증을 구분한다. 다른 미병합 구현을 추가하지 않았다.
+- `doc_claims.py`는 모든 항목의 schema를 검사한 뒤 줄 ID를 검사한다. 같은 혼합 오류의 항목 순서를
+  바꿔도 schema로 분류한다. 기존 정상 결과·4종·20개·태그 5개·원문 복원·전체 거절 정책은 유지한다.
+- 회귀 5사례를 추가했다: 혼합 오류의 두 순서·동일 항목, 정상 항목 뒤 schema/semantic 오류의 부분 채택 방지.
+  단일 호출 대역의 설명도 Gateway HTTP·재시도를 검증하는 것처럼 읽히지 않게 고쳤다.
+- [0030](decisions/0030-document-claims-validation-boundary.md)과 내부 계약에서 독립 AI 모듈과 서비스 활성화,
+  문서 Claim과 답변 `claim_checks`, 원문 ID 존재와 추출 충실성의 경계를 정정했다. 0029의 원본과 Accepted
+  상태는 보존하고 후속 링크를 추가했다. FE·공개 API·DB·BE 호출·Director 소비 코드는 변경하지 않았다.
+
+### 이번 수정 후 직접 실행한 검증
+
+| 대상·명령 | 실제 결과 |
+| --- | --- |
+| 수정 전 새 회귀 포함 `pytest tests/llm_tasks/test_doc_claims.py` | 1 failed / 24 passed. 줄 ID 오류가 먼저인 혼합 응답의 분류 차이 재현 |
+| 수정 후 동일 파일 | 25 passed |
+| 수정 PR 단독 AI `pytest -q` | 303 passed |
+| 최신 develop + 수정 PR AI `pytest -q` | 372 passed |
+| 두 환경 AI Ruff·format·Mypy | 통과. format 54/60 files, Mypy 13/14 source files |
+| 통합 BE 패키지 import·기존 `tests/contract` | 55 passed |
+| 실제 Gateway + `httpx.MockTransport`, 단독/통합 각각 같은 13사례 | 통과. 혼합 오류 세 경우 모두 schema 재시도 후 정상 응답 채택(HTTP 2회), schema가 맞는 없는 ID는 semantic 종료(1회), 일부 채택 없음, 빈 입력 비호출·빈 결과 성공·byte 상한·취소 전파 확인 |
+| 공통 계약 검사 | schema 2개·부분 OpenAPI·양성/음성 fixture 7개 통과. 전체 API·FE 호환성 검증 아님 |
+| 최신 develop 병합 검사 | 충돌 없음. 최신 공통 계약·색인·구현 기록 보존 |
+
+위 결과는 이전 검토의 298/367개나 작성 당시 213개를 재사용한 수치가 아니다. 이번 수정의 테스트를
+현재 소스 경로에 고정해 실행했다. 실제 모델 호출·추출 품질 데이터셋·BE 저장/분석·면접 서비스 흐름·
+전체 DB/Redis suite·배포 검증은 미실행이다. 실패·시도 정보의 영구 기록, 문서 버전별 실행 상태·중복 방지,
+prompt 등록·adapter·Context/질문 근거 연결은 후속이다. 로그·source hash·정확한 명령은
+`.claude/scratch/pr146-review-fix-20261030/`에 보존한다.
+
+<a id="issue109-ai-docs-20261103"></a>
+
+## 2026-11-03 — #109 AI 현재 안내의 상태 표현 정리
+
+### 범위와 유지한 기준
+
+- 기준은 #168까지 병합된 develop `460f5fe`다. 기존 결정에 따른 AI 문서의 의미·참조를 정리했으며
+  기능·API·DB·모델·재시도 정책을 변경하지 않았다. BE 기능 PR 전체를 선행으로 복사하지 않았다.
+- [문서 역할과 상태 표현](../../ai/README.md#ai-document-status)에서 실제 결정 필요, 채택된 방향의
+  구현·검증, 현재 범위 밖, 검증 미실행을 구분한다. 사용자 명시 보류·평가 판단 유보·과거 상태는 보존한다.
+  이 안내는 새 runtime 상태·승인 절차를 정의하지 않는다.
+- 0018의 기존 Sprint 1 채택 범위와 후속 결정의 변경 범위를 따르고, Proposed·Accepted·FIX를
+  실제 구현 완료 상태로 바꾸지 않았다. 0020의 단일 AI 구현 기록 원칙과 기존 문서 경로를 유지한다.
+
+### 표현 대응과 근거
+
+| 대상 | 정리한 안내 | 근거와 보존 범위 |
+| --- | --- | --- |
+| AI README·pipeline | 승인 방향은 결정 기록, 구현·검수 조건은 AI-L 인계표, 실제 현황은 이 기록으로 연결 | 0018·0020. pipeline의 이전 제목 앵커 보존 |
+| task-01~13 | 포괄적인 결정 대기와 이미 채택된 범위의 구현·검증 조건을 구분. task-05는 기존 안내 유지 | 0010·0014·0015·0018. 미채택 상세 계약·실제 합의 필요 범위는 유지 |
+| README·testing·layer-rules | loader·분석 모듈·테스트가 없다는 고정 현황 대신 책임·검증 조건과 원본 안내 | develop의 `ai/evals/eval_cases.py`·`grader_check.py`와 관련 경계 확인. 도구 존재가 실제 모델 평가 완료를 뜻하지 않음 |
+| pipeline의 seed 안내·리포트 입력 조건 | 초안 작성과 채택·검수·실제 연결을 구분 | `seed_score_criteria.py`의 초안·비활성·환산 미확정 제한 유지 |
+| architecture·contracts·verification | 승인 상태·구현 조건·검증 단계·당시 확인 이력을 구분 | 0018·0020. 계약 필드·값·운영 상한의 기존 설정·실측 책임 유지 |
+| L1/L2·Evidence·analysis-scope | schema 승인 범위, 준비·조회 조건, 실제 읽기 한계를 구분 | 0003·0008·0010·0015·0018. 평가 유보·미발견·거짓의 구분 유지 |
+
+과거 ADR·초기 설계·원본 감사·실행 프롬프트·평가 사실표와 기존 구현 기록은 변경하지 않고,
+현재 안내만 필요한 곳에서 참조화했다. task-04와 pipeline의 기존 제목 앵커는 명시 앵커로 남겼다.
+
+### 이번 검증
+
+| 검사 | 결과·범위 |
+| --- | --- |
+| 수정 전 기준 AI 전체 | 428 passed |
+| 수정 후 작업본 AI 전체 | 428 passed |
+| AI Ruff·format·mypy | 통과. format 65파일, mypy 16소스 |
+| BE AI 패키지 연결 | 1 passed. 서비스 전체·DB·실제 모델 검증을 대체하지 않음 |
+| 게시 전 공통 계약 검사 | 부분 검사: schema 2개·부분 OpenAPI·양성/음성 fixture 7개 통과. BE `tests/contract` 54 passed. 전체 API·FE·서비스 호환성 검증은 아님 |
+| 문서·코드의 내부 참조 | Markdown 187개와 UTF-8 코드·설정 528개의 참조 1,464개 검사. 경로·앵커 오류와 기존 앵커 손실 0개 |
+| 보존 대조·의미 검토 | 역사 문서 37개·날짜별 기록 48구간·기존 구현 기록 1,544줄 보존. 보호 지침·실행 코드·프롬프트·평가자료 변경 없음. 독립 검토의 기본 질문 생성 경로 한정 문구 보완 후 잔여 지적 없음 |
+
+검사 대상 모듈이 이번 작업본에서 import되는지 확인했고 실행 전후 runtime·테스트·설정 소스 해시가 같다.
+YAML·실행 코드 변경, 실제 모델 평가·전체 서비스 실행·운영 배포 검증은 이번 문서 정리 범위에 포함하지 않았다.
+문장별 근거, 파일 분류, 링크·앵커·보존 검사와 실행 로그는 `.claude/scratch/issue109-ai-fix-20261103/`에 보존한다.
+
+### 후속 범위
+
+AI 정리는 #109 전체의 BE·FE·shared 문서 구조 결정을 완료한 것이 아니다. 해당 범위는 별도로 처리하거나
+이월해야 한다. 단일 기록 안의 고유 절과 안정 앵커로 편집 범위를 구분하되 여러 PR의 같은 구간 편집
+충돌이 없어졌다고 보장하지 않는다.

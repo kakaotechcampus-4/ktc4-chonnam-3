@@ -862,9 +862,8 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 | 값 | 화면 처리 | 재시도 |
 | --- | --- | --- |
 | `no_public_repo` | 안내만 — 재시도 버튼 숨김 | ❌ |
-| `user_not_found` | 안내만 | ❌ |
 | `rate_limited` | 대기 시간 안내 (`retryAfter`) | 시간 후 |
-| `github_token_invalid` | GitHub 재연동 강조 | 재연동 후 |
+| `token_invalid` | GitHub 재연동 강조 | 재연동 후 |
 | `jd_fetch_failed` | 공고 URL 입력창 강조 | ✅ |
 | `jd_extraction_failed` | 공고 URL 입력창 강조 | ✅ |
 | `not_a_job_posting` | "채용 공고가 아닌 것 같아요" | ✅ |
@@ -873,6 +872,7 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 
 > `jd_fetch_failed`는 페이지 수집 실패, `jd_extraction_failed`는 LLM 추출 실패다. 재시도 성공률이 다르므로 구분한다.
 `doc_extract_failed`는 첨부한 문서의 추출에 실패한 경우다. 미첨부는 실패가 아니라 `skipped`이며 `failureReason`을 만들지 않는다.
+`failureReason`은 `analysis_jobs.error_code`라 HTTP `error.reason`과 다른 값이다. GitHub 토큰 무효는 job 코드 `token_invalid`이며 HTTP 403 `github_token_invalid`와 구분한다(`openapi.yaml` `AnalysisRunResponse.failureReason`).
 > 
 
 `410` — `run_expired`
@@ -906,6 +906,11 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
   ],
   "mentionedRepoCount": 3,
   "matchedRepoCount": 2,
+  "analyzedCount": 5,
+  "failedCount": 1,
+  "failedRepositories": [
+    { "repositoryId": "r_006", "errorCode": "llm_failed" }
+  ],
   "repositories": [
     {
       "id": "r_001",
@@ -945,6 +950,10 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 | `jdRequirements[].displayOrder` | number | ❌ |
 | `mentionedRepoCount` | number | ❌ |
 | `matchedRepoCount` | number | ❌ |
+| `analyzedCount` | number | ❌ |
+| `failedCount` | number | ❌ |
+| `failedRepositories[].repositoryId` | string | ❌ |
+| `failedRepositories[].errorCode` | string | ❌ |
 | `repositories[].id` | string | ❌ |
 | `repositories[].name` | string | ❌ |
 | `repositories[].fullName` | string | ❌ |
@@ -965,6 +974,8 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 | `repositories[].matchScore` | number | ✅ |
 | `repositories[].matchedRequirementIds` | string[] | ❌ |
 
+`analyzedCount`는 이 run에 배정된 batch의 L1 분석 `succeeded`·`partial` 수, `failedCount`는 `failed` 수이며 `failedRepositories` 원소 수와 같다. 둘 다 배정 뒤 카드에서 빠진 저장소를 포함하므로 `repositories[]`의 카드 수와 다를 수 있다. `failedRepositories[].errorCode`는 카드의 `errorCode`와 같은 `repo_analyses.error_code`라 아래 문구 표를 그대로 쓴다. 현재 화면은 이 집계를 표시하지 않는다.
+
 `doc_extract`가 `skipped`인 run에서는 `candidateSource`가 `portfolio`·`both`인 레포가 없고, `mentionedRepoCount`·`matchedRepoCount`는 `0`이다.
 
 [0017 결정](../../spec/ai/decisions/0017-recommendation-score-deferral.md)에 따라 Sprint 1은 `matchScore` 필드를 생략하지 않고 null을 반환한다. 숫자 계산·표시·점수 정렬은 보류하며 null만으로 실패나 추천 제외를 판단하지 않는다. 기존 mock의 숫자 예시는 후속 반영 대상이다.
@@ -983,10 +994,14 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 | `errorCode` | 문구 | 재시도 |
 | --- | --- | --- |
 | `llm_timeout` | "분석이 지연되고 있어요" | 자동 1회 |
-| `parse_failed` | "분석이 지연되고 있어요" | 자동 1회 |
+| `llm_parse_failed` | "분석이 지연되고 있어요" | 자동 1회 |
+| `rate_limited` | "분석이 지연되고 있어요" | ❌ |
 | `input_too_large` | "정보가 부족해요" | ❌ |
 | `no_readme` | "정보가 부족해요" | ❌ |
-| `github_token_invalid` | "GitHub 재연동이 필요해요" | 재연동 후 |
+| `repo_unreachable` | "레포에 접근할 수 없어요" | ❌ |
+| `llm_failed` · 목록에 없는 값 | "분석에 실패했어요" | ❌ |
+
+값은 BE `repo_analyses.error_code`이며 [분석 명세](../../spec/frontend/features/analysis.md)의 레포별 errorCode 표와 같다.
 
 **Failure**
 
@@ -1024,11 +1039,16 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 
 **UI states**
 
-5a-v2 `내 레포 더 보기` 클릭 시 호출. `202`면 로딩 상태 유지 후 폴링, `200`이면 카드를 기존 목록에 추가한다.
+5a-v2 `내 레포 더 보기` 클릭 시 호출. `202`면 로딩 상태 유지 후 폴링, `200`이면 카드를 기존 목록에 추가한다. 범위 밖 page는 `200 { "repositories": [] }`이며 "더 이상 없음"으로 보고 더 보기를 숨긴다.
 
 **Failure**
 
-공통 인증 에러 참고. 그 외 고유 실패 코드 없음(상태는 `200`/`202`로 표현).
+| 코드 | reason | 화면 처리 |
+| --- | --- | --- |
+| 400 | `invalid_request` | `page`가 없거나 1 미만·정수가 아님. FE 호출 오류 |
+| 409 | `candidate_page_failed` | 해당 page 분석 실패. 같은 page를 다시 요청해도 재실행하지 않으므로 재시도 버튼 없이 안내 |
+| 409 | `not_ready` | run이 후보를 줄 수 없는 상태 |
+| 410 | `run_expired` | 만료·타인 소유·없는 run 모두 같은 응답. 공고 입력부터 다시 |
 
 ---
 
@@ -1209,6 +1229,7 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 | --- | --- | --- |
 | 409 | `prep_in_progress` | 이미 재실행 중. 배너 없이 진행 화면 유지 |
 | 409 | `prep_failed` | `preparing_failed` 상태가 아님. `GET /interviews/{id}`로 상태 재확인 |
+| 409 | `session_limit_exceeded` | 같은 run에 다른 활성 면접이 있음. 그 면접을 끝내거나 나간 뒤 다시 시도하도록 안내 |
 | 410 | `session_expired` | 재시도 버튼을 내리고 `레포 다시 선택하기`만 남긴다 |
 
 ---
@@ -1338,7 +1359,7 @@ Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시�
 | `answer_too_long` | `ERR_ANSWER_TOO_LONG` | `true` | 같은 턴 재제출 |
 | `answer_rejected` | `ERR_ANSWER_REJECTED` | `true` | 같은 턴 재제출 (저장 실패) |
 | `answer_stale_turn` | `ERR_ANSWER_STALE_TURN` | `true` | 지나간 턴에 보낸 답변 — 초안을 버리고 현재 질문으로 |
-| `question_failed` | `ERR_QUESTION_FAILED` | `true` | 허용된 시도 후 실패 안내·기록 보존·명시적 나가기 (아래 재시도 책임 참고) |
+| `question_failed` | `ERR_QUESTION_FAILED` | 진행 중 분석·질문 생성 실패 `false`, 연결 교체·서버 오류 `true` | `false`: 이어갈 수 없음 안내 — abandon 후 같은 레포로 재도전(#20) 또는 홈. `true`: 재연결 ([공통 0010](../../spec/shared/decisions/0010-in-progress-question-failed-unrecoverable.md)) |
 | `question_gen_timeout` | `ERR_QUESTION_GEN_TIMEOUT` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
 | `persona_build_failed` | `ERR_PERSONA_BUILD_FAILED` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
 | `criteria_set_failed` | `ERR_CRITERIA_SET_FAILED` | `true` | 준비 실패 화면 — `POST /interviews/{id}/prepare/retry` |
@@ -1347,11 +1368,11 @@ Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시�
 | `repo_unreachable` | `ERR_REPO_UNREACHABLE` | `false` | "레포에 접근할 수 없어요" — 레포 재선택 |
 | `github_token_invalid` | `ERR_GITHUB_TOKEN_INVALID` | `false` | GitHub 재연동 유도 |
 
-[0010 결정](../../spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md)에 따라 LLM의 timeout/provider 오류·parse/schema 실패는 공통 호출 계층에서만 자동 1회 재시도한다(최초 호출 포함 최대 2회). semantic 실패는 재호출하지 않는다. `question_failed`의 기존 `recoverable: true`는 FE의 추가 재시도나 재연결을 통한 LLM 재호출을 허용한다는 뜻이 아니다. 허용된 시도 후에도 질문 생성에 실패하면 [기존 면접 실패 정책](../../spec/ai/features/interviewer.md#공개-메시지와-보류-항목)에 따라 오류 안내·기록 보존·명시적 나가기와 새 면접 흐름을 유지하며, 진행 중 면접의 새 수동 이어가기를 추가하지 않는다.
+[0010 결정](../../spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md)에 따라 LLM의 timeout/provider 오류·parse/schema 실패는 공통 호출 계층에서만 자동 1회 재시도한다(최초 호출 포함 최대 2회). semantic 실패는 재호출하지 않는다. 진행 중 분석·질문 생성이 실패하면 `question_failed`는 `recoverable: false`다([공통 0010](../../spec/shared/decisions/0010-in-progress-question-failed-unrecoverable.md)). 연결 교체·서버 오류의 `recoverable: true`도 FE의 추가 재시도나 재연결을 통한 LLM 재호출을 허용한다는 뜻이 아니다. 허용된 시도 후에도 질문 생성에 실패하면 [기존 면접 실패 정책](../../spec/ai/features/interviewer.md#공개-메시지와-보류-항목)에 따라 오류 안내·기록 보존·명시적 나가기와 새 면접 흐름을 유지하며, 진행 중 면접의 새 수동 이어가기를 추가하지 않는다.
 
 `recoverable: false`면 서버가 WS 연결을 닫는다. 오류 안내나 연결 종료만으로 DB 상태를 `completed` 또는 `abandoned`로 바꾸지 않는다. 정상 완료는 9번째 답변 처리 완료, `abandoned`는 명시적 나가기 확인·레포 재선택에 따른다. 오류 전달·종료 요청·실패 기록 복원의 실제 연결은 구현·검증 대상이다.
 
-`code`는 화면에 그대로 노출하는 표시용 식별자로, `occurredAt`과 함께 배너 하단에 표기한다. `step`은 준비 단계 오류일 때만 값이 있고 진행 중 오류에서는 `null`이다.
+`code`는 오류 식별자다. 화면에는 `code`·`occurredAt`을 노출하지 않고 `reason`별 문구만 보인다. `step`은 준비 단계 오류일 때만 값이 있고 진행 중 오류에서는 `null`이다.
 
 `repo_unreachable`의 "레포 재선택"은 `GET /interviews/{id}`의 `runId`로 5a-v2에 진입한다.
 
@@ -1546,8 +1567,11 @@ Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시�
 
 | 코드 | reason |
 | --- | --- |
+| 404 | `not_found` |
 | 409 | `original_not_completed` · `repository_unavailable` · `session_limit_exceeded` |
 | 410 | `run_expired` |
+
+`not_found`는 원본 면접이 없거나 남의 면접인 경우다(`GET /interviews/{id}`와 같은 규칙).
 
 `repository_unavailable`은 원본 레포가 삭제·private 전환된 경우다.
 
@@ -1803,6 +1827,9 @@ Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagr
 | 2026-09-17 | #13 SSE에 **구독 전 `GET /analysis-runs/{runId}` 스냅샷 호출 명시** — 스트림은 구독 시점 이후 델타만 전달하므로 새로고침 시 이전 `step` 이벤트를 복구할 수 없다 |
 | 2026-09-23 | **준비 재시도를 WS `prepareRetry` → `POST /interviews/{id}/prepare/retry`(#23)로 이동** — `spec/ai/decisions/0010:32`(Accepted, 2026-09-15) 반영. 거절 reason `prep_in_progress`(409)·`session_expired`(410) 신설, 성공은 `204` |
 | 2026-09-23 | WS `answer`에 **`turn` 추가** — `spec/ai/decisions/0010:30` 반영. 불일치 시 `answer_stale_turn` 신설 |
+| 2026-10-29 | #23 준비 재시도에 `409 session_limit_exceeded`, #20 재도전에 `404 not_found` 추가 — BE 구현 동작을 계약에 반영 |
 | 2026-09-17 | #19의 **`202 Accepted`를 Failure → Response로 이동** (생성 중은 실패가 아님), `error.retryAfter`와 본문 최상위 `retryAfter`의 위치 차이 명시 |
 | 2026-09-22 | [공통 0003](../../spec/shared/decisions/0003-sprint1-session-auth.md): Sprint 1은 기존 Redis·HttpOnly `devon_session`·14일 sliding 세션으로 확정. JWT·refresh 및 #3은 Sprint 2로 이관. 기존 번호와 과거안은 보존하며 실제 인증 구현·검증은 후속 작업으로 구분 |
 | 2026-10-28 | **#24 `POST /interviews/{id}/abandon` 추가**, #10 `/me/interviews`에 시작 후 중단된 `abandoned` 포함, #20 재도전 허용을 `completed`와 시작 후 중단으로 확정, #10 정렬 기준 명시 — [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md) |
+| 2026-11-07 | #18 진행 중 분석·질문 생성 실패의 **`question_failed`를 `recoverable: false`로 변경** — [공통 0010](../../spec/shared/decisions/0010-in-progress-question-failed-unrecoverable.md). 연결 교체·서버 오류는 `true` 유지 |
+| 2026-10-29 | #15 결과에 **`analyzedCount`·`failedCount`·`failedRepositories` 추가**, #15 레포 `errorCode` 표를 `repo_analyses.error_code`로 정정, #14 `failureReason`의 GitHub 토큰 무효를 job 코드 `token_invalid`로 정정, #14 `failureReason`에서 BE job 코드에 없는 `user_not_found` 삭제, #22 실패 응답(`invalid_request`·`candidate_page_failed`·`not_ready`·`run_expired`) 명시 — [#144](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/144) |

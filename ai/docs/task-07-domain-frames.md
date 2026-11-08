@@ -1,6 +1,6 @@
 # task-07 - 도메인 질문 프레임 정책
 
-상태: 구현 가이드. 생성 정책과 개발용 후보는 승인됐지만 runtime seed와 Director 연결은 아직 구현되지 않았다.
+상태: 구현 가이드. 현재 구현·검증 범위와 남은 연결은 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
 
 ## 목표
 
@@ -28,8 +28,8 @@
 
 ## 대상 파일과 책임
 
-- [AI Director 모듈](../src/devon_ai/agents/director/agent.py): 향후 단일 Director가 정책을 소비할 위치이며 현재 docstring뿐이다.
-- [AI 계약 자리](../src/devon_ai/contracts.py): 채택된 category/frame 참조 타입만 두며 현재 미구현이다.
+- [AI Director 모듈](../src/devon_ai/agents/director/agent.py): 단일 Director가 질문 생성 정책과 검증된 frame을 소비하는 경계다.
+- [AI 계약 원본](../src/devon_ai/contracts.py): 채택된 category/frame 참조 타입만 둔다.
 - [BE Director adapter](../../backend/app/agents/director/agent.py): prompt/seed 조회 결과를 AI에 주입하는 연결 경계다.
 - BE는 `domain_question_frames` 조회, seed 설치·재실행, 활성 version과 검수 metadata를 소유한다.
 - AI는 전달받은 검수된 frame에서 질문 후보를 만들고 정책 위반 여부를 판정한다.
@@ -59,7 +59,7 @@
 
 ## 검증
 
-- 예정 테스트: `ai/tests/agents/director/test_domain_frames.py` (추가 예정, 현재 없음).
+- 계획 테스트 경로: `ai/tests/agents/director/test_domain_frames.py`. 실제 테스트 구성·실행 결과는 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
 - [ ] 7개 category x 3개 축과 총 21개 후보의 보존을 검사한다.
 - [ ] category 없음·불신 입력의 `etc` fallback과 확인된 category 보존을 대조한다.
 - [ ] 적격 후보가 여러 개일 때 검증된 맥락 관련성과 목적 비반복 순으로 선택되는지 검사한다.
@@ -67,7 +67,7 @@
 - [ ] 기술 질문 중복, JD 검사, 법률/의료 보증, 점수화를 금지 사례로 둔다.
 - [ ] domain 경험이 없다는 답변을 감점 근거로 바꾸지 않는지 검사한다.
 - [ ] fixture 정책 통과를 운영 문구 독립 검수나 실제 모델 품질 통과로 보고하지 않는다.
-- [ ] 실제 seed가 없는 현재 상태에서는 DB 설치·version 재현 검증을 미실행으로 기록한다.
+- [ ] 실제 seed의 DB 설치·version 재현을 검증하지 않았다면 미실행으로 기록한다.
 
 ## 완료 조건
 

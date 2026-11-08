@@ -16,6 +16,9 @@
 
 문서 작성과 현황 확인에는 [0020 AI 구현·검증 기록의 단일화](0020-implementation-record-policy.md)를 적용한다. 현재 구현·실행 결과의 원본은 [구현 기록](../implementation.md)이다.
 
+Director 후속 게시의 코어 경계는 [0023](0023-director-runtime.md), 별도 연결 기반 PR의
+게시 경계는 [0025](0025-director-bridge-publication.md)를 따른다. 두 문서는 Proposed다.
+
 각 결정의 승인 범위는 후속 결정까지 함께 적용한다. 0010·0014~0019에서 채택한 정책을 이전 기록의 보류 문구만으로 다시 미정 처리하지 않는다. 남은 상세 구현·저장 연결·실측·검수는 아래 구현 인계에서 관리한다.
 
 - [공통 0003 Sprint 1 세션 인증 유지](../../shared/decisions/0003-sprint1-session-auth.md): Accepted, 2026-09-22. 0010의 `accessToken` 인증 부분을 Redis·`devon_session`으로 대체한다. 면접 `sessionId`와 로그인 세션 ID는 별개이며 JWT·갱신은 Sprint 2로 이관한다.
@@ -54,8 +57,17 @@
 
 - [0028 도메인 category 근거의 문단 ID 선택과 mobility 범위 (v2)](0028-domain-category-evidence-id.md): Accepted, 2026-10-26. 모델은 근거를 인용하지 않고 원문 문단 ID를 고르며 코드가 원문을 복원한다. ID 검증 실패는 validator 안에서 semantic 실패로 기록되고 재시도하지 않는다. 산업 전용 지원 서비스와 `mobility`의 차량 데이터·보안·시험 도구 범위를 명시한다. `domain_category_v2`, schema `2`.
 
+- [0029 포트폴리오 문서 Claim 추출 (AI 모듈)](0029-document-claims.md): Accepted, 2026-10-26. 포트폴리오 추출 텍스트의 줄마다 ID를 붙여 LLM이 Claim(최대 20개, `tech_usage`·`implementation`·`outcome`·`role`)과 근거 줄을 고른다. Claim은 내부 전용이며 사실 판정을 하지 않는다. 모듈은 실패 정보와 빈 Claim을 반환한다. 실패의 영구 기록과 분석 계속 진행은 BE 후속 책임이며 [0030](0030-document-claims-validation-boundary.md)의 경계를 따른다. BE 저장·호출 위치와 Director 사용은 담당자 확인 필요. `doc_claims_v1`.
+
+- [0030 문서 Claim의 검증 순서와 서비스 연결 경계](0030-document-claims-validation-boundary.md): Accepted, 2026-10-30. 0029의 AI 내부 추출 범위는 유지하되 전체 schema 검사 후 줄 ID 검사를 적용한다. 면접 준비 상태·기존 답변 `claim_checks` 재사용·호출 단위 설명을 정정한다. 서비스 활성화와 BE·Director·사용자 확인 정책의 합의를 대신하지 않는다.
+
 ## 결정 상태와 후속 작업
 
 [0018](0018-existing-baseline-bulk-resolution.md)에 따라 현재 Sprint 1 범위에서 추가 사용자 선택이 필요한 항목은 없다. 기존 ID별 실제 작업은 [구현·검수 인계](../../../ai/docs/pipeline.md#기존-id별-구현검수-인계), Sprint 2의 미정 세부는 [후속 목록](../features/extensions.md#sprint-2-착수-시-검토할-사항)에서 관리한다. 확정한 설명은 해당 기능 명세와 이 디렉터리에 보존한다. 기존 ID는 재번호화하거나 재사용하지 않으며 항목 이동을 결정·구현 완료로 해석하지 않는다.
 
 이 디렉터리는 승인된 결정과 그 이력을 보존한다. 과거 결정 문서의 미결정 목록은 작성 당시 기록이다. 후속 승인 범위는 위 결정 링크와 해당 기능 명세를 확인한다. 기존 범위를 바꾸는 사용자 선택이 새로 필요하면 관련 결정 문서에 근거·영향을 정리해 확인한다. 대기 목록 정리를 구현·검수·실측 완료로 해석하지 않는다.
+
+## 면접 실행 후속 검토
+
+- [0024 WS 인증·연결 교체의 기존 계약 준수](0024-director-ws-contract-alignment.md): Proposed. handshake 인증과 소켓 교체·분석 인계 경계를 정의한다.
+- [0026 면접 실행 연결의 신규 게시](0026-interview-execution-publication.md): Proposed. 기존 코어와 선행 구현을 복사하지 않는 실행·검증 게시 범위를 정의한다.

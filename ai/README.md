@@ -4,6 +4,32 @@
 
 현재 구현 범위, 코드 위치, 실행한 검증 결과와 남은 작업은 [AI 구현·검증 기록](../spec/ai/implementation.md)에서 관리한다. 초기 설계는 [AI 기반 설계](../spec/ai/designs/2026-09-23-ai-foundation.md)와 [Director 질문 경로 설계](../spec/ai/designs/2026-09-23-director-question-path.md)에 보존한다.
 
+<a id="ai-document-status"></a>
+
+## 문서 역할과 상태 표현
+
+[0020 기록 원칙](../spec/ai/decisions/0020-implementation-record-policy.md)에 따라 문서마다 다음 내용을 확인한다.
+
+| 문서 | 확인할 내용 |
+| --- | --- |
+| 이 README | 진입점·실행 안내·원본 링크 |
+| task·pipeline·layer-rules | 작업 목표·선행 조건·책임·구현·검수 조건 |
+| testing·verification | 검증 방법·환경·판정 기준 |
+| features·contracts | 현행 요구사항·계약과 검토 범위 |
+| decisions·designs | 결정 이유·승인·대체 관계와 초기 설계 기준선 |
+| [AI 구현·검증 기록](../spec/ai/implementation.md) | 실제 구현·수정·검증 결과와 남은 작업 |
+
+현재 안내의 대기·후속 표현은 문맥에 따라 아래 뜻을 구분해 읽는다. 새 상태 값이나 승인 절차를 추가하는 표가 아니다.
+
+| 문장의 뜻 | 확인할 내용 |
+| --- | --- |
+| 실제 결정 필요 | 아직 채택하지 않은 선택·영향 범위·관계 팀과 결정 근거 |
+| 채택된 방향의 구현·검증 | [결정 기록](../spec/ai/decisions/README.md)의 승인 범위와 [AI-L 인계표](docs/pipeline.md#기존-id별-구현검수-인계)의 확인 조건. 실제 완료 범위는 구현 기록 참조 |
+| 현재 범위 밖 | 해당 범위와 착수 조건. 후속 목록 등재만으로 도입을 승인하지 않음 |
+| 검증 미실행 | 실행하지 않은 대상과 이유. 모델·DB·서비스 검증을 각각 구분 |
+
+사용자의 명시적 보류·재개 조건, 자료 부족에 따른 평가 판단 유보, 과거 기록의 당시 상태·수치는 각각 보존한다. Proposed·Accepted·Superseded는 승인·대체 상태이며 실행 완료 상태가 아니다. FIX도 해당 문서가 고정한 범위 안에서 읽는다.
+
 ## 프로젝트 구조
 
 ```text
@@ -31,7 +57,7 @@ ai/
     pipeline.md, layer-rules.md, testing.md
 ```
 
-배포명은 `devon-ai`, import 이름은 `devon_ai`다. `src/devon_ai/`만 런타임 패키지에 포함하고 테스트·평가자료는 배포물에서 제외한다. 임시 실행 결과는 Git 제외 경로인 `ai/report/`에 둔다. `evals/`에는 아직 실제 사례, 검수 정답, loader, harness가 없다.
+배포명은 `devon-ai`, import 이름은 `devon_ai`다. `src/devon_ai/`만 런타임 패키지에 포함하고 테스트·평가자료는 배포물에서 제외한다. 임시 실행 결과는 Git 제외 경로인 `ai/report/`에 둔다. 평가자료의 형식·분리는 [평가 작업 공간](evals/README.md), 자료·loader·grader·평가 실행기의 실제 구현·검수 범위는 [AI 구현·검증 기록](../spec/ai/implementation.md)에서 확인한다. 평가 도구의 존재와 실제 모델 평가 완료를 구분한다.
 
 ## 개발 문서
 

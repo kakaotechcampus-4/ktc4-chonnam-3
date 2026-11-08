@@ -6,11 +6,11 @@
 
 모든 검사는 `통과`, `실패`, `보류`, `미실행`, `범위 밖`으로 구분한다. 빈 테스트 수집, import 성공, README 명령 예시, 정적 형식 검사만으로 AI 기능·모델 품질·서비스 흐름이 통과했다고 기록하지 않는다.
 
-패키지 구조·설치 검사 외에 task-02~03 계약·레포 검증·fake callable과 BE의 HTTP 호출·설정·prompt loader/seed 검사가 있다. 외부 HTTP/DB 응답을 대체한 검사와 실제 환경 검사를 구분한다. DB·Redis·API·worker·실제 모델 평가는 별도 근거가 없는 한 미실행이다.
+패키지 구조·설치, task별 계약·기능, BE의 HTTP 호출·설정·prompt loader/seed 검사를 구분한다. 외부 HTTP/DB 응답을 대체한 검사와 실제 환경 검사도 구분한다. DB·Redis·API·worker·실제 모델 평가는 각각 실행 근거를 확인하며, 근거가 없으면 미실행으로 기록한다. 실제 구현·검증 현황은 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다. 아래 날짜별 결과는 당시 범위의 기록으로 보존한다.
 
 2026-09-23 task-01~03 검증: 양쪽 locked sync·Ruff·format·mypy 통과, AI `pytest -q` **90 passed**. 후속 로컬 PostgreSQL 15.19 검증 13개를 추가하고 `TEST_POSTGRES_URL`을 주입한 BE 전체 검사는 **133 passed**다. sdist/wheel 빌드와 별도 venv 설치 후 저장소 밖 11개 모듈 import도 통과했다. wheel 15개 entry에는 runtime·py.typed·metadata만 포함된다. 실제 OpenAI 호출은 키 미설정으로 미실행이다. PostgreSQL 검증은 별도 임시 DB에서 prompt 스키마·loader·seed만 확인했으며 현재 브랜치의 전체 migration·서비스 DB 연결 완료를 의미하지 않는다. 상세 로컬 결과는 Git 제외 `ai/report/foundation-verification-results.md`에, 재사용할 코드 경계는 [구현 인계](../../spec/ai/designs/2026-09-23-ai-foundation.md)에 기록했다.
 
-실제 DB 검사는 [test_prompt_postgres.py](../../backend/tests/llm_tasks/test_prompt_postgres.py)에서 수행한다. 실행 방법과 격리 범위는 [BE 테스트 안내](../../backend/docs/testing.md#실제-postgresql-프롬프트-검증)를 따른다. `TEST_POSTGRES_URL`이 없으면 해당 13개 검사는 skip되므로, 기존 단위 검사 통과를 실제 DB 검증으로 보고하지 않는다.
+실제 DB 검사는 [test_prompt_postgres.py](../../backend/tests/llm_tasks/test_prompt_postgres.py)에서 수행한다. 실행 방법과 격리 범위는 [BE 테스트 안내](../../backend/docs/testing.md#실제-postgresql-프롬프트-검증)를 따른다. `TEST_POSTGRES_URL`이 없으면 해당 검사는 skip되므로, 기존 단위 검사 통과를 실제 DB 검증으로 보고하지 않는다.
 
 2026-09-23 [Director 첫 구현](../../spec/ai/designs/2026-09-23-director-question-path.md) 후
 최종 검증: AI **137 passed**(Director 47개 포함), 실제 PostgreSQL URL을 주입한 BE
@@ -32,9 +32,9 @@ Linux 실행은 WSL 미설치 및 Docker 엔진 미기동으로 미실행이다.
 
 ## 기능별 검증 위치
 
-작업의 선행 관계는 [구현 작업 지도](pipeline.md)를 따른다. 현재 존재하는 구조 검사는 [test_package.py](../tests/test_package.py), [test_import_boundaries.py](../tests/test_import_boundaries.py), BE의 [설치 연결 검사](../../backend/tests/agents/test_ai_package_imports.py)다.
+작업의 선행 관계는 [구현 작업 지도](pipeline.md)를 따른다. 구조·설치 검사 경로는 [test_package.py](../tests/test_package.py), [test_import_boundaries.py](../tests/test_import_boundaries.py), BE의 [설치 연결 검사](../../backend/tests/agents/test_ai_package_imports.py)다.
 
-아래 task-02/03 및 task-10 기본 생성 경로 테스트는 구현되어 있다. 나머지 task-04~13 경로는 **추가 예정**이며 존재·수집을 별도로 확인한다. task-02의 `ai/tests/test_repository_contracts.py`는 L1/L2 계약 검증이며 실제 분석 함수 검사가 아니다. BE 호출 경계는 `backend/tests/integrations/test_llm_client.py`, Director 연결은 `test_director_boundary.py`, 설정은 `tests/core/test_llm_config.py`, prompt는 `tests/llm_tasks/test_prompt_loader.py`·`test_prompt_seed.py`에서 검사한다.
+아래 표는 task별 검증 위치와 경계를 안내한다. 테스트의 실제 생성·수집·실행 범위는 [AI 구현·검증 기록](../../spec/ai/implementation.md)과 해당 코드에서 확인한다. task-02의 `ai/tests/test_repository_contracts.py`는 L1/L2 계약 검증이며 실제 분석 함수 검사가 아니다. BE 호출 경계는 `backend/tests/integrations/test_llm_client.py`, Director 연결은 `test_director_boundary.py`, 설정은 `tests/core/test_llm_config.py`, prompt는 `tests/llm_tasks/test_prompt_loader.py`·`test_prompt_seed.py`에서 검사한다.
 
 | 작업 | 검증 위치, 저장소 루트 기준 | 주요 검증 경계 |
 | --- | --- | --- |
@@ -120,11 +120,11 @@ hook이 의존성을 설치하거나 코드를 자동 수정하지 않으며, li
 
 ## 평가자료와 모델 실행
 
-평가자료·실행 체계를 구현할 때는 [task-12](task-12-evaluation.md)의 단계별 작업과 결정 대기 조건을 적용한다. 이 문서는 공통 실행 안내이며 실제 dataset과 평가 harness의 존재를 선언하지 않는다.
+평가자료·실행 체계를 구현할 때는 [task-12](task-12-evaluation.md)의 단계별 작업과 구현·검수 조건을 적용한다. 자료 형식·격리와 loader·grader 안내는 [평가 작업 공간](../evals/README.md), 자료·도구·평가 실행기의 실제 구현·검수·실행 범위는 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다. loader·grader 검사와 실제 모델 평가는 각각 근거를 남긴다.
 
-`evals/inputs/`와 `evals/expectations/`는 작업 위치만 준비되어 있으며 실제 JSON, dataset, 운영 schema, loader, harness는 아직 없다. 향후 합성 로컬 JSON은 같은 `case_id`와 `version`의 입력/기대 쌍으로 읽고 mismatch, duplicate, orphan을 거부한다. 모델에는 입력 파일의 실행 payload만 보내며 식별·분류·split·source group 제어 정보와 기대값·검수·control 정보는 prompt, retrieval query, tool input에서 제외한다. 같은 원본의 파생 사례는 같은 source group으로 유지하고 development와 holdout에 나누지 않는다.
+`evals/inputs/`와 `evals/expectations/`의 합성 로컬 JSON은 같은 `case_id`와 `version`의 입력/기대 쌍으로 읽고 mismatch, duplicate, orphan을 거부한다. 모델에는 입력 파일의 실행 payload만 보내며 식별·분류·split·source group 제어 정보와 기대값·검수·control 정보는 prompt, retrieval query, tool input에서 제외한다. 같은 원본의 파생 사례는 같은 source group으로 유지하고 development와 holdout에 나누지 않는다.
 
-검수자 불일치는 양쪽 근거를 가진 `pending`으로 보존한다. 전체 사례 수·coverage와 독립 검수가 끝난 판정 가능 사례의 품질 분모를 구분하고 제외 수와 이유를 함께 보고한다. grader는 허용·금지·모호·유효하지 않은 참조·tool 실패 control에서 false accept와 false reject를 종류별로 확인한다. 실제 검수자와 조정 결과, control 사례, 수치 기준은 아직 정하지 않았다.
+검수자 불일치는 양쪽 근거를 가진 `pending`으로 보존한다. 전체 사례 수·coverage와 독립 검수가 끝난 판정 가능 사례의 품질 분모를 구분하고 제외 수와 이유를 함께 보고한다. grader는 허용·금지·모호·유효하지 않은 참조·tool 실패 control에서 false accept와 false reject를 종류별로 확인한다. 실제 검수자·조정 결과·control 사례·수치 기준의 확정 범위는 [평가 작업 공간](../evals/README.md)과 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인하며, 작성자 제안을 실제 검수 완료로 보지 않는다.
 
 baseline과 candidate는 같은 사례·source group에서 한 요인씩 바꾸고 task 실패, 품질, 비용, 지연을 함께 비교한다. 권한·참조·parser·tool·source 부재 실패를 검색 방법 결함과 구분한다. 승인 범위 안의 방법 비교와 범위 확대 제안 실험은 분리하며, 후자의 실패 사례도 버리지 않되 실제 확장 실험은 사전 승인 뒤에만 실행한다.
 

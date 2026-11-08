@@ -2,7 +2,7 @@
 
 이 문서는 재사용 가능한 구현 체크리스트의 연결 지도다. 서비스 pipeline 원본은 [AI 아키텍처의 확정 흐름](../../spec/ai/architecture.md)과 [BE pipeline](../../backend/docs/pipeline.md)이며, 이 작업 번호로 외부 분석 단계·worker 순서·계약을 변경하지 않는다.
 
-task-01~03의 패키지·계약·공통 호출 기반을 구현했다. [구현 인계](../../spec/ai/designs/2026-09-23-ai-foundation.md)에 현재 callable과 검증 범위를 기록했다. [task-10 첫 구현](../../spec/ai/designs/2026-09-23-director-question-path.md)은 준비된 목적의 질문 생성·독립 검토 경로다. task-04~13의 나머지 기능·통합·평가와 실제 provider 검증은 후속 작업이다. 프롬프트 조회·seed는 로컬 PostgreSQL에서 검증했다. [레이어 규칙](layer-rules.md)과 [검증 안내](testing.md)를 공통으로 적용한다.
+task-01~03은 패키지·계약·공통 호출 기반을, task-04~13은 기능·통합·평가를 다룬다. [AI 기반 설계](../../spec/ai/designs/2026-09-23-ai-foundation.md)와 [Director 질문 경로 설계](../../spec/ai/designs/2026-09-23-director-question-path.md)는 설계 기준선으로 읽는다. 실제 callable·연결·검증 범위는 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다. [레이어 규칙](layer-rules.md)과 [검증 안내](testing.md)를 공통으로 적용한다.
 
 ## 작업을 선택하는 순서
 
@@ -36,9 +36,9 @@ task-01~03의 패키지·계약·공통 호출 기반을 구현했다. [구현 �
 
 ## 기능과 소스 연결
 
-아래 경로는 현재 존재하는 골격의 위치다. 해당 기능이 구현되어 있다는 뜻이 아니다. 새 테스트 파일과 fixture의 제안 위치는 각 task의 `검증`에 적고 실제 생성 여부를 구분한다.
+아래 경로는 기능별 책임과 구현 위치를 연결한다. 사용할 callable과 입력·출력은 실제 코드·테스트에서 확인하고, 구현·연결·검증 현황은 [AI 구현·검증 기록](../../spec/ai/implementation.md)을 따른다. 새 테스트 파일과 fixture의 제안 위치는 각 task의 `검증`에 적고 실제 생성 여부를 구분한다.
 
-| 명세·책임 | 작업 | 현재 구현 대상 |
+| 명세·책임 | 작업 | 책임별 구현 경로 |
 | --- | --- | --- |
 | [내부 계약](../../spec/ai/contracts.md) | 02·03 | [contracts.py](../src/devon_ai/contracts.py), BE 주입 경계 |
 | [레포 분석](../../spec/ai/features/repository-analysis.md) | 04·05·13 | [repo_shallow.py](../src/devon_ai/llm_tasks/repo_shallow.py), [repo_deep.py](../src/devon_ai/llm_tasks/repo_deep.py); 수집·추천·저장은 BE |
@@ -64,9 +64,11 @@ AI 기능과 관련되더라도 다음 작업을 `devon_ai`로 옮기거나 중�
 | 프로필 집계·역할 요약 | [profile_summary.py](../../backend/app/llm_tasks/profile_summary.py), [ADR 0016](../../spec/ai/decisions/0016-profile-language-aggregation.md), [ADR 0019](../../spec/ai/decisions/0019-sprint1-profile-role-summary-restoration.md) | 언어 비율은 기존 평균·비LLM 집계, 개인 역할만 근거에 맞춰 LLM 요약; 기존 저장·응답·후속 job 연결 |
 | 큐·저장·전송 | [BE pipeline](../../backend/docs/pipeline.md), [BE task-15](../../backend/docs/task-15-interview-ws.md), [BE task-16](../../backend/docs/task-16-report.md) | 기존 여섯 job·텍스트 WS·분석 SSE 유지; 멱등성·복구·공개 응답의 미합의 구분 |
 
-## 결정 대기 지점을 다루는 방법
+<a id="결정-대기-지점을-다루는-방법"></a>
 
-[0018 일괄 정리](../../spec/ai/decisions/0018-existing-baseline-bulk-resolution.md)에 따라 현재 Sprint 1 범위에서 추가 사용자 선택이 필요한 항목은 없다. 채택한 방향은 [AI 결정 기록](../../spec/ai/decisions/README.md), 구현·검수는 아래 인계표, Sprint 2의 미정 세부는 [후속 목록](../../spec/ai/features/extensions.md#sprint-2-착수-시-검토할-사항)에서 확인한다. 기존 task의 “AI-Lxx 결정 후” 표기는 이 분류와 최신 Accepted 결정을 함께 읽으며 사용자에게 같은 설계 선택을 다시 요청하는 조건으로 사용하지 않는다.
+## 채택된 방향과 구현·검수 조건의 구분
+
+[0018 일괄 정리](../../spec/ai/decisions/0018-existing-baseline-bulk-resolution.md)가 정리한 기존 Sprint 1 범위에는 추가 사용자 선택이 필요한 항목이 없다. 후속 변경·새 범위는 해당 결정의 승인 범위를 확인한다. 채택한 방향은 [AI 결정 기록](../../spec/ai/decisions/README.md), 구현·검수 조건은 아래 인계표, 실제 완료·실행 현황은 [AI 구현·검증 기록](../../spec/ai/implementation.md), Sprint 2의 미정 세부는 [후속 목록](../../spec/ai/features/extensions.md#sprint-2-착수-시-검토할-사항)에서 확인한다. 기존 task의 “AI-Lxx 결정 후” 표기는 [문서 역할과 상태 표현](../README.md#ai-document-status) 및 최신 Accepted 결정을 함께 읽으며 사용자에게 같은 설계 선택을 다시 요청하는 조건으로 사용하지 않는다.
 
 - AI-L01·02·04: 모델 선택·기존 내부 계약·재시도 책임은 채택 범위를 유지한다. 실제 연결·상세 타입과 저장 매핑·실행 상한은 각각 구현·검증하며 한 경로의 완료를 다른 경로의 완료로 보지 않는다.
 - [ADR 0008](../../spec/ai/decisions/0008-ai-candidate-policy.md)의 후보 정책과 [ADR 0009](../../spec/ai/decisions/0009-ai-evaluation-method.md)의 평가 방법을 포함한 Accepted AI 정책은 후속 결정의 변경 범위와 함께 적용한다. version·저장·실행 설정·운영·실측의 구체화는 아래 인계표에서 확인한다. 기존 범위를 바꾸는 사용자 선택이 새로 필요하면 관련 결정 문서에 근거·영향을 정리해 확인한다.
@@ -78,7 +80,9 @@ AI 기능과 관련되더라도 다음 작업을 `devon_ai`로 옮기거나 중�
 
 ## 기존 ID별 구현·검수 인계
 
-| 기존 ID | 유지하는 방향과 남은 실제 확인 | 연결 작업 |
+아래 표는 AI-L별 책임과 확인 조건을 묶은 인계표다. 항목별 실제 완료 범위와 검증 결과는 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
+
+| 기존 ID | 유지하는 방향과 구현·검수 조건 | 연결 작업 |
 | --- | --- | --- |
 | AI-L01 | 선택한 모델을 설정/seed에서 주입하고 실제 사용값·version 기록. 서비스 인증·SDK/client·호출 경로 연결, 계정 접근·구조화 출력·도구 호출 적합성 검증. 다른 모델·공급자가 필요하면 그때 실제 차이 확인 | task-03·13 |
 | AI-L02 | 기존 Context·Question·Evidence·ToolResult·분석/판단 계약 안에서 타입·null·참조·직렬화 연결. 공고 내용 비교·동시 수집 제약 확인. 실패 원문·조회 중단의 영구 저장 위치는 기존 책임 안에서 확인하고 AI-L18의 자료 정책 적용 | task-02·13 |
@@ -90,7 +94,7 @@ AI 기능과 관련되더라도 다음 작업을 `devon_ai`로 옮기거나 중�
 | AI-L11 | 단일 queue/worker·기존 6개 job·식별자 전달·DB 재조회 유지. initial_sync 인수·직렬화·등록 연결을 확인. job timeout은 AI-L04·08 운영 상한과 함께 설정 | task-06·13 |
 | AI-L12 | T3/T4·실패 정리의 짧은 transaction, 기존 식별자·입력 version·행 잠금/조건부 갱신·중복 제약·lock token 확인. DB commit 후 알림, 저장 질문 재전달, 기존 queued 작업 재등록 범위 유지. running 자동 재실행·outbox는 선제 추가하지 않음. 충돌 중복·DB 장애·서버 중단을 실제 검사 | task-13, BE pipeline |
 | AI-L13 | 기존 인증·소유권·명시적 이탈 의미를 유지하고 종료 wire/endpoint를 BE·FE가 기록·검증. 연결 끊김으로 abandoned 처리하지 않음 | task-13, BE task-15 |
-| AI-L15 | 기존 6개 0~100 점수·단순 평균·score_criteria 유지. 주석뿐인 seed의 세부 평가 기준·version과 근거 자료를 작성·검수하고 미관찰 사례까지 점검. 숫자 정책을 다시 선택하지 않음 | task-11·12, BE task-03 |
+| AI-L15 | 기존 6개 0~100 점수·단순 평균·score_criteria 유지. seed의 세부 평가 기준·version·근거 자료를 작성·검수하고 미관찰 사례와 점수 환산을 확인. 개발용 rubric 초안을 운영 검수·활성화·환산 확정으로 취급하지 않으며, 검수·환산 기준 확인 전에는 활성화하거나 리포트 prompt에 환산을 맡기지 않음. 숫자 정책을 다시 선택하지 않음 | task-11·12, BE task-03 |
 | AI-L18 | 0018의 후속 내부 비교용 보관·재사용 범위 유지. 최종 내부 비교 검증 뒤에도 보관하며 별도의 자동 삭제 기한 없음. 실제 사용 권한·참여자 안내·팀 접근·영구 저장·마스킹·복사본과 파생 자료 관리 연결 확인 | task-12·13, BE 저장 |
 | AI-L19 | 기존 네 사례 종류·source group 분리·합성 JSON 쌍·독립 검수·불일치 pending·grader control·전체 결과 기록 유지. 실제 자료·기대 결과·검수자·판정 오류를 확인하고 대표 사례를 측정. 최종 표본·비율·수용 수치는 운영 조건 및 AI-L18 자료 범위에 맞춰 설정 | task-12·13 |
 

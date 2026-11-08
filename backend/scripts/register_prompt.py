@@ -9,7 +9,11 @@ from devon_ai.contracts import PromptSpec
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
-from scripts.seed_prompt_versions import PROMPT_VERSIONS, register_prompt_versions
+from scripts.seed_prompt_versions import (
+    ADDITIONAL_PROMPT_VERSIONS,
+    PROMPT_VERSIONS,
+    register_prompt_versions,
+)
 
 
 async def register(task: str, version: str, template: Path) -> PromptSpec:
@@ -29,7 +33,9 @@ async def register(task: str, version: str, template: Path) -> PromptSpec:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--task", required=True, choices=tuple(PROMPT_VERSIONS))
+    parser.add_argument(
+        "--task", required=True, choices=tuple(PROMPT_VERSIONS | ADDITIONAL_PROMPT_VERSIONS)
+    )
     parser.add_argument("--version", required=True)
     parser.add_argument("--template", required=True, type=Path)
     args = parser.parse_args(argv)

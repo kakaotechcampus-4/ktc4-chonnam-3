@@ -1,22 +1,31 @@
 name: Backend CI
-# backend 변경 PR 에서 ruff · format · mypy · pytest 를 단계별로 실행한다.
+# backend 변경 PR과 병합 후 develop에서 같은 품질 검사를 실행한다.
 # secrets 를 쓰지 않고, GitHub · Wanted · LLM 은 호출하지 않는다(테스트는 mock).
 # ai/ 는 backend 의 editable path 의존성이라 함께 감시한다(backend/docs/deploy.md §6).
 
 on:
   pull_request:
     branches: [develop, release]
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'backend/**'
       - 'ai/**'
       - '.github/workflows/backend-ci.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'backend/**'
+      - 'ai/**'
+      - '.github/workflows/backend-ci.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: backend-ci-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  # PR·병합·수동 검증이 서로 취소되지 않도록 이벤트와 ref를 구분한다.
+  group: backend-ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend:
