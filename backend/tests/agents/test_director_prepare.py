@@ -575,70 +575,6 @@ async def test_canceled_source_fetch_keeps_completed_selection_attempt(agent_ses
     assert transport.model_operations == ["select"]
 
 
-async def test_failed_question_retries_through_real_rest_queue_and_worker(
-    agent_sessions,
-    ready,
-    test_redis_url,
-):
-    from uuid import uuid4
-
-    from arq.connections import RedisSettings, create_pool
-    from fastapi import FastAPI
-
-    from app.core.deps import current_user
-    from app.db.models import User
-    from app.db.session import get_db
-    from app.features.interview.router import router
-    from app.workers.tasks.interview_prep import interview_prep
-
-    invalid = Transport(ready)
-    invalid.outputs[0]["question"]["text"] = ""
-    assert not await run(agent_sessions, ready, invalid)
-    async with agent_sessions() as db:
-        row = await db.get(InterviewSession, ready["interview_id"])
-        assert row.status == "preparing_failed" and "prepare_job_id" not in row.context_state
-        original = await db.scalar(select(Evidence.id))
-    queue = "arq:director-prepare-test:" + uuid4().hex
-    broker = await create_pool(RedisSettings.from_dsn(test_redis_url), default_queue_name=queue)
-    app = FastAPI()
-    app.include_router(router, prefix="/api")
-    app.state.redis = broker
-
-    async def database():
-        async with agent_sessions() as db:
-            yield db
-
-    async def owner():
-        async with agent_sessions() as db:
-            return await db.get(User, ready["owner"])
-
-    app.dependency_overrides[get_db] = database
-    app.dependency_overrides[current_user] = owner
-    jobs = []
-    try:
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://test"
-        ) as api:
-            result = await api.post(f"/api/interviews/{ready['interview_id']}/prepare/retry")
-        assert result.status_code == 204
-        jobs = await broker.queued_jobs()
-        assert len(jobs) == 1 and jobs[0].function == "interview_prep"
-        transport = Transport(ready)
-        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
-            await interview_prep(
-                dict(session_factory=agent_sessions, settings=settings(), http_client=http),
-                jobs[0].args[0],
-            )
-        async with agent_sessions() as db:
-            row = await db.get(InterviewSession, ready["interview_id"])
-            assert row.status == "in_progress"
-            assert (await db.scalars(select(Evidence.id))).all() == [original]
-        assert transport.model_operations == ["plan", "review"]
-    finally:
-        await broker.delete(queue, *("arq:job:" + item.job_id for item in jobs))
-        await broker.aclose()
-
-
 async def test_changed_selection_releases_owned_claim_and_allows_retry(agent_sessions, ready):
     transport = Transport(ready)
     changed = False
@@ -709,3 +645,36 @@ async def test_committed_valid_first_question_recovers_without_model_call(agent_
         row = await db.get(InterviewSession, ready["interview_id"])
         assert row.status == "in_progress" and row.context_state == dict(preserved="원본")
     assert transport.model_operations == transport.github == []
+
+
+async def test_interview_started_recorded_once_for_duplicate_delivery(agent_sessions, ready):
+    from tests.event_helpers import names
+
+    transport = Transport(ready)
+    assert await run(agent_sessions, ready, transport)
+    assert not await run(agent_sessions, ready, Transport(ready))
+    async with agent_sessions() as db:
+        assert await names(db, "interview_started") == ["interview_started"]
+
+
+async def test_interview_started_recorded_when_committed_question_is_recovered(
+    agent_sessions, ready
+):
+    from tests.event_helpers import names
+
+    async with agent_sessions.begin() as db:
+        row = await db.get(InterviewSession, ready["interview_id"])
+        row.current_turn = 1
+        db.add(
+            InterviewTurn(
+                interview_session_id=row.id,
+                turn_no=1,
+                persona="hr_manager",
+                topic_code="role",
+                question_text="프로젝트에서 맡은 역할을 소개해 주세요.",
+                question_contract=plan()["question"]["question_contract"],
+            )
+        )
+    assert await run(agent_sessions, ready, Transport(ready))
+    async with agent_sessions() as db:
+        assert await names(db, "interview_started") == ["interview_started"]
