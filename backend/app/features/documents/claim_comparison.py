@@ -478,3 +478,14 @@ async def load_claim_comparison_sources(
             c.SupplementalSource(
                 source_id=str(comparison.id),
                 kind="document_claim_comparison",
+                content=json.dumps(content, ensure_ascii=False, sort_keys=True),
+                location=f"document:{claim.document_id}:comparison:{comparison.id}",
+                version=_hash({"input": comparison.input_fingerprint, "result": content}),
+                limitations=limitations
+                + ("model_interpretation_not_document_original",)
+                + (("comparison_code_source_unavailable",) if invalid else ())
+                + (("historical_document_claim_comparison",) if not current else ()),
+                title=document.filename,
+            )
+        )
+    return tuple(result)
