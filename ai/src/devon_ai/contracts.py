@@ -1329,6 +1329,10 @@ def parse_deep_analysis(
         else None
         for item in raw_areas
     ]
+    source_by_scope = {(item.path, item.read_scope): item for item in source.sources}
+    scopes = [
+        (item.get("path"), item.get("scope")) if type(item) is dict else None for item in raw_areas
+    ]
     area_keys = {item.name for item in fields(NotableArea)}
     areas: list[NotableArea] = []
     rejected: list[AreaFailure] = []
