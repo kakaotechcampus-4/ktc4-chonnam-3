@@ -1,0 +1,35 @@
+diff --git a/ai/evals/README.md b/ai/evals/README.md
+--- a/ai/evals/README.md
++++ b/ai/evals/README.md
+@@ -133,15 +133,27 @@
+ `uv run python evals/review_sheet.py [case_id ...]`로 만들며 결과는 무시되는 `ai/report/review-sheets/`에
+ 저장된다. 시트에는 정답이 있으므로 모델 입력에 쓰지 않는다.
+ 
+-현재 사례는 `evidence` 6건(`e-0001`~`e-0006`), `question` 10건(`q-0001`~`q-0010`), `flow` 1건
+-(`f-0001`)이며 모두 `unreviewed`이다. 자료·근거 사례의 `payload`는 `question`과
++사례의 검수 상태는 각 `expectations/*.json`의 `review`가 원본이다. 실행·검증 현황은
++[단일 구현 기록](../../spec/ai/implementation.md)을 참조한다. 자료·근거 사례의 `payload`는 `question`과
+ `materials`(`ref`, `path`, `lines`, `text`)이고, 자료 `text`는 공개 저장소 원문이 아니라
+ `fact-table.md`의 사실 구조만 본떠 새로 쓴 합성 내용이다. 질문·흐름 사례의 `payload`는 Director의
+ 입력을 단순화한 평가용 형식(`turn`, `allowed_personas`, `persona_left`, `history`, `latest_analysis`,
+ `evidence`, `task` 등)이며 실제 입력 객체와 필드가 완전히 같지 않다. 실행기를 만들 때 변환이 필요하다.
+ 질문·흐름 사례의 금지 유형 이름(`topic_jump`, `false_premise` 등)은 작성자가 임시로 붙였고 팀 합의
+-코드가 아니다. 실제 채점기와 평가 실행 harness는 없다. 이 디렉터리는 런타임 패키지와 배포물에
+-포함되지 않는다.
++코드가 아니다. 실제 서비스 실행에는 명시적인 `service_input`과 해당 task의 타입 검증이 필요하다.
++축약 사례를 임의로 서비스 입력으로 변환하거나 정답 필드를 모델에 전달하지 않는다.
++이 디렉터리는 런타임 패키지와 배포물에 포함되지 않는다.
++
++실행 진입점은 `backend/scripts/run_ai_evaluation.py`다. `--execute --manifest <파일>`은 서비스
++출력을 만들고, `--llm-judge --max-judge-attempts <상한>`은 별도 Judge 예산을 사용한다.
++승인된 기존 control만 확인할 때는 `--calibrate-judge-only --approved-only`를 사용한다.
++이 모드는 서비스 모델을 실행하지 않으며, `service_input`이 없는 사례를 서비스 실행 성공으로 세지 않는다.
++Judge v1은 허용·금지 기준과 출력 하나를 사용한다. v2는 해당 사례에 실제 제공된 원문·위치·
++질문 계약·면접관 역할·조회 상태를 `judge-context.v1` whitelist와 64KiB 상한으로 함께 전달한다.
++control의 정답 종류·검수 메타데이터는 숨기고, 없는 원문은 추정하지 않는다.
++`--rejudge-results <기존 결과>`는 사례·기대값·출력·binding 지문이 맞는 저장 출력만 새 Judge로
++재판정한다. 서비스 모델을 다시 실행하지 않으며 원래 실패와 출력은 보존한다.
++실행 모드·모델·입출력 지문·예산 소진·미실행 상태를 함께 확인하며 release gate의 미확정을 임의로 승인하지 않는다.
+ 
+ 같은 원본에서 나온 사례는 같은 source group에 둔다. 개발용과 최종검증용(holdout)은 서로 다른 source
+ group을 써야 한다. holdout 사례가 구현이나 정책 변경에 쓰였다면 회귀검사 자료가 되며 사용 이력을
