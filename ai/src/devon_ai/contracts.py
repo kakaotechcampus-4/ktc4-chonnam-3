@@ -1492,7 +1492,6 @@ def validate_score_judgments(
     if not turns:
         raise ContractError("semantic", "turns")
     _unique(tuple(turn.turn_id for turn in turns), "turn_id")
-    expected = {(t.turn_id, key) for t in turns for key in SCORE_CANDIDATE_KEYS[t.persona]}
     pairs = tuple((item.turn_id, item.key) for item in candidate.judgments)
     _unique(pairs, "judgment")
     if set(pairs) != expected:
