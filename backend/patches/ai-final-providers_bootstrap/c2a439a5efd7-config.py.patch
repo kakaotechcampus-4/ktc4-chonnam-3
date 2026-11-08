@@ -238,3 +238,89 @@ diff --git a/backend/app/core/config.py b/backend/app/core/config.py
      def _empty_stt_value_is_unset(cls, value: object) -> object:
 @@ -325,11 +449,83 @@
  
+     def require_stt(self) -> STTSettings:
+         """캐시된 설정만 검증하며 주소·키·모델이 준비되지 않으면 실패한다."""
+-        return STTSettings.model_validate(self.model_dump(include=set(STTSettings.model_fields)))
+-
+-    def call_limits(self) -> CallLimits:
++        values = self.model_dump(include=set(STTSettings.model_fields))
++        if self.stt_base_url is None and self.whisper_large_v3_proxy_url is not None:
++            values["stt_base_url"] = self.whisper_large_v3_proxy_url
++            if self.stt_api_key is None:
++                # 공통 키는 MLAPI 호환 주소에만 적용하고 명시한 별도 주소에는 전달하지 않는다.
++                values["stt_api_key"] = self.proxy_token
++        return STTSettings.model_validate(values)
++
++    @field_validator("tts_voice_map", mode="before")
++    @classmethod
++    def _parse_voice_map(cls, value: object) -> object:
++        if isinstance(value, str):
++            if not value.strip():
++                return {}
++            try:
++                return json.loads(value)
++            except ValueError:
++                raise ValueError("TTS voice map must be a JSON object") from None
++        return value
++
++    def require_tavily(self) -> "TavilySettings":
++        from app.integrations.search.tavily import TavilySettings
++
++        if self.tavily_api_key is None or not self.tavily_api_key.get_secret_value().strip():
++            raise ValueError("Tavily credentials are not configured")
++        return TavilySettings(
++            api_key=self.tavily_api_key,
++            timeout_seconds=self.tavily_timeout_seconds,
++            max_response_bytes=self.tavily_max_response_bytes,
++            max_content_chars=self.tavily_max_content_chars,
++            max_results=self.tavily_max_results,
++        )
++
++    def require_vision(self) -> "EliceVisionSettings":
++        from app.integrations.vision.elice import EliceVisionSettings
++
++        base_url = self.vision_base_url or self.helpy_vision_document_proxy_url
++        api_key = self.vision_api_key
++        if api_key is None and not self.vision_base_url and self.helpy_vision_document_proxy_url:
++            # 공통 토큰을 임의의 명시 엔드포인트로 보내지 않고 MLAPI 호환 경로에만 적용한다.
++            api_key = self.proxy_token
++        if not base_url or api_key is None:
++            raise ValueError("Vision endpoint and credentials are not configured")
++        return EliceVisionSettings(
++            base_url=base_url,
++            api_key=api_key,
++            model=self.vision_model,
++            timeout_seconds=self.vision_timeout_seconds,
++            max_file_bytes=self.vision_max_file_bytes,
++            max_response_bytes=self.vision_max_response_bytes,
++            max_polls=self.vision_max_polls,
++            poll_interval_seconds=self.vision_poll_interval_seconds,
++            job_path_template=self.vision_job_path_template,
++        )
++
++    def require_tts(self) -> "TTSSettings":
++        from app.integrations.tts.google import TTSSettings
++
++        if not self.tts_provider:
++            raise ValueError("TTS provider is not configured")
++        return TTSSettings(
++            provider=self.tts_provider,
++            voice_map=self.tts_voice_map,
++            api_key=self.tts_api_key,
++            access_token=self.tts_access_token,
++            language_code=self.tts_language_code,
++            timeout_seconds=self.tts_timeout_seconds,
++            max_text_bytes=self.tts_max_text_bytes,
++            max_audio_bytes=self.tts_max_audio_bytes,
++            cache_ttl_seconds=self.tts_cache_ttl_seconds,
++            monthly_character_limit=self.tts_monthly_character_limit,
++            budget_project=self.tts_budget_project,
++        )
++
++    def call_limits(self, task_name: str | None = None) -> CallLimits:
+         """LLM 설정을 먼저 검증한 뒤 AI 호출에 전달할 상한을 만든다."""
+-        return self.require_llm().call_limits()
++        return self.require_llm().call_limits(task_name)
+ 
+     @field_validator("persona_turn_quota", mode="before")
+     @classmethod
