@@ -1,0 +1,31 @@
+diff --git a/backend/tests/features/test_event_wiring_candidates.py b/backend/tests/features/test_event_wiring_candidates.py
+--- a/backend/tests/features/test_event_wiring_candidates.py
++++ b/backend/tests/features/test_event_wiring_candidates.py
+@@ -1,4 +1,4 @@
+-"""repo_recommended 이벤트 연결. task-17"""
++"""후보 준비와 추천 확정 이벤트를 구분한다. task-17"""
+ 
+ from app.features.analysis.candidates import prepare_candidates
+ from tests.event_helpers import broken_events as broken_events
+@@ -6,7 +6,7 @@
+ from tests.features.interview.factories import make_repo, make_run, make_user
+ 
+ 
+-async def test_repo_recommended_recorded_once_per_run(db):
++async def test_candidate_preparation_does_not_publish_a_recommendation(db):
+     user = await make_user(db)
+     run = await make_run(db, user, status="running")
+     await make_repo(db, run, in_run=False)
+@@ -15,10 +15,10 @@
+     await prepare_candidates(db, run.id, min_size_kb=0)
+     await db.commit()
+ 
+-    assert await names(db) == ["repo_recommended"]
++    assert await names(db) == []
+ 
+ 
+-async def test_repo_recommended_failure_does_not_block_candidate_save(db, broken_events):
++async def test_candidate_save_does_not_depend_on_event_storage(db, broken_events):
+     user = await make_user(db)
+     run = await make_run(db, user, status="running")
+     await make_repo(db, run, in_run=False)
