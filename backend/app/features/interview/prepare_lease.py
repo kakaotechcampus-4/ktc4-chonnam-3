@@ -14,8 +14,7 @@ from app.db.models import InterviewSession
 STEPS = ("analyze_repo", "build_persona", "set_criteria", "compose_question")
 LEASE_SECONDS = 90
 HEARTBEAT_SECONDS = 20
-JOB_TIMEOUT_SECONDS = 1800
-PREPARATION_DEADLINE_SECONDS = JOB_TIMEOUT_SECONDS - 30
+JOB_TIMEOUT_SECONDS = 600
 CLAIM_KEYS = {"prepare_job_id", "prepare_lease_expires_at", "prepare_director_call_id"}
 logger = get_logger(__name__)
 
@@ -134,25 +133,7 @@ def heartbeat(
     return asyncio.create_task(renew())
 
 
-def validate_timeout(
-    source_seconds: float,
-    llm_seconds: float,
-    *,
-    deep_seconds: float | None = None,
-    claim_seconds: float | None = None,
-    document_seconds: float | None = None,
-) -> None:
+def validate_timeout(source_seconds: float, llm_seconds: float) -> None:
     # primary 두 개의 수집과 L2, 생성·검토에 여유 30초를 남긴다.
-    # 두 문서의 추출·재시도 대기 6T, 두 레포 선택·분석·재시도 대기 6T,
-    # Claim 대조·대기 3T와 Director 생성·독립 검토 2T를 포함한다.
-    # 전체 deadline이 별도로 DB 대기·취소 정리까지 포함해 worker보다 먼저 중단한다.
-    planned = (
-        2 * source_seconds
-        + 6 * (document_seconds if document_seconds is not None else llm_seconds)
-        + 6 * (deep_seconds if deep_seconds is not None else llm_seconds)
-        + 3 * (claim_seconds if claim_seconds is not None else llm_seconds)
-        + 2 * llm_seconds
-        + 30
-    )
-    if planned > PREPARATION_DEADLINE_SECONDS:
+    if 2 * source_seconds + 4 * llm_seconds + 30 > JOB_TIMEOUT_SECONDS:
         raise PreparationTimeoutError("Preparation timeouts exceed the worker time budget")
