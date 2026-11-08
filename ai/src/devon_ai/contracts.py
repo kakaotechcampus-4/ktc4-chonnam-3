@@ -1218,6 +1218,16 @@ class SourceDocument(_Contract):
     def __post_init__(self) -> None:
         super().__post_init__()
         _repository_path(self.path)
+        _positive_int(self.start_line, "source line range")
+        if self.end_line is not None:
+            _positive_int(self.end_line, "source line range")
+            if (
+                self.kind != "file"
+                or self.end_line != self.start_line + len(self.content.splitlines()) - 1
+            ):
+                raise ContractError("semantic", "source line range")
+        elif self.start_line != 1:
+            raise ContractError("semantic", "source line range")
 
 
 @dataclass(frozen=True)
