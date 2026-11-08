@@ -378,37 +378,6 @@ async def generate_report(
             if outcome in {"created", "revised"}:
                 from app.features.profile.refresh_outbox import ensure_request
 
-    raw = await generate(
-        payload, prompts=prompts, limits=llm.call_limits(), model_call_factory=model_call_factory
-    )
-    draft = validate_draft(raw)
-    rows = _score_rows(draft, turn_ids)
-
-    async with sessions.begin() as db:
-        saved = await queries.insert_report(
-            db,
-            interview_id=interview_id,
-            values={
-                "headline": draft.headline,
-                "summary": draft.summary,
-                "total_score": draft.total_score,
-                "feedback_json": [
-                    {
-                        "persona": f.persona,
-                        "tags": list(f.tags),
-                        "strengths": list(f.strengths),
-                        "improvements": list(f.improvements),
-                    }
-                    for f in draft.feedbacks
-                ],
-                "coverage_json": coverage,
-                "model": prompts[REPORT_PROMPT_TASKS[0]].model,
-                "prompt_version": "+".join(prompts[name].version for name in REPORT_PROMPT_TASKS),
-            },
-            scores=rows,
-            generated_at=datetime.now(UTC),
-        )
-    return "created" if saved else "exists"
 
 
 def _build_payload(
