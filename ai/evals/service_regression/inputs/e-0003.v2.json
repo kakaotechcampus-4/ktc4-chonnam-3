@@ -1,0 +1,143 @@
+{
+  "case_id": "e-0003",
+  "version": 2,
+  "control": {
+    "kind": "evidence",
+    "split": "dev",
+    "source_group_id": "sg-r2",
+    "synthetic": true
+  },
+  "payload": {
+    "service_task": "answer_analysis",
+    "service_input": {
+      "context": {
+        "interview_id": "e-0003",
+        "current_turn_id": "e-0003-answer",
+        "turn_no": 2,
+        "total_turns": 9,
+        "persona_counts": [],
+        "allowed_personas": [
+          "tech_lead"
+        ],
+        "jd_requirements": [],
+        "repositories": [
+          {
+            "repository_id": "synthetic-repo-sg-r2",
+            "git_ref": "245a28f1ef1eba5dd089952940d5a3e818ce457a",
+            "primary": true,
+            "analysis_refs": [],
+            "limitations": [
+              "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+              "제공된 원문 구간 밖의 구현은 확인하지 않았다."
+            ]
+          }
+        ],
+        "history": [],
+        "current_question_contract": {
+          "purpose": "updateTask()가 실패를 조용히 무시해서 운영 중 문제를 일으키나요? 확인한 자료만으로 답하세요.",
+          "required_points": [
+            {
+              "key": "verified_scope",
+              "description": "제공 원문에서 확인되는 사실과 미확인을 구분한다."
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "m1"
+            }
+          ],
+          "evaluation_scope": "updateTask()가 실패를 조용히 무시해서 운영 중 문제를 일으키나요? 확인한 자료만으로 답하세요.",
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ]
+        },
+        "evidence": [
+          {
+            "evidence_id": "m1",
+            "repository_id": "synthetic-repo-sg-r2",
+            "git_ref": "245a28f1ef1eba5dd089952940d5a3e818ce457a",
+            "source_kind": "code",
+            "path": "src/api/task/taskApi.ts",
+            "metadata_key": null,
+            "content": "export const createTask = async (task: NewTask) => {\n  const { error } = await db.from(\"tasks\").insert(task);\n  if (error) return error;\n};\n\nexport const updateTask = async (id: string, patch: TaskPatch) => {\n  const { error } = await db.from(\"tasks\").update(patch).eq(\"id\", id);\n};",
+            "tool_name": null,
+            "start_line": 21,
+            "end_line": 28
+          }
+        ],
+        "domain_frames": [
+          {
+            "id": "synthetic-domain-frame",
+            "category": "etc",
+            "version": "v2",
+            "text": "가정한 서비스에서 접근 권한·보존 기간·장애 영향을 어떻게 확인할지 묻는다."
+          }
+        ],
+        "limits": {
+          "remaining_calls": 2,
+          "remaining_replans": 0,
+          "policy_version": "explicit-synthetic-v2"
+        },
+        "evaluation_targets": [
+          {
+            "persona": "tech_lead",
+            "keys": [
+              "project_understanding",
+              "communication"
+            ]
+          }
+        ],
+        "supplemental_sources": [],
+        "external_searches": [],
+        "supplemental_limitations": [
+          "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+          "제공된 원문 구간 밖의 구현은 확인하지 않았다."
+        ]
+      },
+      "question": {
+        "persona": "tech_lead",
+        "text": "updateTask()가 실패를 조용히 무시해서 운영 중 문제를 일으키나요? 확인한 자료만으로 답하세요.",
+        "topic_code": "synthetic-topic",
+        "question_contract": {
+          "purpose": "updateTask()가 실패를 조용히 무시해서 운영 중 문제를 일으키나요? 확인한 자료만으로 답하세요.",
+          "required_points": [
+            {
+              "key": "verified_scope",
+              "description": "제공 원문에서 확인되는 사실과 미확인을 구분한다."
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "m1"
+            }
+          ],
+          "evaluation_scope": "updateTask()가 실패를 조용히 무시해서 운영 중 문제를 일으키나요? 확인한 자료만으로 답하세요.",
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "m1"
+        ],
+        "jd_requirement_ids": [],
+        "question_type": "main",
+        "parent_turn_id": null
+      },
+      "turn_id": "e-0003-answer",
+      "answer_text": "이 함수 때문에 실제 운영 장애가 발생했습니다.",
+      "allowed_locations": [
+        [
+          "synthetic-repo-sg-r2",
+          "245a28f1ef1eba5dd089952940d5a3e818ce457a",
+          "src/api/task/taskApi.ts"
+        ]
+      ]
+    }
+  }
+}
