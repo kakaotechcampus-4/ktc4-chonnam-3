@@ -37,6 +37,40 @@ def test_partial_answer_returns_checked_analysis_scoped_to_the_question(kit, run
     assert request.max_attempts == 2
 
 
+def test_same_registered_evidence_may_be_returned_by_a_tool(kit, run):
+    evidence = c.Evidence("ev-1", "repo-1", kit.REF, "file", "a.py", None, "x", "grep")
+    context = kit.make_context(evidence=(evidence,))
+    tool = c.ToolResult("found", (evidence,), ("a.py",), (), None)
+    provider = kit.Provider(kit.analysis_output())
+    assert run(provider, context=context, tool_results=(tool,)).succeeded
+
+
+def test_same_evidence_id_with_changed_content_is_rejected(kit, run):
+    evidence = c.Evidence("ev-1", "repo-1", kit.REF, "file", "a.py", None, "x", "grep")
+    context = kit.make_context(evidence=(evidence,))
+    tool = c.ToolResult("found", (replace(evidence, content="changed"),), ("a.py",), (), None)
+    provider = kit.Provider(kit.analysis_output())
+    assert (
+        run(provider, context=context, tool_results=(tool,)).failure.error_code
+        == "answer_analysis_input_invalid"
+    )
+    assert provider.requests == []
+
+
+def test_t3_receives_source_limitations_and_external_search_status(kit, run):
+    status = c.ExternalSearchStatus(
+        "tool_error", (), ("official domains",), ("unavailable",), "search_failed"
+    )
+    context = kit.make_context(
+        external_searches=(status,), supplemental_limitations=("document_unavailable",)
+    )
+    provider = kit.Provider(kit.analysis_output())
+    run(provider, context=context)
+    payload = provider.requests[0].payload
+    assert payload["external_searches"] == [asdict(status)]
+    assert payload["supplemental_limitations"] == ["document_unavailable"]
+
+
 def test_request_carries_the_question_scope_and_answer_but_no_persona_proxy(kit, run):
     provider = kit.Provider(kit.analysis_output())
     run(provider)
