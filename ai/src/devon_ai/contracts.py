@@ -1624,6 +1624,26 @@ def validate_report_input(report_input: ReportInput) -> ReportInput:
     _convert(ReportInput, report_input, "report input", wire=False)
     if not report_input.turns:
         raise ContractError("semantic", "turns")
+    validate_supplemental_input(
+        report_input.supplemental_sources,
+        contracts=tuple(turn.question_contract for turn in report_input.turns),
+        limitations=report_input.limitations,
+    )
+    validate_jd_source_notes(
+        report_input.source_notes,
+        requirement_ids=frozenset(
+            identifier
+            for turn in report_input.turns
+            for identifier in (
+                *turn.jd_requirement_ids,
+                *(
+                    ref.id
+                    for ref in turn.question_contract.basis_refs
+                    if ref.kind == "jd_requirement"
+                ),
+            )
+        ),
+    )
     ids = tuple(turn.turn_id for turn in report_input.turns)
     _unique(ids, "turn_id")
     for index, turn in enumerate(report_input.turns):
