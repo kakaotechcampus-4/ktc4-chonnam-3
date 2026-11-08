@@ -1,12 +1,15 @@
 """Wanted 수집 결과를 재사용하거나 새 자료로 저장한다. run·큐 실행은 task-11 책임이다."""
 
-from dataclasses import asdict, dataclass
+import json
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.config import Settings
 from app.db.models.posting import JdRequirement, JobPosting
+from app.features.analysis.image_jd import extend_image_drafts
 from app.features.analysis.posting_queries import (
     get_current_successful_posting,
     get_posting_requirements,
@@ -41,15 +44,50 @@ def _fresh(posting: JobPosting | None, now: datetime, ttl: timedelta) -> bool:
 
 def _content(snapshot: dict[str, object]) -> dict[str, object]:
     # 원문 그룹·표시 순서를 그대로 비교한다. 실제 수집 URL 표기만 내용 비교에서 제외한다.
-    return {key: value for key, value in snapshot.items() if key != "fetch_url"}
+    content = {
+        key: value
+        for key, value in snapshot.items()
+        if key not in {"fetch_url", "_domain_classification", "_image_extraction"}
+    }
+    metadata = content.get("source_metadata")
+    if isinstance(metadata, dict):
+        content["source_metadata"] = {
+            key: value
+            for key, value in metadata.items()
+            if key not in {"image_processing", "image_extraction"}
+        }
+    return content
+
+
+def _snapshot_content(content: PostingContent) -> dict[str, object]:
+    snapshot = asdict(content)
+    extraction = content.source_metadata.get("image_extraction")
+    if extraction is not None:
+        snapshot["_image_extraction"] = extraction
+    return snapshot
 
 
 def _validate_content(content: PostingContent) -> None:
     # JSONB뿐 아니라 TEXT·배열·요구사항에도 같은 원문이 저장되므로 모든 문자열을 검사한다.
-    for value in asdict(content).values():
-        values = value if isinstance(value, list) else [value]
-        if any(isinstance(item, str) and "\x00" in item for item in values):
-            raise PostingInvalidResponseError("공고 원문에 저장할 수 없는 NUL 문자가 있음")
+    def validate(value: object) -> None:
+        if isinstance(value, str):
+            if "\x00" in value:
+                raise ValueError
+            value.encode("utf-8")
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                validate(key)
+                validate(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                validate(item)
+
+    try:
+        data = asdict(content)
+        validate(data)
+        json.dumps(data, allow_nan=False)
+    except (ValueError, UnicodeError, RecursionError):
+        raise PostingInvalidResponseError("공고 원문에 저장할 수 없는 값이 있음") from None
 
 
 def _posting(
@@ -71,7 +109,7 @@ def _posting(
         domain_category=None,
         skill_tags=list(content.skill_tags) if content else [],
         # 전체 HTTP JSON이 아니라 어댑터가 확보한 원문 그룹과 출처의 스냅샷이다.
-        raw_payload=asdict(content) if content else None,
+        raw_payload=_snapshot_content(content) if content else None,
         parse_status="failed" if error_code else "succeeded",
         parse_error_code=error_code,
         fetched_at=fetched_at if content else None,
@@ -174,7 +212,11 @@ async def fetch_posting(
 
 
 async def complete_posting(
-    session_factory: async_sessionmaker[AsyncSession], prepared: PreparedPosting
+    session_factory: async_sessionmaker[AsyncSession],
+    prepared: PreparedPosting,
+    *,
+    settings: Settings | None = None,
+    http_client: httpx.AsyncClient | None = None,
 ) -> JobPosting:
     """수집 원문을 추출·저장한다. 기존 ID 참조와 URL 잠금·재사용 정책을 유지한다."""
     if prepared.cached is not None:
@@ -183,14 +225,28 @@ async def complete_posting(
     if content is None:
         raise ValueError("공고 원문 또는 캐시가 필요합니다.")
     try:
-        drafts = build_requirement_drafts(content)
+        drafts = (
+            build_requirement_drafts(content)
+            if content.is_structured or not content.image_urls
+            else []
+        )
+        source_refs: list[list[dict[str, object]]] = [[] for _ in drafts]
+        if content.image_urls:
+            image = await extend_image_drafts(
+                session_factory, content, drafts, settings=settings, http_client=http_client
+            )
+            content, drafts, source_refs = image.content, image.drafts, image.source_refs
+            prepared = replace(prepared, content=content)
+            _validate_content(content)
+        if not drafts:
+            raise JdExtractionError("jd_extraction_failed", "검증한 요구사항이 없음")
     except JdExtractionError as error:
         await _save_posting_failure(session_factory, prepared, error.code)
         raise
     normalized_url = prepared.normalized_url
     checked_at = prepared.checked_at
     ttl = timedelta(days=prepared.reuse_ttl_days)
-    snapshot = asdict(content)
+    snapshot = _snapshot_content(content)
     async with session_factory.begin() as db:
         await lock_posting_url(db, normalized_url)
         current = await get_current_successful_posting(db, normalized_url)
@@ -210,7 +266,12 @@ async def complete_posting(
             result = _posting(prepared.posting_url, normalized_url, content, checked_at)
             db.add(result)
             await db.flush()
-            db.add_all(JdRequirement(job_posting_id=result.id, **asdict(draft)) for draft in drafts)
+            db.add_all(
+                JdRequirement(
+                    job_posting_id=result.id, **asdict(draft), source_refs=source_refs[index]
+                )
+                for index, draft in enumerate(drafts)
+            )
         await db.flush()
         await db.refresh(result)
         # expire_on_commit=True인 호출자도 반환된 자료를 안전하게 읽을 수 있게 한다.
@@ -225,9 +286,10 @@ async def get_or_fetch_posting(
     client: httpx.AsyncClient | None = None,
     now: datetime | None = None,
     reuse_ttl_days: int = 7,
+    settings: Settings | None = None,
 ) -> JobPosting:
     """기존 호출자를 위해 수집과 추출을 순서대로 실행한다."""
     prepared = await fetch_posting(
         session_factory, posting_url, client=client, now=now, reuse_ttl_days=reuse_ttl_days
     )
-    return await complete_posting(session_factory, prepared)
+    return await complete_posting(session_factory, prepared, settings=settings, http_client=client)
