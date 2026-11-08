@@ -1329,7 +1329,6 @@ def parse_deep_analysis(
         else None
         for item in raw_areas
     ]
-    source_by_path = {item.path: item for item in source.sources}
     area_keys = {item.name for item in fields(NotableArea)}
     areas: list[NotableArea] = []
     rejected: list[AreaFailure] = []
