@@ -1057,6 +1057,7 @@ def validate_shallow_batch(
             reason = "head_sha mismatch"
         elif (
             candidate is not None
+            and (source.collection_errors or source.readme_truncated or source.source_limitations)
             and not candidate.limitations
         ):
             reason = "collection limitations missing"
