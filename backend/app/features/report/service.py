@@ -271,32 +271,6 @@ async def generate_report(
             if request is not None:
                 request.input_fingerprint, request.input_snapshot = fingerprint, snapshot
 
-    DB transaction 은 입력 수집과 저장에 각각 짧게만 쓰고 모델 호출 중에는 열어 두지 않는다.
-    실패는 예외로 전파하며 호출자(worker)가 실패 이력과 lock 해제를 맡는다.
-    """
-    async with sessions.begin() as db:
-        interview = await db.get(InterviewSession, interview_id)
-        if interview is None:
-            return "skipped"
-        if await queries.get_report(db, interview_id=interview_id) is not None:
-            return "exists"
-        if interview.status != "completed":
-            return "skipped"
-        answered = await queries.list_answered_turns(db, interview_id=interview_id)
-        if not answered:
-            return "skipped"
-        turns = await queries.list_report_turns(db, interview_id=interview_id)
-        posting = await db.get(JobPosting, interview.job_posting_id)
-        requirements = await queries.list_requirements(db, posting_id=interview.job_posting_id)
-        evidences = await queries.list_turn_evidences(db, interview_id=interview_id)
-        prompts = {name: await load_active_prompt(db, name) for name in REPORT_PROMPT_TASKS}
-        rubrics = await queries.list_active_rubrics(db)
-        if set(rubrics) != set(SCORE_KEYS):
-            # 검수 전(비활성) 기준이나 일부 key 만으로 채점하지 않는다. 활성화는 평가 담당 몫이다.
-            raise ReportRubricUnavailableError(",".join(sorted(rubrics)))
-        payload = _build_payload(posting, turns, evidences, requirements, rubrics)
-        coverage = _coverage(requirements, answered)
-        turn_ids = {t.turn_no: t.id for t in turns}
 
     generate = generator or resolve_generator()
 
