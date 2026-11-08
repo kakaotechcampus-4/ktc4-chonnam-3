@@ -1434,6 +1434,26 @@ class ScoreTurn(_Contract):
     question: str
     answer: str | None
     question_contract: QuestionContract
+    jd_requirement_ids: tuple[str, ...] = ()
+    jd_requirements: tuple[JDRequirement, ...] = ()
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _references(
+            self.jd_requirement_ids,
+            frozenset(item.id for item in self.jd_requirements),
+            "score JD references",
+        )
+        if (
+            "company_job_fit" in self.question_contract.evaluation_keys
+            and not self.jd_requirement_ids
+        ):
+            raise ContractError("semantic", "job fit JD references")
+
+
+def score_candidate_keys(turn: ScoreTurn) -> tuple[ScoreKeyId, ...]:
+    """선언된 질문 범위만 평가한다. 구형 저장 계약은 기존 후보 정책으로 읽는다."""
+    return turn.question_contract.evaluation_keys or SCORE_CANDIDATE_KEYS[turn.persona]
 
 
 @dataclass(frozen=True)
