@@ -7,7 +7,7 @@ DB 저장·캐시 조회는 service(pipeline deep_analysis)가 소유한다. 이
 
 import uuid
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import asdict, replace
 from functools import partial
 
 import httpx
@@ -57,13 +57,29 @@ async def analyze_repository(
             request = replace(
                 request, payload={**request.payload, "source_limitations": list(source_limitations)}
             )
-        return await model_call(request, validator)
+
+        def validate(raw: object) -> c.ContractChecked[c.DeepAnalysisResult]:
+            # 수집기가 확인한 누락은 모델이 되풀이하지 않아도 저장 결과에서 잃지 않는다.
+            if (
+                source_limitations
+                and isinstance(raw, dict)
+                and isinstance(raw.get("limitations"), list)
+            ):
+                current = raw["limitations"]
+                if all(isinstance(value, str) for value in current):
+                    raw = {
+                        **raw,
+                        "limitations": list(dict.fromkeys([*current, *source_limitations])),
+                    }
+            return validator(raw)
+
+        return await model_call(request, validate)
 
     return await analyze_deep(
         item,
         snapshot_head_sha=snapshot_head_sha,
         prompt=prompt,
-        limits=settings.call_limits(),
+        limits=settings.call_limits(prompt.task_name),
         model_call=with_source_limits,
     )
 
@@ -101,6 +117,15 @@ def to_repo_analysis_row(
             "result": None,
         }
     data = c.to_data(result.data)
+    # 해석 결과와 별도로 실제 읽은 원문 범위·버전을 보존해 구간 캐시를 재검증할 수 있게 한다.
+    data = {
+        **data,
+        "_source_snapshot": {
+            "head_sha": item.head_sha,
+            "sources": [asdict(source) for source in item.sources],
+            "reader_version": "bounded-text-v2",
+        },
+    }
     analysis = result.data.data.analysis
     if analysis is None:
         # 모든 area가 거절되면 semantic 실패다. 거절 사유는 result에 보존한다.

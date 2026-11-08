@@ -52,7 +52,7 @@ async def analyze_answer(
         turn_id=turn_id,
         answer_text=answer_text,
         prompt=prompt,
-        limits=settings.call_limits(),
+        limits=settings.call_limits(prompt.task_name),
         model_call=model_call,
         tool_results=tool_results,
         allowed_locations=allowed_locations,
