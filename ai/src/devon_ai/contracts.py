@@ -624,6 +624,9 @@ def validate_analysis(
             raise ContractError("semantic", "claim evidence required")
         if claim.status == "unverified" and not claim.limitations:
             raise ContractError("semantic", "claim limitations")
+    if candidate.needs_verification != bool(
+        candidate.verification_requests or candidate.external_queries
+    ):
         raise ContractError("semantic", "needs_verification")
     _requests(candidate.verification_requests, allowed_locations)
     for request in candidate.verification_requests:
