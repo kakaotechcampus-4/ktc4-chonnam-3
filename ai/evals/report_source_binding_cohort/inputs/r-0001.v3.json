@@ -1,0 +1,240 @@
+{
+  "case_id": "r-0001",
+  "version": 3,
+  "control": {
+    "kind": "report",
+    "split": "dev",
+    "source_group_id": "sg-r1",
+    "synthetic": true
+  },
+  "payload": {
+    "service_task": "report",
+    "service_input": {
+      "turns": [
+        {
+          "turn_no": 1,
+          "persona": "hr_manager",
+          "question": "간단히 자기소개와 이 프로젝트에서 맡은 역할을 말씀해 주세요.",
+          "answer": "백엔드를 맡았고 로그인과 토큰 재발급을 담당했습니다.",
+          "question_contract": {
+            "purpose": "지원자가 맡은 역할과 담당 범위 확인",
+            "required_points": [
+              {
+                "key": "role",
+                "description": "맡은 역할"
+              },
+              {
+                "key": "own_work",
+                "description": "직접 한 일의 범위"
+              }
+            ],
+            "evaluation_scope": "본인 역할과 기여 범위의 설명을 평가한다. 기술 선택 이유나 공고 요구사항 연결은 평가하지 않는다.",
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_keys": [
+              "communication",
+              "contribution_clarity"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 2,
+          "persona": "tech_lead",
+          "question": "refresh token 저장소로 Redis를 선택하신 이유가 있나요?",
+          "answer": "토큰은 만료가 있는 단순 key-value라 TTL이 자연스러운 Redis를 골랐습니다. RDB에 두는 방법도 있었지만 만료된 토큰을 주기적으로 지우는 배치가 따로 필요해서 Redis가 더 단순하다고 판단했습니다.",
+          "question_contract": {
+            "purpose": "refresh token 저장소 선택의 근거 확인",
+            "required_points": [
+              {
+                "key": "choice_reason",
+                "description": "선택 이유"
+              },
+              {
+                "key": "alternative",
+                "description": "고려한 대안"
+              }
+            ],
+            "evaluation_scope": "기술 선택 이유와 대안 비교를 평가한다. 구현 세부와 성능 수치는 평가하지 않는다.",
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_keys": [
+              "communication",
+              "technical_reasoning"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": [
+            {
+              "id": "m1",
+              "repository_id": "synthetic-repo-sg-r1",
+              "git_ref": "70a6816bba2e328de436952d69d14395ba13d2e4",
+              "source_type": "code",
+              "path": "build.gradle",
+              "metadata_key": null,
+              "snippet": "dependencies {\n    implementation 'org.springframework.boot:spring-boot-starter-web'\n    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'\n    implementation 'org.springframework.boot:spring-boot-starter-data-redis'\n    runtimeOnly 'com.mysql:mysql-connector-j'\n}",
+              "tool_name": null,
+              "start_line": 38,
+              "end_line": 43,
+              "usage": "evaluation_basis"
+            }
+          ]
+        },
+        {
+          "turn_no": 3,
+          "persona": "tech_lead",
+          "question": "재발급 시 기존 토큰은 어떻게 처리하셨나요?",
+          "answer": "재발급과 동시에 기존 토큰 전체를 폐기하고, 폐기된 토큰으로 요청이 오면 거절합니다.",
+          "question_contract": {
+            "purpose": "재발급 시 토큰 처리 흐름 이해 확인",
+            "required_points": [
+              {
+                "key": "revoke_flow",
+                "description": "기존 토큰 폐기 방식"
+              },
+              {
+                "key": "reject_flow",
+                "description": "폐기 토큰 요청 처리"
+              }
+            ],
+            "evaluation_scope": "처리 흐름의 이해와 설명을 평가한다. 선택 이유는 평가하지 않는다.",
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_keys": [
+              "communication",
+              "project_understanding"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": [
+            {
+              "id": "m2",
+              "repository_id": "synthetic-repo-sg-r1",
+              "git_ref": "70a6816bba2e328de436952d69d14395ba13d2e4",
+              "source_type": "code",
+              "path": "src/main/java/app/auth/AuthService.java",
+              "metadata_key": null,
+              "snippet": "    // revokeAllByUserId() runs in REQUIRES_NEW, so the revocation is committed\n    // even if this transaction rolls back.\n    @Transactional\n    public TokenPair reissue(String refreshToken) {\n",
+              "tool_name": null,
+              "start_line": 128,
+              "end_line": 131,
+              "usage": "evaluation_basis"
+            }
+          ]
+        },
+        {
+          "turn_no": 4,
+          "persona": "domain_lead",
+          "question": "공고에 '개인정보 보호를 고려한 인증 설계 경험'이 요구사항으로 있습니다. 본인 경험과 어떻게 연결되나요?",
+          "answer": "토큰에는 사용자 번호만 담고 이메일 같은 개인정보는 넣지 않습니다. 요구하시는 인증 설계와 개인정보 최소화라는 점에서 맞닿아 있지만, 보안 감사를 받아 본 경험은 없다는 한계가 있습니다.",
+          "question_contract": {
+            "purpose": "공고의 인증 설계 요구사항과 본인 경험의 연결 확인",
+            "required_points": [
+              {
+                "key": "requirement",
+                "description": "요구사항에 대응하는 경험"
+              },
+              {
+                "key": "limit",
+                "description": "경험의 한계"
+              }
+            ],
+            "evaluation_scope": "공고 요구사항과 본인 경험의 연결을 평가한다. 구현 세부와 기술 선택 이유는 평가하지 않는다.",
+            "assumptions": [],
+            "basis_refs": [
+              {
+                "kind": "jd_requirement",
+                "id": "synthetic-jd-auth"
+              }
+            ],
+            "evaluation_keys": [
+              "communication",
+              "company_job_fit"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [
+            "synthetic-jd-auth"
+          ],
+          "evidences": []
+        },
+        {
+          "turn_no": 5,
+          "persona": "tech_lead",
+          "question": "토큰 폐기 도중 재발급이 롤백되면 어떻게 되나요?",
+          "answer": "폐기는 REQUIRES_NEW로 별도 트랜잭션에 두었습니다. 재발급이 실패해 롤백돼도 폐기는 유지되어야 탈취된 토큰이 다시 살아나지 않기 때문입니다. 대신 재발급이 실패하면 사용자가 다시 로그인해야 하는 불편은 감수했습니다.",
+          "question_contract": {
+            "purpose": "폐기와 재발급의 트랜잭션 분리 이유와 실패 영향 확인",
+            "required_points": [
+              {
+                "key": "tx_reason",
+                "description": "트랜잭션 분리 이유"
+              },
+              {
+                "key": "failure_effect",
+                "description": "롤백 시 영향"
+              }
+            ],
+            "evaluation_scope": "설계 근거와 실패 상황의 대응을 평가한다. 코드 작성자 확인은 평가하지 않는다.",
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_keys": [
+              "communication",
+              "technical_reasoning"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": [
+            {
+              "id": "m2",
+              "repository_id": "synthetic-repo-sg-r1",
+              "git_ref": "70a6816bba2e328de436952d69d14395ba13d2e4",
+              "source_type": "code",
+              "path": "src/main/java/app/auth/AuthService.java",
+              "metadata_key": null,
+              "snippet": "    // revokeAllByUserId() runs in REQUIRES_NEW, so the revocation is committed\n    // even if this transaction rolls back.\n    @Transactional\n    public TokenPair reissue(String refreshToken) {\n",
+              "tool_name": null,
+              "start_line": 128,
+              "end_line": 131,
+              "usage": "evaluation_basis"
+            }
+          ]
+        },
+        {
+          "turn_no": 6,
+          "persona": "tech_lead",
+          "question": "의존성 구성은 어떻게 하셨나요?",
+          "answer": "web, jpa, redis 스타터를 선언했고 redis는 토큰 저장에 씁니다.",
+          "question_contract": {
+            "purpose": "프로젝트 의존성 구성 이해 확인",
+            "required_points": [
+              {
+                "key": "dependencies",
+                "description": "선언한 의존성"
+              },
+              {
+                "key": "redis_use",
+                "description": "redis 사용 위치"
+              }
+            ],
+            "evaluation_scope": "프로젝트 구성의 이해를 평가한다. 선택 이유는 평가하지 않는다.",
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_keys": [
+              "communication",
+              "project_understanding"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
