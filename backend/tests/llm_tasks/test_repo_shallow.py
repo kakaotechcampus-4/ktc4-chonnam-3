@@ -82,6 +82,33 @@ def _failure(stage: str, reason: object) -> dict[str, object]:
     return {"_failure": {"stage": stage, "reason_summary": reason}}
 
 
+async def test_supporting_file_basis_keeps_actual_source_snapshot():
+    from dataclasses import replace
+
+    source = c.SourceDocument("nested/custom.cfg", "file", "cache = true\n", "entire file")
+    item = replace(_input(REPO_1), supporting_files=(source,), structure=("nested/custom.cfg",))
+    sent = []
+    output = _item(
+        REPO_1,
+        basis=[
+            {
+                "kind": "supporting_file",
+                "claim": "캐시 설정이 있음",
+                "source_path": source.path,
+            }
+        ],
+    )
+    async with httpx.AsyncClient(transport=_transport([_batch(output)], sent)) as http:
+        run = await repo_shallow.analyze_repositories(
+            (item,), prompt=PROMPT, settings=SETTINGS, http_client=http
+        )
+    rows = repo_shallow.to_repo_analysis_rows(run, (item,), PROMPT)
+    stored = rows[0]["result"]
+    assert stored["basis"][0]["source_path"] == source.path
+    assert stored["_source_snapshot"]["supporting_files"][0]["content"] == source.content
+    assert stored["_source_snapshot"]["head_sha"] == SHA
+
+
 def _transport(replies: list[object], sent: list[httpx.Request]) -> httpx.MockTransport:
     pending = iter(replies)
 
