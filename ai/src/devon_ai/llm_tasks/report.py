@@ -186,8 +186,11 @@ def _requirements(raw: object) -> dict[str, dict[str, object]]:
     found: dict[str, dict[str, object]] = {}
     for item in _items(raw, "requirements"):
         entry = _mapping(item, "requirement")
-        found[str(entry.get("id"))] = {
-            "id": entry.get("id"),
+        key = entry.get("id")
+        if type(key) is not str or key in found:  # 같은 ID의 다른 본문을 조용히 고르지 않는다.
+            raise c.ContractError("semantic", "requirements")
+        found[key] = {
+            "id": key,
             "category": entry.get("category"),
             "text": entry.get("text"),
         }
@@ -197,9 +200,11 @@ def _requirements(raw: object) -> dict[str, dict[str, object]]:
 def _linked(raw: object, requirements: dict[str, dict[str, object]]) -> list[dict[str, object]]:
     """턴이 연결한 요구사항 ID를 본문으로 옮긴다. payload에 없는 ID는 보정하지 않고 거절한다."""
     ids = _items(raw, "jd_requirement_ids")
-    if len(set(map(str, ids))) != len(ids) or any(str(i) not in requirements for i in ids):
+    if len(set(map(str, ids))) != len(ids) or any(
+        type(i) is not str or i not in requirements for i in ids
+    ):
         raise c.ContractError("semantic", "jd_requirement_ids")
-    return [requirements[str(i)] for i in ids]
+    return [requirements[cast(str, i)] for i in ids]
 
 
 def _build_inputs(

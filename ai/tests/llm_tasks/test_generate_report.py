@@ -353,7 +353,9 @@ def test_linked_requirement_ids_are_resolved_to_text_for_the_score_request(run):
     ]
 
 
-@pytest.mark.parametrize("linked", [["jd-missing"], ["jd-1", "jd-1"]], ids=["unknown", "duplicate"])
+@pytest.mark.parametrize(
+    "linked", [["jd-missing"], ["jd-1", "jd-1"], [1]], ids=["unknown", "duplicate", "non-str"]
+)
 def test_a_bad_requirement_reference_is_rejected_before_any_model_call(kit, linked):
     called = []
     with pytest.raises(c.ContractError) as error:
@@ -367,3 +369,16 @@ def test_a_bad_requirement_reference_is_rejected_before_any_model_call(kit, link
         )
     assert error.value.field == "jd_requirement_ids"
     assert called == []
+
+
+def test_duplicate_or_non_str_requirement_ids_are_rejected(kit):
+    for requirements in (
+        [
+            {"id": "jd-1", "category": "required", "text": "A"},
+            {"id": "jd-1", "category": "required", "text": "B"},
+        ],
+        [{"id": 1, "category": "required", "text": "A"}],
+    ):
+        with pytest.raises(c.ContractError) as error:
+            report._build_inputs(payload(requirements=requirements))
+        assert error.value.field == "requirements"
