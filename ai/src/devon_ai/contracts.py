@@ -350,6 +350,8 @@ class QuestionContract(_Contract):
     assumptions: tuple[str, ...]
     basis_refs: tuple[BasisRef, ...]
     evaluation_scope: str
+    # 빈 값은 과거 질문이다. 없던 평가 범위를 사후에 만들어 채우지 않는다.
+    evaluation_keys: "tuple[ScoreKeyId, ...]" = ()
 
     def __post_init__(self) -> None:
         super().__post_init__()
