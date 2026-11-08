@@ -2632,3 +2632,81 @@ r1~r8의 v2 입력에는 원래 전역 자료 m1/m2가 빠져 있었고,
 리포트 평탄화 후에는 원래 검증된 내부 참조도 Judge에 보이지 않았다.
 이 결과만으로 운영이 조회를 생략하거나 보고서 내부 참조가 없다고 결론내리지 않는다.
 
+### 보고서 자료 연결과 내부 관찰의 추가 보완
+
+기존 v1·v2 자료와 실제 실행·판정은 보존하고 별도
+[보고서 v3 코호트](../../ai/evals/report_source_binding_cohort/binding-manifest.json)를 구성했다.
+원래 m1/m2 원문과 명시 경로·줄 표기를 그대로 사용한다.
+새 연결은 가상 평가의 사용 가능 자료라는 전제이며 원래 질문 당시 사용 이력의 복원이 아니다.
+필요한 ref는 기존 합성 snapshot에 연결하고 실제 코드 버전을 증명한 것으로 취급하지 않는다.
+질문·답변·질문 계약·허용/금지 기준·control은 바꾸지 않고 검수는 `unreviewed`로 유지한다.
+
+평가 bridge는 실제 모델의 검증된 `ReportNarrative`를 같은 입력으로 다시 검증한 뒤
+`validated-report-claims.v1` artifact를 만든다. 문구·section·persona·claim_index·turn_refs·
+evidence_refs를 함께 보존하고 공개 `output_hash`와 별도의 `artifacts_hash`를 기록한다.
+공개 보고서·DB·서비스 런타임을 변경하거나 공개 문자열에서 참조를 만들어 붙이지 않는다.
+[artifact 검증](../../ai/evals/eval_artifacts.py)과 재판정은 형식·버전·해시 쌍·변조를 검사하고,
+원래 artifact가 없는 결과에는 숨은 근거를 만들어 채우지 않는다.
+
+이 관찰을 읽는 v3 Judge는 기존 기본 v2와 분리했다.
+`--judge-prompt ai/prompts/evaluation-judge-v3.md --judge-prompt-version evaluation-judge-v3`를 명시한다.
+내부에만 있는 항목이 공개 응답에 표시됐다고 간주하거나 공개 누락을 대신 충족할 수는 없다.
+
+[q7 v3 코호트](../../ai/evals/component_regression/binding-manifest.json)는
+`director_verification` 단계의 실제 `verification_decision`만 실행한다.
+요청·경로·SHA는 입력과 일치했고 model factory·HTTP·다음 Director는 모두 0회였다.
+이는 조회 판단 함수의 자동 검증이며 실제 원문 조회는 앞선 별도 실검증 결과를 참조한다.
+새 manifest의 출처 지문은 `utf8_lf`로 정규화하고 원본 raw 지문은 별도로 보존했다.
+Windows CRLF·Linux LF에서 같은 의미의 자료가 해시 차이만으로 실패하지 않는 회귀도 확인했다.
+
+추가 보완 후 AI 전체 782개, BE 평가 관련 42개가 통과했다.
+기존 전체 BE 2409개 이후의 평가 연결 변경에 대한 별도 영향 검사이며 두 수치를 합산하지 않는다.
+Ruff 전체·format 530파일·mypy app+scripts 228소스도 통과했고 검사 대상 713파일은 전후 같았다.
+원본 58개 자료, v2 코호트 66개 JSON과 BE app 212파일도 이전 동결본과 같았다.
+산출물은 `report-source-observation-verification-01/`과
+`followups-final-validation/backend-static-post-artifacts/`에 있다.
+
+### 최종 이미지와 임시 검증 프로세스
+
+추가 평가 코드와 v3 prompt를 포함한 runtime·평가 이미지를 새로 빌드했다.
+평가 이미지의 실제 실행 파일 7개 해시가 작업본과 같았고 키·사례·holdout 내장 파일은 없었다.
+네트워크 없이 기존 32개·새 보고서 8개·조회 결정 1개의 입력 계약이 모두 통과했다.
+그 실행에서는 서비스·Judge 예산을 생성하지 않았다. 실제 모델 실행과는 별도 결과다.
+산출물은 `followups-final-validation/images-artifacts-final/`에 있다.
+
+시험 로그인 세션을 폐기하고 임시 API 컨테이너·Vite를 종료했다.
+DB·Redis의 검증 이력과 TTS 예산은 보존했으며 5173·8000 포트는 해제됐다.
+이는 평상시 `.env`의 DB 적용이나 운영 배포를 완료한 상태가 아니다.
+정리 도우미의 인코딩·부분 정리 후 재실행 오류도 기록하고 마지막 정리 결과와 구분했다.
+산출물은 `runtime/cleanup/attempt-03/result.json`이다.
+
+### 자료·관찰 보완 후 실제 9개 검증의 확정 결과
+
+`source-binding-observation-live-01/`에서 기존 실행과 분리해 실제 sol로 검증했다.
+새 보고서 v3 8개와 조회 결정 q7 v3 1개이며 기존 공개 출력·기준을 고쳐 통과시키지 않았다.
+
+| 항목 | 실제 결과 |
+| --- | --- |
+| 입력·실행 | 9/9 통과. 조회 결정 1개는 실제 함수만 실행했고 model factory·HTTP·다음 Director는 0회였다. |
+| 보고서 형식 | 8/8 통과. 점수·서술 모델은 각각 8회, 총 16/20시도를 사용했다. |
+| 내부 근거 | 실제 검증된 모델 Narrative와 최종 artifact의 문구·구분·담당·순번·턴/Evidence 참조가 8/8 일치했다. 별도 artifact 해시·참조 그래프 대조도 통과했다. |
+| Judge 실행 | 명시한 v3 Judge 9/9 실행 성공, 9/16시도 사용. 재시도·실행 실패 0회다. |
+| 진단 판정 | accept 8·reject 1. 사람의 정답 승인이나 전체 서비스 품질 합격으로 승격하지 않는다. |
+| 보존 | 기존 자료·v2 결과·31개 재판정·제어 출력 교정과 새 실행 전후 소스 지문이 같다. |
+
+남은 reject는 `r-0008.v3`이다. m1/m2가 실제 모델 입력에 모두 있고,
+최종 Claim 24개도 검증된 모델 결과와 같지만 구조화된 evidence_refs에는 m2만 사용했다.
+Redis 보완 관찰은 실제 턴 2·6으로 연결했고 `build.gradle:38~43`은 한계 문장에만 언급했다.
+Judge는 해당 a3의 m1 근거 연결을 충족하지 못했다고 판정했다.
+이제 자료 누락·관찰 손실과 구분되는 특정 인용 품질 진단이며, 기준은 여전히 미검수다.
+사람 기여·성과를 확정하거나 환각이라고 단정하지 않았고 재실행·기준 완화로 결과를 바꾸지 않았다.
+
+이번 후속 구현과 기능·형식·참조·실행의 상태는 **자동 검증 완료**다.
+내용의 모든 품질 판정이 통과한 것은 아니며 사람의 rubric·평가셋 검수는 **사람 검수 대기**로 유지한다.
+운영 적용·게시·배포, 실제 공개 Wanted 이미지 공고, 물리 마이크의 전체 9턴,
+모든 언어·규모와 운영 동시성·SLO는 이번 완료 범위에서 확인하지 않았다.
+
+원본 모델 입력·결과·판정과 독립 대조는 `source-binding-observation-live-01/`의
+`result.json`, `summary.json`, `preservation.json`에 있다.
+겹치는 검사 수를 합산하지 않은 최종 색인은 `followups-final-validation/final-summary.json`이다.
+원본 worktree 371파일·patch·status는 그대로이며 공개 대상 1104파일에서 실제 키 값은 검출되지 않았다.
