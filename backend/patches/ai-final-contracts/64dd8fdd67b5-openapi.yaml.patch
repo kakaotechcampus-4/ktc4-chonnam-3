@@ -1,0 +1,211 @@
+diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.yaml
+--- a/spec/shared/contracts/openapi.yaml
++++ b/spec/shared/contracts/openapi.yaml
+@@ -115,6 +115,18 @@
+       description: >-
+         Called in the background as soon as a file is selected. The client must not
+         set Content-Type - the browser generates the multipart boundary.
++        docType identifies the selected document role and defaults to portfolio
++        for existing clients. The default upload limits are 20 MiB for portfolio
++        and 10 MiB for cover_letter. PDF, DOCX, TXT and MD have native extraction;
++        configured Vision may supplement scanned PDFs and layout, and is required
++        for PNG, JPG, JPEG, PPT and PPTX. An unavailable or incomplete extraction
++        never establishes that unread content is absent. Unsupported formats
++        return 415; extraction status distinguishes succeeded, partial and failed.
++      x-max-file-bytes-by-doc-type:
++        portfolio: 20971520
++        cover_letter: 10485760
++      x-native-file-extensions: [pdf, docx, txt, md]
++      x-vision-file-extensions: [png, jpg, jpeg, ppt, pptx]
+       requestBody:
+         required: true
+         content:
+@@ -126,7 +138,12 @@
+                 file:
+                   type: string
+                   format: binary
+-                  description: .pdf (text layer only), .docx, .txt or .md. Max 20MB (20971520 bytes).
++                  description: Document bytes; supported format and size depend on docType and configured extraction providers.
++                docType:
++                  type: string
++                  enum: [portfolio, cover_letter]
++                  default: portfolio
++                  description: Document role, preserved independently of its upload filename.
+       responses:
+         '200':
+           description: Preview result
+@@ -305,6 +322,47 @@
+           $ref: '#/components/responses/Error'
+         '404':
+           $ref: '#/components/responses/Error'
++  /interviews/{id}/turns/{turn}/question-audio:
++    get:
++      operationId: getInterviewQuestionAudio
++      summary: Play the saved question using its persona voice
++      description: >-
++        Authenticated access to a question owned by the current user. The WebSocket
++        question includes this same-origin URL when TTS is enabled. The server
++        reuses cached audio or synthesizes the saved question within the explicitly
++        initialized free character allowance. Missing configuration, budget,
++        synthesis or cache failures return not_ready; the client keeps the question
++        text visible. Audio failure never submits an answer or advances the turn.
++      parameters:
++        - $ref: '#/components/parameters/InterviewId'
++        - name: turn
++          in: path
++          required: true
++          schema:
++            type: integer
++            minimum: 1
++      responses:
++        '200':
++          description: MP3 question audio. Cache-Control is private, no-store.
++          content:
++            audio/mpeg:
++              schema:
++                type: string
++                format: binary
++        '401':
++          $ref: '#/components/responses/Error'
++        '404':
++          description: not_found when the interview or question is absent or belongs to another user.
++          content:
++            application/json:
++              schema:
++                $ref: '#/components/schemas/ApiError'
++        '409':
++          description: not_ready. Keep displaying the question text and allow text fallback.
++          content:
++            application/json:
++              schema:
++                $ref: '#/components/schemas/ApiError'
+   /interviews/{id}/prepare/retry:
+     post:
+       operationId: retryInterviewPrepare
+@@ -431,7 +489,9 @@
+       summary: Disagree with one persona's feedback
+       description: >-
+         The path parameter is interviewId. A report is unique per interview, so no
+-        separate reportId is issued.
++        separate reportId is issued. Submission records a concern only and never
++        changes scores automatically. expectedRevision must match the displayed
++        report; omission is accepted only for the original revision 1.
+       parameters:
+         - $ref: '#/components/parameters/InterviewId'
+       requestBody:
+@@ -447,8 +507,38 @@
+           $ref: '#/components/responses/Error'
+         '401':
+           $ref: '#/components/responses/Error'
++        '404':
++          $ref: '#/components/responses/Error'
+         '409':
+           $ref: '#/components/responses/Error'
++  /interviews/{id}/report/retry:
++    post:
++      operationId: retryReportGeneration
++      summary: Explicitly retry a failed report without a successful result
++      description: >-
++        Only the owner of a completed interview with an answered turn may retry.
++        Requires a recorded generation failure and no successful report. Duplicate
++        requests for the same active retry return 202 without another job. This
++        endpoint never replaces a successful report or starts a new interview.
++      parameters:
++        - $ref: '#/components/parameters/InterviewId'
++      responses:
++        '202':
++          description: Explicit retry queued or already in progress
++          content:
++            application/json:
++              schema:
++                $ref: '#/components/schemas/GeneratingResponse'
++        '401':
++          $ref: '#/components/responses/Error'
++        '404':
++          $ref: '#/components/responses/Error'
++        '409':
++          description: report_unavailable when no eligible failure or a successful report exists
++          content:
++            application/json:
++              schema:
++                $ref: '#/components/schemas/ApiError'
+ components:
+   securitySchemes:
+     sessionCookie:
+@@ -526,7 +616,11 @@
+       enum: [text, voice]
+       description: >-
+         New interviews are voice. text remains only for interviews created before
+-        the voice switch (spec/shared/decisions/0007, Proposed).
++        the voice switch. The stored answerMode controls the client input:
++        text accepts the answer JSON message; voice accepts answerStart, binary
++        audio chunks, and answerEnd. Opposite-mode input is rejected with the
++        recoverable answer_rejected error before STT, model calls, or answer
++        storage. Existing text interviews continue without mode conversion.
+     DocumentExtractStatus:
+       type: string
+       enum: [succeeded, partial, failed]
+@@ -757,7 +851,11 @@
+           description: Sprint 1 accepts Wanted URLs only.
+         documentId:
+           type: string
+-          description: Must come from POST /documents/preview. Omit to skip doc_extract.
++          description: Owned portfolio ID from POST /documents/preview; used as a repository recommendation hint and interview source. Omit to skip portfolio doc_extract.
++        coverLetterDocumentId:
++          type: string
++          format: uuid
++          description: Owned cover_letter ID from POST /documents/preview. Optional and independent of documentId; used for interview claims, never substituted for the portfolio recommendation hint. A changed selection creates a distinct analysis input.
+ 
+     CreateAnalysisRunResponse:
+       type: object
+@@ -1003,7 +1101,7 @@
+ 
+     InterviewTurn:
+       type: object
+-      required: [turn, persona, question, answer]
++      required: [turn, persona, question, answer, mainIndex, followUpDepth]
+       properties:
+         turn:
+           type: integer
+@@ -1014,6 +1112,14 @@
+         answer:
+           type: string
+           nullable: true
++        mainIndex:
++          type: integer
++          minimum: 1
++          description: Main question sequence number, including follow-ups under the same main question.
++        followUpDepth:
++          type: integer
++          minimum: 0
++          description: Zero for a main question; one or more for its follow-ups.
+ 
+     InterviewLastError:
+       type: object
+@@ -1140,6 +1246,7 @@
+       type: object
+       required:
+         - interviewId
++        - revision
+         - position
+         - positionLabel
+         - totalScore
+@@ -1154,6 +1261,10 @@
+       properties:
+         interviewId:
+           type: string
++        revision:
++          type: integer
++          minimum: 1
++          description: Current published report revision; earlier results remain archived.
+         position:
+           type: string
+         positionLabel:
+@@ -1212,3 +1323,7 @@
+         comment:
+           type: string
+           maxLength: 500
++        expectedRevision:
++          type: integer
++          minimum: 1
++          description: Displayed report revision; required after revision 1 to prevent stale submissions.
