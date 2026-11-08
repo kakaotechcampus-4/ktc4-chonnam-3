@@ -1,0 +1,16 @@
+{"case_id": "f-0001", "version": 1,
+ "allowed": [
+  {"id": "a1", "purpose": "ask를 선택해, 이미 확인한 '재발급 시 기존 토큰 처리'를 다시 묻지 않고 부족한 '로그 보관 기간'이나 새 목적을 묻는다"},
+  {"id": "a2", "purpose": "hr_manager는 남은 할당이 0이므로 선택하지 않는다"}
+ ],
+ "forbidden": [
+  {"id": "f1", "reason": "turn 2에서 충분히 확인한 기존 토큰 처리를 표현만 바꿔 다시 묻기", "type": "repeat"},
+  {"id": "f2", "reason": "할당이 없는 hr_manager를 선택", "type": "persona_violation"},
+  {"id": "f3", "reason": "turn 5에 finish를 선택(정상 조기 종료는 허용되지 않음, 정상 종료는 9번째 답변 처리 뒤)", "type": "early_finish"}
+ ],
+ "grader_controls": [
+  {"kind": "allowed", "output": "ask / domain_lead: 로그에 사용자 번호만 남기신다고 했는데, 이 로그를 얼마나 오래 보관하는 게 적절하다고 보셨나요?"},
+  {"kind": "forbidden", "output": "ask / tech_lead: 재발급이 일어나면 이전에 발급된 토큰들은 어떻게 되도록 하셨는지 다시 설명해 주세요."},
+  {"kind": "forbidden", "output": "ask / hr_manager: 팀에서 협업하며 힘들었던 점을 말씀해 주세요."}
+ ],
+ "review": {"status": "unreviewed", "author": "geonyeong325", "reviewer": null, "reviewed_at": null, "pending_notes": []}}

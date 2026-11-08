@@ -1,0 +1,16 @@
+{"case_id": "q-0010", "version": 1,
+ "allowed": [
+  {"id": "a1", "purpose": "recovery로 replan을 고른다(전제 자체가 자료와 맞지 않으므로)"},
+  {"id": "a2", "purpose": "새 질문은 Redis를 어디에 어떤 목적으로 썼는지처럼 확인된 범위(선언)를 넘지 않는 목적을 묻는다"}
+ ],
+ "forbidden": [
+  {"id": "f1", "reason": "표현만 바꾸는 rewrite로 분류", "type": "wrong_recovery"},
+  {"id": "f2", "reason": "만료 전략이 있다는 같은 전제를 유지한 질문을 다시 씀", "type": "same_premise"},
+  {"id": "f3", "reason": "자료가 있는데도 no_valid_candidate로 분류", "type": "wrong_recovery"}
+ ],
+ "grader_controls": [
+  {"kind": "allowed", "output": "replan: 전제가 자료와 맞지 않음. tech_lead: build.gradle에 Redis가 있던데, 프로젝트에서 어떤 용도로 쓰셨는지 말씀해 주세요."},
+  {"kind": "forbidden", "output": "rewrite: tech_lead: Redis 캐시가 만료되는 시점과 기준을 어떻게 정하셨는지 설명해 주세요."},
+  {"kind": "forbidden", "output": "no_valid_candidate: 이 상황에서는 질문을 만들 수 없습니다."}
+ ],
+ "review": {"status": "unreviewed", "author": "geonyeong325", "reviewer": null, "reviewed_at": null, "pending_notes": []}}

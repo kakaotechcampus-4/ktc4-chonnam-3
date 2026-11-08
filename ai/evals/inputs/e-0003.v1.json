@@ -1,0 +1,6 @@
+{"case_id": "e-0003", "version": 1,
+ "control": {"kind": "evidence", "split": "dev", "source_group_id": "sg-r2", "synthetic": true},
+ "payload": {"question": "updateTask()가 실패를 조용히 무시해서 운영 중 문제를 일으키나요? 확인한 자료만으로 답하세요.",
+  "materials": [
+   {"ref": "m1", "path": "src/api/task/taskApi.ts", "lines": "21-30", "text": "export const createTask = async (task: NewTask) => {\n  const { error } = await db.from(\"tasks\").insert(task);\n  if (error) return error;\n};\n\nexport const updateTask = async (id: string, patch: TaskPatch) => {\n  const { error } = await db.from(\"tasks\").update(patch).eq(\"id\", id);\n};"}
+  ]}}
