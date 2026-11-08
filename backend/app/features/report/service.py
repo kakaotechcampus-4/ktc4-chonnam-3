@@ -427,6 +427,8 @@ def _build_payload(
             }
             for r in requirements
         ],
+        "source_notes": source_notes,
+        "limitations": source_limits,
         "turns": [
             {
                 "turn_no": t.turn_no,
