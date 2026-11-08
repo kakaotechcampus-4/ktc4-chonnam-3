@@ -1549,6 +1549,38 @@ class ReportInput(_Contract):
     turns: tuple[ReportTurn, ...]
     evidence: tuple[Evidence, ...]
     tool_results: tuple[ReportToolResult, ...]
+    limitations: tuple[str, ...] = ()
+    supplemental_sources: tuple[SupplementalSource, ...] = ()
+    source_notes: tuple[JDSourceNote, ...] = ()
+
+
+def validate_supplemental_input(
+    sources: tuple[SupplementalSource, ...],
+    *,
+    contracts: tuple[QuestionContract, ...],
+    limitations: tuple[str, ...],
+) -> None:
+    """질문한 자료의 원문만 허용하고 예산 밖 참조는 명시적인 미확인 범위로 둔다."""
+    if type(sources) is not tuple or any(type(item) is not SupplementalSource for item in sources):
+        raise ContractError("schema", "supplemental sources")
+    if type(limitations) is not tuple:
+        raise ContractError("schema", "source limitations")
+    for item in limitations:
+        _text(item, "source limitations")
+    provided = tuple(BasisRef(item.kind, item.source_id) for item in sources)
+    _unique(cast(tuple[object, ...], provided), "supplemental sources")
+    required = {
+        ref
+        for contract in contracts
+        for ref in contract.basis_refs
+        if ref.kind
+        in {"document_claim", "document_claim_comparison", "document_visual", "external_source"}
+    }
+    if not set(provided) <= required:
+        raise ContractError("semantic", "unasked supplemental source")
+    for ref in required - set(provided):
+        if f"supplemental_source_outside_model_budget:{ref.kind}:{ref.id}" not in limitations:
+            raise ContractError("semantic", "missing supplemental source")
 
 
 @dataclass(frozen=True)
