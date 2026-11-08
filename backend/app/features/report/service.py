@@ -434,8 +434,6 @@ def _build_payload(
                 "turn_no": t.turn_no,
                 "persona": t.persona,
                 "question": t.question_text,
-                # 답하지 못한 턴은 빈 답변으로 보낸다. AI 는 이를 0단계로 판정한다.
-                "answer": t.answer_text or "",
                 "question_contract": t.question_contract,
                 "analysis": t.analysis,
                 "parent_turn_no": t.parent_turn_no,
