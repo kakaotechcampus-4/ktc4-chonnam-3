@@ -303,6 +303,80 @@ async def generate_report(
             limits=llm.call_limits(prompts["report"].task_name),
             model_call_factory=model_call_factory,
         )
+        draft = validate_draft(raw)
+        rows = _score_rows(draft, turn_ids)
+        values = _draft_values(draft, coverage, prompts)
+        for call in attempts:
+            if call.get("task") == "report":
+                for metadata in cast(list[dict[str, object]], call["attempts"]):
+                    if metadata.get("error_stage") is None and isinstance(
+                        metadata.get("model"), str
+                    ):
+                        values["model"] = metadata["model"]
+        async with sessions.begin() as db:
+            interview = await db.get(InterviewSession, interview_id, with_for_update=True)
+            request = (
+                await db.get(ReportGenerationRequest, generation_request_id, with_for_update=True)
+                if generation_request_id is not None
+                else None
+            )
+            if generation_request_id is not None:
+                if request is not None:
+                    request.attempts = attempts
+                if request is None or request.status != "running":
+                    return "skipped"
+            valid = interview is not None and interview.status == "completed"
+            if valid and request is not None:
+                assert interview is not None
+                current, active_prompts, _, _ = await _read_generation_input(db, interview)
+                valid = request.expires_at > datetime.now(UTC) and (
+                    _input_snapshot(current, active_prompts, llm)[0] == fingerprint
+                )
+            if not valid:
+                if request is not None:
+                    request.status, request.error_code = "stale", "report_input_changed"
+                return "skipped"
+            if reassessment:
+                assert request is not None
+                existing = await db.scalar(
+                    select(InterviewReport)
+                    .where(InterviewReport.interview_session_id == interview_id)
+                    .with_for_update()
+                )
+                review = await db.get(
+                    ReportDisagreement, request.disagreement_id, with_for_update=True
+                )
+                if (
+                    existing is None
+                    or existing.current_revision != request.expected_revision
+                    or review is None
+                    or review.status != "approved"
+                    or review.source_revision != request.expected_revision
+                ):
+                    request.status, request.error_code = "stale", "report_revision_changed"
+                    return "skipped"
+                await revisions.preserve(db, existing)
+                for name, value in values.items():
+                    setattr(existing, name, value)
+                existing.current_revision += 1
+                existing.generated_at = datetime.now(UTC)
+                await db.execute(delete(ReportScore).where(ReportScore.report_id == existing.id))
+                db.add_all(ReportScore(report_id=existing.id, **row) for row in rows)
+                await db.flush()
+                await revisions.preserve(db, existing)
+                review.status, review.applied_revision = "applied", existing.current_revision
+                outcome: GenerateOutcome = "revised"
+            else:
+                saved = await queries.insert_report(
+                    db,
+                    interview_id=interview_id,
+                    values=values,
+                    scores=rows,
+                    generated_at=datetime.now(UTC),
+                )
+                outcome = "created" if saved else "exists"
+            if outcome in {"created", "revised"}:
+                from app.features.profile.refresh_outbox import ensure_request
 
     raw = await generate(
         payload, prompts=prompts, limits=llm.call_limits(), model_call_factory=model_call_factory
