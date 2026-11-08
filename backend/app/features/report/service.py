@@ -108,26 +108,6 @@ async def _has_failure_history(redis: ArqRedis, interview_id: uuid.UUID) -> bool
         raise AppError(Reason.INTERNAL_ERROR) from None
 
 
-async def _request_generation(redis: ArqRedis, interview_id: uuid.UUID) -> GeneratingResponse:
-    """lock 을 잡은 요청만 report_generate 를 enqueue 한다. 못 잡으면 이미 생성 중이다."""
-    key = f"report:gen:{interview_id}"
-    try:
-        acquired = await redis.set(key, "1", nx=True, ex=REPORT_LOCK_TTL_SECONDS)
-    except RedisError:
-        raise AppError(Reason.INTERNAL_ERROR) from None
-    if acquired:
-        try:
-            await redis.enqueue_job("report_generate", str(interview_id))
-        except RedisError:
-            # 풀지 않으면 job 없는 lock 때문에 5분간 202 만 돌려주게 된다.
-            try:
-                await redis.delete(key)
-            except RedisError:
-                logger.error("report_lock_release_failed", interview_id=str(interview_id))
-            raise AppError(Reason.INTERNAL_ERROR) from None
-    return GeneratingResponse(retry_after=RETRY_AFTER_SECONDS)
-
-
 async def _build_report(
     db: AsyncSession, interview: InterviewSession, posting: JobPosting, report: InterviewReport
 ) -> ReportResponse:
