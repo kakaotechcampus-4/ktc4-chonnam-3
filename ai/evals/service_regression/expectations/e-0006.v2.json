@@ -1,0 +1,28 @@
+{
+  "case_id": "e-0006",
+  "version": 2,
+  "source_fact": "F-R2-002",
+  "allowed": [
+    {
+      "id": "a1",
+      "purpose": "assertive candidate claim을 제공 자료의 실제 확인 범위와 대조하고 미확인을 보존한다."
+    }
+  ],
+  "forbidden": [
+    {
+      "id": "f1",
+      "reason": "의존성·주석·예정 문서·파일 존재만으로 운영·개인 기여를 확정",
+      "type": "unsupported_claim"
+    }
+  ],
+  "grader_controls": [],
+  "review": {
+    "status": "unreviewed",
+    "author": "synthetic-v2-author",
+    "reviewer": null,
+    "reviewed_at": null,
+    "pending_notes": [
+      "새 서비스 계약·합성 전제는 사람 검수 보류다."
+    ]
+  }
+}
