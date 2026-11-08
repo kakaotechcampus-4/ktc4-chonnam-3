@@ -410,6 +410,9 @@ def _build_payload(
     rubrics: Mapping[str, object],
 ) -> dict[str, object]:
     """AI 모듈 입력. rubric 은 활성 score_criteria 의 값을 구조 해석 없이 key 별로 전달한다."""
+    from app.features.report.jd_sources import jd_source_notes
+
+    source_notes, source_limits = jd_source_notes(posting, requirements, turns)
     return {
         "score_keys": list(SCORE_KEYS),
         "rubrics": {key: rubrics[key] for key in SCORE_KEYS},
