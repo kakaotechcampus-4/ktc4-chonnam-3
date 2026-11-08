@@ -972,6 +972,9 @@ class ShallowRepoInput(_Contract):
 
 @dataclass(frozen=True)
 class ShallowBasis(_Contract):
+    kind: Literal[
+        "readme", "description", "languages", "commit_metadata", "structure", "supporting_file"
+    ]
     claim: str
 
 
