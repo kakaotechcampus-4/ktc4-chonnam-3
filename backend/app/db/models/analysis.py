@@ -93,10 +93,6 @@ class AnalysisJob(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     document_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("user_documents.id", ondelete="SET NULL"), nullable=True
     )
-    # 포트폴리오와 구분한 선택 입력이다. 자소서의 URL을 레포 추천 힌트로 쓰지 않는다.
-    cover_letter_document_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("user_documents.id", ondelete="SET NULL"), nullable=True
-    )
     # user_id + normalized posting_url + document 해시. 중복 요청 재사용 판정에 쓴다.
     fingerprint: Mapped[str | None] = mapped_column(Text, nullable=True)
 
