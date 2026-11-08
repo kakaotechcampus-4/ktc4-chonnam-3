@@ -1,0 +1,240 @@
+{
+  "case_id": "r-holdout-0001",
+  "version": 1,
+  "control": {
+    "kind": "report",
+    "split": "holdout",
+    "source_group_id": "new-inventory-flow",
+    "synthetic": true
+  },
+  "payload": {
+    "service_task": "report",
+    "service_input": {
+      "turns": [
+        {
+          "turn_no": 1,
+          "persona": "hr_manager",
+          "question": "재고 관리의 본인 작업과 팀 작업을 구분해 주세요.",
+          "answer": "입력 검증은 제 작업이고 저장소 운영은 팀 작업입니다.",
+          "question_contract": {
+            "purpose": "재고 관리의 본인 작업과 팀 작업을 구분해 주세요.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "재고 관리의 본인 작업과 팀 작업을 구분해 주세요."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "재고 관리의 본인 작업과 팀 작업을 구분해 주세요.",
+            "evaluation_keys": [
+              "contribution_clarity",
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 2,
+          "persona": "tech_lead",
+          "question": "입고 요청이 검증·저장을 거치는 흐름을 설명해 주세요.",
+          "answer": "입고 수량을 검증한 다음 재고 행을 저장하고 결과를 돌려줍니다.",
+          "question_contract": {
+            "purpose": "입고 요청이 검증·저장을 거치는 흐름을 설명해 주세요.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "입고 요청이 검증·저장을 거치는 흐름을 설명해 주세요."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "입고 요청이 검증·저장을 거치는 흐름을 설명해 주세요.",
+            "evaluation_keys": [
+              "project_understanding",
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 3,
+          "persona": "tech_lead",
+          "question": "동기 처리와 큐 처리의 선택 조건과 대안을 비교해 주세요.",
+          "answer": "작은 요청은 동기로 처리하고 일괄 입고는 큐를 대안으로 봅니다. 지연과 재처리 복잡성이 다릅니다.",
+          "question_contract": {
+            "purpose": "동기 처리와 큐 처리의 선택 조건과 대안을 비교해 주세요.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "동기 처리와 큐 처리의 선택 조건과 대안을 비교해 주세요."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "동기 처리와 큐 처리의 선택 조건과 대안을 비교해 주세요.",
+            "evaluation_keys": [
+              "technical_reasoning",
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 4,
+          "persona": "tech_lead",
+          "question": "중복 입고 오류를 가정하고 재현·가설·수정 검증 순서를 설명해 주세요.",
+          "answer": "동일 식별자로 두 요청을 재현하고 중복 저장 여부를 확인합니다. 원자적 조건을 수정한 뒤 동시 요청 시험을 반복합니다.",
+          "question_contract": {
+            "purpose": "중복 입고 오류를 가정하고 재현·가설·수정 검증 순서를 설명해 주세요.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "중복 입고 오류를 가정하고 재현·가설·수정 검증 순서를 설명해 주세요."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "중복 입고 오류를 가정하고 재현·가설·수정 검증 순서를 설명해 주세요.",
+            "evaluation_keys": [
+              "problem_solving",
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 5,
+          "persona": "domain_lead",
+          "question": "공고의 재고 정합성 요구를 지금 설명한 경험과 연결하고 한계를 밝혀 주세요.",
+          "answer": "중복 입력 시험은 정합성 요구와 연결되지만 대규모 물류 운영 경험은 없습니다.",
+          "question_contract": {
+            "purpose": "공고의 재고 정합성 요구를 지금 설명한 경험과 연결하고 한계를 밝혀 주세요.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "공고의 재고 정합성 요구를 지금 설명한 경험과 연결하고 한계를 밝혀 주세요."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [
+              {
+                "kind": "jd_requirement",
+                "id": "holdout-jd"
+              }
+            ],
+            "evaluation_scope": "공고의 재고 정합성 요구를 지금 설명한 경험과 연결하고 한계를 밝혀 주세요.",
+            "evaluation_keys": [
+              "company_job_fit",
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [
+            "holdout-jd"
+          ],
+          "evidences": []
+        },
+        {
+          "turn_no": 6,
+          "persona": "tech_lead",
+          "question": "수량 검증의 경계값 시험과 한계를 설명해 주세요.",
+          "answer": "0과 음수, 큰 수를 시험합니다. 단위가 다른 자료는 별도 정책이 필요합니다.",
+          "question_contract": {
+            "purpose": "수량 검증의 경계값 시험과 한계를 설명해 주세요.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "수량 검증의 경계값 시험과 한계를 설명해 주세요."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "수량 검증의 경계값 시험과 한계를 설명해 주세요.",
+            "evaluation_keys": [
+              "technical_reasoning",
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 7,
+          "persona": "tech_lead",
+          "question": "재고 저장 시 조건이 충족되지 않으면 어떤 흐름인가요?",
+          "answer": "변경하지 않고 실패 상태를 돌려줍니다. 내부 예외를 성공으로 바꾸지 않습니다.",
+          "question_contract": {
+            "purpose": "재고 저장 시 조건이 충족되지 않으면 어떤 흐름인가요?",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "재고 저장 시 조건이 충족되지 않으면 어떤 흐름인가요?"
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "재고 저장 시 조건이 충족되지 않으면 어떤 흐름인가요?",
+            "evaluation_keys": [
+              "project_understanding",
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 8,
+          "persona": "domain_lead",
+          "question": "일부 창고의 처리가 늦어지면 사용자에게 어떤 상태를 보여줄지 설명해 주세요.",
+          "answer": "확정한 재고와 처리 중인 입고를 구분하고 아직 반영되지 않은 범위를 알려줍니다.",
+          "question_contract": {
+            "purpose": "일부 창고의 처리가 늦어지면 사용자에게 어떤 상태를 보여줄지 설명해 주세요.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "일부 창고의 처리가 늦어지면 사용자에게 어떤 상태를 보여줄지 설명해 주세요."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "일부 창고의 처리가 늦어지면 사용자에게 어떤 상태를 보여줄지 설명해 주세요.",
+            "evaluation_keys": [
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 9,
+          "persona": "tech_lead",
+          "question": "큐 전환 대안이 유리해지는 조건과 검증할 지표를 설명해 주세요.",
+          "answer": "대량 입력으로 지연이 커지면 큐를 검토하고 처리 시간과 재시도 중복을 측정합니다.",
+          "question_contract": {
+            "purpose": "큐 전환 대안이 유리해지는 조건과 검증할 지표를 설명해 주세요.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "큐 전환 대안이 유리해지는 조건과 검증할 지표를 설명해 주세요."
+              }
+            ],
