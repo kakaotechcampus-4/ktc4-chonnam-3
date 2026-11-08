@@ -276,10 +276,34 @@ test('180초가 지나면 녹음이 저절로 끝나고 제출된다', async ({ 
   await page.clock.install();
   await stubMic(page);
   await openSession(page);
+  // 화면 로딩을 마친 뒤 시간을 멈춰 180초 경계 전후를 정확히 나누어 검사한다.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 10_000));
   await page.getByRole('button', { name: '답변 시작' }).click();
   await expect(page.getByTestId('transcript-partial')).toBeVisible();
-  await page.clock.runFor(180_000);
-  await expect(page.getByTestId('transcript-final')).toHaveText(FIRST_ANSWER);
+  const readInterview = () =>
+    page.evaluate(async (id) => {
+      const response = await fetch(`/api/interviews/${id}`);
+      return { status: response.status, body: await response.json() };
+    }, SEED_IN_PROGRESS);
+
+  // 표시용 반복 타이머를 모두 재생하지 않고 종료 타이머의 경계 직전으로 이동한다.
+  await page.clock.fastForward(179_999);
+  await expect(page.getByRole('button', { name: '답변 끝내기' })).toBeVisible();
+  await expect(page.getByText('질문 1 / 9 · 인사팀')).toBeVisible();
+  await expect(page.getByTestId('transcript-final')).toHaveCount(0);
+  await expect.poll(() => liveMics(page)).toBe(1);
+  await page.clock.runFor(1);
+  await page.clock.resume();
+  // 최종 전사는 다음 질문에서 지워진다. 자동 제출 결과는 영구 복구 응답으로 확인한다.
+  await expect(page.getByText('질문 2 / 9 · 개발팀')).toBeVisible({ timeout: 10_000 });
+  expect(await readInterview()).toMatchObject({
+    status: 200,
+    body: {
+      currentTurn: 2,
+      turns: expect.arrayContaining([expect.objectContaining({ turn: 1, answer: FIRST_ANSWER })]),
+    },
+  });
+  await expect.poll(() => liveMics(page)).toBe(0);
 });
 
 test('녹음 중 새로고침하면 끊김 안내와 함께 같은 턴부터 다시 시작한다', async ({ page }) => {
@@ -436,9 +460,7 @@ test('녹음 중 복구 불가 오류가 오면 마이크와 녹음 표시를 �
   await openSession(page);
   await page.getByRole('button', { name: '답변 시작' }).click();
   await expect(page.getByTestId('transcript-partial')).toBeVisible();
-  await page.evaluate(() =>
-    (window as unknown as { msw: { failWs: () => void } }).msw.failWs(),
-  );
+  await page.evaluate(() => (window as unknown as { msw: { failWs: () => void } }).msw.failWs());
 
   await expect.poll(() => liveMics(page)).toBe(0);
   await expect(page.getByText(/^녹음 중/)).toHaveCount(0);
