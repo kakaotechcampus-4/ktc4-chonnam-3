@@ -11,7 +11,6 @@ import asyncio
 import hashlib
 import json
 import uuid
-from collections.abc import Mapping
 from datetime import UTC, datetime
 from functools import partial
 from typing import Literal, NoReturn, cast
