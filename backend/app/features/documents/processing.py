@@ -77,4 +77,6 @@ def process_document(
         text=_bounded_text(text, max_chars) if is_truncated else text,
         status=DocumentExtractStatus.PARTIAL if partial else DocumentExtractStatus.SUCCEEDED,
         is_truncated=result.is_truncated or is_truncated,
+        source_text=text,
+        source_is_partial=result.status is DocumentExtractStatus.PARTIAL or "\x00" in result.text,
     ), urls
