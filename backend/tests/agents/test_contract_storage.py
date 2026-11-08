@@ -1,6 +1,7 @@
 """The BE storage boundary accepts validated candidates, never raw model output."""
 
 import json
+from dataclasses import replace
 
 import pytest
 from devon_ai import contracts as c
@@ -65,6 +66,25 @@ def test_director_decision_is_flat_and_keeps_all_six_fields():
         "reason_summary",
     }
     assert value["next_step"] == "finish" and value["tool_requests"] == []
+
+
+def test_explicit_evaluation_keys_survive_storage_extension():
+    candidate = question().data
+    contract = replace(candidate.question_contract, evaluation_keys=("technical_reasoning",))
+    candidate = replace(candidate, question_contract=contract)
+    checked = c.validate_question(
+        candidate,
+        review=c.QuestionReview(candidate.text, contract),
+        allowed_personas=("tech_lead",),
+        evidence_refs=frozenset(),
+        basis_refs=frozenset(),
+        jd_requirement_ids=frozenset(),
+    )
+    value = adapter.to_turn_jsonb(
+        c.ModelResult(checked, None, (metadata(),)), column="question_contract"
+    )
+    assert value["evaluation_keys"] == ["technical_reasoning"]
+    assert c.decode_strict(c.QuestionContract, value) == contract
 
 
 def test_failed_model_result_cannot_be_saved_as_success():
