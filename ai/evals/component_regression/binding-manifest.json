@@ -1,0 +1,36 @@
+{
+  "format_version": 1,
+  "source_hash_format": "utf8_lf",
+  "source_files": {
+    "ai/evals/inputs/q-0007.v1.json": "0212497237b5aadb33cae8651c0aba020522e813ed26399afa668f5d8f1896d1",
+    "ai/evals/expectations/q-0007.v1.json": "411814e7f61793e3b2aa3cce34ff7fded04cd9c6a2129def00f092d334ebb306",
+    "ai/evals/service_regression/inputs/q-0007.v2.json": "496333acc2b8a06a86c3560acbbdc109b552b37d4b3ed0604704dfb292026304",
+    "ai/evals/service_regression/expectations/q-0007.v2.json": "e337d8cd3a3abe74824b424dbb8a63ce2fce6ed309950b9cc5aab0315448140d"
+  },
+  "bindings": [
+    {
+      "case": "q-0007.v3",
+      "source_case": "q-0007.v2",
+      "prior_source_case": "q-0007.v1",
+      "source_group_id": "sg-r1",
+      "review_status": "unreviewed",
+      "human_review_status": "deferred",
+      "source_input_changed": false,
+      "service_task": "director_verification",
+      "runtime_component": "devon_ai.agents.director.runtime.verification_decision",
+      "execution_scope": "verification_decision_only",
+      "tool_io_executed": false,
+      "next_director_executed": false,
+      "provider_attempts_required": 0,
+      "grader_controls_execution": "not_part_of_component_execution",
+      "added_premises": [
+        "이 사례는 실제 verification_decision의 조회 요청 판단만 실행한다. Tool I/O와 다음 Director 질문 생성은 실행하지 않는다.",
+        "기존 v2 service_input과 allowed/forbidden/grader_controls를 그대로 보존한다. 조회 없이 확인형 ask를 허용할지의 사람 기준은 확정하지 않는다.",
+        "합성 저장소·SHA·경로는 기존 합성 입력이며 실제 GitHub 수집·구현·개인 기여를 증명하지 않는다.",
+        "기존 control의 legacy 저장소·ref 표현도 보존한다. 이 코호트의 component 실행은 control 교정이나 LLM-as-Judge 품질 승인을 포함하지 않는다."
+      ]
+    }
+  ],
+  "quality_gate": "human_criteria_review_required",
+  "holdout_status": "not_a_holdout"
+}
