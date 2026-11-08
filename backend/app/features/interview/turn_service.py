@@ -138,6 +138,18 @@ async def save_answer(
     ALREADY_ANSWERED 는 재전송이다. 재전송으로 다음 질문을 다시 만들지 않는다 — 실패한 LLM
     작업을 재호출하지 않는 규칙(spec/ai/features/interviewer.md:93), 복구는 재접속 후속 작업.
     """
+    # 중단·종료·T3/T4와 같은 부모 행부터 잠근다. 존재 확인만 하면 중단 확정 뒤에도
+    # 오래된 스냅샷으로 답변을 쓸 수 있으므로 잠금을 얻은 뒤 상태를 재확인한다.
+    current = await db.scalar(
+        select(InterviewSession)
+        .where(InterviewSession.id == interview_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if current is None or current.status != "in_progress":
+        return TurnRejected.NOT_IN_PROGRESS
+    if current.current_turn != turn_no:
+        return TurnRejected.NOT_CURRENT_TURN
     now = datetime.now(UTC)
     is_current = exists().where(
         InterviewSession.id == interview_id,
