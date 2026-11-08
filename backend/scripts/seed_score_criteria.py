@@ -9,6 +9,7 @@ score_key 는 shared/enums.py ScoreKey 와 1:1 이며 CHECK 제약(SCORE_KEYS)�
   기존 행은 충돌 시 rubric 만 덮어쓰고 is_active 는 유지하므로, 이미 활성인 DB 에 실행하면
   새 초안이 활성 상태로 적용된다.
   재실행 전 활성 행과 변경 문구의 검수·적용 순서를 확인해야 한다.
+  활성 상태 확인과 활성화 절차는 scripts/check_score_criteria.py 를 따른다.
 ★ rubric 0~4단계를 공개 점수로 바꾸는 단계별 고정 점수는 LEVEL_SCORES 다. 환산은 모델이
   하지 않고 코드가 한다.
 ★ 0단계는 "질문을 받고도 답하지 못함"만 뜻한다. 질문하지 않았거나 근거가 부족한 항목,
