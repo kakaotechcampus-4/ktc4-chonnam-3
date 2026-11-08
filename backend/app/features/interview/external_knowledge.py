@@ -238,3 +238,128 @@ async def retrieve_external_knowledge(
     budget = SearchBudget(call_limit, credit_limit)
     collected: list[tuple[str, WebSource]] = []
     limitations: list[str] = list(cached_limitations)
+    query_limitations: dict[str, tuple[str, ...]] = {}
+    error_code = None
+    try:
+        for query in pending:
+            search = await provider.search(
+                query.query, domains=domains, budget=budget, max_results=3
+            )
+            limitations.extend(search.limitations)
+            if not search.sources:
+                continue
+            extracted = await provider.extract(
+                tuple(source.url for source in search.sources),
+                domains=domains,
+                budget=budget,
+            )
+            limitations.extend(extracted.limitations)
+            limitations.extend(f"extraction:{failure.reason}" for failure in extracted.failures)
+            if not extracted.sources:
+                limitations.append("search_snippets_only")
+            query_limitations[_cache_key(query.query, domains)] = (
+                *search.limitations,
+                *extracted.limitations,
+                *(f"extraction:{failure.reason}" for failure in extracted.failures),
+            )
+            collected.extend((query.query, source) for source in extracted.sources)
+    except SearchError as exc:
+        error_code = exc.reason
+        limitations.append(f"external_lookup:{exc.reason}")
+    finally:
+        # 중단·실패 시에도 보수적으로 예약한 실제 호출 비용을 보존한다.
+        with CancelScope(shield=True):
+            async with sessions.begin() as db:
+                row = await db.scalar(
+                    select(InterviewSession)
+                    .where(
+                        InterviewSession.id == interview_id,
+                        InterviewSession.user_id == user_id,
+                    )
+                    .with_for_update()
+                )
+                if row is not None:
+                    state = dict(row.context_state or {})
+                    reservations = _reservations(state.get("external_search_reservations"))
+                    reserved = reservations.pop(reservation_id, None)
+                    if reserved is not None:
+                        usage = _usage(state.get("external_search_usage"))
+                        usage["calls"] -= reserved["calls"] - budget.calls_used
+                        usage["credits"] -= reserved["credits"] - budget.credits_used
+                        state["external_search_usage"] = usage
+                        state["external_search_reservations"] = reservations
+                        row.context_state = state
+
+    async with sessions.begin() as db:
+        interview = await db.scalar(
+            select(InterviewSession)
+            .where(
+                InterviewSession.id == interview_id,
+                InterviewSession.user_id == user_id,
+            )
+            .with_for_update()
+        )
+        if interview is None or interview.status != "in_progress":
+            return ExternalKnowledgeResult(
+                "tool_error", (), domains, ("stale_interview",), "stale_interview"
+            )
+        refreshed: dict[str, set[UUID]] = {}
+        for query_text, source in collected:
+            existing = await db.scalar(
+                select(InterviewExternalSource).where(
+                    InterviewExternalSource.interview_session_id == interview_id,
+                    InterviewExternalSource.user_id == user_id,
+                    InterviewExternalSource.url == source.url,
+                    InterviewExternalSource.content_hash == source.content_hash,
+                )
+            )
+            if existing is None:
+                existing = InterviewExternalSource(
+                    user_id=user_id,
+                    interview_session_id=interview_id,
+                    query_text=query_text,
+                    url=source.url,
+                    title=source.title,
+                    content=source.content,
+                    content_scope=source.content_scope,
+                    content_hash=source.content_hash,
+                    retrieved_at=datetime.fromisoformat(source.retrieved_at.replace("Z", "+00:00")),
+                    published_at=source.published_at,
+                    limitations=list(source.limitations),
+                )
+                db.add(existing)
+                await db.flush()
+            cached_ids.add(existing.id)
+            refreshed.setdefault(_cache_key(query_text, domains), set()).add(existing.id)
+        sources = tuple(
+            source
+            for source in await load_supplemental_sources(db, interview_id)
+            if source.kind == "external_source" and UUID(source.source_id) in cached_ids
+        )
+        if cached_ids and not sources:
+            limitations.append("context_source_budget")
+        status: LookupStatus = (
+            "found"
+            if sources
+            else (
+                "tool_error"
+                if error_code
+                else "insufficient_analysis"
+                if limitations
+                else "not_found"
+            )
+        )
+        result = ExternalKnowledgeResult(
+            status, sources, domains, tuple(dict.fromkeys(limitations)), error_code
+        )
+        state = dict(interview.context_state or {})
+        # 인용 원문의 query_text·retrieved_at은 보존하고 질의별 재검증 시점만 갱신한다.
+        cache = _query_cache(state.get("external_query_cache"))
+        for key, ids in refreshed.items():
+            cache[key] = _CachedQuery(
+                tuple(sorted(ids)), datetime.now(UTC), query_limitations.get(key, ())
+            )
+        state["external_query_cache"] = _cache_state(cache)
+        state["external_searches"] = [_trace(result)]
+        interview.context_state = state
+    return result
