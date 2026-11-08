@@ -81,7 +81,8 @@ const FAILURE_TITLE: Record<string, string> = {
 const RETRY_REJECTED_MESSAGE: Record<string, string> = {
   prep_in_progress: '이미 다시 준비하고 있어요 · 잠시만 기다려주세요',
   prep_failed: '지금은 다시 시도할 수 없어요 · 상태를 다시 확인할게요',
-  session_limit_exceeded: '같은 공고로 진행 중인 면접이 있어요 · 그 면접을 끝내거나 나간 뒤 다시 시도해주세요',
+  session_limit_exceeded:
+    '같은 공고로 진행 중인 면접이 있어요 · 그 면접을 끝내거나 나간 뒤 다시 시도해주세요',
   session_expired: '면접 세션이 만료됐어요 · 레포를 다시 선택해주세요',
 };
 
@@ -166,7 +167,8 @@ export default function InterviewPrepare() {
    */
   const reconnectSeqRef = useRef(0);
 
-  const mic = useMicCheck();
+  const isVoiceMode = interview?.answerMode === 'voice';
+  const mic = useMicCheck({ enabled: isVoiceMode });
   const micBadge = MIC_BADGE[mic.status];
 
   const status = interview?.status;
@@ -451,142 +453,144 @@ export default function InterviewPrepare() {
         </p>
       )}
 
-      {/*
-        마이크 · 스피커 점검. Sprint 2부터 음성 면접만 남으므로 answerMode와 무관하게 늘 띄운다.
-        마이크가 정상이 아니면 면접 시작을 막는다 (spec/frontend/features/interview.md).
-      */}
-      <div className="flex flex-col gap-3 border-t border-line-soft pt-5">
-        <h2 className="text-[13px] font-bold">마이크 · 스피커 점검</h2>
+      {/* 저장된 text 세션은 장치 권한 없이 이어간다. 새 voice 세션에만 장치를 확인한다. */}
+      {isVoiceMode && (
+        <div className="flex flex-col gap-3 border-t border-line-soft pt-5">
+          <h2 className="text-[13px] font-bold">마이크 · 스피커 점검</h2>
 
-        <div className="flex items-center gap-3">
-          <div className="flex-1">
-            <p className="text-[13px] font-bold">마이크</p>
-            {micBadge.help && <p className="text-[11px] text-muted">{micBadge.help}</p>}
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <p className="text-[13px] font-bold">마이크</p>
+              {micBadge.help && <p className="text-[11px] text-muted">{micBadge.help}</p>}
+            </div>
+            {/* 비보안 주소 등 'error'는 다시 확인해도 같아서 버튼을 두지 않는다. */}
+            {(mic.status === 'denied' || mic.status === 'missing' || mic.status === 'busy') && (
+              <button
+                type="button"
+                onClick={mic.recheck}
+                className="h-8 shrink-0 rounded-lg bg-accent-soft px-3 text-[12px] font-bold text-accent"
+              >
+                다시 확인
+              </button>
+            )}
+            <span
+              className={
+                micBadge.ok
+                  ? 'rounded-full bg-accent-soft px-3 py-1.5 text-[12px] font-bold text-accent'
+                  : 'rounded-full bg-error-soft px-3 py-1.5 text-[12px] font-bold text-error'
+              }
+            >
+              {micBadge.text}
+            </span>
           </div>
-          {/* 비보안 주소 등 'error'는 다시 확인해도 같아서 버튼을 두지 않는다. */}
-          {(mic.status === 'denied' || mic.status === 'missing' || mic.status === 'busy') && (
+          {mic.mics.length > 0 && (
+            <DeviceSelect
+              label="마이크"
+              icon={MIC_ICON}
+              devices={mic.mics}
+              value={mic.micId}
+              onChange={mic.setMicId}
+            />
+          )}
+          <div className="flex items-center gap-2">
+            <div className="flex h-11 flex-1 items-center justify-center gap-1 rounded-card border border-line-soft">
+              {mic.levels.map((level, index) => (
+                <span
+                  key={index}
+                  className="w-[3px] rounded-full bg-accent"
+                  style={{ height: `${Math.max(3, Math.round(level * 28))}px` }}
+                />
+              ))}
+            </div>
             <button
               type="button"
-              onClick={mic.recheck}
-              className="h-8 shrink-0 rounded-lg bg-accent-soft px-3 text-[12px] font-bold text-accent"
+              disabled={mic.phase === 'playing' || (mic.phase === 'idle' && mic.status !== 'ok')}
+              onClick={() =>
+                mic.phase === 'recording' ? mic.finishRecording() : void mic.startTest()
+              }
+              className={
+                // 녹음 중은 빨강으로 구분한다. 재생 중·권한 없음은 비활성 회색.
+                mic.phase === 'recording'
+                  ? 'h-11 shrink-0 rounded-lg bg-error-soft px-4 text-[12px] font-bold text-error'
+                  : 'h-11 shrink-0 rounded-lg bg-accent-soft px-4 text-[12px] font-bold text-accent disabled:bg-line-soft disabled:text-muted'
+              }
             >
-              다시 확인
+              {mic.phase === 'recording'
+                ? `녹음 끝내기 (${mic.secondsLeft})`
+                : mic.phase === 'playing'
+                  ? '재생 중'
+                  : '마이크 테스트'}
             </button>
-          )}
-          <span
-            className={
-              micBadge.ok
-                ? 'rounded-full bg-accent-soft px-3 py-1.5 text-[12px] font-bold text-accent'
-                : 'rounded-full bg-error-soft px-3 py-1.5 text-[12px] font-bold text-error'
-            }
-          >
-            {micBadge.text}
-          </span>
-        </div>
-        {mic.mics.length > 0 && (
-          <DeviceSelect
-            label="마이크"
-            icon={MIC_ICON}
-            devices={mic.mics}
-            value={mic.micId}
-            onChange={mic.setMicId}
-          />
-        )}
-        <div className="flex items-center gap-2">
-          <div className="flex h-11 flex-1 items-center justify-center gap-1 rounded-card border border-line-soft">
-            {mic.levels.map((level, index) => (
-              <span
-                key={index}
-                className="w-[3px] rounded-full bg-accent"
-                style={{ height: `${Math.max(3, Math.round(level * 28))}px` }}
-              />
-            ))}
           </div>
-          <button
-            type="button"
-            disabled={mic.phase === 'playing' || (mic.phase === 'idle' && mic.status !== 'ok')}
-            onClick={() =>
-              mic.phase === 'recording' ? mic.finishRecording() : void mic.startTest()
-            }
-            className={
-              // 녹음 중은 빨강으로 구분한다. 재생 중·권한 없음은 비활성 회색.
-              mic.phase === 'recording'
-                ? 'h-11 shrink-0 rounded-lg bg-error-soft px-4 text-[12px] font-bold text-error'
-                : 'h-11 shrink-0 rounded-lg bg-accent-soft px-4 text-[12px] font-bold text-accent disabled:bg-line-soft disabled:text-muted'
-            }
-          >
-            {mic.phase === 'recording'
-              ? `녹음 끝내기 (${mic.secondsLeft})`
-              : mic.phase === 'playing'
-                ? '재생 중'
-                : '마이크 테스트'}
-          </button>
-        </div>
-        {mic.phase !== 'idle' && (
-          <p className="text-[11px] text-muted">
-            {mic.phase === 'recording'
-              ? '말해보세요 · 녹음이 끝나면 바로 들려드려요'
-              : '녹음한 목소리를 재생하고 있어요'}
-          </p>
-        )}
-        {mic.phase === 'idle' && mic.playFailed && (
-          <p role="alert" className="text-[11px] text-error">
-            재생하지 못했어요. 스피커 연결을 확인하고 다시 테스트해주세요.
-          </p>
-        )}
-
-        <p className="mt-2 text-[13px] font-bold">스피커</p>
-        <div className="flex items-center gap-2">
-          {mic.canPickSpeaker ? (
-            <DeviceSelect
-              label="스피커"
-              icon={SPEAKER_ICON}
-              devices={mic.speakers}
-              value={mic.speakerId}
-              onChange={mic.setSpeakerId}
-            />
-          ) : (
-            <p className="flex-1 text-[11px] text-muted">기본 스피커</p>
+          {mic.phase !== 'idle' && (
+            <p className="text-[11px] text-muted">
+              {mic.phase === 'recording'
+                ? '말해보세요 · 녹음이 끝나면 바로 들려드려요'
+                : '녹음한 목소리를 재생하고 있어요'}
+            </p>
           )}
-          <button
-            type="button"
-            onClick={() => void playTestTone(mic.speakerId)}
-            className="h-11 shrink-0 rounded-lg bg-accent-soft px-4 text-[12px] font-bold text-accent"
-          >
-            테스트 재생
-          </button>
-        </div>
-      </div>
+          {mic.phase === 'idle' && mic.playFailed && (
+            <p role="alert" className="text-[11px] text-error">
+              재생하지 못했어요. 스피커 연결을 확인하고 다시 테스트해주세요.
+            </p>
+          )}
 
-      {/* 준비 중·실패 어느 쪽이든 항상 보인다. 값은 5b-v2가 읽는다. */}
-      <label className="flex items-center gap-3">
-        <span className="flex-1">
-          <span className="block text-[13px] font-bold">질문 텍스트 표시</span>
-          <span className="block text-[11px] text-muted">
-            면접 중에도 질문을 텍스트로 볼 수 있어요
+          <p className="mt-2 text-[13px] font-bold">스피커</p>
+          <div className="flex items-center gap-2">
+            {mic.canPickSpeaker ? (
+              <DeviceSelect
+                label="스피커"
+                icon={SPEAKER_ICON}
+                devices={mic.speakers}
+                value={mic.speakerId}
+                onChange={mic.setSpeakerId}
+              />
+            ) : (
+              <p className="flex-1 text-[11px] text-muted">기본 스피커</p>
+            )}
+            <button
+              type="button"
+              onClick={() => void playTestTone(mic.speakerId)}
+              className="h-11 shrink-0 rounded-lg bg-accent-soft px-4 text-[12px] font-bold text-accent"
+            >
+              테스트 재생
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 음성 면접에서만 질문 텍스트 표시를 선택한다. 텍스트 면접은 항상 표시한다. */}
+      {isVoiceMode && (
+        <label className="flex items-center gap-3">
+          <span className="flex-1">
+            <span className="block text-[13px] font-bold">질문 텍스트 표시</span>
+            <span className="block text-[11px] text-muted">
+              면접 중에도 질문을 텍스트로 볼 수 있어요
+            </span>
           </span>
-        </span>
-        <input
-          type="checkbox"
-          role="switch"
-          checked={showQuestionText}
-          onChange={(event) => {
-            setShowQuestionText(event.target.checked);
-            try {
-              localStorage.setItem(QUESTION_TEXT_KEY, String(event.target.checked));
-            } catch {
-              /* 시크릿 창 등에서 저장이 막히면 이번 세션에만 적용한다. */
-            }
-          }}
-          className="h-6 w-11 shrink-0 appearance-none rounded-full bg-line-soft transition-colors before:ml-0.5 before:block before:h-5 before:w-5 before:translate-y-0.5 before:rounded-full before:bg-surface before:transition-transform checked:bg-accent checked:before:translate-x-5"
-        />
-      </label>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={showQuestionText}
+            onChange={(event) => {
+              setShowQuestionText(event.target.checked);
+              try {
+                localStorage.setItem(QUESTION_TEXT_KEY, String(event.target.checked));
+              } catch {
+                /* 시크릿 창 등에서 저장이 막히면 이번 세션에만 적용한다. */
+              }
+            }}
+            className="h-6 w-11 shrink-0 appearance-none rounded-full bg-line-soft transition-colors before:ml-0.5 before:block before:h-5 before:w-5 before:translate-y-0.5 before:rounded-full before:bg-surface before:transition-transform checked:bg-accent checked:before:translate-x-5"
+          />
+        </label>
+      )}
 
       {displayError ? (
         <div className="flex flex-col gap-2">
           {retryRejected && (
             <p className="text-[11px] font-bold text-error">
-              {RETRY_REJECTED_MESSAGE[retryRejected] ?? '다시 시도하지 못했어요 · 잠시 후 눌러주세요'}
+              {RETRY_REJECTED_MESSAGE[retryRejected] ??
+                '다시 시도하지 못했어요 · 잠시 후 눌러주세요'}
             </p>
           )}
           {/*
@@ -644,14 +648,14 @@ export default function InterviewPrepare() {
             음성 면접은 마이크 없이 답변할 수 없다. 타이머가 돌기 전에 여기서 막는다.
             확인 중에는 문구를 띄우지 않는다 — 진입 직후 한순간 경고가 스친다.
           */}
-          {mic.status !== 'ok' && mic.status !== 'checking' && (
+          {isVoiceMode && mic.status !== 'ok' && mic.status !== 'checking' && (
             <p className="text-[11px] font-bold text-error">
               마이크를 확인해야 면접을 시작할 수 있어요
             </p>
           )}
           <button
             type="button"
-            disabled={!ready || starting || mic.status !== 'ok'}
+            disabled={!ready || starting || (isVoiceMode && mic.status !== 'ok')}
             onClick={() => void handleStart()}
             className="h-12 rounded-lg bg-accent text-sm font-bold text-surface disabled:bg-line-soft disabled:text-muted"
           >
