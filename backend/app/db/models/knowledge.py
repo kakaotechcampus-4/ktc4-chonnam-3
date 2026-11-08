@@ -33,6 +33,9 @@ QUESTION_FRAME_AXES = (
     "user_experience_context",
 )
 
+# 배포 식별자를 붙인 버전도 등록·저장 경계에서 같은 문자 수 상한을 사용한다.
+PROMPT_VERSION_MAX_LENGTH = 100
+
 
 class ScoreCriterion(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     """점수 항목 기준. label_ko 가 리포트 응답의 scores[].label 이 된다.
@@ -74,7 +77,7 @@ class PromptVersion(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
     task_name: Mapped[str] = mapped_column(String(50), nullable=False)
-    version: Mapped[str] = mapped_column(String(20), nullable=False)
+    version: Mapped[str] = mapped_column(String(PROMPT_VERSION_MAX_LENGTH), nullable=False)
     model: Mapped[str] = mapped_column(Text, nullable=False)
     template: Mapped[str] = mapped_column(Text, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")

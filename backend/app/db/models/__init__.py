@@ -13,13 +13,15 @@ from app.db.models.analysis import (
     RepoMatchScore,
 )
 from app.db.models.document import DocumentClaim, UserDocument
-from app.db.models.evidence import Evidence, EvidenceConflict, TurnEvidence
+from app.db.models.evidence import DocumentClaimComparison, Evidence, EvidenceConflict, TurnEvidence
+from app.db.models.external_source import InterviewExternalSource
 from app.db.models.github import RepoAnalysis, Repository, UserProfileSummary
 from app.db.models.interview import InterviewSession, InterviewTurn, SessionRepository
 from app.db.models.knowledge import DomainQuestionFrame, PromptVersion, ScoreCriterion
 from app.db.models.llm_call import LLMCallRecord
 from app.db.models.metric import Event
 from app.db.models.posting import JdRequirement, JobPosting
+from app.db.models.profile_refresh import ProfileRefreshRequest
 from app.db.models.report import InterviewReport, ReportDisagreement, ReportScore
 from app.db.models.user import GithubAccount, User
 
@@ -28,18 +30,21 @@ __all__ = [
     "AnalysisRepoCandidate",
     "AnalysisRepoCandidatePage",
     "DocumentClaim",
+    "DocumentClaimComparison",
     "DomainQuestionFrame",
     "Event",
     "Evidence",
     "EvidenceConflict",
     "GithubAccount",
     "InterviewReport",
+    "InterviewExternalSource",
     "InterviewSession",
     "InterviewTurn",
     "JdRequirement",
     "JobPosting",
     "LLMCallRecord",
     "PromptVersion",
+    "ProfileRefreshRequest",
     "RepoAnalysis",
     "RepoMatchScore",
     "ReportDisagreement",
