@@ -495,6 +495,17 @@ class VerificationRequest(_Contract):
 
 
 @dataclass(frozen=True)
+class ExternalQueryRequest(_Contract):
+    query: str
+    purpose: str
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if len(self.query) > 1000 or len(self.purpose) > 2000:
+            raise ContractError("schema", "external query length")
+
+
+@dataclass(frozen=True)
 class AnswerAnalysis(_Contract):
     evaluation_status: Literal["evaluated", "needs_clarification", "not_evaluable"]
     sufficiency: Literal["sufficient", "partial", "insufficient"] | None
