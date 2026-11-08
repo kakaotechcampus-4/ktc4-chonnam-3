@@ -238,3 +238,64 @@ async def enrich_report_history(
                         schema_version=schema_version,
                         answer_text=answer,
                         contract=question.data.question_contract,
+                    )
+                    return c.validate_analysis(
+                        analysis,
+                        question=question,
+                        answer_text=answer,
+                        evidence_refs=frozenset(sources),
+                        allowed_locations=frozenset(locations),
+                    ).data
+
+                selected = validate(turn.analysis) if turn.analysis is not None else None
+                for record in turn_records:
+                    if record.turn_no != turn.turn_no:
+                        raise ValueError("analysis turn")
+                    if record.failure is not None or record.discard_reason is not None:
+                        limitations.append(f"answer_analysis_unapplied:{turn.turn_no}")
+                        continue
+                    for raw_attempt in record.attempts:
+                        attempt = c.AttemptMetadata(**cast(dict[str, Any], raw_attempt))
+                        if attempt.error_stage is None and attempt.raw_output is not None:
+                            selected = validate(
+                                json.loads(attempt.raw_output),
+                                attempt.prompt_version,
+                                attempt.schema_version,
+                            )
+                if selected is not None:
+                    wire_turns[turn.turn_no]["analysis"] = json.loads(json.dumps(asdict(selected)))
+                    if selected.verification_requests and str(turn.id) not in trace:
+                        limitations.append(f"historical_tool_status_unavailable:{turn.turn_no}")
+            if str(turn.id) in trace:
+                tool = c.decode_strict(c.ToolResult, trace[str(turn.id)])
+                for item in tool.items:
+                    if item.evidence_id is None or sources.get(item.evidence_id) != item:
+                        raise ValueError("tool source unavailable")
+                    evidence_items = cast(
+                        list[dict[str, object]], wire_turns[turn.turn_no]["evidences"]
+                    )
+                    if not any(raw["id"] == item.evidence_id for raw in evidence_items):
+                        evidence_items.append(_wire(source_rows[item.evidence_id]))
+                tool_results.append(
+                    json.loads(json.dumps(asdict(c.ReportToolResult(str(turn.turn_no), tool))))
+                )
+        external_trace = state.get("external_searches", [])
+        if type(external_trace) is not list:
+            raise ValueError("external trace")
+        for raw in external_trace:
+            status = c.decode_strict(c.ExternalSearchStatus, raw)
+            limitations.extend(
+                f"external_search:{status.status}:{value}" for value in status.limitations
+            )
+            if status.status != "found":
+                limitations.append(f"external_search_status:{status.status}")
+        return {
+            **payload,
+            "tool_results": tool_results,
+            "limitations": list(dict.fromkeys(limitations)),
+            "supplemental_sources": [
+                json.loads(json.dumps(asdict(item))) for item in model_sources
+            ],
+        }
+    except (c.ContractError, ValueError, TypeError, KeyError):
+        raise ReportDraftInvalidError("history.source_or_analysis_invalid") from None
