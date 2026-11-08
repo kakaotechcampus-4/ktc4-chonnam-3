@@ -1345,7 +1345,6 @@ def parse_deep_analysis(
             area = decode(NotableArea, item)
             if scopes.count((area.path, area.scope)) > 1:
                 raise ContractError("semantic", "duplicate path")
-            matched = source_by_path.get(area.path)
             if matched is None:
                 raise ContractError("semantic", "unread source")
             if matched.read_scope != area.scope:
