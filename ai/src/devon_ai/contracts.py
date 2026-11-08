@@ -49,6 +49,8 @@ class CallLimits:
     max_output_tokens: int
     max_input_bytes: int
     max_response_bytes: int
+    reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh"] | None = None
+    stream: bool = False
 
     def __post_init__(self) -> None:
         timeout = self.timeout_seconds
