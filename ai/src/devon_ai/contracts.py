@@ -517,6 +517,14 @@ class AnswerAnalysis(_Contract):
     needs_verification: bool
     verification_requests: tuple[VerificationRequest, ...]
     limitations: tuple[str, ...]
+    external_queries: tuple[ExternalQueryRequest, ...] = ()
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _unique(
+            tuple(item.query.strip().casefold() for item in self.external_queries),
+            "external queries",
+        )
 
 
 def _checked_data[T](value: ContractChecked[T], expected: type[T]) -> T:
