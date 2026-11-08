@@ -58,6 +58,10 @@ class CallLimits:
             raise ContractError("schema", "timeout_seconds")
         for name in ("max_output_tokens", "max_input_bytes", "max_response_bytes"):
             _positive_int(getattr(self, name), name)
+        if self.reasoning_effort not in (None, "none", "minimal", "low", "medium", "high", "xhigh"):
+            raise ContractError("schema", "reasoning_effort")
+        if type(self.stream) is not bool:
+            raise ContractError("schema", "stream")
 
 
 @dataclass(frozen=True)
