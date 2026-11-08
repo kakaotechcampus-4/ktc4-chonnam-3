@@ -1,0 +1,34 @@
+{
+  "prompts": [
+    {
+      "task_name": "director",
+      "version": "director_v4",
+      "model": "fixture-model-not-for-provider-execution",
+      "template_path": "../../prompts/director-runtime-v4.md"
+    },
+    {
+      "task_name": "answer_analysis",
+      "version": "answer_analysis_v6",
+      "model": "fixture-model-not-for-provider-execution",
+      "template_path": "../../prompts/answer-analysis-runtime-v6.md"
+    },
+    {
+      "task_name": "report",
+      "version": "report_v2",
+      "model": "fixture-model-not-for-provider-execution",
+      "template_path": "../../prompts/report-runtime-v2.md"
+    },
+    {
+      "task_name": "report_score",
+      "version": "report_score_v2",
+      "model": "fixture-model-not-for-provider-execution",
+      "template_path": "../../prompts/report-score-v2.md"
+    }
+  ],
+  "limits": {
+    "timeout_seconds": 30,
+    "max_output_tokens": 4096,
+    "max_input_bytes": 262144,
+    "max_response_bytes": 1048576
+  }
+}
