@@ -1,7 +1,6 @@
 """리포트 lazy 생성·조회(200/202/409).
 완료 면접에 답변 완료 턴이 있을 때만 생성한다. 생성 불가는 409 report_unavailable.
 이전 생성 실패 이력(report:fail:{id}, report_generate worker 가 기록)이 있으면 자동 재생성 없이 409.
-재생성·수동 재시도·이의제기는 Sprint 2다.
 생성(generate_report)과 profile_summary 후속 enqueue 는 report_generate worker 가 호출한다.
 
 docs/db-schema.md 리포트 절 / task-16
