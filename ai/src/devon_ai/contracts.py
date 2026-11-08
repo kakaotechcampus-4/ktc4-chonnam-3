@@ -1074,6 +1074,12 @@ def validate_shallow_batch(
             }
             if any(not available[item.kind] for item in candidate.basis):
                 reason = "analysis basis unavailable"
+            elif any(
+                item.kind == "supporting_file"
+                and item.source_path not in {file.path for file in source.supporting_files}
+                for item in candidate.basis
+            ):
+                reason = "analysis basis source unavailable"
         if reason is None and candidate is not None:
             succeeded.append(candidate)
         else:
