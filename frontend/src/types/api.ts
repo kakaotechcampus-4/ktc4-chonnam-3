@@ -15,7 +15,7 @@ export type StepKey =
 export type PrepareStepKey = 'analyze_repo' | 'build_persona' | 'compose_question' | 'set_criteria';
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 /** Sprint 2부터 음성 면접만 남는다. spec/shared/decisions/0007 (Proposed) */
-export type AnswerMode = 'voice';
+export type AnswerMode = 'text' | 'voice';
 export type Persona = 'tech_lead' | 'hr_manager' | 'domain_lead';
 export type ScoreKey =
   | 'project_understanding'
@@ -139,6 +139,7 @@ export type InterviewListResponse = {
 // 4-v2 공고 입력 POST /documents/preview
 
 export type DocumentStatus = 'succeeded' | 'partial' | 'failed';
+export type DocumentType = 'portfolio' | 'cover_letter';
 
 export type DocumentPreviewResponse = {
   documentId: string;
@@ -149,8 +150,9 @@ export type DocumentPreviewResponse = {
 
 export type CreateAnalysisRunRequest = {
   postingUrl: string;
-  // Sprint 1 에서는 포트폴리오만 분석에 반영한다. 자소서 연결은 Sprint 2 설계 때 결정한다.
+  // 포트폴리오의 레포 추천 힌트와 두 문서의 면접 Claim은 구분한다.
   documentId?: string;
+  coverLetterDocumentId?: string;
 };
 
 export type CreateAnalysisRunResponse = {
@@ -329,6 +331,7 @@ export type PrepareStepStatus = Exclude<StepStatus, 'skipped'>;
  * 준비 실패 재시도는 WS 메시지가 아니라 `POST /interviews/{id}/prepare/retry` 다(0010 결정).
  */
 export type WsClientMessage =
+  | { type: 'answer'; turn: number; text: string }
   | { type: 'answerStart'; turn: number; mimeType: string }
   | { type: 'answerEnd'; turn: number };
 
@@ -339,8 +342,8 @@ export type WsClientMessage =
  */
 /** details는 stt_failed의 cause(`empty_transcript`)처럼 원인 구분용이다(0007). */
 export type WsErrorMessage = { type: 'error' } & InterviewLastError & {
-  details?: Record<string, unknown>;
-};
+    details?: Record<string, unknown>;
+  };
 
 export type WsServerMessage =
   | { type: 'prepareStep'; key: PrepareStepKey; status: PrepareStepStatus }
@@ -393,6 +396,7 @@ export type ReportCoverage = {
 
 export type ReportResponse = {
   interviewId: string;
+  revision: number;
   position: string;
   positionLabel: string;
   totalScore: number;
@@ -412,10 +416,11 @@ export type ReportGeneratingResponse = {
   retryAfter: number;
 };
 
-// POST /reports/{id}/feedback-disagreements
+// POST /interviews/{id}/feedback-disagreements
 
 export type FeedbackDisagreementRequest = {
   persona: Persona;
   reasonType: ReasonType;
+  expectedRevision: number;
   comment?: string;
 };
