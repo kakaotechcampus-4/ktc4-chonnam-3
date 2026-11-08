@@ -17,6 +17,57 @@ ENV_LINE = re.compile(r"^(?P<key>[A-Z][A-Z0-9_]*)=(?P<value>[^#]*)")
 # .env.example 에만 있고 Settings 에 없어도 되는 키 (스프린트2 예약 등).
 UNMAPPED_KEYS: set[str] = set()
 
+# 운영 연결 예시는 안전한 무설정 fallback과 구분하며, 의도한 차이만 정확히 허용한다.
+OPERATIONAL_EXAMPLES: dict[str, object] = {
+    "OPENAI_MODEL": "gpt-6-luna",
+    "LLM_CONNECTION_SLOT": 3,
+    "LLM_TASK_TIMEOUTS": {
+        "repo_deep": 120,
+        "answer_analysis": 120,
+        "director": 120,
+        "report_score": 180,
+        "report": 180,
+    },
+    "OPENAI_MODEL_2": "gpt-6.1-terra",
+    "OPENAI_MODEL_3": "gpt-6.1-sol",
+    "LLM_TIMEOUT_SECONDS": 50,
+    "LLM_MAX_OUTPUT_TOKENS": 128000,
+    "LLM_MAX_INPUT_BYTES": 262144,
+    "LLM_MAX_RESPONSE_BYTES": 67108864,
+    "LLM_REASONING_EFFORT": "xhigh",
+    "LLM_STREAM": True,
+    "TTS_PROVIDER": "google_cloud",
+    "TTS_VOICE_MAP": {
+        "tech_lead": "ko-KR-Chirp3-HD-Charon",
+        "domain_lead": "ko-KR-Chirp3-HD-Kore",
+        "hr_manager": "ko-KR-Chirp3-HD-Aoede",
+    },
+    "TTS_MONTHLY_CHARACTER_LIMIT": 1000000,
+}
+PRIVATE_PLACEHOLDERS = {
+    "GITHUB_CLIENT_ID",
+    "GITHUB_CLIENT_SECRET",
+    "TOKEN_ENCRYPTION_KEY",
+    "OPENAI_API_KEY",
+    "PROXY_TOKEN",
+    "CHAT_PROXY_URL",
+    "CHAT_PROXY_URL_2",
+    "CHAT_PROXY_URL_3",
+    "TTS_API_KEY",
+    "TTS_ACCESS_TOKEN",
+    "TAVILY_API_KEY",
+    "VISION_BASE_URL",
+    "VISION_API_KEY",
+    "STT_BASE_URL",
+    "STT_API_KEY",
+}
+
+
+def _assert_private_placeholders(items: dict[str, str]) -> None:
+    # 잘못 들어온 비공개 값이 테스트 실패 메시지에 다시 노출되지 않게 키만 보고한다.
+    unsafe = {key for key in PRIVATE_PLACEHOLDERS if items.get(key)}
+    assert not unsafe, f"예제의 비공개 입력은 빈 값이어야 합니다: {sorted(unsafe)}"
+
 
 def _env_example_items() -> list[tuple[str, str]]:
     """.env.example 에서 주석 처리되지 않은 (키, 값) 을 순서대로 모은다. 값의 인라인 주석은 뗀다."""
@@ -50,10 +101,12 @@ def test_env_example_has_no_duplicate_keys() -> None:
 
 
 def test_env_example_defaults_match_settings() -> None:
-    """값이 있는 키는 Settings 기본값과 같아야 한다. 빈 값(비밀 키)은 건너뛴다."""
+    """명시한 운영 예시 외의 값은 Settings fallback과 같아야 한다."""
+    items = dict(_env_example_items())
+    _assert_private_placeholders(items)
     settings = Settings(_env_file=None)
     diff = {
-        key: (value, getattr(settings, key.lower()))
+        key
         for key, value in _env_example_items()
         if value
         and key not in UNMAPPED_KEYS
@@ -63,7 +116,44 @@ def test_env_example_defaults_match_settings() -> None:
         != getattr(settings, key.lower())
     }
 
-    assert not diff, f"(.env.example, Settings) 기본값 불일치: {diff}"
+    assert diff == set(OPERATIONAL_EXAMPLES), f"의도한 운영 예시와 실제 차이의 키: {sorted(diff)}"
+    for key, expected in OPERATIONAL_EXAMPLES.items():
+        parsed = Settings(_env_file=None, **{key.lower(): items[key]})
+        assert getattr(parsed, key.lower()) == expected
+
+
+def test_env_example_keeps_private_connection_values_empty() -> None:
+    items = dict(_env_example_items())
+    assert PRIVATE_PLACEHOLDERS <= items.keys()
+    _assert_private_placeholders(items)
+
+
+def test_env_example_parses_the_explicit_sol_slot_and_call_policies() -> None:
+    _assert_private_placeholders(dict(_env_example_items()))
+    # 실행 연결은 가짜 주소·키를 메모리에만 주입하며 실제 API는 호출하지 않는다.
+    settings = Settings(
+        _env_file=ENV_EXAMPLE,
+        chat_proxy_url_3="https://slot-three.example.test/v1",
+        proxy_token="example-fixture-key",
+    )
+    llm = settings.require_llm()
+    assert settings.llm_connection_slot == 3
+    assert llm.llm_default_model == "gpt-6.1-sol"
+    for name, timeout in {
+        "report": 180,
+        "report_score": 180,
+        "profile_summary": 50,
+        "repo_deep": 120,
+        "answer_analysis": 120,
+        "director": 120,
+    }.items():
+        limits = llm.call_limits(name)
+        assert limits.timeout_seconds == timeout
+        assert limits.max_output_tokens == 128000
+        assert limits.reasoning_effort == "xhigh"
+        assert limits.stream is True
+        assert limits.max_input_bytes == 262144
+        assert limits.max_response_bytes == 67108864
 
 
 def test_settings_load_without_env_file() -> None:
