@@ -1350,8 +1350,6 @@ def parse_deep_analysis(
                 if any(item.path == area.path for item in source.sources):
                     raise ContractError("semantic", "read scope mismatch")
                 raise ContractError("semantic", "unread source")
-            if matched.read_scope != area.scope:
-                raise ContractError("semantic", "read scope mismatch")
             # 디렉터리 목록만으로는 파일 동작을 확인할 수 없어 한계 없는 관찰을 받지 않는다.
             if matched.kind == "directory" and not area.limitations:
                 raise ContractError("semantic", "directory limitations missing")
