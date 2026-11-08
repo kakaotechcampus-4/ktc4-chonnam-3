@@ -97,6 +97,8 @@ async def get_report(
         raise AppError(Reason.REPORT_UNAVAILABLE)
     if await _has_failure_history(redis, interview.id):
         raise AppError(Reason.REPORT_UNAVAILABLE)
+    await generation.enqueue(db, redis, interview_id=interview.id, user_id=user_id)
+    return GeneratingResponse(retry_after=RETRY_AFTER_SECONDS)
 
 
 async def _has_failure_history(redis: ArqRedis, interview_id: uuid.UUID) -> bool:
