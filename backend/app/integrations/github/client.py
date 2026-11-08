@@ -12,6 +12,7 @@ ETag 값 자체는 여기서 보관하지 않는다. 조건부 요청(If-None-Ma
 401 응답에는 x-ratelimit-remaining 헤더가 없어 rate limit 분기보다 먼저 판정한다.
 """
 
+import asyncio
 import base64
 import binascii
 import time
@@ -27,12 +28,15 @@ from app.integrations.github.base import (
     GITHUB_ERROR_RATE_LIMITED,
     GITHUB_ERROR_REPO_UNREACHABLE,
     GITHUB_ERROR_TOKEN_INVALID,
+    GITHUB_USER_AGENT,
     GithubApiError,
     RepoDetail,
     RepoSummary,
+    RepoSupportingFile,
     repo_summary_from_api,
 )
 from app.integrations.github.pagination import parse_link_header, total_from_per_page_one
+from app.integrations.github.snapshot import collect_snapshot_context
 
 API_BASE = "https://api.github.com"
 DEFAULT_TIMEOUT_SECONDS = 15.0
@@ -69,6 +73,7 @@ class GithubClient:
     def _headers(self, etag: str | None = None) -> dict[str, str]:
         headers = {
             "Accept": _ACCEPT,
+            "User-Agent": GITHUB_USER_AGENT,
             "Authorization": f"Bearer {self._token}",
             "X-GitHub-Api-Version": _API_VERSION,
         }
@@ -234,14 +239,22 @@ class GithubClient:
         return {str(key): value for key, value in payload.items()}
 
     async def fetch_readme(
-        self, full_name: str, *, max_chars: int = DEFAULT_README_MAX_CHARS
+        self,
+        full_name: str,
+        *,
+        max_chars: int = DEFAULT_README_MAX_CHARS,
+        ref: str | None = None,
     ) -> tuple[str, bool]:
         """README 본문. 입력: owner/repo, 길이 상한. 출력: (본문, 잘렸는지).
 
         README 가 없으면 GithubApiError(no_readme) 를 던진다.
         """
         try:
-            payload = (await self.request(f"/repos/{full_name}/readme")).json()
+            payload = (
+                await self.request(
+                    f"/repos/{full_name}/readme", params={"ref": ref} if ref is not None else None
+                )
+            ).json()
         except GithubApiError as error:
             if error.status_code == httpx.codes.NOT_FOUND:
                 raise GithubApiError(GITHUB_ERROR_NO_README, status_code=404) from error
@@ -296,6 +309,7 @@ class GithubClient:
         *,
         login: str | None = None,
         readme_max_chars: int = DEFAULT_README_MAX_CHARS,
+        include_context: bool = False,
     ) -> RepoDetail:
         """L0-b 를 모아 온다. 입력: RepoSummary, 사용자 login, README 상한. 출력: RepoDetail.
 
@@ -315,6 +329,9 @@ class GithubClient:
         stopped = False
         repository_inaccessible = False
         collected_fields: set[str] = set()
+        structure: tuple[str, ...] = ()
+        supporting_files: tuple[RepoSupportingFile, ...] = ()
+        source_limitations: tuple[str, ...] = ()
 
         def _record(error: GithubApiError) -> None:
             nonlocal retry_after, stopped
@@ -323,6 +340,17 @@ class GithubClient:
                 retry_after = error.retry_after_seconds
             if error.error_code in (GITHUB_ERROR_RATE_LIMITED, GITHUB_ERROR_TOKEN_INVALID):
                 stopped = True
+
+        # 서비스 L1 수집에서는 원문보다 SHA를 먼저 정해 분석 중 push와 섞이지 않게 한다.
+        if include_context and repo.default_branch:
+            try:
+                head_sha = await self.fetch_head_sha(repo.full_name, repo.default_branch)
+                if head_sha is not None and fullmatch(r"[0-9a-f]{40}", head_sha):
+                    collected_fields.add("head_sha")
+                else:
+                    head_sha = None
+            except GithubApiError as error:
+                _record(error)
 
         if not stopped:
             try:
@@ -333,10 +361,12 @@ class GithubClient:
                 repository_inaccessible = error.status_code == httpx.codes.NOT_FOUND
                 _record(error)
 
-        if not stopped:
+        if not stopped and (not include_context or head_sha is not None):
             try:
                 readme_text, readme_truncated = await self.fetch_readme(
-                    repo.full_name, max_chars=readme_max_chars
+                    repo.full_name,
+                    max_chars=readme_max_chars,
+                    **({"ref": head_sha} if include_context else {}),
                 )
                 collected_fields.update(("readme_text", "readme_truncated"))
                 repository_inaccessible = False
@@ -347,7 +377,7 @@ class GithubClient:
                 _record(error)
 
         branch = repo.default_branch
-        if not stopped and branch:
+        if not stopped and branch and not include_context:
             try:
                 head_sha = await self.fetch_head_sha(repo.full_name, branch)
                 if head_sha is not None and fullmatch(r"[0-9a-f]{40}", head_sha):
@@ -375,6 +405,22 @@ class GithubClient:
             except GithubApiError as error:
                 _record(error)
 
+        if include_context and head_sha is not None and not stopped:
+            try:
+                async with asyncio.timeout(self._timeout_seconds):
+                    (
+                        structure,
+                        supporting_files,
+                        source_limitations,
+                    ) = await collect_snapshot_context(
+                        repo.full_name, head_sha, self._snapshot_json
+                    )
+            except GithubApiError as error:
+                _record(error)
+                source_limitations = ("고정 SHA의 L1 구조·보조 원문 수집을 완료하지 못했습니다.",)
+            except TimeoutError:
+                source_limitations = ("L1 보조 원문 수집의 전체 시간 상한에 도달했습니다.",)
+
         return RepoDetail(
             languages=languages,
             readme_text=readme_text,
@@ -386,7 +432,55 @@ class GithubClient:
             rate_limit_retry_after_seconds=retry_after,
             repository_inaccessible=repository_inaccessible,
             collected_fields=frozenset(collected_fields),
+            structure=structure,
+            supporting_files=supporting_files,
+            source_limitations=source_limitations,
         )
+
+    async def _snapshot_json(
+        self, path: str, params: dict[str, str] | None, *, max_bytes: int = 65536
+    ) -> dict[str, object]:
+        """L1 보조 조회는 응답을 스트리밍해 고정 바이트 상한에서 중단한다."""
+        url = self._api_base + path
+        if not self._is_api_origin(url):
+            raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE)
+        request = httpx.Request(
+            "GET",
+            url,
+            params=params,
+            headers={**self._headers(), "Accept-Encoding": "identity"},
+            extensions={"timeout": httpx.Timeout(self._timeout_seconds).as_dict()},
+        )
+
+        async def receive(client: httpx.AsyncClient) -> dict[str, object]:
+            response = await client.send(request, auth=None, stream=True, follow_redirects=False)
+            body = bytearray()
+            try:
+                async for part in response.aiter_bytes():
+                    if len(body) + len(part) > max_bytes:
+                        raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE)
+                    body.extend(part)
+            finally:
+                await response.aclose()
+            buffered = httpx.Response(
+                response.status_code, headers=response.headers, content=bytes(body)
+            )
+            self._raise_for_status(buffered)
+            try:
+                value = buffered.json()
+            except ValueError:
+                raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE) from None
+            if not isinstance(value, dict):
+                raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE)
+            return value
+
+        try:
+            if self._client is not None:
+                return await receive(self._client)
+            async with httpx.AsyncClient() as client:
+                return await receive(client)
+        except httpx.HTTPError:
+            raise GithubApiError(GITHUB_ERROR_REPO_UNREACHABLE) from None
 
 
 def _repository_items(response: httpx.Response) -> list[dict[str, Any]]:

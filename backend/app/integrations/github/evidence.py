@@ -10,6 +10,8 @@ from urllib.parse import quote
 import httpx
 from pydantic import SecretStr
 
+from app.integrations.github.base import GITHUB_USER_AGENT
+
 
 class EvidenceReadError(Exception):
     """외부 원문이나 비밀값 대신 고정된 오류 코드만 전달한다."""
@@ -71,15 +73,30 @@ class EvidenceReader:
         self.bytes_left = max_total_bytes
         self.timeout = timeout_seconds
         self.trees: dict[str, list[object]] = {}
+        self.blob_sizes: dict[str, int] = {}
         self._public_app_auth = public_app_auth
 
     async def get(
-        self, suffix: str, *, ref: str | None = None, token: SecretStr | None = None
+        self,
+        suffix: str,
+        *,
+        ref: str | None = None,
+        token: SecretStr | None = None,
+        max_bytes: int | None = None,
     ) -> dict[str, object] | None:
         if self.requests_left == 0 or self.bytes_left == 0:
             raise EvidenceReadError("evidence_budget_exhausted")
+        read_limit = (
+            self.response_limit if max_bytes is None else min(self.response_limit, max_bytes)
+        )
+        if read_limit <= 0:
+            raise EvidenceReadError("evidence_budget_exhausted")
         self.requests_left -= 1
-        headers = {"Accept": "application/vnd.github+json", "Accept-Encoding": "identity"}
+        headers = {
+            "Accept": "application/vnd.github+json",
+            "Accept-Encoding": "identity",
+            "User-Agent": GITHUB_USER_AGENT,
+        }
         if token is not None:
             headers["Authorization"] = f"Bearer {token.get_secret_value()}"
         elif self._public_app_auth is not None:
@@ -105,12 +122,20 @@ class EvidenceReader:
                 # 압축 폭탄을 피한다. 오류 본문·download_url은 읽거나 따라가지 않는다.
                 if response.headers.get("Content-Encoding", "identity").lower() != "identity":
                     raise EvidenceReadError("github_invalid_response")
+                declared = response.headers.get("Content-Length", "")
+                if max_bytes is not None and declared.isdecimal() and int(declared) > read_limit:
+                    raise EvidenceReadError("evidence_byte_limit")
                 body = bytearray()
-                async for chunk in response.aiter_bytes():
+                async for chunk in response.aiter_bytes(
+                    chunk_size=read_limit if max_bytes is not None else None
+                ):
                     self.bytes_left -= len(chunk)
-                    if self.bytes_left < 0 or len(body) + len(chunk) > self.response_limit:
+                    if self.bytes_left < 0 or len(body) + len(chunk) > read_limit:
                         raise EvidenceReadError("evidence_byte_limit")
                     body.extend(chunk)
+                    # 구조 응답은 경계에서 보수적으로 중단해 원문 몫을 읽지 않는다.
+                    if max_bytes is not None and len(body) == read_limit:
+                        raise EvidenceReadError("evidence_byte_limit")
             finally:
                 await response.aclose()
         except httpx.TimeoutException:
@@ -177,6 +202,8 @@ class EvidenceReader:
                 "blob" if final else "tree"
             ):
                 raise EvidenceReadError("evidence_not_regular_file")
+            if final and type(entry.get("size")) is int and entry["size"] >= 0:
+                self.blob_sizes[str(entry["sha"])] = entry["size"]
             current = _sha(entry.get("sha"))
         return current
 
@@ -210,3 +237,77 @@ class EvidenceReader:
         if "\0" in text:
             raise EvidenceReadError("evidence_not_text")
         return text
+
+    async def file_text_prefix(
+        self, path: str, commit_sha: str, blob_sha: str, *, max_bytes: int, expected_size: int
+    ) -> tuple[str, bool]:
+        """큰 파일의 실제 원문 prefix만 읽는다. 미완료 본문은 완성된 줄까지만 반환한다.
+
+        GitHub Contents의 raw media type을 고정 ref에 요청하며 download_url은 따라가지 않는다.
+        전체 읽기를 마친 경우에만 Git blob hash를 검증하고, 부분 읽기는 명시적으로 구분한다.
+        """
+        if self.requests_left <= 0 or self.bytes_left <= 0 or max_bytes <= 0:
+            raise EvidenceReadError("evidence_budget_exhausted")
+        self.requests_left -= 1
+        limit = min(max_bytes, self.response_limit, self.bytes_left)
+        headers = {
+            "Accept": "application/vnd.github.raw+json",
+            "Accept-Encoding": "identity",
+            "User-Agent": GITHUB_USER_AGENT,
+        }
+        if self._public_app_auth is not None:
+            client_id, secret = self._public_app_auth
+            basic = base64.b64encode(f"{client_id}:{secret.get_secret_value()}".encode()).decode()
+            headers["Authorization"] = f"Basic {basic}"
+        request = httpx.Request(
+            "GET",
+            self.base + f"/contents/{quote(path, safe='/')}",
+            params={"ref": commit_sha},
+            headers=headers,
+            extensions={"timeout": httpx.Timeout(self.timeout).as_dict()},
+        )
+        body = bytearray()
+        complete = True
+        try:
+            response = await self.http.send(request, stream=True, auth=None, follow_redirects=False)
+            try:
+                if response.status_code != 200:
+                    raise EvidenceReadError(f"github_http_{response.status_code}")
+                if response.headers.get("Content-Encoding", "identity").lower() != "identity":
+                    raise EvidenceReadError("github_invalid_response")
+                async for part in response.aiter_bytes(chunk_size=limit):
+                    self.bytes_left -= len(part)
+                    body.extend(part[: limit - len(body)])
+                    if len(body) == limit and expected_size > limit:
+                        complete = False
+                        break
+                    if len(body) >= limit:
+                        complete = False
+                        break
+            finally:
+                await response.aclose()
+        except httpx.TimeoutException:
+            raise EvidenceReadError("github_timeout") from None
+        except httpx.HTTPError:
+            raise EvidenceReadError("github_transport_error") from None
+        raw = bytes(body)
+        if len(raw) == expected_size:
+            # EOF 직전 상한과 일치해도 Git 객체 전체 hash로 동일성을 확인할 수 있다.
+            complete = True
+        if complete:
+            digest = hashlib.sha1(
+                f"blob {len(raw)}\0".encode("ascii") + raw, usedforsecurity=False
+            ).hexdigest()
+            if len(raw) != expected_size or digest != blob_sha:
+                raise EvidenceReadError("github_invalid_response")
+        elif b"\n" in raw:
+            raw = raw[: raw.rfind(b"\n") + 1]
+        else:
+            raw = b""
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeError:
+            raise EvidenceReadError("evidence_not_text") from None
+        if "\0" in text:
+            raise EvidenceReadError("evidence_not_text")
+        return text, complete
