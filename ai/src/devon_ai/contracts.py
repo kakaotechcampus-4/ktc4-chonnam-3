@@ -1245,7 +1245,6 @@ class DeepRepoInput(_Contract):
             or self.shallow.head_sha != self.head_sha
         ):
             raise ContractError("semantic", "shallow repository ref")
-        _unique(tuple(source.path for source in self.sources), "source paths")
 
 
 @dataclass(frozen=True)
