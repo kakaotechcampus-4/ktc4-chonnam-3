@@ -1343,6 +1343,7 @@ def parse_deep_analysis(
                 # 줄 번호·함수 위치는 읽은 범위로 확인할 수 없는 근거라 받지 않는다.
                 raise ContractError("schema", min(extra))
             area = decode(NotableArea, item)
+            if scopes.count((area.path, area.scope)) > 1:
                 raise ContractError("semantic", "duplicate path")
             matched = source_by_path.get(area.path)
             if matched is None:
