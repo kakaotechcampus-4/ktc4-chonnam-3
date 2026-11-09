@@ -211,3 +211,218 @@ def _state(
         "document_claim_comparison_error": error,
         "document_claim_comparison_active_ids": list(ids),
     }
+
+
+async def prepare_selected_claim_comparisons(
+    sessions: async_sessionmaker[AsyncSession],
+    interview_id: UUID,
+    settings: Settings,
+    http_client: httpx.AsyncClient | None = None,
+    *,
+    job_id: UUID,
+) -> None:
+    """레포 원문 저장 뒤 호출한다. 한 논리 task만 실행하며 준비 임대를 다시 확인한다."""
+    async with sessions.begin() as db:
+        interview = await _owned(db, interview_id, job_id)
+        if interview is None:
+            return
+        material = await _input(db, interview)
+        if not material.claims:
+            _state(interview, "succeeded", 0)
+            return
+        prompt: c.PromptSpec | None
+        llm: LLMSettings | None
+        needs_model = any(
+            unverified_reason(item, has_code=bool(material.evidences)) is None
+            for item in material.claims[:MAX_CLAIMS]
+        )
+        if needs_model:
+            try:
+                prompt = await load_active_prompt(db, "claim_code")
+                llm = settings.require_llm()
+            except (PromptNotFoundError, PromptConfigurationError, ValueError):
+                prompt, llm = None, None
+        else:
+            prompt, llm = None, None
+        fingerprint = material.fingerprint(prompt)
+        cached = list(
+            await db.scalars(
+                select(DocumentClaimComparison)
+                .where(
+                    DocumentClaimComparison.interview_session_id == interview_id,
+                    DocumentClaimComparison.input_fingerprint == fingerprint,
+                    DocumentClaimComparison.execution_status.in_(("succeeded", "budget_exhausted")),
+                )
+                .order_by(DocumentClaimComparison.created_at.desc(), DocumentClaimComparison.id)
+            )
+        )
+        batches: dict[UUID, list[DocumentClaimComparison]] = {}
+        for item in cached:
+            batches.setdefault(item.run_id, []).append(item)
+        reusable = next(
+            (batch for batch in batches.values() if len(batch) == len(material.claims)), None
+        )
+        if reusable is not None:
+            overall = (
+                "budget_exhausted"
+                if any(row.execution_status == "budget_exhausted" for row in reusable)
+                else "succeeded"
+            )
+            _state(interview, overall, len(reusable), ids=tuple(str(row.id) for row in reusable))
+            return
+        state = dict(interview.context_state or {})
+        if (
+            state.get("document_claim_comparison_status") == "running"
+            and state.get("document_claim_comparison_job") == str(job_id)
+            and state.get("document_claim_comparison_input") == fingerprint
+            and (expires := _expires(state)) is not None
+            and expires > datetime.now(UTC)
+        ):
+            return
+        run_id = uuid4()
+        _state(interview, "running", 0)
+        interview.context_state = {
+            **(interview.context_state or {}),
+            "document_claim_comparison_run_id": str(run_id),
+            "document_claim_comparison_job": str(job_id),
+            "document_claim_comparison_input": fingerprint,
+            "document_claim_comparison_started_at": datetime.now(UTC).isoformat(),
+            "document_claim_comparison_expires_at": (
+                datetime.now(UTC)
+                + timedelta(
+                    seconds=3 * llm.call_limits("claim_code").timeout_seconds if llm else 30
+                )
+            ).isoformat(),
+        }
+
+    attempts: list[c.AttemptMetadata] = []
+    execution = "succeeded"
+    selected = material.claims[:MAX_CLAIMS]
+    cancelled = False
+    if not needs_model:
+        result = ClaimComparisonResult(
+            tuple(
+                unverified(
+                    item,
+                    unverified_reason(item, has_code=bool(material.evidences))
+                    or "code_evidence_unavailable",
+                )
+                for item in selected
+            ),
+            None,
+            (),
+        )
+    elif prompt is None or llm is None:
+        execution = "not_available"
+        result = ClaimComparisonResult(
+            None,
+            c.CallFailure(
+                "provider", "claim_comparison_not_configured", "Comparison is not configured."
+            ),
+            (),
+        )
+    else:
+        try:
+            result = await compare_document_claims(
+                selected,
+                material.evidences,
+                prompt=prompt,
+                settings=llm,
+                http_client=http_client,
+                attempt_sink=attempts,
+            )
+        except asyncio.CancelledError:
+            cancelled = True
+            execution = "failed"
+            result = ClaimComparisonResult(
+                None,
+                c.CallFailure("provider", "claim_comparison_cancelled", "Comparison cancelled."),
+                tuple(attempts),
+            )
+    if result.failure and execution == "succeeded":
+        execution = "failed"
+
+    async def store() -> None:
+        async with sessions.begin() as db:
+            interview = await db.scalar(
+                select(InterviewSession)
+                .where(InterviewSession.id == interview_id)
+                .with_for_update()
+            )
+            if interview is None:
+                return
+            record = LLMCallRecord(
+                id=run_id,
+                interview_session_id=interview_id,
+                task_name="claim_code",
+                attempts=[asdict(item) for item in result.attempts],
+                failure=asdict(result.failure) if result.failure else None,
+            )
+            db.add(record)
+            if not owns_preparation(interview, job_id=job_id) or (
+                interview.context_state or {}
+            ).get("document_claim_comparison_run_id") != str(run_id):
+                record.discard_reason = "preparation_changed"
+                return
+            expires = _expires(interview.context_state or {})
+            if expires is None or expires <= datetime.now(UTC):
+                record.discard_reason = "comparison_lease_expired"
+                _state(interview, "pending", 0, "comparison_lease_expired")
+                return
+            current = await _input(db, interview)
+            if needs_model:
+                try:
+                    active = await load_active_prompt(db, "claim_code")
+                except (PromptNotFoundError, PromptConfigurationError):
+                    active = None
+            else:
+                active = None
+            if cancelled or current.fingerprint(active) != fingerprint:
+                record.discard_reason = "comparison_input_or_preparation_changed"
+                _state(interview, "pending", 0, "comparison_input_changed")
+                return
+            by_id = {item.claim_id: item for item in result.data or ()}
+            stored = []
+            for index, claim in enumerate(material.claims):
+                status = execution if index < MAX_CLAIMS else "budget_exhausted"
+                error = (
+                    result.failure.error_code
+                    if result.failure
+                    else "comparison_claim_budget_exceeded"
+                )
+                comparison = by_id.get(claim.claim_id) or unverified(claim, error)
+                comparison = replace(
+                    comparison,
+                    limitations=tuple(
+                        dict.fromkeys((*comparison.limitations, *material.limitations))
+                    ),
+                )
+                existing = DocumentClaimComparison(
+                    interview_session_id=interview_id,
+                    claim_id=UUID(claim.claim_id),
+                    run_id=run_id,
+                    input_fingerprint=fingerprint,
+                    document_version=claim.source_version,
+                )
+                db.add(existing)
+                existing.claim_source = asdict(claim)
+                existing.code_sources = list(material.code_sources)
+                existing.status, existing.execution_status = comparison.status, status
+                existing.result = asdict(comparison)
+                existing.prompt_version = prompt.version if prompt else None
+                existing.model = prompt.model if prompt else None
+                stored.append(existing)
+            await db.flush()
+            overall = execution if len(material.claims) <= MAX_CLAIMS else "budget_exhausted"
+            _state(
+                interview,
+                overall,
+                len(material.claims),
+                result.failure.error_code if result.failure else None,
+                tuple(str(row.id) for row in stored),
+            )
+
+    if cancelled:
+        await asyncio.shield(store())
+        raise asyncio.CancelledError
+    await store()
