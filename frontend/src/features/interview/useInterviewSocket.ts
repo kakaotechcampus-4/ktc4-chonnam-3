@@ -45,7 +45,10 @@ export function useInterviewSocket({
   const socketRef = useRef<WebSocket | null>(null);
   /** 연결이 열리는 즉시 보낼 메시지. 끊긴 상태에서 send를 호출하면 여기 담긴다. */
   const pendingSendRef = useRef<WsClientMessage | null>(null);
-  /** recoverable: false면 서버가 세션을 닫는다. 그때는 재연결하지 않는다. */
+  /**
+   * recoverable: false면 보통 서버가 세션을 닫는다. 그때는 재연결하지 않는다. stt_unavailable은
+   * 연결을 유지하지만 재연결해도 복구되지 않으므로 같이 막는다.
+   */
   const sessionClosedRef = useRef(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**

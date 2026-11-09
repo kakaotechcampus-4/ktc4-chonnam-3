@@ -160,6 +160,33 @@ test('빈 전사는 details.cause가 empty_transcript다', async ({ page }) => {
   });
 });
 
+test('STT 설정 누락·인증 오류는 recoverable false와 stt_unavailable이다', async ({ page }) => {
+  await bootMock(page);
+  await scenario(page, 'ws-stt-unavailable');
+  const got = await exchange(page, [start, ...chunks(4), end], 'error');
+  expect(got.at(-1)).toMatchObject({
+    reason: 'stt_failed',
+    recoverable: false,
+    details: { cause: 'stt_unavailable' },
+  });
+});
+
+test('오디오 길이 초과는 answer_too_long·audio_too_long이고 같은 턴에 다시 답할 수 있다', async ({
+  page,
+}) => {
+  await bootMock(page);
+  await scenario(page, 'ws-audio-too-long');
+  const failed = await exchange(page, [start, ...chunks(4)], 'error');
+  expect(failed.at(-1)).toMatchObject({
+    reason: 'answer_too_long',
+    recoverable: true,
+    details: { cause: 'audio_too_long', limitSeconds: 180 },
+  });
+
+  const retried = await exchange(page, [start, ...chunks(4), end], 'transcript');
+  expect(types(retried)).toContain('transcript');
+});
+
 test('다시 듣기 요청이면 answerReceived 없이 같은 턴 question이 다시 온다', async ({ page }) => {
   await bootMock(page);
   await scenario(page, 'ws-repeat-request');

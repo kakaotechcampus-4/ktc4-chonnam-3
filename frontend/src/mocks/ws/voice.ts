@@ -19,7 +19,8 @@ const TRANSCRIBE_MS = 600;
 export const REPEAT_REQUEST_TEXT = '다시 한 번 말씀해 주시겠어요?';
 const FALLBACK_ANSWER = '네, 그 부분은 직접 설계하고 구현했습니다.';
 
-type AnswerFault = 'stt' | 'repeat' | 'no-partial' | 'reject' | 'no-ack' | 'drop-before-ack';
+type AnswerFault =
+  'stt' | 'repeat' | 'no-partial' | 'reject' | 'no-ack' | 'drop-before-ack' | 'too-long';
 
 /** `/ws/interviews/{sessionId}/{kind}` 규칙만 받는다. 연결 단계 규칙은 끝이 달라 걸러진다. */
 function takeAnswerFault(socketPath: string, kind: AnswerFault) {
@@ -46,7 +47,9 @@ export function createAnswerHandler(
     const stt = takeAnswerFault(socketPath, 'stt');
     if (stt) {
       send(client, {
-        ...wsError(stt.reason ?? 'stt_failed', stt.code ?? 'ERR_STT_FAILED', { recoverable: true }),
+        ...wsError(stt.reason ?? 'stt_failed', stt.code ?? 'ERR_STT_FAILED', {
+          recoverable: stt.recoverable ?? true,
+        }),
         details: stt.details,
       });
       return;
@@ -77,6 +80,15 @@ export function createAnswerHandler(
   return (data: unknown) => {
     if (typeof data !== 'string') {
       if (!pending) return;
+      // 서버 길이 상한 초과. 받던 오디오를 버리고 같은 턴 answerStart를 기다린다(error-reasons.md).
+      if (takeAnswerFault(socketPath, 'too-long')) {
+        pending = null;
+        send(client, {
+          ...wsError('answer_too_long', 'ERR_ANSWER_TOO_LONG', { recoverable: true }),
+          details: { cause: 'audio_too_long', limitSeconds: 180 },
+        });
+        return;
+      }
       pending.chunks += 1;
       if (pending.chunks % CHUNKS_PER_WORD !== 0) return;
       if (takeAnswerFault(socketPath, 'no-partial')) return;
