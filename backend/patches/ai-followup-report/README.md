@@ -1,17 +1,20 @@
-# 후속 패치 적용 검증
+# 현재 리뷰 보완과 적용 조건
 
-<!-- verified-current-patches -->
-아래 표만 현재 게시 payload의 개별 재생 결과다. UTF-8 LF 기준 SHA256이며 `없음`은 신규/삭제 파일이다. `git apply --check` 뒤 별도 sandbox에서 실제 적용하고 선언된 원문 목표와 대조했다. **여러 PR의 전체 순서 적용·서비스 통합 통과를 뜻하지 않는다.**
+선행은 #213·#218·#216입니다. #197이 이미 반영한 LinkedRequirement의 id·category·text 세 필드와 엄격한 ID 연결을 보존합니다. source_field·tech_tags를 이 계약에 추가하지 않습니다. 잘못된 다섯 필드 기대값은 활성 테스트에서 수정했습니다.
 
-일부 적용 전 원문은 미병합 선행을 결합한 로컬 기준이다. 지문만 맞춘 대체 코드를 만들거나 선행 구현을 이 PR에 복사하지 않고, 실제 병합된 선행 커밋에서 다시 기준을 확인한다.
+ScoreTurn의 새 ID 필드와 legacy replay 옵션을 사용하는 회귀는 구현과 함께 대기 패치로 보존합니다. 기존 develop 호환 회귀는 활성 상태로 유지합니다. requirements 키 누락은 기본적으로 거절하며, 내부 allow_legacy_requirements=True로 명시한 과거 재현만 빈 목록으로 읽습니다. null·잘못된 값·존재하지 않는 연결 ID는 예외에서도 거절합니다.
+
+과거 기록에 후보 키가 없으면 호환 경로를 유지합니다. 키가 있지만 타입이 손상됐으면 제한 사항을 남기고 조회 권한을 늘리지 않습니다. 실제 인용을 검증할 수 없으면 기존 검증 오류로 거절합니다. 아래 지문은 명시한 로컬 선행 원문에서의 개별 재생 근거이며 최신 develop에 바로 적용된다는 뜻이 아닙니다.
+
+이번에 개별 재생한 패치만 아래에 적습니다. 각 원문에서 git apply --check·실제 적용·목표 SHA 대조를 통과했으며 전체 PR 순서 적용·서비스 통합 통과를 뜻하지 않습니다. 나머지 기존 코호트 패치는 선행 통합 후 재기준·검증해야 합니다.
 
 | 패치 | 대상 | 적용 전 SHA256 | 적용 후 SHA256 | patch SHA256 |
 | --- | --- | --- | --- | --- |
-| `1754dffffbe0-history.py.patch` | `backend/app/features/report/history.py` | `85eb48f2d4d2fab43eb08709421c83fda30881170e126f8126a1d38a126be2a8` | `dd63b3a5451916f744641b9a0dfbc849284397abf766e3eccc6733148db8f7d4` | `7c80c0f2b33351cdf8bbc60935db9ec0d0731aff9da8705503cfd5f8e02763f0` |
-| `26ffa57af361-test_report_history.py.patch` | `backend/tests/features/report/test_report_history.py` | `37032638637fa66c4a865d9740d0d7abaadccf5d5bc7cb4173000f2039d34595` | `6ed0a4cb5a4192722ea09a5df650daaf8acb8ba41a4b95ead015b30d3d1f6910` | `161906af6dc3d67adcefcdf2e49ddef5295f64b76ffceab93855cd0960f2ecd6` |
-| `3e5dd61dfcf2-report.py.patch` | `ai/src/devon_ai/llm_tasks/report.py` | `e462dd96f8242779f8ac13be614cb8f5341180fa3530beb7e13f3e274889da74` | `4a1ac1f7bb6ab77b5832a4622213ca6137d4b116a80511d3dd24780ac5f402e8` | `2ca3016d0e56551f8e2c678a848d29747766df7bd5003dcab382a13300dfaa33` |
-
-선행의 실제 병합 커밋으로 재기준한 뒤 적용한다. 리포트 outbox 생산자·3인수 worker·reaper 등록·ProfileRefreshRequest/0012·전용 회귀는 함께 활성화한다. 적용 커밋·지문·통합 회귀를 spec/ai/implementation.md에 기록한 뒤에만 대기 패치를 제거한다.
+| `test_generate_report-legacy-requirements.py.patch` | `ai/tests/llm_tasks/test_generate_report.py` | `21ee3b699d7bdcf7f205b842daaf333cc5ffb62032732459e21eb462625e92ba` | `ca422a9f4bd5a968a8f81027f0f424c2739305eefe03d7c4065892dadcaf0520` | `2a976aa3e3994fd560903a3a07aebb00eb32d4540c1f3f0e59ac39a6298bb75a` |
+| `test_report_score-jd-ids.py.patch` | `ai/tests/llm_tasks/test_report_score.py` | `0887808545a0e8855d1cafc94d33793018ec42aec95658a018f4387c53dbab20` | `009de8ab5274dc7d5408d3f9d6d45d7a2e9136bb2f30ead403592592c20dd511` | `31e9deeb2b0a10d166415d71f02e7de459b43169159e6453037d698c8367ae55` |
+| `1754dffffbe0-history.py.patch` | `backend/app/features/report/history.py` | `85eb48f2d4d2fab43eb08709421c83fda30881170e126f8126a1d38a126be2a8` | `2a85a0abf22d2157f06e1acad9a98c0ad647be124cd9dd8d83ebfe68ef456447` | `cc955ef05d2a7b2e13fa623a6799fa4ebd7118d9d5cd8f2fd0aad840b4ce38d9` |
+| `26ffa57af361-test_report_history.py.patch` | `backend/tests/features/report/test_report_history.py` | `37032638637fa66c4a865d9740d0d7abaadccf5d5bc7cb4173000f2039d34595` | `0d54ab6ccdb92b69d8029021003eac37e2e5f9681b531d14835a573462d12776` | `15179e1d4e7b6136159fa6ad88df28c23e2d5c66f55d2158e7f5325c78bbb0f8` |
+| `3e5dd61dfcf2-report.py.patch` | `ai/src/devon_ai/llm_tasks/report.py` | `e462dd96f8242779f8ac13be614cb8f5341180fa3530beb7e13f3e274889da74` | `f38dfa4a457bfc9570fd006aff125a510f972bd07ac213a22df9f9fd8619ff10` | `06608c1c7b2cf96a2ba2ae7a62afe9ec2b27784144830dc97bf4cb811cc1c8be` |
 
 <details>
 <summary>이전 안내·과거 기준 지문(현재 적용 지문으로 사용 금지)</summary>
