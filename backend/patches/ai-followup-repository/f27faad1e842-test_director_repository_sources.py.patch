@@ -1,7 +1,95 @@
 diff --git a/backend/tests/agents/test_director_repository_sources.py b/backend/tests/agents/test_director_repository_sources.py
 --- a/backend/tests/agents/test_director_repository_sources.py
 +++ b/backend/tests/agents/test_director_repository_sources.py
-@@ -274,8 +274,8 @@
+@@ -102,6 +102,87 @@
+         raise AssertionError(f"예상하지 않은 GitHub 경로: {suffix}")
+ 
+ 
++async def test_symlink_inventory_is_preserved_without_filling_the_selection_request():
++    from uuid import UUID
++
++    from app.agents.director.tools import EvidenceScope
++    from app.features.interview.repository_sources import collect_repository_sources
++    from app.integrations.llm.client import CallBudget
++
++    seed = dict(repo_id=UUID(int=1), sha="a" * 40)
++    transport = Transport(seed, miss=True)
++
++    async def handle(request):
++        response = await transport(request)
++        if request.url.path.endswith(f"/git/trees/{TREE}"):
++            raw = response.json()
++            raw["tree"].extend(
++                dict(path=f"symlink-{n}", mode="120000", type="blob", sha="d" * 40)
++                for n in range(3000)
++            )
++            return httpx.Response(200, json=raw)
++        return response
++
++    config = settings().model_copy(
++        update={
++            "director_prepare_max_response_bytes": 1048576,
++            "director_prepare_max_total_bytes": 2097152,
++        }
++    )
++    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
++        result = await collect_repository_sources(
++            scope=EvidenceScope(
++                str(seed["repo_id"]), 123, "owner/sample", seed["sha"], frozenset()
++            ),
++            shallow=shallow(seed),
++            prompt=c.PromptSpec("repo_deep", "fixture", "fixture", "t"),
++            settings=config,
++            http_client=http,
++            budget=CallBudget(),
++        )
++    assert len(result.inventory_limitations) == 3000
++    assert len(result.limitations) < 12
++    assert len(transport.model_payloads[0]["limitations"]) < 12
++    assert [source.path for source in result.item.sources] == [PATH]
++
++
++async def test_cached_inventory_is_reused_without_replacing_its_observed_scope():
++    from uuid import UUID
++
++    from app.agents.director.tools import EvidenceScope
++    from app.features.interview.repository_inventory import SourceInventory
++    from app.features.interview.repository_sources import collect_repository_sources
++    from app.integrations.llm.client import CallBudget
++
++    seed = dict(repo_id=UUID(int=1), sha="a" * 40)
++    transport = Transport(seed)
++    original = SourceInventory(seed["sha"], (PATH, "old.custom"), (PATH,), ("당시 일부 미확인",))
++    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
++        result = await collect_repository_sources(
++            scope=EvidenceScope(
++                str(seed["repo_id"]), 123, "owner/sample", seed["sha"], frozenset()
++            ),
++            shallow=shallow(seed),
++            prompt=c.PromptSpec("repo_deep", "fixture", "fixture", "t"),
++            settings=settings().model_copy(update={"director_prepare_max_entries": 1}),
++            http_client=http,
++            budget=CallBudget(),
++            paths=(PATH,),
++            read_scopes=((PATH, "entire file"),),
++            inventory=original,
++        )
++    assert (
++        SourceInventory(
++            seed["sha"],
++            result.inventory_paths,
++            result.selection_paths,
++            result.inventory_limitations,
++        )
++        == original
++    )
++    assert not transport.model_operations
++
++
+ async def test_actual_tree_neighbor_is_preserved_without_reading_or_analyzing_it():
+     from uuid import UUID
+ 
+@@ -274,8 +355,8 @@
      config = settings().model_copy(
          update={
              "director_prepare_max_requests": 4 if limit == "requests" else 8,
