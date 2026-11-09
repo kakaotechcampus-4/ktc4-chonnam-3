@@ -1,7 +1,7 @@
 diff --git a/spec/ai/decisions/README.md b/spec/ai/decisions/README.md
 --- a/spec/ai/decisions/README.md
 +++ b/spec/ai/decisions/README.md
-@@ -86,3 +86,9 @@
+@@ -86,5 +86,11 @@
  - [0037 확인된 전체 사용 이력에 근거한 최초 TTS 예산](0037-tts-complete-history-budget.md): Accepted, 2026-11-08. 같은 결제계정의 이번 달 전체 사용 이력을 확인한 경우의 최초 예산 산정과 공급자 조회의 차이를 정의한다.
  - [0038 최종 서비스의 기준 초기화·작업 전달·검증 경계](0038-final-service-followups.md): Accepted for local development, 2026-11-08. 개발 초안 활성화와 사람 검수 구분, 프로필 outbox, 고정 SHA 보완 조회와 유한 복구·자동 검증의 경계를 정의한다.
  - [0041 게시 PR의 공통 기반과 통합 검사 순서](0041-published-pr-dependency-order.md): Accepted, 2026-11-08. 기존 PR 번호·원본 보존, 공통 기반 선행 배치와 통합 검사 이동, 미병합 선행 및 19개 후속 패치의 실행 제약을 정의한다.
@@ -11,3 +11,5 @@ diff --git a/spec/ai/decisions/README.md b/spec/ai/decisions/README.md
 +- [0042 실제 계정의 로컬 이용과 진단 수집 경계](0042-local-user-test-observability.md): Accepted for local operation, 2026-11-09. 별도 통합 환경, 사용자의 직접 로그인, 허용 메타데이터 관측과 AI 상주 판단의 차이를 정의한다.
 +
 +- [0044. 게시 시 평가 원본 바이트와 프롬프트 문자 보존](0044-publication-byte-and-prompt-integrity.md)
+ 
+ - [0045 리뷰 후 실행 활성화와 원문 복구 경계](0045-review-runtime-activation-and-source-recovery.md): Accepted for development, 2026-11-09. 계약 소비자 사전 검사, 원문 좌표·유한 복구, 검색·음성 정산과 공개 활성화 단위를 정의한다.

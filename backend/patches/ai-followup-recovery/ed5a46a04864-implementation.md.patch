@@ -1,12 +1,10 @@
 diff --git a/spec/ai/implementation.md b/spec/ai/implementation.md
 --- a/spec/ai/implementation.md
 +++ b/spec/ai/implementation.md
-@@ -2737,3 +2737,573 @@
- 기존 실제 공급자 실행 결과를 이번 변경의 새 결과로 재사용하지 않는다.
- 외부 모델·STT·TTS·Vision·검색 유료 호출과 사람 평가는 이번에 실행하지 않는다.
+@@ -2739,6 +2739,576 @@
  지속되는 결정은 [0041](decisions/0041-published-pr-dependency-order.md)에 남긴다.
-+
-+
+ 
+ 
 +## 2026-11-08 — 기존 작업의 신규 변경 게시와 실제 자료 후속 보완
 +
 +사용자 요청에 따라 기존 작업을 먼저 게시하고, 별도 `feature/ai-real-source-hardening-20261108`에서 후속 구현을 시작했다.
@@ -575,3 +573,8 @@ diff --git a/spec/ai/implementation.md b/spec/ai/implementation.md
 +- 게시 범위 159개 원본 경로를 직접 변경과 37개 후속 패치로 재생해 새 통합본 전체와 일치함을 확인했다. 적용 안내를 포함한 게시 파일은 175개다.
 +- 단독 게시본의 AST·수집·타입 검사 결과는 통합본 실행 결과와 구분한다. 필요한 선행 import가 없는 실패와 검사 환경 미준비도 PR 본문에 기록한다.
 +- 후속 패치는 자동 활성화되지 않는다. 선행 구현 반영, 지문 확인, 실제 코드 적용과 통합·CI 재검증 전까지 Draft를 유지한다.
++
++
+ <a id="review-followups-20261109"></a>
+ ## 2026-11-09 PR 리뷰 후속 수정
+ 
