@@ -145,6 +145,7 @@ async def test_only_unexpected_failures_log_a_safe_error_chain(
         (lambda: PostingUnreachableError(SECRET), "jd_fetch_failed"),
         (lambda: JdExtractionError("jd_extraction_failed"), "jd_extraction_failed"),
         (lambda: AppError(Reason.GITHUB_TOKEN_INVALID), "token_invalid"),
+        (_program_error, "internal_error"),  # SQLAlchemy 의 .code("f405")를 저장하지 않는다
     ],
 )
 async def test_failure_code_and_finish_state_are_unchanged(monkeypatch, make_error, code):

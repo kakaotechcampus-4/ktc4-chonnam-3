@@ -3,6 +3,7 @@
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from app.core.errors import AppError
 from app.db.models.user import GithubAccount, User
@@ -12,6 +13,8 @@ from app.features.analysis.pipeline.run_support import (
     batch_outcome,
     failure_code,
 )
+from app.integrations.jd.base import PostingUnreachableError, UnsupportedSiteError
+from app.llm_tasks.jd_extract import JdExtractionError
 from app.shared.enums import Reason
 
 
@@ -41,7 +44,13 @@ def test_batch_outcome_keeps_partial_success(snapshots, expected):
         (AppError(Reason.GITHUB_TOKEN_INVALID), "token_invalid"),
         (AppError(Reason.UNSUPPORTED_SITE), "unsupported_site"),
         (RunFailure("jd_fetch_failed"), "jd_fetch_failed"),
+        (PostingUnreachableError("x"), "jd_fetch_failed"),
+        (UnsupportedSiteError("x"), "unsupported_site"),
+        (JdExtractionError("jd_extraction_failed"), "jd_extraction_failed"),
         (RuntimeError("private diagnostic must not escape"), "internal_error"),
+        # SQLAlchemy 예외는 자체 .code("f405"·"e3q8")를 갖지만 우리 실패 코드가 아니다.
+        (ProgrammingError("s", {}, Exception("x")), "internal_error"),
+        (OperationalError("s", {}, Exception("x")), "internal_error"),
     ],
 )
 def test_failure_code_keeps_internal_namespace_without_exception_text(error, expected):

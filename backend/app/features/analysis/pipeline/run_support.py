@@ -64,7 +64,9 @@ def failure_code(error: BaseException) -> str:
     if isinstance(error, AppError):
         return "token_invalid" if error.reason == "github_token_invalid" else error.reason.value
     code = getattr(error, "code", None)
-    return code if isinstance(code, str) else "internal_error"
+    return (
+        code if isinstance(error, EXPECTED_FAILURES) and isinstance(code, str) else "internal_error"
+    )
 
 
 async def account_for_run(ctx: dict[str, Any], user_id: UUID) -> GithubAccount:
