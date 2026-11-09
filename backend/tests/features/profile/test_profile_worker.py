@@ -63,3 +63,20 @@ async def test_worker_failure_does_not_raise_and_keeps_summary(
     assert summary.role_summary == ROLE
     assert summary.based_repo_ids == [first.id]
     assert await app.state.redis.exists(f"profile:gen:{user.id}") == 0
+
+
+async def test_second_run_after_new_interview_refreshes_summary(
+    app, db, world, worker_env, monkeypatch
+):
+    """같은 사용자의 두 번째 report 뒤 worker 가 다시 돌면 최신 저장소 집합으로 갱신된다."""
+    user, run = world
+    first = await make_repo(db, run, languages={"Python": 1})
+    await completed_interview(db, run, [first])
+    monkeypatch.setattr(tasks, "generate_role_summary", FakeGenerator())
+    await worker.profile_summary(worker_env, str(user.id))
+    assert (await read_summary(db, user)).based_repo_ids == [first.id]
+    second = await make_repo(db, run, languages={"Java": 1})
+    await completed_interview(db, run, [second])
+    await worker.profile_summary(worker_env, str(user.id))
+    summary = await read_summary(db, user)
+    assert set(summary.based_repo_ids) == {first.id, second.id}
