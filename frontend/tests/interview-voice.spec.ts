@@ -159,7 +159,7 @@ test('전사 결과가 비면 마이크 확인을 안내한다', async ({ page }
   await expect(page.getByRole('alert')).toContainText('목소리가 인식되지 않았어요');
 });
 
-test('STT를 쓸 수 없으면 다시 답변 대신 서비스 불가를 안내하고 마이크를 닫는다', async ({
+test('STT를 쓸 수 없으면 서비스 불가를 안내하고 나가기로 abandon 후 홈으로 간다', async ({
   page,
 }) => {
   await stubMic(page);
@@ -167,8 +167,17 @@ test('STT를 쓸 수 없으면 다시 답변 대신 서비스 불가를 안내�
   await answerOnce(page);
   await expect(page.getByRole('alert')).toContainText('음성 인식을 사용할 수 없어');
   await expect(page.getByRole('button', { name: '다시 답변하기' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '홈으로' })).toBeVisible();
+  await expect(page.getByRole('button', { name: '홈으로' })).toHaveCount(0);
   await expect.poll(() => liveMics(page)).toBe(0);
+
+  const abandon = page.waitForRequest(
+    (request) =>
+      request.method() === 'POST' &&
+      request.url().endsWith(`/interviews/${SEED_IN_PROGRESS}/abandon`),
+  );
+  await page.getByRole('button', { name: '나가기', exact: true }).click();
+  await abandon;
+  await expect(page).toHaveURL(/\/home$/);
 });
 
 test('답변 오디오가 서버 길이 상한을 넘으면 안내하고 같은 턴에 다시 답할 수 있다', async ({

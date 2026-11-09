@@ -33,7 +33,7 @@ const ERROR_MESSAGE: Record<string, string> = {
 const FATAL_ERROR_MESSAGE: Record<string, string> = {
   question_failed: '다음 질문을 만들지 못해 면접을 이어갈 수 없어요.',
   // details.cause: stt_unavailable. STT 설정 누락·인증 오류라 다시 답해도 풀리지 않는다.
-  stt_failed: '음성 인식을 사용할 수 없어 면접을 이어갈 수 없어요. 잠시 후 다시 시도해주세요.',
+  stt_failed: '음성 인식을 사용할 수 없어 면접을 이어갈 수 없어요.',
 };
 
 /** 30초간 다른 메시지가 없으면 근거 확인 배너를 내린다. */
@@ -760,6 +760,20 @@ export default function InterviewScreen() {
                   {restart.isPending ? '준비 중…' : '같은 레포로 다시 시작'}
                 </button>
               </div>
+            ) : error?.reason === 'stt_failed' ? (
+              /*
+                stt_unavailable. 서버는 상태를 바꾸지 않아 in_progress로 남으면 같은 run의 새 면접이
+                session_limit_exceeded로 막힌다. 명시적 나가기로 abandon한다(interview.md:231).
+                STT가 복구되기 전에는 새 면접도 같은 오류라 다시 시작은 두지 않는다.
+              */
+              <button
+                type="button"
+                disabled={leaving}
+                onClick={() => void handleLeave()}
+                className="h-10 rounded-lg bg-accent px-5 text-[13px] font-bold text-surface disabled:opacity-50"
+              >
+                {leaving ? '나가는 중…' : '나가기'}
+              </button>
             ) : (
               <button
                 type="button"
