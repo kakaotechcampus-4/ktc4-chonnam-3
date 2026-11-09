@@ -28,7 +28,9 @@ async def test_repo_selected_recorded_once_when_enqueue_fails(db: AsyncSession) 
     """enqueue 실패에도 면접 행과 선택은 commit 되어 남으므로 이벤트를 1회 기록한다."""
     run, repos = await _selectable(db)
 
-    interview_id, session_id = await _create(db, run, [r.id for r in repos], FakeRedis(fail=True))
+    interview_id, session_id = await _create(
+        db, run, [r.id for r in repos], FakeRedis(enqueue_fail=True)
+    )
 
     assert interview_id and session_id
     assert await names(db) == ["repo_selected"]
