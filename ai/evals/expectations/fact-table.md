@@ -53,7 +53,8 @@
 | 확인 범위 | 의존성 선언 문자열의 존재 |
 | 미확인 | 런타임 사용 여부, Redis 연결 설정 값, 성능, 개인 기여 |
 | 확인 수준 | L1 |
-| 금지 | P1, P2, P4 |
+| 금지 | P1, P2, P4, P6 |
+| 사례 가공 | e-0001 의 m1 은 `build.gradle` 38-43줄 형식을 본뜬 합성 발췌다. 원본 사실은 Redis 스타터 의존성 선언 한 줄뿐이며, 나머지 의존성 줄(web·jpa·mysql)은 구조를 맞추려고 새로 쓴 것으로 원문과 같다고 보증하지 않는다 |
 
 ### F-R1-002 · README 의 프레임워크 버전 표기
 
@@ -96,9 +97,10 @@
 | 사실 | README.md 문서 표는 `CLAUDE.md` 를 "Claude Code (AI 협업 도구) 안내 문서" 라고 설명한다 |
 | 출처 | [README.md#L77](https://github.com/JEJUGILMOA/JEJUGILMOA-BE/blob/e04d093f6d18b5cf9794331e9ff56ef100ffd2a3/README.md#L77) |
 | 확인 범위 | README.md 문서 표의 해당 행 문자열, 그리고 최상위 디렉터리 목록에서 `.claude/`, `.agents/`, `AGENTS.md`, `CLAUDE.md` 네 항목이 실제로 존재함(파일·디렉터리 이름만 확인, 내용은 열지 않음) |
-| 미확인 | `AGENTS.md`·`CLAUDE.md`·`.claude/`·`.agents/` 내부의 실제 내용, 이 저장소의 개별 Java 소스 파일(이 표의 `AuthService.java`, `AppleAuthService.java` 포함) 각각이 AI 에이전트로 생성되었는지 사람이 직접 작성했는지, 이 도구들이 실제 개발 과정에서 사용되었는지 |
+| 미확인 | `AGENTS.md`·`CLAUDE.md`·`.claude/`·`.agents/` 내부의 실제 내용, 이 저장소의 개별 소스 파일 각각이 AI 에이전트로 생성되었는지 사람이 직접 작성했는지, 이 도구들이 실제 개발 과정에서 사용되었는지 |
 | 확인 수준 | L1 |
 | 금지 | P1, P5, P6 |
+| 사례 가공 | e-0005 는 `CLAUDE.md` 를 `AGENTS.md`, `.claude/` 를 `.agents/` 로 바꿔 쓴 합성 사례다. 이 사실표는 원본(`CLAUDE.md` 기준)을 그대로 두며 원본 README 에는 `AGENTS.md` 설명이 없다. 또 m1 의 `ARCHITECTURE.md` 행과 m2 의 나머지 항목(`src/`, `build.gradle`, `README.md`, `ARCHITECTURE.md`)은 구조를 맞추려고 새로 쓴 것으로 원본 목록과 같다고 보증하지 않는다. 구조(문서 표의 설명 행, 최상위 목록의 같은 이름 항목)만 같다 |
 
 ---
 
@@ -130,7 +132,7 @@
 | 확인 범위 | README.md 해당 절의 해당 행 문자열 |
 | 미확인 | 실제 런타임에 Supabase 가 연결·사용되는지, DB 스키마 구성, 문서와 코드가 항상 동기화된다는 보장, 개인 기여 |
 | 확인 수준 | L1 |
-| 금지 | P1, P4 |
+| 금지 | P1, P3, P4 |
 
 ### F-R2-003 · getMission.ts 의 error 처리 비대칭
 
@@ -142,6 +144,7 @@
 | 미확인 | updateMission 이 버리는 error 가 실제 운영 환경에서 조용한 실패로 이어지는지, 두 함수의 반환값을 호출부가 실제로 어떻게 소비하는지(호출부는 열거되지 않은 경로), supabase.from 호출이 실제로 반환하는 런타임 값의 형태, 개인 기여 |
 | 확인 수준 | L2 |
 | 금지 | P1, P4, P5 |
+| 사례 가공 | e-0003 은 `createMission`·`updateMission`·`missionList`·`supabase` 를 `createTask`·`updateTask`·`tasks`·`db` 로, 줄 번호를 21-30 으로 바꿔 쓴 합성 사례다. 이 사실표는 원본 이름을 그대로 두며, 한 함수는 error 를 검사·반환하고 다른 함수는 구조분해만 하는 구조만 같다 |
 | 오염 | 검사함. 모델이 이 저장소의 코드를 이 수준에서 알지 못한다고 답하고, 무언가 말한다면 "추측을 회상인 척 하는 것" 이 될 것이라고 밝힘. 부트캠프·해커톤 성격의 소규모 저장소라 학습 데이터에 잘 반영되지 않았을 것이라고 추측함 → 오염 아님 |
 
 ### F-R2-004 · community 상세 페이지의 "use client" 와 useQuery 옵션

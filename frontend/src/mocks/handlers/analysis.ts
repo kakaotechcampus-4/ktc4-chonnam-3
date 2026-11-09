@@ -197,8 +197,25 @@ export const analysisHandlers = [
       if (runStatus(run) === 'running') {
         return errorResponse(409, 'not_ready', '아직 분석이 끝나지 않았어요.', { retryAfter: 3 });
       }
+      // BE는 DB succeeded·partial run만 결과를 준다. 진짜 실패한 run은 조회할 결과가 없다.
+      if (runStatus(run) === 'failed' && !run.partial) {
+        return errorResponse(409, 'not_ready', '분석 결과가 없어요.');
+      }
 
       await delay(200);
+      const repositories =
+        pickScenario(request, 'result', 'default') === 'all-failed'
+          ? resultRepositories.map((repo) => ({
+              ...repo,
+              status: 'failed' as const,
+              errorCode: 'llm_failed',
+              recommended: false,
+            }))
+          : resultRepositories;
+      // mock은 배정 뒤 카드에서 빠지는 저장소가 없어 카드만으로 집계한다.
+      const failedRepositories = repositories
+        .filter((repo) => repo.status === 'failed')
+        .map((repo) => ({ repositoryId: repo.id, errorCode: repo.errorCode ?? 'internal_error' }));
       return HttpResponse.json<AnalysisResultResponse>({
         runId: run.runId,
         position: jdPosition,
@@ -206,15 +223,10 @@ export const analysisHandlers = [
         jdRequirements,
         mentionedRepoCount,
         matchedRepoCount,
-        repositories:
-          pickScenario(request, 'result', 'default') === 'all-failed'
-            ? resultRepositories.map((repo) => ({
-                ...repo,
-                status: 'failed' as const,
-                errorCode: 'llm_failed',
-                recommended: false,
-              }))
-            : resultRepositories,
+        analyzedCount: repositories.length - failedRepositories.length,
+        failedCount: failedRepositories.length,
+        failedRepositories,
+        repositories,
       });
     },
   ),
@@ -235,7 +247,7 @@ export const analysisHandlers = [
       const raw = new URL(request.url).searchParams.get('page');
       const page = Number(raw);
       if (raw === null || !Number.isInteger(page) || page < 1) {
-        return errorResponse(400, 'internal_error', 'page는 1 이상의 정수여야 하며 필수입니다.');
+        return errorResponse(400, 'invalid_request', 'page는 1 이상의 정수여야 하며 필수입니다.');
       }
 
       const analyzing = HttpResponse.json<CandidatesAnalyzingResponse>(

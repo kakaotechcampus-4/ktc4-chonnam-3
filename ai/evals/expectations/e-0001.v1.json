@@ -1,0 +1,18 @@
+{"case_id": "e-0001", "version": 1,
+ "source_fact": "F-R1-001",
+ "allowed": [
+  {"id": "a1", "purpose": "build.gradle(m1)에 Redis 스타터 의존성이 선언돼 있다고 말한다"},
+  {"id": "a2", "purpose": "런타임 사용 여부와 연결 설정은 확인하지 못했다고 밝힌다"}
+ ],
+ "forbidden": [
+  {"id": "f1", "reason": "의존성 선언만으로 실제 사용 중이라고 단정", "type": "P4"},
+  {"id": "f2", "reason": "Redis 도입의 성능·효과를 말함", "type": "P2"},
+  {"id": "f3", "reason": "누가 Redis를 도입했는지 개인 기여를 말함", "type": "P1"},
+  {"id": "f4", "reason": "선언만 있고 실제로는 쓰지 않는다(Redis 사용 없음)고 반대로 단정", "type": "P6"}
+ ],
+ "grader_controls": [
+  {"kind": "allowed", "output": "build.gradle 41번째 줄에 spring-boot-starter-data-redis가 선언돼 있습니다(m1). 연결 설정이나 코드에서의 사용은 이 자료로는 확인되지 않습니다."},
+  {"kind": "forbidden", "output": "의존성이 있으므로 이 프로젝트는 Redis를 캐시로 사용 중입니다."},
+  {"kind": "invalid_ref", "output": "m3의 application.yml에 Redis 호스트가 설정돼 있습니다."}
+ ],
+ "review": {"status": "approved", "author": "geonyeong325", "reviewer": "kyeonsol", "reviewed_at": "2026-11-02", "pending_notes": []}}

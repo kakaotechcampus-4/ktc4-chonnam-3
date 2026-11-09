@@ -65,3 +65,12 @@ def test_invalid_parent_cron_setting_is_not_treated_as_empty(configured_parent):
     with pytest.raises(TypeError):
         with configured_parent(0):
             pass
+
+
+def test_analysis_worker_settings_define_arq_keys_in_own_dict():
+    # ARQ는 클래스 __dict__만 읽으므로 상속만으로는 redis_settings 등이 누락된다.
+    own = analysis_app.WorkerSettings.__dict__
+    for key in ("redis_settings", "on_startup", "on_shutdown", "job_timeout", "max_tries"):
+        assert key in own
+    # 키만 있고 값이 localhost 기본값으로 바뀌는 경우도 잡는다.
+    assert own["redis_settings"] is arq_app.WorkerSettings.redis_settings

@@ -16,11 +16,13 @@ export type ScenarioName =
   | 'auth-expired'
   | 'github-token-invalid'
   | 'run-expired'
+  | 'candidate-page-failed'
   | 'report-unavailable'
   | 'session-limit'
   | 'server-error'
   | 'ws-prepare-failed'
   | 'ws-question-failed'
+  | 'ws-question-failed-closed'
   | 'ws-repo-unreachable'
   | 'ws-stt-failed'
   | 'ws-stt-empty'
@@ -75,6 +77,19 @@ export const scenarios: Record<ScenarioName, Scenario> = {
         status: 410,
         reason: 'run_expired',
         message: '분석 결과가 만료되었어요. 다시 분석해주세요.',
+      },
+    ],
+  },
+
+  /** 더 보기 page 분석 실패. BE는 같은 page를 다시 요청해도 재실행하지 않는다. */
+  'candidate-page-failed': {
+    describe: '후보 더 보기 page 분석 실패(409). 재시도 없이 안내하는지 본다.',
+    rules: [
+      {
+        path: '/analysis-runs/*/candidates',
+        status: 409,
+        reason: 'candidate_page_failed',
+        message: '추가 레포지토리 분석에 실패했습니다.',
       },
     ],
   },
@@ -138,13 +153,27 @@ export const scenarios: Record<ScenarioName, Scenario> = {
    * 준비 실패 화면은 seed 면접(`SEED_PREPARING_FAILED_INTERVIEW_ID`)으로도 열 수 있다.
    */
   'ws-question-failed': {
-    describe: 'WS 연결 직후 question_failed. 복구 가능한 오류 배너를 본다.',
+    describe: 'WS 연결 직후 question_failed(연결 교체·서버 오류). 복구 가능한 오류 배너를 본다.',
     rules: [
       {
         path: '/ws/interviews/*',
         reason: 'question_failed',
         code: 'ERR_QUESTION_FAILED',
         recoverable: true,
+      },
+    ],
+  },
+
+  /** 진행 중 분석·질문 생성 실패. 이어갈 수 없어 abandon 후 다시 시작·나가기로 보낸다(공통 0010). */
+  'ws-question-failed-closed': {
+    describe:
+      'WS 연결 직후 question_failed recoverable false. 같은 레포로 다시 시작·나가기를 본다.',
+    rules: [
+      {
+        path: '/ws/interviews/*',
+        reason: 'question_failed',
+        code: 'ERR_QUESTION_FAILED',
+        recoverable: false,
       },
     ],
   },

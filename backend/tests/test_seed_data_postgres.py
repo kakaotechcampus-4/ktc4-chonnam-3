@@ -86,6 +86,35 @@ async def test_score_criteria_seed_updates_changed_label(seed_sessions) -> None:
         assert label == "수정된 라벨"
 
 
+@pytest.mark.parametrize("active", [False, True])
+async def test_score_criteria_rubric_update_preserves_activation(seed_sessions, active) -> None:
+    # 이미 활성인 행도 새 문구로 바뀌므로, 신규 비활성 삽입과 재시드 동작을 구분한다.
+    async with seed_sessions() as session:
+        await seed_score_criteria(session)
+        original = SCORE_CRITERIA[0]
+        await session.execute(
+            text("UPDATE score_criteria SET is_active = :active WHERE score_key = :key"),
+            {"active": active, "key": original.score_key},
+        )
+        await session.commit()
+
+        changed = replace(original, rubric={**original.rubric, "0": "검수할 새 0단계 문구"})
+        await seed_score_criteria(session, [changed])
+        await session.commit()
+
+        row = (
+            await session.execute(
+                text("SELECT rubric, is_active FROM score_criteria WHERE score_key = :key"),
+                {"key": original.score_key},
+            )
+        ).one()
+        assert row.rubric == changed.rubric
+        assert row.is_active is active
+        assert await session.scalar(text("SELECT count(*) FROM score_criteria")) == len(
+            SCORE_CRITERIA
+        )
+
+
 async def test_domain_question_frames_seed_is_idempotent(seed_sessions) -> None:
     async with seed_sessions() as session:
         await seed_domain_question_frames(session)

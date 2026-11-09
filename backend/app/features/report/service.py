@@ -49,16 +49,20 @@ from app.llm_tasks.report import (
     ReportDraftInvalidError,
     ReportGenerator,
     ReportModuleUnavailableError,
+    ReportRubricUnavailableError,
     resolve_generator,
+    total_score,
     validate_draft,
 )
 from app.shared.enums import Reason
+from app.shared.events import commit_events, record_event
 
 # docs/redis-keys.md: report generation lock. worker 가 끝나기 전에 풀리면 중복 enqueue 가 난다.
 REPORT_LOCK_TTL_SECONDS = 5 * 60
 # 실패 이력: report_generate worker 가 코드를 남긴다. TTL 이 없어 자동 재생성이 없다.
 REPORT_FAIL_KEY = "report:fail:{interview_id}"
-REPORT_PROMPT_TASK = "report"
+# AI 모듈이 서술(report)과 점수 판정(report_score) 두 task 를 쓴다. 둘 다 활성이어야 한다.
+REPORT_PROMPT_TASKS = ("report", "report_score")
 RETRY_AFTER_SECONDS = 3
 logger = get_logger(__name__)
 
@@ -78,7 +82,10 @@ async def get_report(
 
     report = await queries.get_report(db, interview_id=interview.id)
     if report is not None:
-        return await _build_report(db, interview, posting, report)
+        response = await _build_report(db, interview, posting, report)
+        await record_event(db, "report_viewed", user_id=user_id, interview_session_id=interview.id)
+        await commit_events(db)
+        return response
 
     if interview.status != "completed":
         raise AppError(Reason.REPORT_UNAVAILABLE)
@@ -141,7 +148,7 @@ async def _build_report(
         interview_id=interview.id,
         position=position,
         position_label=" ".join(p for p in (posting.company_name, position) if p),
-        total_score=round(sum(s.score for s in scores) / len(scores), 2),
+        total_score=total_score([int(s.score) for s in scores]),
         headline=report.headline,
         summary=report.summary,
         scores=scores,
@@ -187,29 +194,40 @@ async def generate_report(
             return "exists"
         if interview.status != "completed":
             return "skipped"
-        turns = await queries.list_answered_turns(db, interview_id=interview_id)
-        if not turns:
+        answered = await queries.list_answered_turns(db, interview_id=interview_id)
+        if not answered:
             return "skipped"
+        turns = await queries.list_report_turns(db, interview_id=interview_id)
         posting = await db.get(JobPosting, interview.job_posting_id)
         requirements = await queries.list_requirements(db, posting_id=interview.job_posting_id)
         evidences = await queries.list_turn_evidences(db, interview_id=interview_id)
-        prompt = await load_active_prompt(db, REPORT_PROMPT_TASK)
-        payload = _build_payload(posting, turns, evidences, requirements)
-        coverage = _coverage(requirements, turns)
+        prompts = {name: await load_active_prompt(db, name) for name in REPORT_PROMPT_TASKS}
+        rubrics = await queries.list_active_rubrics(db)
+        if set(rubrics) != set(SCORE_KEYS):
+            # 검수 전(비활성) 기준이나 일부 key 만으로 채점하지 않는다. 활성화는 평가 담당 몫이다.
+            raise ReportRubricUnavailableError(",".join(sorted(rubrics)))
+        payload = _build_payload(posting, turns, evidences, requirements, rubrics)
+        coverage = _coverage(requirements, answered)
         turn_ids = {t.turn_no: t.id for t in turns}
 
     generate = generator or resolve_generator()
-    model_call = cast(
-        ModelCall,
-        partial(
-            call_model,
-            api_key=llm.openai_api_key,
-            base_url=llm.llm_base_url,
-            http_client=http_client,
-            budget=CallBudget(),
-        ),
+
+    def model_call_factory() -> ModelCall:
+        # task 마다 새 CallBudget 을 묶어 두 task 가 총 2회 시도를 나눠 쓰지 않게 한다.
+        return cast(
+            ModelCall,
+            partial(
+                call_model,
+                api_key=llm.openai_api_key,
+                base_url=llm.llm_base_url,
+                http_client=http_client,
+                budget=CallBudget(),
+            ),
+        )
+
+    raw = await generate(
+        payload, prompts=prompts, limits=llm.call_limits(), model_call_factory=model_call_factory
     )
-    raw = await generate(payload, prompt=prompt, limits=llm.call_limits(), model_call=model_call)
     draft = validate_draft(raw)
     rows = _score_rows(draft, turn_ids)
 
@@ -231,8 +249,8 @@ async def generate_report(
                     for f in draft.feedbacks
                 ],
                 "coverage_json": coverage,
-                "model": prompt.model,
-                "prompt_version": prompt.version,
+                "model": prompts[REPORT_PROMPT_TASKS[0]].model,
+                "prompt_version": "+".join(prompts[name].version for name in REPORT_PROMPT_TASKS),
             },
             scores=rows,
             generated_at=datetime.now(UTC),
@@ -245,10 +263,12 @@ def _build_payload(
     turns: list[InterviewTurn],
     evidences: Mapping[uuid.UUID, list[tuple[str, Evidence]]],
     requirements: list[JdRequirement],
+    rubrics: Mapping[str, object],
 ) -> dict[str, object]:
-    """AI 모듈 입력. 점수 key 는 고정 6개만 전달하고 score_criteria 세부 기준은 넣지 않는다."""
+    """AI 모듈 입력. rubric 은 활성 score_criteria 의 값을 구조 해석 없이 key 별로 전달한다."""
     return {
         "score_keys": list(SCORE_KEYS),
+        "rubrics": {key: rubrics[key] for key in SCORE_KEYS},
         "position": posting.position if posting else None,
         "company_name": posting.company_name if posting else None,
         "requirements": [
@@ -259,16 +279,22 @@ def _build_payload(
                 "turn_no": t.turn_no,
                 "persona": t.persona,
                 "question": t.question_text,
-                "answer": t.answer_text,
+                # 답하지 못한 턴은 빈 답변으로 보낸다. AI 는 이를 0단계로 판정한다.
+                "answer": t.answer_text or "",
                 "question_contract": t.question_contract,
                 "analysis": t.analysis,
-                "decision": t.decision,
+                "parent_turn_no": t.parent_turn_no,
                 "jd_requirement_ids": [str(i) for i in t.jd_requirement_ids],
                 "evidences": [
                     {
+                        "id": str(e.id),
                         "usage": usage,
+                        "repository_id": None if e.repository_id is None else str(e.repository_id),
+                        "git_ref": e.git_ref,
                         "source_type": e.source_type,
                         "path": e.path,
+                        "metadata_key": e.metadata_key,
+                        "tool_name": e.tool_name,
                         "start_line": e.start_line,
                         "end_line": e.end_line,
                         "snippet": e.snippet,
@@ -294,7 +320,7 @@ def _coverage(requirements: list[JdRequirement], turns: list[InterviewTurn]) -> 
 
 
 def _score_rows(draft: ReportDraft, turn_ids: Mapping[int, uuid.UUID]) -> list[dict[str, object]]:
-    """ReportScore 값. 근거 turn 번호가 답변 완료 턴이 아니면 보정하지 않고 실패시킨다."""
+    """ReportScore 값. 근거 turn 번호가 이 면접의 턴이 아니면 보정하지 않고 실패시킨다."""
     rows: list[dict[str, object]] = []
     for key in SCORE_KEYS:
         item = draft.scores[key]
@@ -315,10 +341,13 @@ def failure_code(error: BaseException) -> str:
     """실패 이력에 남길 코드. 원문 예외 메시지는 저장하지 않는다."""
     if isinstance(error, ReportModuleUnavailableError):
         return "report_module_unavailable"
+    if isinstance(error, ReportRubricUnavailableError):
+        return "report_rubric_unavailable"
     if isinstance(error, ReportDraftInvalidError):
         return "report_invalid"
     if isinstance(error, c.ContractError):
-        return "llm_failed"
+        # 점수를 낼 수 없는 key 가 있으면 AI 가 실패시킨다. 점수 없음 계약 전까지 알려진 실패다.
+        return "report_unscorable_key" if error.field == "unscorable key" else "llm_failed"
     return "internal_error"
 
 

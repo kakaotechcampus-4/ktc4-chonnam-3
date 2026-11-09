@@ -2,7 +2,7 @@
 
 from app.shared.enums import ScoreKey
 from scripts.seed_domain_question_frames import DOMAIN_QUESTION_FRAMES
-from scripts.seed_score_criteria import SCORE_CRITERIA
+from scripts.seed_score_criteria import LEVEL_SCORES, SCORE_CRITERIA
 
 
 def test_score_criteria_covers_every_score_key_exactly_once() -> None:
@@ -53,8 +53,14 @@ def test_domain_question_frames_are_hypothetical_questions() -> None:
         assert "물어본다" not in frame.frame_text
 
 
-def test_score_criteria_level_one_requires_a_question_or_answer() -> None:
-    # 질문하지 않은 항목(미관찰)이 1단계로 읽히지 않아야 한다 (task-11).
+def test_score_criteria_level_zero_requires_a_question_or_answer() -> None:
+    # 질문하지 않은 항목(미관찰)이 0단계로 읽히지 않아야 한다 (task-11).
     for criterion in SCORE_CRITERIA:
-        level_one = criterion.rubric["1"]
-        assert "질문" in level_one or "답변" in level_one, criterion.score_key
+        level_zero = criterion.rubric["0"]
+        assert "질문" in level_zero or "답변" in level_zero, criterion.score_key
+
+
+def test_score_criteria_rubric_levels_match_level_scores() -> None:
+    assert LEVEL_SCORES == {"0": 0, "1": 20, "2": 45, "3": 70, "4": 90}
+    for criterion in SCORE_CRITERIA:
+        assert set(criterion.rubric) == set(LEVEL_SCORES), criterion.score_key

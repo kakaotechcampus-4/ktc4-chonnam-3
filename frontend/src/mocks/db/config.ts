@@ -40,12 +40,20 @@ export const SEED_SESSION_ID = 'sess_0000000000000001';
 export const SEED_FAILED_RUN_ID = '5c7b9e10-0000-4000-8000-00000000bbbb';
 /** GitHub 토큰 무효로 실패한 run. BE 현재 값인 token_invalid로 재연동 안내를 연다. */
 export const SEED_TOKEN_INVALID_RUN_ID = '5c7b9e10-0000-4000-8000-00000000dddd';
+/** 분석 대상 레포가 없어 repo_select에서 멈춘 run(no_public_repo). */
+export const SEED_NO_PUBLIC_REPO_RUN_ID = '5c7b9e10-0000-4000-8000-000000001111';
+/** 단계 사이에서 멈춘 run. repo_select 완료 뒤 repo_detail을 시작하기 전에 중단돼 failed 단계가 없다. */
+export const SEED_STOPPED_RUN_ID = '5c7b9e10-0000-4000-8000-000000002222';
 /** 끝나지 않는 run. 10초 폴링·SSE 재연결처럼 분석 시간(약 8초)보다 긴 진행 화면 동작을 본다. */
 export const SEED_RUNNING_RUN_ID = '5c7b9e10-0000-4000-8000-00000000eeee';
+/** DB partial run. API는 failed지만 성공한 저장소의 결과는 조회된다(analysis-run.md 부분 실패). */
+export const SEED_PARTIAL_RUN_ID = '5c7b9e10-0000-4000-8000-00000000ffff';
 /** 면접 준비 실패 화면(1b)용. lastError 가 채워져 있다. */
 export const SEED_PREPARING_FAILED_INTERVIEW_ID = 'a3d51c20-1009-4c00-9a00-000000000009';
 /** 면접 진행 화면(5b-v2)을 바로 여는 진행 중 면접. 새로고침해도 1턴부터 다시 시작한다. */
 export const SEED_IN_PROGRESS_INTERVIEW_ID = 'a3d51c20-1005-4c00-9a00-000000000005';
+/** 마이페이지의 시작 후 중단된 면접 행. 다시 도전하기가 이 레코드로 재도전한다. */
+export const SEED_ABANDONED_INTERVIEW_ID = 'a3d51c20-1003-4c00-9a00-000000000003';
 /**
  * 진행 중 seed 면접 전용 run. SEED_RUN_ID를 쓰면 그 run에 진행 중 면접이 늘 있어
  * 새 면접 생성·다시 보기가 409 session_limit_exceeded로 막힌다.

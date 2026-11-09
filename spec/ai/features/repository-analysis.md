@@ -58,6 +58,8 @@ Wanted의 구조화 필드를 원문으로 사용한다. `jd_requirements.catego
 
 상태: Proposed. `repo_shallow_v1`의 구체 JSON Schema는 [AI 계약](../contracts.md) 승인 뒤 고정한다.
 
+이 상태는 구체 schema의 미채택 범위를 뜻한다. [0018](../decisions/0018-existing-baseline-bulk-resolution.md)에서 채택한 L1 의미·기존 저장 위치와 batch 검증의 구현·검수 조건을 새 결정 대기로 돌리지 않는다. 실제 적용·검증 범위는 [구현 기록](../implementation.md)을 따른다.
+
 0006에서 승인한 L1 요약 의미는 프로젝트의 기능·역할과 확인 한계다. README·commit 수로 사용자의 개인 기여를 추정하지 않는다. `role_summary`의 필드명·저장/API 매핑은 BE와 별도 합의하며, 기존 개인 역할 필드를 임의로 프로젝트 요약으로 재해석하지 않는다. L1/L2의 기존 LLM 사용 방향은 유지한다.
 
 배치 요청의 각 항목에는 내부 순서가 아닌 안정적인 repository 식별자를 넣는다. 출력 검증은 다음을 지킨다.
@@ -89,7 +91,7 @@ L2의 `notable_areas`가 없거나 path가 해당 분석의 고정 SHA에서 확
 
 0008에 따라 L2 관찰은 고정 SHA의 실제 source와 읽은 내용이 주장을 뒷받침할 때만 사용한다. source는 유효하지만 언어·도구 기능이나 읽은 범위가 부족하면 확인 가능한 관찰과 한계를 함께 남기며, 읽지 않은 경로의 동작·아키텍처를 추론하지 않는다. 사용 가능한 관찰과 제한되거나 무효인 관찰은 구분하되 지원 언어·parser 목록과 context limitations의 정확한 저장 필드는 계속 AI·BE 검토 대상이다.
 
-근거: [AI L1 task 골격](../../../ai/src/devon_ai/llm_tasks/repo_shallow.py), [AI L2 task 골격](../../../ai/src/devon_ai/llm_tasks/repo_deep.py). 과거 기획 결정 원본 `report.md`는 현재 저장소에 없으며, 현행 L2 관찰 정책은 [0008 결정](../decisions/0008-ai-candidate-policy.md)을 따른다. 기존 BE task 파일은 연결 경계로 남으며 수집·저장은 BE가 맡는다.
+근거: [AI L1 task 경계](../../../ai/src/devon_ai/llm_tasks/repo_shallow.py), [AI L2 task 경계](../../../ai/src/devon_ai/llm_tasks/repo_deep.py). 과거 기획 결정 원본 `report.md`는 현재 저장소에 없으며, 현행 L2 관찰 정책은 [0008 결정](../decisions/0008-ai-candidate-policy.md)을 따른다. 기존 BE task 파일은 연결 경계로 남으며 수집·저장은 BE가 맡는다.
 
 ## 추천
 

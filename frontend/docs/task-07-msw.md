@@ -110,6 +110,7 @@ msw.session('authenticated'); // 화면 개발용 로그인 상태 복원 후 �
 | `auth-expired`         | 모든 요청 401 `unauthenticated` |
 | `github-token-invalid` | 403 `github_token_invalid`      |
 | `run-expired`          | `/analysis-runs/*` 410          |
+| `candidate-page-failed` | 후보 더 보기 409 `candidate_page_failed` |
 | `report-unavailable`   | 리포트 409                      |
 | `session-limit`        | 면접 생성 409                   |
 | `server-error`         | 모든 요청 500                   |

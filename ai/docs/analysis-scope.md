@@ -7,7 +7,7 @@
 
 기본 분석(L1)과 정밀 분석(L2)이 각각 어떤 파일을 읽고 무엇을 읽지 않는지 고정한다. 읽지 않는 범위가 사실표의 `미확인` 항목과 대응한다.
 
-이 문서는 읽기 범위만 정한다. L1·L2 의 실제 구현은 `ai/docs/task-04-repo-shallow.md` 와 `ai/docs/task-05-repo-deep.md` 가 다룬다.
+이 문서는 L1·L2 읽기 범위와 W4 샘플 선정 근거를 다룬다. 구현·검수 조건은 [L1 작업](task-04-repo-shallow.md)과 [L2 작업](task-05-repo-deep.md), 실제 구현·검증 현황은 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다. 여기서 `미확인`은 읽기·판단 범위의 한계이며 해당 기능이 없거나 미구현이라는 뜻이 아니다. 다른 대기·후속 표현은 [문서 역할과 상태 표현](../README.md#ai-document-status)을 따른다.
 
 `L0-a` 는 파일을 읽지 않고 저장소 목록 메타데이터만 보는 lightweight filter 이므로(`spec/ai/features/repository-analysis.md` — "LLM을 호출하지 않는다") 사실표의 `미확인` 항목과 대응하지 않는다. 4단계가 모두 보이도록 표에는 남긴다.
 
@@ -22,7 +22,7 @@
 
 L2 의 제약은 `ai/docs/task-05-repo-deep.md` 에서 온다.
 
-> directory path 는 AI-L08 상한 승인 전 자동 재귀·전체 tree·global keyword search 로 확장하지 않는다.
+> directory path를 임의 재귀 탐색·전체 tree·global keyword search로 확장하지 않는다. 기존 허용 범위의 파일 열거·인접 후보 조회는 AI-L08의 [운영 상한 기준](pipeline.md#ai-runtime-limits)에 따라 유한한 초기 상한과 소진 시 차단을 먼저 확인한 뒤 제한적으로 실측한다. 실측 결과로 production 조회 상한을 조정·검증한다. 상한 설정은 검색 범위를 확대하는 승인이 아니다.
 
 따라서 정밀 분석 대상은 "이 디렉터리를 본다" 가 아니라 **"이 파일 N개를 본다"** 로 열거한다.
 
@@ -46,7 +46,7 @@ L2 의 제약은 `ai/docs/task-05-repo-deep.md` 에서 온다.
 
 ## 4. 샘플 저장소
 
-이 절의 목록과 L2 후보 path 를 근거로 `ai/evals/expectations/fact-table.md` 의 레코드가 작성되었으나, 그 사람 전수 검수는 아직 미완료다 — 해당 문서의 "사람 전수 검수 — 미완료" 절 참고.
+이 절의 목록과 L2 후보 path는 [W4 사실표](../evals/expectations/fact-table.md)의 작성 근거다. 사람 전수 검수 상태와 자료 격리 조건은 해당 사실표에서 확인한다. 아래 고정 SHA·파일 수·선정 근거는 W4 샘플 기록으로 보존하며 현재 구현·모델 평가 완료의 근거로 사용하지 않는다.
 
 | ID | 저장소 | 언어 | 파일 수 | 고정 SHA | source group |
 | --- | --- | --- | --- | --- | --- |

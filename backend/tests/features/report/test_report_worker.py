@@ -4,28 +4,18 @@ import copy
 
 import pytest
 from devon_ai import contracts as c
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
-from app.db.models import InterviewReport, PromptVersion, ReportScore
+from app.db.models import InterviewReport, ReportScore, ScoreCriterion
 from app.features.report import service
-from app.llm_tasks.report import ReportDraftInvalidError, ReportModuleUnavailableError
+from app.llm_tasks.report import (
+    ReportDraftInvalidError,
+    ReportModuleUnavailableError,
+    ReportRubricUnavailableError,
+)
 from app.workers.tasks import report_generate as worker
 
 from .fakes import LLM, OUTPUT, FakeGenerator
-
-
-@pytest.fixture
-async def prompt(db):
-    db.add(
-        PromptVersion(
-            task_name="report",
-            version="fixture-v1",
-            model="fixture-model",
-            template="t",
-            is_active=True,
-        )
-    )
-    await db.commit()
 
 
 async def _counts(db):
@@ -110,7 +100,8 @@ async def test_worker_without_ai_module_records_failure(
     app, db, ctx, prompt, worker_env, enqueue, monkeypatch
 ):
     interview, _ = ctx
-    # 실제 resolve_generator 를 그대로 쓴다. AI 모듈에 generate_report 가 아직 없다.
+    # AI 모듈에 generate_report 가 없는 상태를 만든다(병합 뒤에도 실패 경로를 확인한다).
+    monkeypatch.delattr("devon_ai.llm_tasks.report.generate_report", raising=False)
     await worker.report_generate(worker_env, str(interview.id))
     assert await app.state.redis.get(f"report:fail:{interview.id}") in (
         b"report_module_unavailable",
@@ -140,8 +131,27 @@ async def test_worker_rerun_after_success_does_not_enqueue_again(
     assert enqueue.await_count == 1
 
 
+async def test_worker_without_active_rubrics_records_failure(
+    app, db, ctx, prompt, worker_env, enqueue, monkeypatch
+):
+    interview, _ = ctx
+    await db.execute(update(ScoreCriterion).values(is_active=False))
+    await db.commit()
+    _use(monkeypatch, FakeGenerator())
+    await worker.report_generate(worker_env, str(interview.id))
+    failure = await app.state.redis.get(f"report:fail:{interview.id}")
+    assert failure in (b"report_rubric_unavailable", "report_rubric_unavailable")
+    assert await _counts(db) == (0, 0)
+    enqueue.assert_not_awaited()
+
+
 def test_failure_codes_are_stable():
+    assert service.failure_code(ReportRubricUnavailableError("x")) == "report_rubric_unavailable"
     assert service.failure_code(ReportModuleUnavailableError("x")) == "report_module_unavailable"
     assert service.failure_code(ReportDraftInvalidError("x")) == "report_invalid"
     assert service.failure_code(c.ContractError("schema", "x")) == "llm_failed"
+    assert (
+        service.failure_code(c.ContractError("semantic", "unscorable key"))
+        == "report_unscorable_key"
+    )
     assert service.failure_code(RuntimeError("x")) == "internal_error"

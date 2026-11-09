@@ -1,3 +1,5 @@
+from dataclasses import asdict, replace
+
 import pytest
 
 from devon_ai import contracts as c
@@ -56,13 +58,36 @@ def test_shallow_batch_preserves_valid_item_and_reports_missing_unknown_duplicat
         ),
     ).data
     assert tuple(item.repository_id for item in result.succeeded) == ("valid",)
-    assert {item.repository_id for item in result.failed} == {
-        "duplicate",
-        "missing",
-        "stale",
-        "unknown",
-    }
+    assert [(item.repository_id, item.reason_summary) for item in result.failed] == [
+        ("duplicate", "duplicate repository result"),
+        ("missing", "missing repository result"),
+        ("stale", "head_sha mismatch"),
+        ("unknown", "unregistered repository_id"),
+    ]
     assert all(item.stage == "semantic" for item in result.failed)
+
+
+def test_parse_shallow_batch_distinguishes_unknown_duplicate_and_missing_ids() -> None:
+    raw = {
+        "head_sha": SHA,
+        "purpose": "캐시 서비스",
+        "key_features": ["조회"],
+        "project_types": ["backend"],
+        "tech_stack": ["Python"],
+        "project_role_summary": "캐시 기능 제공",
+        "basis": [{"kind": "readme", "claim": "캐시 서비스"}],
+        "limitations": [],
+    }
+    result = c.parse_shallow_batch(
+        [{**raw, "repository_id": rid} for rid in ("duplicate", "duplicate", "unknown")],
+        inputs=(_input("duplicate"), _input("missing")),
+    ).data
+    assert result.succeeded == ()
+    assert [(item.repository_id, item.stage, item.reason_summary) for item in result.failed] == [
+        ("duplicate", "semantic", "duplicate repository result"),
+        ("missing", "semantic", "missing repository result"),
+        ("unknown", "semantic", "unregistered repository_id"),
+    ]
 
 
 def test_parse_shallow_batch_keeps_valid_sibling_when_one_item_has_bad_schema() -> None:
@@ -266,3 +291,13 @@ def test_checked_repository_result_serializes_without_raw_candidate_access() -> 
     assert data["succeeded"][0]["repository_id"] == "repo-1"  # type: ignore[index]
     with pytest.raises(c.ContractError):
         c.to_data(_shallow())  # type: ignore[arg-type]
+
+
+def test_shallow_input_hides_readme_text_from_repr_but_keeps_it_in_payload() -> None:
+    item = _input()
+    assert "A cache service" not in repr(item)
+    # repr만 가리고 비교와 모델 payload 직렬화에는 README가 그대로 남는다.
+    assert item == _input()
+    assert item != replace(item, readme_text="other")
+    assert hash(item) == hash(_input())
+    assert asdict(item)["readme_text"] == "A cache service"

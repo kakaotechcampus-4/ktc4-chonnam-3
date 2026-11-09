@@ -1,0 +1,7 @@
+{"case_id": "e-0005", "version": 1,
+ "control": {"kind": "evidence", "split": "dev", "source_group_id": "sg-r1", "synthetic": true},
+ "payload": {"question": "이 프로젝트의 코드는 AI가 작성했나요? 확인한 자료만으로 답하세요.",
+  "materials": [
+   {"ref": "m1", "path": "README.md", "lines": "70-75", "text": "| 문서 | 설명 |\n| --- | --- |\n| ARCHITECTURE.md | 구조 설명 |\n| AGENTS.md | AI 코딩 에이전트 안내 문서 |"},
+   {"ref": "m2", "path": "(최상위 디렉터리 목록)", "lines": "-", "text": "src/\nbuild.gradle\nREADME.md\nARCHITECTURE.md\nAGENTS.md\n.agents/"}
+  ]}}

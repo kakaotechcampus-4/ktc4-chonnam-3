@@ -30,15 +30,19 @@ LLM = LLMSettings(
 
 
 class FakeGenerator:
-    """generate_report 대역. 호출 횟수와 받은 payload 를 기록한다."""
+    """generate_report 대역. 호출 횟수와 받은 payload·prompts·팩토리를 기록한다."""
 
     def __init__(self, output=None, error=None):
         self.output = copy.deepcopy(OUTPUT) if output is None else output
         self.error = error
         self.calls = []
+        self.prompts = None
+        self.factory = None
 
-    async def __call__(self, payload, *, prompt, limits, model_call):
+    async def __call__(self, payload, *, prompts, limits, model_call_factory):
         self.calls.append(payload)
+        self.prompts = prompts
+        self.factory = model_call_factory
         if self.error:
             raise self.error
         return self.output

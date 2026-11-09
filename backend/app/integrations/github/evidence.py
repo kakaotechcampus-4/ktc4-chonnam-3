@@ -170,6 +170,9 @@ class EvidenceReader:
             expected_modes = {"100644", "100755"} if final else {"040000"}
             if not isinstance(entry.get("mode"), str):
                 raise EvidenceReadError("github_invalid_response")
+            if final and entry.get("mode") == "040000" and entry.get("type") == "tree":
+                # 디렉터리 tree는 요청하지 않는다. 호출자가 경로별 분석 한계로 구분한다.
+                raise EvidenceReadError("evidence_directory")
             if entry.get("mode") not in expected_modes or entry.get("type") != (
                 "blob" if final else "tree"
             ):

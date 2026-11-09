@@ -157,7 +157,15 @@ async def read_files(
                 pending = paths[index:]
                 if index >= limits.max_files:
                     raise EvidenceReadError("evidence_file_limit")
-                blob = await reader.regular_blob(root, path)
+                try:
+                    blob = await reader.regular_blob(root, path)
+                except EvidenceReadError as exc:
+                    if exc.code != "evidence_directory":
+                        raise
+                    # 디렉터리 열거는 구현하지 않았다.
+                    # 읽지 않은 범위로 남기고 나머지 경로는 계속 읽는다.
+                    limitations.append(f"{path}: 디렉터리는 파일로 읽지 않았습니다.")
+                    continue
                 searched.append(path)
                 if blob is None:
                     continue

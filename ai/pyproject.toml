@@ -22,8 +22,9 @@ include = ["/src/devon_ai", "/pyproject.toml", "/README.md", "/ruff.toml"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["src"]
+files = ["src", "evals"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["evals"]
 addopts = "--import-mode=importlib"
