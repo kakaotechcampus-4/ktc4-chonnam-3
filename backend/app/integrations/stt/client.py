@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from enum import StrEnum
 
@@ -76,20 +77,33 @@ class MlapiSttClient:
         filename = f"answer.{_EXTENSION_BY_MIME.get(base_mime, 'bin')}"
         settings = self._settings
         try:
-            async with httpx.AsyncClient(
-                timeout=settings.stt_timeout_seconds, transport=self._transport
-            ) as client:
-                response = await client.post(
-                    f"{settings.stt_base_url}{TRANSCRIPTIONS_PATH}",
-                    headers={"Authorization": f"Bearer {settings.stt_api_key.get_secret_value()}"},
-                    data={
-                        "model": settings.stt_model,
-                        "language": settings.stt_language,
-                        "return_timestamps": "false",
-                    },
-                    files={"file": (filename, audio, base_mime)},
-                )
-        except httpx.TimeoutException:
+            # HTTPX의 조각별 read timeout과 별도로 전체 업로드·수신 시간을 제한한다.
+            async with asyncio.timeout(settings.stt_timeout_seconds):
+                async with httpx.AsyncClient(
+                    timeout=settings.stt_timeout_seconds, transport=self._transport
+                ) as client:
+                    async with client.stream(
+                        "POST",
+                        f"{settings.stt_base_url}{TRANSCRIPTIONS_PATH}",
+                        headers={
+                            "Authorization": f"Bearer {settings.stt_api_key.get_secret_value()}"
+                        },
+                        data={
+                            "model": settings.stt_model,
+                            "language": settings.stt_language,
+                            "return_timestamps": "false",
+                        },
+                        files={"file": (filename, audio, base_mime)},
+                    ) as streamed:
+                        content = bytearray()
+                        # 오류 본문은 필요하지 않으며 큰 오류 페이지도 메모리에 모으지 않는다.
+                        if streamed.status_code == 200:
+                            async for chunk in streamed.aiter_bytes():
+                                if len(content) + len(chunk) > settings.stt_max_response_bytes:
+                                    raise self._fail(SttFailureCause.INVALID_RESPONSE)
+                                content.extend(chunk)
+                        response = httpx.Response(streamed.status_code, content=bytes(content))
+        except (TimeoutError, httpx.TimeoutException):
             raise self._fail(SttFailureCause.TIMEOUT) from None
         except httpx.HTTPError:
             raise self._fail(SttFailureCause.PROVIDER_ERROR) from None
