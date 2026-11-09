@@ -16,6 +16,7 @@ import type {
 import {
   candidatePageReady,
   createRun,
+  getDocument,
   getRun,
   runEstimatedSeconds,
   runFailureReason,
@@ -48,15 +49,14 @@ export const analysisHandlers = [
     path('/analysis-runs'),
     async ({ request }) => {
       /**
-       * Sprint 1 계약에서 이 엔드포인트는 multipart가 아니라 JSON이다.
-       * 파일은 POST /documents/preview로 먼저 올리고 documentId만 넘긴다.
+       * 파일은 POST /documents/preview로 먼저 올리고 선택한 문서 ID를 JSON으로 넘긴다.
        * 아직 multipart로 부르는 코드가 있으면 여기서 바로 드러나야 한다.
        */
       if (!request.headers.get('Content-Type')?.includes('application/json')) {
         return errorResponse(
           501,
           'internal_error',
-          'POST /analysis-runs는 JSON { postingUrl, documentId } 를 받습니다. 파일은 POST /documents/preview로 먼저 올리세요.',
+          'POST /analysis-runs는 JSON { postingUrl, documentId, coverLetterDocumentId } 를 받습니다. 파일은 POST /documents/preview로 먼저 올리세요.',
         );
       }
 
@@ -69,8 +69,26 @@ export const analysisHandlers = [
         return errorResponse(400, 'unsupported_site', '지금은 원티드 공고만 분석할 수 있어요.');
       }
 
+      for (const [id, docType] of [
+        [body.documentId, 'portfolio'],
+        [body.coverLetterDocumentId, 'cover_letter'],
+      ] as const) {
+        if (id == null) continue;
+        const document = getDocument(id);
+        if (!document || document.docType !== docType) {
+          return errorResponse(400, 'invalid_request', '선택한 문서를 확인해주세요.');
+        }
+        if (document.extractStatus === 'failed') {
+          return errorResponse(409, 'document_extract_failed', '첨부한 문서를 읽지 못했어요.');
+        }
+      }
+
       await delay(400);
-      const { run, reused } = createRun(body.postingUrl, body.documentId ?? null);
+      const { run, reused } = createRun(
+        body.postingUrl,
+        body.documentId ?? null,
+        body.coverLetterDocumentId ?? null,
+      );
 
       /**
        * 같은 공고로 진행 중인 run이 이미 있으면 409다. 계약의 CreateAnalysisRunResponse에는

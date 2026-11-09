@@ -20,12 +20,14 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from app.core.config import Settings
 from app.db.models import Evidence, InterviewSession, InterviewTurn, LLMCallRecord
 from tests.agents.director_helpers import analysis, contract, response, seed_turns
+from tests.agents.test_director_prepare import Transport, run, settings
+from tests.agents.test_director_prepare import ready as ready
 
 
 @pytest.fixture
 def connect_ws(agent_sessions, agent_seed, test_redis_url):
     @contextmanager
-    def connect(handler=None, *, user_id=None):
+    def connect(handler=None, *, user_id=None, answer_mode="text"):
         from app.features.interview.service import _issue_session_id
         from app.main import create_app
 
@@ -49,6 +51,9 @@ def connect_ws(agent_sessions, agent_seed, test_redis_url):
             app.state.http_client = http
 
             async def setup():
+                async with agent_sessions.begin() as db:
+                    interview = await db.get(InterviewSession, agent_seed["interview_id"])
+                    interview.answer_mode = answer_mode
                 sid = await app.state.sessions.create(user_id or agent_seed["owner"])
                 realtime = await _issue_session_id(
                     app.state.redis,
@@ -71,6 +76,38 @@ def unexpected_model(request):
     pytest.fail("저장된 질문 재전달에서 모델을 호출했다")
 
 
+@pytest.mark.parametrize("mode", ["text", "voice"])
+async def test_stored_mode_rejects_opposite_input_before_model_or_answer_storage(
+    agent_sessions, agent_seed, connect_ws, mode
+):
+    await seed_turns(agent_sessions, agent_seed)
+    with connect_ws(answer_mode=mode) as (client, _, path, _, _):
+        with client.websocket_connect(path, headers={"origin": "http://localhost:5173"}) as socket:
+            assert socket.receive_json()["type"] == "question"
+            if mode == "voice":
+                socket.send_json({"type": "answer", "turn": 1, "text": "잘못된 모드의 답변"})
+            else:
+                socket.send_json({"type": "answerStart", "turn": 1, "mimeType": "audio/webm"})
+            rejected = socket.receive_json()
+            assert rejected["type"] == "error"
+            assert rejected["reason"] == "answer_rejected"
+            assert rejected["recoverable"] is True
+    async with agent_sessions() as db:
+        turn = await db.scalar(
+            select(InterviewTurn).where(
+                InterviewTurn.interview_session_id == agent_seed["interview_id"]
+            )
+        )
+        assert turn.answer_text is None
+        assert (
+            await db.scalars(
+                select(LLMCallRecord).where(
+                    LLMCallRecord.interview_session_id == agent_seed["interview_id"]
+                )
+            )
+        ).all() == []
+
+
 async def test_reconnect_replays_stored_question_and_rebuilds_snapshot_without_a_model(
     agent_sessions,
     agent_seed,
@@ -87,6 +124,9 @@ async def test_reconnect_replays_stored_question_and_rebuilds_snapshot_without_a
                     "persona": "hr_manager",
                     "text": "본인의 역할을 설명해 주세요.",
                     "turn": 1,
+                    "mainIndex": 1,
+                    "followUpDepth": 0,
+                    "audioUrl": None,
                 }
 
         async def cached():
@@ -645,3 +685,67 @@ async def test_evidence_check_is_sent_only_after_actual_evidence_is_committed(
 
             assert client.portal.call(stored) == ("hello\n", sha)
             assert socket.receive_json() == {"type": "interviewEnd"}
+
+
+async def test_failed_question_retries_through_real_rest_queue_and_worker(
+    agent_sessions,
+    ready,
+    test_redis_url,
+):
+    from uuid import uuid4
+
+    from arq.connections import RedisSettings, create_pool
+    from fastapi import FastAPI
+
+    from app.core.deps import current_user
+    from app.db.models import User
+    from app.db.session import get_db
+    from app.features.interview.router import router
+    from app.workers.tasks.interview_prep import interview_prep
+
+    invalid = Transport(ready)
+    invalid.outputs[0]["question"]["text"] = ""
+    assert not await run(agent_sessions, ready, invalid)
+    async with agent_sessions() as db:
+        row = await db.get(InterviewSession, ready["interview_id"])
+        assert row.status == "preparing_failed" and "prepare_job_id" not in row.context_state
+        original = await db.scalar(select(Evidence.id))
+    queue = "arq:director-prepare-test:" + uuid4().hex
+    broker = await create_pool(RedisSettings.from_dsn(test_redis_url), default_queue_name=queue)
+    app = FastAPI()
+    app.include_router(router, prefix="/api")
+    app.state.redis = broker
+
+    async def database():
+        async with agent_sessions() as db:
+            yield db
+
+    async def owner():
+        async with agent_sessions() as db:
+            return await db.get(User, ready["owner"])
+
+    app.dependency_overrides[get_db] = database
+    app.dependency_overrides[current_user] = owner
+    jobs = []
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as api:
+            result = await api.post(f"/api/interviews/{ready['interview_id']}/prepare/retry")
+        assert result.status_code == 204
+        jobs = await broker.queued_jobs()
+        assert len(jobs) == 1 and jobs[0].function == "interview_prep"
+        transport = Transport(ready)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+            await interview_prep(
+                dict(session_factory=agent_sessions, settings=settings(), http_client=http),
+                jobs[0].args[0],
+            )
+        async with agent_sessions() as db:
+            row = await db.get(InterviewSession, ready["interview_id"])
+            assert row.status == "in_progress"
+            assert (await db.scalars(select(Evidence.id))).all() == [original]
+        assert transport.model_operations == ["plan", "review"]
+    finally:
+        await broker.delete(queue, *("arq:job:" + item.job_id for item in jobs))
+        await broker.aclose()

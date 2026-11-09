@@ -8,7 +8,8 @@ import Footer from '@/shared/components/Footer';
 import { PERSONA_INITIALS, PERSONA_LABELS } from '@/shared/persona';
 import { RESTART_REASONS, RETRY_ERROR } from '@/features/interview/retryErrors';
 import { isApiError } from '@/types/api';
-import type { AgentFeedback, ReportResponse } from '@/types/api';
+import type { AgentFeedback } from '@/types/api';
+import FeedbackDisagreement from './FeedbackDisagreement';
 
 const DEFAULT_RETRY_AFTER_SECONDS = 3;
 
@@ -42,9 +43,17 @@ export default function Report() {
     },
   });
 
+  const reportRetry = useMutation({
+    mutationFn: () => api.retryReport(id),
+    onSuccess: (generating) => {
+      queryClient.setQueryData(queryKeys.report(id), generating);
+      void reportQuery.refetch();
+    },
+  });
+
   const data = reportQuery.data;
   const generating = !!data && 'status' in data && data.status === 'generating';
-  const report = data && !generating ? (data as ReportResponse) : undefined;
+  const report = data && !('status' in data) ? data : undefined;
   // 네트워크 오류·AbortError는 ApiError 모양이 아니라 `.error`가 없다. 렌더 중 읽으면 흰 화면이 된다.
   const errorReason = isApiError(reportQuery.error) ? reportQuery.error.error.reason : null;
   const reportUnavailable = errorReason === 'report_unavailable';
@@ -64,8 +73,13 @@ export default function Report() {
         {showError && (
           <div className="flex flex-col items-start gap-3">
             {/* report_unavailable은 진행 턴 0개·생성 실패 등 원인이 여럿이라 원인을 단정하지 않는다. */}
-            <p role="alert" className={`text-sm ${reportUnavailable ? 'text-muted' : 'text-error'}`}>
-              {reportUnavailable ? '이 면접은 리포트를 만들 수 없어요.' : '리포트를 불러오지 못했어요.'}
+            <p
+              role="alert"
+              className={`text-sm ${reportUnavailable ? 'text-muted' : 'text-error'}`}
+            >
+              {reportUnavailable
+                ? '이 면접은 리포트를 만들 수 없어요.'
+                : '리포트를 불러오지 못했어요.'}
             </p>
             <div className="flex gap-2">
               <button type="button" onClick={() => navigate('/home')} className={OUTLINE_BUTTON}>
@@ -80,7 +94,25 @@ export default function Report() {
                   다시 불러오기
                 </button>
               )}
+              {reportUnavailable && (
+                <button
+                  type="button"
+                  disabled={reportRetry.isPending}
+                  onClick={() => reportRetry.mutate()}
+                  className={OUTLINE_BUTTON}
+                >
+                  {reportRetry.isPending ? '다시 요청하는 중...' : '리포트 생성 다시 시도'}
+                </button>
+              )}
             </div>
+            {reportRetry.isError && (
+              <p role="alert" className="text-xs text-error">
+                {isApiError(reportRetry.error) &&
+                reportRetry.error.error.reason === 'report_unavailable'
+                  ? '현재 이 리포트를 다시 생성할 수 없어요. 면접 상태를 확인하거나 나중에 다시 시도해주세요.'
+                  : '리포트 생성을 다시 요청하지 못했어요. 잠시 후 다시 시도해주세요.'}
+              </p>
+            )}
           </div>
         )}
 
@@ -139,7 +171,15 @@ export default function Report() {
             <section className="flex flex-col gap-3.5">
               <SectionTitle>면접관별 피드백</SectionTitle>
               {report.agentFeedbacks.map((feedback) => (
-                <FeedbackCard key={feedback.persona} feedback={feedback} />
+                <FeedbackCard
+                  key={`${feedback.persona}:${report.revision}`}
+                  feedback={feedback}
+                  interviewId={id}
+                  revision={report.revision}
+                  onRefresh={() => {
+                    void reportQuery.refetch();
+                  }}
+                />
               ))}
             </section>
 
@@ -227,7 +267,17 @@ function SectionTitle({ children }: { children: string }) {
   );
 }
 
-function FeedbackCard({ feedback }: { feedback: AgentFeedback }) {
+function FeedbackCard({
+  feedback,
+  interviewId,
+  revision,
+  onRefresh,
+}: {
+  feedback: AgentFeedback;
+  interviewId: string;
+  revision: number;
+  onRefresh: () => void;
+}) {
   return (
     <div className="flex gap-3 rounded-lg border border-line-soft p-3.5">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[11.5px] font-bold text-accent">
@@ -254,14 +304,12 @@ function FeedbackCard({ feedback }: { feedback: AgentFeedback }) {
             </p>
           ))}
         </div>
-        {/* Sprint 1: 이의 제기는 항상 비활성 — POST /reports/{id}/feedback-disagreements 호출 없음 (spec/frontend/features/report.md) */}
-        <button
-          type="button"
-          disabled
-          className="self-start text-[11px] text-muted opacity-50"
-        >
-          이 평가에 동의하지 않아요
-        </button>
+        <FeedbackDisagreement
+          interviewId={interviewId}
+          revision={revision}
+          feedback={feedback}
+          onRefresh={onRefresh}
+        />
       </div>
     </div>
   );

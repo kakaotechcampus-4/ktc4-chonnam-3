@@ -56,7 +56,7 @@ async function openPrepare(page: Page, mic: MicResult) {
           sessionId: 'ses-1',
           runId: 'run-1',
           status: 'preparing',
-          answerMode: 'text',
+          answerMode: 'voice',
           position: 'BE',
           companyName: null,
           repositoryNames: [],

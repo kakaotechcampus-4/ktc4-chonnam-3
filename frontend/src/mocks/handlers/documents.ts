@@ -6,7 +6,6 @@ import { errorResponse, path, type Res } from '../http';
 
 /** spec/backend/features/documents.md — 지원 형식과 크기 제한. */
 const SUPPORTED = ['.pdf', '.docx', '.txt', '.md'];
-const MAX_BYTES = 20 * 1024 * 1024;
 
 export const documentHandlers = [
   http.post<PathParams, never, Res<DocumentPreviewResponse>>(
@@ -14,6 +13,11 @@ export const documentHandlers = [
     async ({ request }) => {
       const form = await request.formData();
       const file = form.get('file');
+      const docType = form.get('docType') ?? 'portfolio';
+
+      if (docType !== 'portfolio' && docType !== 'cover_letter') {
+        return errorResponse(400, 'invalid_request', '문서 종류를 확인해주세요.');
+      }
 
       if (!(file instanceof File)) {
         return errorResponse(400, 'internal_error', 'file 필드가 필요합니다.');
@@ -27,8 +31,13 @@ export const documentHandlers = [
           'PDF, DOCX, TXT, MD 파일만 올릴 수 있어요.',
         );
       }
-      if (file.size > MAX_BYTES) {
-        return errorResponse(413, 'document_too_large', '파일은 20MB까지 올릴 수 있어요.');
+      const maxMegabytes = docType === 'cover_letter' ? 10 : 20;
+      if (file.size > maxMegabytes * 1024 * 1024) {
+        return errorResponse(
+          413,
+          'document_too_large',
+          `파일은 ${maxMegabytes}MB까지 올릴 수 있어요.`,
+        );
       }
 
       // 실제 텍스트 추출 없이 화면의 처리 대기 상태를 확인하도록 잠시 지연한다.
@@ -51,7 +60,7 @@ export const documentHandlers = [
         extractStatus,
       };
 
-      saveDocument(preview);
+      saveDocument(preview, docType);
       return HttpResponse.json<DocumentPreviewResponse>(preview);
     },
   ),
