@@ -371,6 +371,33 @@ def _assessment(raw: object, candidate: c.Question) -> c.QuestionReview | c.Cand
     return c.CandidateRecovery("rewrite", reason)
 
 
+def _turn_state(context: c.Context) -> dict[str, object]:
+    """다음 질문 번호와 이미 확정된 답변 수를 혼동하지 않도록 코드에서 계산한다."""
+    answered = len(context.history)
+    if context.turn_no != answered + 1:
+        raise c.ContractError("semantic", "next question turn")
+    if context.current_turn_id != (context.history[-1].turn_id if answered else None):
+        raise c.ContractError("semantic", "last answered turn")
+    observed = {turn.persona for turn in context.history}
+    counts = {item.persona: item.count for item in context.persona_counts}
+    if any(
+        counts.get(persona, 0) != sum(turn.persona == persona for turn in context.history)
+        for persona in observed | counts.keys()
+    ):
+        raise c.ContractError("semantic", "answered persona counts")
+    return {
+        "phase": "generate_next_question",
+        "next_question_no": context.turn_no,
+        "answered_turn_count": answered,
+        "last_answered_turn_no": answered or None,
+        "last_answered_turn_id": context.current_turn_id,
+        "total_questions": context.total_turns,
+        "remaining_questions": context.total_turns - answered,
+        "is_final_question": context.turn_no == context.total_turns,
+        "finish_authority": "controller_after_final_answer",
+    }
+
+
 def _input_payload(
     context: c.Context,
     prompt: c.PromptSpec,
@@ -384,6 +411,8 @@ def _input_payload(
         raise c.ContractError("schema", "Director context")
     if type(prompt) is not c.PromptSpec or prompt.task_name != "director":
         raise c.ContractError("schema", "Director prompt")
+    if prompt.version.partition("@")[0] not in SUPPORTED_PROMPT_VERSIONS:
+        raise c.ContractError("schema", "unsupported Director prompt version")
     if type(limits) is not c.CallLimits:
         raise c.ContractError("schema", "Director limits")
     if type(tool_results) is not tuple or any(
@@ -423,15 +452,35 @@ def _input_payload(
             if type(checked) is not c.ContractChecked or type(checked.data) is not c.AnswerAnalysis:
                 raise c.ContractError("schema", "checked prior analysis")
             previous[turn_id] = c.to_data(checked)
-    return {
+    current_answer = None
+    if context.current_turn_id is not None:
+        # 직전 발언을 분석 요약·다른 턴과 섞지 않고 두 모델 시도에 같은 원문으로 제공한다.
+        current = tuple(turn for turn in context.history if turn.turn_id == context.current_turn_id)
+        if len(current) != 1 or context.current_question_contract is None:
+            raise c.ContractError("semantic", "current answered turn")
+        current_answer = {
+            "turn_id": current[0].turn_id,
+            "question": current[0].question,
+            "answer": current[0].answer,
+            "question_contract": asdict(context.current_question_contract),
+        }
+    payload: dict[str, object] = {
         "context": asdict(context),
-        "reference_texts": [
-            {"kind": ref.kind, "id": ref.id, "text": text} for ref, text in sources.items()
-        ],
+        "current_answer": current_answer,
+        "reference_texts": _model_reference_texts(sources),
         "answer_analysis": analysis,
         "prior_analyses": previous,
         "tool_results": [asdict(result) for result in tool_results],
-    }, sources
+    }
+    if prompt.version.partition("@")[0] in {
+        "director_v5",
+        "director_v6",
+        "director_v7",
+        "director_v8",
+    }:
+        # 기존 버전의 입력을 바꾸지 않고 새 배포에만 명시적인 턴 의미를 제공한다.
+        payload["turn_state"] = _turn_state(context)
+    return payload, sources
 
 
 async def run_director(
@@ -444,6 +493,7 @@ async def run_director(
     reference_texts: Mapping[c.BasisRef, str] | None = None,
     prior_analyses: Mapping[str, c.ContractChecked[c.AnswerAnalysis]] | None = None,
     tool_results: tuple[c.ToolResult, ...] = (),
+    recovery_feedback: RecoveryFeedback | None = None,
 ) -> c.ModelResult[DirectorOutcome]:
     """목적·계약·초안을 한 번 생성하고 남은 한 번으로 독립 검토한다.
 
@@ -460,6 +510,13 @@ async def run_director(
             reference_texts,
             prior_analyses,
             tool_results,
+        )
+        # 과거 프롬프트에는 복구 참고자료의 취급 지침이 없으므로 입력을 소급 확장하지 않는다.
+        feedback = (
+            _feedback_payload(recovery_feedback)
+            if recovery_feedback is not None
+            and prompt.version.partition("@")[0] in {"director_v7", "director_v8"}
+            else None
         )
     except c.ContractError as exc:
         return c.ModelResult(
@@ -482,10 +539,15 @@ async def run_director(
             (),
         )
 
+    # 구형 출력 계약만 보존하고 새 버전·배포 suffix에서는 평가 기회 검증을 유지한다.
+    legacy = prompt.version.partition("@")[0] in {"director_v1", "director_v2"}
+    coverage = bool(context.evaluation_targets) and not legacy
+    bounded_ids = prompt.version.partition("@")[0] in {"director_v6", "director_v7", "director_v8"}
+
     def validate_plan(raw: object) -> _Plan:
         if type(raw) is not dict or set(raw) != {"question", "intent", "reason_summary"}:
             raise c.ContractError("schema", "DirectorPlan")
-        candidate = _validate_candidate(_plan_question(raw["question"]), context, sources)
+        candidate = _validate_candidate(_plan_question(raw["question"]), context, sources, coverage)
         # 자유 텍스트인 의도·사유도 기존 결정 계약의 타입 검사로 검증한다.
         proposal = c.DirectorDecision(
             "ask",
@@ -500,10 +562,20 @@ async def run_director(
     generated = await model_call(
         c.ModelRequest(
             prompt,
-            {**payload, "operation": "plan"},
+            {
+                **payload,
+                "operation": "plan",
+                **({"recovery_feedback": feedback} if feedback is not None else {}),
+            },
             "DirectorPlan",
-            "director-plan.v1",
-            _plan_schema(),
+            "director-plan.v3"
+            if bounded_ids
+            else "director-plan.v2"
+            if coverage
+            else "director-plan.v1",
+            _bounded_plan_schema(context, sources, coverage)
+            if bounded_ids
+            else _plan_schema(coverage),
             limits,
             max_attempts=1,
         ),
@@ -515,7 +587,7 @@ async def run_director(
     if type(plan) is not _Plan:
         raise TypeError("ModelCall did not return a validated Director plan")
     try:
-        _validate_candidate(plan.question, context, sources)
+        _validate_candidate(plan.question, context, sources, coverage)
     except c.ContractError as exc:
         return c.ModelResult(
             None,
@@ -600,6 +672,17 @@ async def run_director(
             attempts,
         )
     return c.ModelResult(DirectorOutcome(decision, checked, generated.attempts[-1]), None, attempts)
+
+
+def external_verification_queries(
+    context: c.Context, analysis: c.ContractChecked[c.AnswerAnalysis]
+) -> tuple[c.ExternalQueryRequest, ...]:
+    """검증된 현재 답변의 보완 요청만 외부 Tool 후보로 넘긴다. 검색 실행은 BE 책임이다."""
+    if type(context) is not c.Context or context.current_turn_id is None:
+        raise c.ContractError("semantic", "external query turn")
+    if type(analysis) is not c.ContractChecked or type(analysis.data) is not c.AnswerAnalysis:
+        raise c.ContractError("schema", "checked analysis")
+    return analysis.data.external_queries if analysis.data.needs_verification else ()
 
 
 def verification_decision(
