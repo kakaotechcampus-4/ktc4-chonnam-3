@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import pytest
 
 from app.db.models.posting import JD_CATEGORIES
@@ -193,3 +195,95 @@ def test_cap_boundaries(required, expected):
     assert [d.text for d in drafts if d.category == "required"] == [
         f"요건 {i}" for i in range(expected["required"])
     ]
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "필수역량",
+        "필수 역량",
+        "주요역할",
+        "주요 업무",
+        "자격요건",
+        "우대사항",
+        "• 필수 역량:",
+        "- **필수역량**",
+        "1. [주요 역할]",
+        "2) 주요역할：",
+        "(3) __우대사항__",
+        "① 【필수역량】",
+        "### **[주요역할]**:",
+        "[필수역량:]",
+        "**필수역량:**",
+    ],
+)
+def test_standalone_section_headings_do_not_become_requirements(heading):
+    drafts = build_requirement_drafts(
+        _posting(requirements=[heading, "Python 개발 경험"], preferred_points=[], main_tasks=[])
+    )
+
+    assert [draft.text for draft in drafts] == ["Python 개발 경험"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "필수 역량을 활용한 API 개발 경험",
+        "팀의 주요 역할을 설명할 수 있는 분",
+        "필수역량: Python 개발 경험",
+        "주요역할 - 결제 API 개발",
+        "요구사항정의",
+        "주요역할구현",
+        "[주요역할] API 개발",
+        "**필수역량",
+        "[필수역량)",
+    ],
+)
+def test_heading_words_inside_content_or_unbalanced_decoration_are_preserved(text):
+    drafts = build_requirement_drafts(
+        _posting(requirements=[text], preferred_points=[], main_tasks=[])
+    )
+
+    assert [draft.text for draft in drafts] == [text]
+
+
+def test_headings_are_removed_before_the_twenty_item_quota_without_mutating_source():
+    # 실제 공고의 8·6·8행 구조만 재현하며 본문은 합성 문장이다.
+    required = [f"필수 요건 {i}" for i in range(7)]
+    preferred = [f"우대 경험 {i}" for i in range(6)]
+    tasks = [f"담당 업무 {i}" for i in range(7)]
+    posting = _posting(
+        requirements=["필수역량", *required],
+        preferred_points=preferred,
+        main_tasks=["주요역할", *tasks],
+    )
+    original = deepcopy(posting)
+
+    drafts = build_requirement_drafts(posting)
+
+    assert len(drafts) == MAX_REQUIREMENTS
+    assert [draft.text for draft in drafts] == required + preferred + tasks
+    assert [draft.category for draft in drafts] == (
+        ["required"] * 7 + ["preferred"] * 6 + ["responsibility"] * 7
+    )
+    assert [draft.source_field for draft in drafts] == (
+        ["requirements"] * 7 + ["preferred_points"] * 6 + ["main_tasks"] * 7
+    )
+    assert [draft.display_order for draft in drafts] == list(range(MAX_REQUIREMENTS))
+    assert all(draft.tech_tags == ["Python", "Redis"] for draft in drafts)
+    drafts[0].tech_tags.append("추가 태그")
+    assert drafts[1].tech_tags == ["Python", "Redis"]
+    assert posting == original
+
+
+def test_headings_without_requirement_content_raise_extraction_error():
+    posting = _posting(
+        requirements=["필수역량"],
+        preferred_points=["[우대사항]:"],
+        main_tasks=["**주요역할**"],
+    )
+
+    with pytest.raises(JdExtractionError) as exc_info:
+        build_requirement_drafts(posting)
+
+    assert exc_info.value.code == "jd_extraction_failed"

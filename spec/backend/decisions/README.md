@@ -4,6 +4,12 @@
 
 ## BE 내부 구현 결정
 
+- [0013 JD 섹션 제목 제외와 기존 캐시의 새 버전 생성](0013-jd-requirement-headings-and-cache-repair.md): Proposed.
+  제목만 있는 행을 추출 전에 제외하고 해당 행이 남은 캐시는 새 버전으로 갱신한다. 과거 면접의 원문·참조 ID는 보존한다.
+
+- [0012 L1 실패 행에 AI 실패 단계·사유 보존](0012-l1-failure-stage-reason.md): Proposed.
+  실패 행 `result._failure`에 단계·사유를 남기고 공개 `error_code`는 유지한다. 실패 행 `result`를 `null`로 가정하지 않는다.
+
 - [0010 공개 저장소의 OAuth App 인증](0010-public-repository-app-auth.md): Proposed.
   기존 앱 자격 증명으로 공개 데이터를 조회하며 사용자 token의 비공개 접근 범위를 확대하지 않는다.
 

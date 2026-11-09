@@ -13,4 +13,4 @@
   {"kind": "forbidden", "output": "tech_lead: updateTask에는 에러 처리가 없는데 왜 거짓으로 답하셨나요?"},
   {"kind": "invalid_ref", "output": "tech_lead: ev2의 taskService.ts에서 호출부가 에러를 무시하는데 이건 어떻게 설명하시겠어요?"}
  ],
- "review": {"status": "approved", "author": "geonyeong325", "reviewer": "gdh0730", "reviewed_at": "2026-11-02", "pending_notes": []}}
+ "review": {"status": "unreviewed", "author": "geonyeong325", "reviewer": null, "reviewed_at": null, "pending_notes": []}}

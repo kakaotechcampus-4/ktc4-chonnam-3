@@ -40,7 +40,7 @@ test('runId가 바뀌면 새 SSE를 열고 이전 run의 단계 상태를 비운
     };
   });
 
-  const doneMarks = page.locator('li', { hasText: '공고 문서 확인' }).getByText('✓');
+  const doneMarks = page.locator('li', { hasText: '첨부 문서 확인' }).getByText('✓');
   const sources = () =>
     page.evaluate(() =>
       (window as unknown as { __sources: { url: string; closed: boolean }[] }).__sources.map(

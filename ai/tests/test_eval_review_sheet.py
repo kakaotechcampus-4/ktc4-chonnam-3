@@ -96,7 +96,7 @@ def test_sheet_without_source_fact_says_so(tmp_path):
 def test_main_writes_one_file_per_case_and_fails_on_unknown_fact(tmp_path):
     _write_case(tmp_path, source_fact="F-R1-001")
     (path,) = main(tmp_path, tmp_path / "out", [])
-    assert path.name == "e-1.md" and "검수 시트" in path.read_text(encoding="utf-8")
+    assert path.name == "e-1.v1.md" and "검수 시트" in path.read_text(encoding="utf-8")
     _write_case(tmp_path, source_fact="F-R9-999")
     with pytest.raises(CaseError):
         main(tmp_path, tmp_path / "out", [])
@@ -123,3 +123,91 @@ def test_interview_sheet_uses_policy_and_readable_history(tmp_path):
     assert "기준이 되는 면접 정책" in sheet and "원본 사실" not in sheet
     assert "질문: Q텍스트" in sheet and "답변: A텍스트" in sheet
     assert "확인 범위" not in sheet and "정책에 맞는 좋은 다음 행동" in sheet
+
+
+_CONTRACT = {
+    "purpose": "질문 목적",
+    "required_points": [{"key": "p", "description": "요구한 내용"}],
+    "evaluation_scope": "평가 범위",
+}
+
+
+def _report(root: Path, case_id: str, version: int, role: str | None, answer: str) -> None:
+    inp = {
+        "case_id": case_id,
+        "version": version,
+        "control": {"kind": "report", "split": "dev", "source_group_id": "sg-1", "synthetic": True},
+        "payload": {
+            "history": [
+                {**turn, "question_contract": _CONTRACT}  # loader 는 report 의 모든 턴에 요구한다
+                for turn in (
+                    {"turn": 1, "persona": "hr_manager", "question": "Q1", "answer": "같은 답"},
+                    {"turn": 2, "persona": "tech_lead", "question": "Q2", "answer": answer},
+                )
+            ]
+        },
+    }
+    exp = {
+        "case_id": case_id,
+        "version": version,
+        "allowed": [{"id": "a1", "purpose": "서술"}],
+        "forbidden": [],
+        "grader_controls": [],
+        "review": {
+            "status": "unreviewed",
+            "author": "me",
+            "reviewer": None,
+            "reviewed_at": None,
+            "pending_notes": [],
+        },
+    }
+    if role:
+        pair = {"pair_id": "rp-1", "role": role, "key": "technical_reasoning", "min_gap": 10}
+        exp["pair"] = pair
+    name = f"{case_id}.v{version}.json"
+    (root / "inputs" / name).write_text(json.dumps(inp), encoding="utf-8")
+    (root / "expectations" / name).write_text(json.dumps(exp), encoding="utf-8")
+
+
+def test_versions_of_one_case_get_separate_sheets(tmp_path):
+    (tmp_path / "inputs").mkdir()
+    (tmp_path / "expectations").mkdir()
+    (tmp_path / "expectations" / "fact-table.md").write_text(FACTS, encoding="utf-8")
+    _report(tmp_path, "r-1", 1, None, "첫 버전")
+    _report(tmp_path, "r-1", 2, None, "둘째 버전")
+    paths = main(tmp_path, tmp_path / "out", [])
+    assert sorted(p.name for p in paths) == ["r-1.v1.md", "r-1.v2.md"]
+    assert "첫 버전" in paths[0].read_text(encoding="utf-8")
+    assert "둘째 버전" in paths[1].read_text(encoding="utf-8")
+
+
+def test_paired_report_sheet_shows_the_comparison(tmp_path):
+    (tmp_path / "inputs").mkdir()
+    (tmp_path / "expectations").mkdir()
+    (tmp_path / "expectations" / "fact-table.md").write_text(FACTS, encoding="utf-8")
+    _report(tmp_path, "r-1", 1, "stronger", "깊은 답")
+    _report(tmp_path, "r-2", 1, "weaker", "얕은 답")
+    strong, weak = (p.read_text(encoding="utf-8") for p in main(tmp_path, tmp_path / "out", []))
+    for text in (
+        "rp-1",
+        "강한 사례",
+        "`r-2` v1",
+        "technical_reasoning",
+        "min_gap",
+        "깊은 답",
+        "얕은 답",
+    ):
+        assert text in strong
+    assert "약한 사례" in weak and "`r-1` v1" in weak
+    assert "같은 답" not in strong.split("## 비교 정보")[1].split("## ③")[0]
+    assert "비교 key를 평가하는 질문이" in strong
+
+
+def test_report_without_a_pair_is_not_treated_as_evidence(tmp_path):
+    (tmp_path / "inputs").mkdir()
+    (tmp_path / "expectations").mkdir()
+    _report(tmp_path, "r-1", 1, None, "답")
+    (case,) = load_cases(tmp_path)
+    sheet = render_sheet(case, None)
+    assert "비교 정보" not in sheet
+    assert "리포트 서술인가" in sheet and "확인 범위" not in sheet

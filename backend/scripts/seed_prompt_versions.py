@@ -17,6 +17,13 @@ PROMPT_VERSIONS = {
 }
 
 
+# 초기 seed에 포함하지 않고 검수된 본문이 준비되면 register_prompt로만 등록하는 task.
+# report_score는 리포트 점수 판정 task이며 version 이름은 작성자가 제안한 값이다.
+ADDITIONAL_PROMPT_VERSIONS = {
+    "report_score": "report_score_v1",
+}
+
+
 class PromptSeedValidationError(ValueError):
     """검수 입력이 초기 seed 또는 부분 등록 조건을 만족하지 않을 때 발생한다."""
 
@@ -135,7 +142,7 @@ def _validate_registration(prompts: list[PromptSpec]) -> None:
         raise PromptSeedValidationError("at least one reviewed prompt is required")
     seen: set[str] = set()
     for prompt in prompts:
-        if prompt.task_name not in PROMPT_VERSIONS:
+        if prompt.task_name not in PROMPT_VERSIONS | ADDITIONAL_PROMPT_VERSIONS:
             raise PromptSeedValidationError(f"unknown prompt task: {prompt.task_name}")
         if prompt.task_name in seen:
             raise PromptSeedValidationError(
@@ -148,6 +155,7 @@ def _validate_registration(prompts: list[PromptSpec]) -> None:
 
 
 __all__ = [
+    "ADDITIONAL_PROMPT_VERSIONS",
     "PROMPT_VERSIONS",
     "PromptSeedValidationError",
     "PromptVersionConflictError",

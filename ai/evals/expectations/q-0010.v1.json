@@ -13,4 +13,4 @@
   {"kind": "forbidden", "output": "rewrite: tech_lead: Redis 캐시가 만료되는 시점과 기준을 어떻게 정하셨는지 설명해 주세요."},
   {"kind": "forbidden", "output": "no_valid_candidate: 이 상황에서는 질문을 만들 수 없습니다."}
  ],
- "review": {"status": "approved", "author": "geonyeong325", "reviewer": "gdh0730", "reviewed_at": "2026-11-02", "pending_notes": []}}
+ "review": {"status": "unreviewed", "author": "geonyeong325", "reviewer": null, "reviewed_at": null, "pending_notes": []}}

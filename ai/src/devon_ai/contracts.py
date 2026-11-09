@@ -224,6 +224,28 @@ def decode[T: _Contract](contract_type: type[T], payload: object) -> T:
     return cast(T, _convert(contract_type, payload, contract_type.__name__, wire=True))
 
 
+def _reject_extra(annotation: object, value: object) -> None:
+    args = get_args(annotation)
+    if get_origin(annotation) is tuple and len(args) == 2 and args[1] is Ellipsis:
+        if type(value) is list:
+            for item in value:
+                _reject_extra(args[0], item)
+    elif isinstance(annotation, type) and issubclass(annotation, _Contract):
+        if type(value) is dict and is_dataclass(annotation):
+            hints = get_type_hints(annotation)
+            extra = set(value) - set(hints)
+            if extra:
+                raise ContractError("schema", min(extra))
+            for name, item in value.items():
+                _reject_extra(hints[name], item)
+
+
+def decode_strict[T: _Contract](contract_type: type[T], payload: object) -> T:
+    """decode와 같지만 중첩 객체의 계약 밖 필드도 버리지 않고 schema 실패로 처리한다."""
+    _reject_extra(contract_type, payload)
+    return decode(contract_type, payload)
+
+
 def _unique(values: tuple[object, ...], name: str) -> None:
     if len(set(values)) != len(values):
         raise ContractError("semantic", name)
@@ -762,7 +784,8 @@ class ShallowRepoInput(_Contract):
     repository_id: str
     head_sha: str
     description: str | None
-    readme_text: str | None
+    # README 원문이 로그에 남지 않도록 repr에서만 숨긴다.
+    readme_text: str | None = field(repr=False)
     readme_truncated: bool
     languages: tuple[LanguageBytes, ...]
     commit_count: int | None
@@ -1173,6 +1196,246 @@ class DomainPostingInput(_Contract):
     main_tasks: tuple[str, ...]
     requirements: tuple[str, ...]
     preferred_points: tuple[str, ...]
+
+
+ScoreKeyId = Literal[
+    "project_understanding",
+    "technical_reasoning",
+    "problem_solving",
+    "communication",
+    "contribution_clarity",
+    "company_job_fit",
+]
+ScoreLevel = Literal[0, 1, 2, 3, 4, "not_applicable"]
+
+# Persona가 평가 후보로 삼는 key. 후보 밖 key는 모델이 만들 수 없다.
+SCORE_CANDIDATE_KEYS: dict[PersonaId, tuple[ScoreKeyId, ...]] = {
+    "tech_lead": (
+        "project_understanding",
+        "technical_reasoning",
+        "problem_solving",
+        "communication",
+    ),
+    "domain_lead": ("company_job_fit", "communication"),
+    "hr_manager": ("contribution_clarity", "communication"),
+}
+
+
+@dataclass(frozen=True)
+class LinkedRequirement(_Contract):
+    """질문이 연결한 JD 요구사항. 점수 판정에 보조 정보로만 전달한다."""
+
+    id: str
+    category: str
+    text: str
+
+
+@dataclass(frozen=True)
+class ScoreTurn(_Contract):
+    """점수 판정 입력의 확정 문답 한 턴. 질문 당시의 Question Contract를 함께 둔다.
+
+    answer가 None이면 질문했지만 지원자가 답하지 않은 턴이다. 질문하지 않은 영역과 다르며,
+    판정은 not_applicable이 아니라 0단계 기준으로 한다. jd_requirements는 질문이 연결한 JD
+    요구사항이며 비어 있을 수 있다. 연결했다는 사실만으로 JD와 경험의 연결을 평가했다고 보지
+    않는다(판단은 question_contract의 purpose·required_points·evaluation_scope로 한다).
+    """
+
+    turn_id: str
+    persona: PersonaId
+    question: str
+    answer: str | None
+    question_contract: QuestionContract
+    jd_requirements: tuple[LinkedRequirement, ...] = ()
+
+
+@dataclass(frozen=True)
+class RubricLevel(_Contract):
+    key: ScoreKeyId
+    level: int
+    text: str
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not 0 <= self.level <= 4:
+            raise ContractError("schema", "rubric level")
+
+
+@dataclass(frozen=True)
+class ScoreJudgment(_Contract):
+    turn_id: str
+    key: ScoreKeyId
+    level: ScoreLevel
+
+
+@dataclass(frozen=True)
+class ScoreJudgments(_Contract):
+    judgments: tuple[ScoreJudgment, ...]
+
+
+def validate_score_judgments(
+    candidate: ScoreJudgments, *, turns: tuple[ScoreTurn, ...]
+) -> ContractChecked[ScoreJudgments]:
+    """(턴, 후보 key) 쌍이 정확히 한 번씩 있고 모든 key에 점수가 있는 판정만 통과시킨다.
+
+    판정 가능한 턴이 하나도 없는 key는 기본 점수를 만들지 않고 semantic 실패로 끝낸다.
+    """
+    _convert(ScoreJudgments, candidate, "score judgments", wire=False)
+    _convert(tuple[ScoreTurn, ...], turns, "turns", wire=False)
+    if not turns:
+        raise ContractError("semantic", "turns")
+    _unique(tuple(turn.turn_id for turn in turns), "turn_id")
+    expected = {(t.turn_id, key) for t in turns for key in SCORE_CANDIDATE_KEYS[t.persona]}
+    pairs = tuple((item.turn_id, item.key) for item in candidate.judgments)
+    _unique(pairs, "judgment")
+    if set(pairs) != expected:
+        raise ContractError("semantic", "judgment pairs")
+    unanswered = {turn.turn_id for turn in turns if turn.answer is None}
+    # 미답변에 양의 단계를 준 후보는 보정하지 않고 거절한다. 질문 범위에 따른 0/NA는 유지한다.
+    if any(
+        item.turn_id in unanswered and item.level not in (0, "not_applicable")
+        for item in candidate.judgments
+    ):
+        raise ContractError("semantic", "unanswered turn level")
+    scored = {item.key for item in candidate.judgments if item.level != "not_applicable"}
+    if scored != set(get_args(ScoreKeyId)):
+        raise ContractError("semantic", "unscorable key")
+    return _checked(candidate)
+
+
+NARRATIVE_PERSONAS: tuple[PersonaId, ...] = ("hr_manager", "tech_lead", "domain_lead")
+HEADLINE_MAX_CHARS = 100  # 임의값. FE 표시 한도 확인 뒤 조정한다.
+TAG_MAX_CHARS = 20  # 임의값. FE 태그 용도 확인 뒤 조정한다.
+
+
+@dataclass(frozen=True)
+class ReportTurn(_Contract):
+    """서술 입력의 확정 문답 한 턴.
+
+    follows는 후속 질문이 가리키는 이전 턴의 turn_id다. evidence_refs는 이 턴의 질문 근거와
+    평가 근거로 등록된 evidence_id이며, 서술 항목이 근거를 인용할 수 있는 범위를 정한다.
+    answer가 None이면 질문했지만 답하지 않은 턴이다. question_contract는 질문 당시의 평가 범위로,
+    분석 결과(analysis)가 없는 턴에서도 서술이 그 범위를 알 수 있게 한다.
+    """
+
+    turn_id: str
+    persona: PersonaId
+    question: str
+    answer: str | None
+    follows: str | None
+    analysis: AnswerAnalysis | None
+    evidence_refs: tuple[str, ...]
+    question_contract: QuestionContract
+
+
+@dataclass(frozen=True)
+class ReportToolResult(_Contract):
+    """어느 턴의 근거 조회 결과인지 묶는다. not_found와 tool_error를 서술이 구분하게 한다."""
+
+    turn_id: str
+    result: ToolResult
+
+
+@dataclass(frozen=True)
+class ReportInput(_Contract):
+    turns: tuple[ReportTurn, ...]
+    evidence: tuple[Evidence, ...]
+    tool_results: tuple[ReportToolResult, ...]
+
+
+@dataclass(frozen=True)
+class NarrativeClaim(_Contract):
+    """서술 한 항목과 그 근거. turn_refs 또는 evidence_refs가 하나 이상 있어야 한다."""
+
+    text: str
+    turn_refs: tuple[str, ...]
+    evidence_refs: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SummaryNarrative(_Contract):
+    strengths: tuple[NarrativeClaim, ...]
+    gaps: tuple[NarrativeClaim, ...]
+    follow_ups: tuple[NarrativeClaim, ...]
+    practice_actions: tuple[NarrativeClaim, ...]
+
+
+@dataclass(frozen=True)
+class PersonaNarrative(_Contract):
+    persona: PersonaId
+    tags: tuple[str, ...]
+    strengths: tuple[NarrativeClaim, ...]
+    improvements: tuple[NarrativeClaim, ...]
+    practice_actions: tuple[NarrativeClaim, ...]
+    limitations: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ReportNarrative(_Contract):
+    """점수 필드가 없는 서술 후보. 점수는 별도 task와 코드가 만든다."""
+
+    headline: str
+    summary: SummaryNarrative
+    persona_feedbacks: tuple[PersonaNarrative, ...]
+
+
+def validate_report_input(report_input: ReportInput) -> ReportInput:
+    """서술 입력의 구조와 턴·근거 참조를 모델을 부르기 전에 확인한다."""
+    _convert(ReportInput, report_input, "report input", wire=False)
+    if not report_input.turns:
+        raise ContractError("semantic", "turns")
+    ids = tuple(turn.turn_id for turn in report_input.turns)
+    _unique(ids, "turn_id")
+    for index, turn in enumerate(report_input.turns):
+        if turn.follows is not None and turn.follows not in ids[:index]:
+            raise ContractError("semantic", "follows")
+    if any(item.turn_id not in ids for item in report_input.tool_results):
+        raise ContractError("semantic", "tool result turn")
+    registered = tuple(i.evidence_id for i in report_input.evidence if i.evidence_id)
+    _unique(registered, "evidence_id")
+    for item in report_input.turns:
+        _references(item.evidence_refs, frozenset(registered), "turn evidence_refs")
+    return report_input
+
+
+def validate_narrative(
+    candidate: ReportNarrative, *, report_input: ReportInput
+) -> ContractChecked[ReportNarrative]:
+    """코드로 판정할 수 있는 규칙만 검사한다. 보완 반영·단정 표현 같은 의미 품질은 검사하지 못한다.
+
+    evidence_refs는 인용한 턴(turn_refs)에 묶인 근거여야 한다. 턴을 인용하지 않고 근거만 인용하는
+    항목은 어느 턴에든 묶인 근거여야 한다.
+    """
+    _convert(ReportNarrative, candidate, "narrative", wire=False)
+    validate_report_input(report_input)
+    if "\n" in candidate.headline or len(candidate.headline) > HEADLINE_MAX_CHARS:
+        raise ContractError("semantic", "headline")
+    personas = tuple(item.persona for item in candidate.persona_feedbacks)
+    if sorted(personas) != sorted(NARRATIVE_PERSONAS):
+        raise ContractError("semantic", "persona_feedbacks")
+    turn_ids = frozenset(turn.turn_id for turn in report_input.turns)
+    linked = {turn.turn_id: frozenset(turn.evidence_refs) for turn in report_input.turns}
+    linked_anywhere = frozenset().union(*linked.values())
+    summary = candidate.summary
+    claims = [*summary.strengths, *summary.gaps, *summary.follow_ups, *summary.practice_actions]
+    for item in candidate.persona_feedbacks:
+        if not 1 <= len(item.tags) <= 3 or any(len(tag) > TAG_MAX_CHARS for tag in item.tags):
+            raise ContractError("semantic", "tags")
+        _unique(item.tags, "tags")
+        claims += [*item.strengths, *item.improvements, *item.practice_actions]
+    for claim in claims:
+        if not claim.turn_refs and not claim.evidence_refs:
+            raise ContractError("semantic", "claim basis")
+        _references(claim.turn_refs, turn_ids, "turn_refs")
+        # 턴을 인용했다면 그 턴들에 묶인 근거만, 근거만 인용했다면 어느 턴에든 묶인 근거를 허용한다.
+        allowed = (
+            frozenset().union(*(linked[ref] for ref in claim.turn_refs))
+            if claim.turn_refs
+            else linked_anywhere
+        )
+        _references(claim.evidence_refs, allowed, "evidence_refs")
+    if not claims and not any(item.limitations for item in candidate.persona_feedbacks):
+        raise ContractError("semantic", "empty narrative")
+    return _checked(candidate)
 
 
 def _json_value(value: object) -> object:

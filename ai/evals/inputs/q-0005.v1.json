@@ -3,7 +3,7 @@
  "payload": {
   "turn": 3,
   "allowed_personas": ["tech_lead", "domain_lead"],
-  "persona_left": {"tech_lead": 4, "domain_lead": 2},
+  "persona_left": {"tech_lead": 5, "domain_lead": 2},
   "history": [{"turn": 1, "persona": "hr_manager", "question": "간단히 자기소개와 이 프로젝트에서 맡은 역할을 말씀해 주세요.", "answer": "백엔드를 맡았고 로그인과 토큰 재발급을 담당했습니다."}, {"turn": 2, "persona": "tech_lead", "question": "캐시 설정을 그렇게 설계하신 이유가 무엇인가요?", "answer": "아, 그건 제가 한 게 아니라 팀원이 만든 거예요. 저는 가져다 쓰기만 했습니다."}],
   "latest_analysis": {"evaluation_status": "evaluated", "sufficiency": "partial", "covered_points": [], "missing_points": ["본인이 담당한 부분"], "contribution_scope": {"scope": "teammate", "answer_quotes": ["그건 제가 한 게 아니라 팀원이 만든 거예요"]}},
   "evidence": [],

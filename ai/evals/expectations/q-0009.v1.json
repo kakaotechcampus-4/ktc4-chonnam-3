@@ -13,4 +13,4 @@
   {"kind": "forbidden", "output": "domain_lead: 금융권에서 개인정보를 다룬 경험을 바탕으로 파기 절차를 설명해 주세요."},
   {"kind": "forbidden", "output": "domain_lead: 개인정보보호법의 파기 의무 조항을 설명해 보세요."}
  ],
- "review": {"status": "approved", "author": "geonyeong325", "reviewer": "gdh0730", "reviewed_at": "2026-11-02", "pending_notes": []}}
+ "review": {"status": "unreviewed", "author": "geonyeong325", "reviewer": null, "reviewed_at": null, "pending_notes": []}}

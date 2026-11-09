@@ -22,6 +22,7 @@ export type ScenarioName =
   | 'server-error'
   | 'ws-prepare-failed'
   | 'ws-question-failed'
+  | 'ws-question-failed-closed'
   | 'ws-repo-unreachable'
   | 'ws-stt-failed'
   | 'ws-stt-empty'
@@ -152,13 +153,27 @@ export const scenarios: Record<ScenarioName, Scenario> = {
    * 준비 실패 화면은 seed 면접(`SEED_PREPARING_FAILED_INTERVIEW_ID`)으로도 열 수 있다.
    */
   'ws-question-failed': {
-    describe: 'WS 연결 직후 question_failed. 복구 가능한 오류 배너를 본다.',
+    describe: 'WS 연결 직후 question_failed(연결 교체·서버 오류). 복구 가능한 오류 배너를 본다.',
     rules: [
       {
         path: '/ws/interviews/*',
         reason: 'question_failed',
         code: 'ERR_QUESTION_FAILED',
         recoverable: true,
+      },
+    ],
+  },
+
+  /** 진행 중 분석·질문 생성 실패. 이어갈 수 없어 abandon 후 다시 시작·나가기로 보낸다(공통 0010). */
+  'ws-question-failed-closed': {
+    describe:
+      'WS 연결 직후 question_failed recoverable false. 같은 레포로 다시 시작·나가기를 본다.',
+    rules: [
+      {
+        path: '/ws/interviews/*',
+        reason: 'question_failed',
+        code: 'ERR_QUESTION_FAILED',
+        recoverable: false,
       },
     ],
   },

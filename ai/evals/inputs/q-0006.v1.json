@@ -3,7 +3,7 @@
  "payload": {
   "turn": 3,
   "allowed_personas": ["tech_lead", "domain_lead"],
-  "persona_left": {"tech_lead": 4, "domain_lead": 2},
+  "persona_left": {"tech_lead": 5, "domain_lead": 2},
   "history": [{"turn": 1, "persona": "hr_manager", "question": "간단히 자기소개와 이 프로젝트에서 맡은 역할을 말씀해 주세요.", "answer": "프론트엔드와 API 연동을 맡았고 게시글과 과제 화면을 담당했습니다."}, {"turn": 2, "persona": "tech_lead", "question": "게시글 목록의 데이터는 어떻게 가져오도록 하셨나요?", "answer": "잘 모르겠습니다."}],
   "latest_analysis": {"evaluation_status": "not_evaluable", "sufficiency": null, "covered_points": [], "missing_points": ["조회 방식"]},
   "evidence": [],

@@ -258,9 +258,39 @@ async def test_answered_current_turn_does_not_resume_a_failed_or_pending_model_c
         turn.status, turn.answer_text = "answered", "팀원 담당입니다"
     with connect_ws() as (client, _, path, _, _):
         with client.websocket_connect(path, headers={"origin": "http://localhost:5173"}) as socket:
-            assert socket.receive_json()["reason"] == "question_failed"
+            event = socket.receive_json()
+            # 재접속이 실패한 모델 호출을 다시 실행하지 않으므로 복구 가능하다고 알리지 않는다.
+            assert event["reason"] == "question_failed" and event["recoverable"] is False
             with pytest.raises(WebSocketDisconnect):
                 socket.receive_json()
+
+
+async def test_failed_next_question_is_reported_as_unrecoverable_and_stays_unrecoverable(
+    agent_sessions,
+    agent_seed,
+    connect_ws,
+):
+    await seed_turns(agent_sessions, agent_seed)
+
+    async def handle(request):
+        # 영구 요청 오류는 공통 호출 계층이 재호출하지 않아 분석 실패로 바로 끝난다.
+        return httpx.Response(400, json={"error": {"message": "invalid"}})
+
+    with connect_ws(handle) as (client, _, path, _, _):
+        headers = {"origin": "http://localhost:5173"}
+        with client.websocket_connect(path, headers=headers) as socket:
+            assert socket.receive_json()["turn"] == 1
+            socket.send_json({"type": "answer", "turn": 1, "text": "팀원 담당입니다"})
+            assert socket.receive_json() == {"type": "answerReceived"}
+            assert socket.receive_json() == {"type": "thinking"}
+            event = socket.receive_json()
+            assert event["reason"] == "question_failed" and event["recoverable"] is False
+            with pytest.raises(WebSocketDisconnect):
+                socket.receive_json()
+        # 같은 실패를 재접속으로 되돌리지 않는다.
+        with client.websocket_connect(path, headers=headers) as again:
+            event = again.receive_json()
+            assert event["reason"] == "question_failed" and event["recoverable"] is False
 
 
 @pytest.mark.parametrize("separate_app", [False, True])

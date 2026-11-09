@@ -13,6 +13,27 @@ loader는 불일치·중복·짝 없는 파일을 거부해야 한다. 입력 �
 제어 정보를 구분한다. 모델에는 실행 payload만 전달한다. 기대값, 검수 정보, 제어 정보는 prompt,
 retrieval query, tool 입력에 들어가면 안 된다.
 
+## 용어
+
+- **평가 사례(case)**: `q-0003` 같은 ID 하나다. 입력 파일(`inputs/`)과 기대 파일(`expectations/`)이 같은
+  `case_id`와 `version`으로 짝을 이룬다. 입력에는 모델이 받는 `payload`와 제어 정보가, 기대에는 모델에게
+  보여 주지 않는 정답 기준과 검수 정보가 있다.
+- **종류(`control.kind`)와 ID 접두어**:
+
+| 접두어 | kind | 평가하는 것 | `payload` 내용 |
+| --- | --- | --- | --- |
+| `e-` | `evidence` | 근거를 찾고 인용하는 능력 | 질문과 자료(`materials`) |
+| `q-` | `question` | Director가 다음에 하는 질문 | 현재 턴, 가능한 Persona, 남은 횟수, 대화 이력, 직전 분석, 근거 |
+| `f-` | `flow` | 면접 흐름의 적절성(계속·종료 등) | `q-`와 같은 구조 |
+| `r-` | `report` | 리포트 생성 결과(서술과 6개 key 점수) | 면접 9턴 전체 대화, 근거, 과제 |
+
+- **split**: `dev`(개발용)와 `holdout`(최종검증용)이다.
+- **source group**: 같은 합성 원천에서 만든 사례 묶음(`sg-r1` 등)이다. `dev`와 `holdout`에 함께 둘 수 없다.
+- **쌍(pair)**: 질문은 같고 답변만 다른 `report` 사례 두 건(`stronger`, `weaker`)이다. 정확한 점수 대신
+  점수의 순서 관계를 검사한다(아래 report 사례).
+- **version**: 같은 ID의 내용을 바꿀 때 올리는 번호다(`q-0003.v1`).
+- **검수 상태(`review.status`)**: `unreviewed`, `approved`, `pending`, `invalid` 중 하나다(아래 사례 검수).
+
 ## 후보 사례 형식
 
 로컬 합성 사례의 후보 형식이다. 파일은 `inputs/{case_id}.v{version}.json`과
@@ -70,8 +91,9 @@ retrieval query, tool 입력에 들어가면 안 된다.
  "task": "종합 피드백과 Persona별 피드백, 6개 key 점수를 쓰세요."}
 ```
 
-- `history`는 정상 완료 면접의 9턴이다. 첫 질문은 `hr_manager`이고 `tech_lead` 6턴, `domain_lead` 2턴,
-  `hr_manager` 1턴이다(공통 ADR 0008).
+- `history`는 정상 완료 면접의 9턴이다. 첫 질문은 `hr_manager`이고 [공통 결정 0008](../../spec/shared/decisions/0008-fixed-persona-allocation.md)에 따라
+  `tech_lead` 6턴, `domain_lead` 2턴, `hr_manager` 1턴으로 고정한다. `question`·`flow` 사례의
+  `persona_left`는 남은 횟수이며 loader가 이력의 진행 횟수와 합해 6/2/1이 되는지 검사한다.
 - 턴마다 `question_contract`가 있어야 한다. 질문을 하기 전에 정한 질문 목적(`purpose`), 요구한 내용
   (`required_points`, key는 질문 안에서 고유), 평가 범위(`evaluation_scope`)이며, 점수 판정이 묻지 않은
   key를 낮게 매기지 않도록 하는 근거다. 실제 Question Contract의 `assumptions`·`basis_refs`는 평가용
@@ -131,10 +153,13 @@ retrieval query, tool 입력에 들어가면 안 된다.
 필드 `source_fact`(예: `F-R1-001`)가 `fact-table.md`의 항목을 가리키고, 시트에는 모델이 받는 것, 원본
 사실, 정답 기준, 채점기 시험용 가짜 답, 판단할 질문 4개가 담긴다. `ai/`에서
 `uv run python evals/review_sheet.py [case_id ...]`로 만들며 결과는 무시되는 `ai/report/review-sheets/`에
-저장된다. 시트에는 정답이 있으므로 모델 입력에 쓰지 않는다.
+`{case_id}.v{version}.md` 이름으로 저장된다(버전마다 시트가 따로 남는다). 쌍을 이루는 `report` 사례의
+시트에는 쌍 ID, 강한/약한 역할, 비교 key, `min_gap`, 상대 사례와 달라진 답변과 비교 검수 질문이 들어간다.
+쌍이 없는 `report` 사례는 서술 기준 검수 질문만 받는다. 시트에는 정답이 있으므로 모델 입력에 쓰지 않는다.
 
-현재 사례는 `evidence` 6건(`e-0001`~`e-0006`), `question` 10건(`q-0001`~`q-0010`), `flow` 1건
-(`f-0001`)이며 모두 `unreviewed`이다. 자료·근거 사례의 `payload`는 `question`과
+현재 사례는 19건이다: `evidence` 6건(`e-0001`~`e-0006`), `question` 10건(`q-0001`~`q-0010`),
+`flow` 1건(`f-0001`), `report` 2건(`r-0001`, `r-0002`). 검수 상태는 `approved` 6건(`e-` 전부),
+`pending` 4건(`q-0002`, `q-0005`~`q-0007`), `unreviewed` 9건이다. `pending` 사례는 품질 집계에서 뺀다. 자료·근거 사례의 `payload`는 `question`과
 `materials`(`ref`, `path`, `lines`, `text`)이고, 자료 `text`는 공개 저장소 원문이 아니라
 `fact-table.md`의 사실 구조만 본떠 새로 쓴 합성 내용이다. 질문·흐름 사례의 `payload`는 Director의
 입력을 단순화한 평가용 형식(`turn`, `allowed_personas`, `persona_left`, `history`, `latest_analysis`,

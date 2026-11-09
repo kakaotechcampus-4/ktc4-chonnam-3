@@ -166,6 +166,12 @@ async def load_context(
         or (answer_turn_no is not None and interview.current_turn != answer_turn_no)
     ):
         raise AgentStateError("interview_state_invalid")
+    if lock:
+        # 준비 검증(input_digest)과 같은 세션→공고→레포→프레임→요구사항 순서로 잠근다.
+        # 두 경로가 같은 공고·레포를 반대 순서로 잠그면 서로를 기다리는 교착이 생긴다.
+        await session.scalar(
+            select(JobPosting.id).where(JobPosting.id == interview.job_posting_id).with_for_update()
+        )
     turns = (
         await session.scalars(
             _fresh(
@@ -232,31 +238,6 @@ async def load_context(
             )
         )
     ).all()
-    if lock:
-        # 준비 검증과 같은 공고→요구사항·프레임 순서로 잠가 공유 자료의 교착을 막는다.
-        await session.scalar(
-            select(JobPosting.id).where(JobPosting.id == interview.job_posting_id).with_for_update()
-        )
-    requirements = (
-        await session.scalars(
-            _fresh(
-                select(JdRequirement)
-                .where(JdRequirement.job_posting_id == interview.job_posting_id)
-                .order_by(JdRequirement.display_order, JdRequirement.id),
-                lock,
-            )
-        )
-    ).all()
-    evidence_rows = (
-        await session.scalars(
-            _fresh(
-                select(Evidence)
-                .where(Evidence.interview_session_id == interview_id)
-                .order_by(Evidence.id),
-                lock,
-            )
-        )
-    ).all()
     frames = (
         await session.scalars(
             _fresh(
@@ -276,6 +257,26 @@ async def load_context(
                     DomainQuestionFrame.display_order,
                     DomainQuestionFrame.id,
                 ),
+                lock,
+            )
+        )
+    ).all()
+    requirements = (
+        await session.scalars(
+            _fresh(
+                select(JdRequirement)
+                .where(JdRequirement.job_posting_id == interview.job_posting_id)
+                .order_by(JdRequirement.display_order, JdRequirement.id),
+                lock,
+            )
+        )
+    ).all()
+    evidence_rows = (
+        await session.scalars(
+            _fresh(
+                select(Evidence)
+                .where(Evidence.interview_session_id == interview_id)
+                .order_by(Evidence.id),
                 lock,
             )
         )

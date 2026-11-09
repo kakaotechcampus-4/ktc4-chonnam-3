@@ -2,7 +2,7 @@
 
 import asyncio
 from contextlib import suppress
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from functools import partial
 from uuid import UUID, uuid4
@@ -601,7 +601,13 @@ async def prepare_interview(
                         continue
                     analysis = result.data.data.analysis
                 else:
-                    analysis = c.validate_deep_analysis(repo.cached, source=sources.item).data
+                    # 다시 읽지 못한 area만 빼고 나머지 관찰은 쓴다(0008 관찰 분리, 0010 준비 기준).
+                    # 못 읽은 경로는 sources.limitations에 남고 Evidence 출발점에서 빠진다.
+                    read = {source.path for source in sources.item.sources}
+                    kept = tuple(a for a in repo.cached.notable_areas if a.path in read)
+                    analysis = c.validate_deep_analysis(
+                        replace(repo.cached, notable_areas=kept), source=sources.item
+                    ).data
                 collected.append((repo, analysis, sources))
             except SourcePreparationError as error:
                 failures.append(error.code)

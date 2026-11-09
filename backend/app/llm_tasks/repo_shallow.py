@@ -72,6 +72,8 @@ def to_repo_analysis_rows(
 ) -> list[dict[str, object]]:
     """입력 저장소마다 repo_analyses 행 값을 만든다. 실패 행에 요약·기술 기본값을 채우지 않는다.
 
+    실패 행의 result에는 분석 값 대신 실패 단계(parse·schema·semantic 등)와 사유만 남긴다.
+
     status는 succeeded/failed만 만든다. 부분 수집 등에 따른 partial 판정은 service 책임이다.
     """
     # ponytail: 배치 호출 기록이라 저장소별 token·latency를 나눌 수 없어 그 저장소 결과를 만든
@@ -84,7 +86,7 @@ def to_repo_analysis_rows(
     }
 
     analyses: dict[str, tuple[c.ShallowRepoAnalysis, dict[str, object]]] = {}
-    failures: dict[str, str] = {}
+    failures: dict[str, tuple[str, c.CallFailure | c.RepoItemFailure | None]] = {}
     if result.data is None:
         call_failure = result.failure
         code = call_failure.error_code if call_failure is not None else "llm_failed"
@@ -92,17 +94,18 @@ def to_repo_analysis_rows(
         # 요청을 보내기 전 크기 상한으로 거절되면 시도 기록이 없다. 응답 초과는 시도가 남는다.
         if call_failure is not None and call_failure.stage == "budget" and not result.attempts:
             whole = "input_too_large"
-        failures = {item.repository_id: whole for item in inputs}
+        failures = {item.repository_id: (whole, call_failure) for item in inputs}
     else:
         batch = result.data.data
         stored = cast(list[dict[str, object]], c.to_data(result.data)["succeeded"])
         for analysis, data in zip(batch.succeeded, stored, strict=True):
             analyses[analysis.repository_id] = (analysis, data)
+        # 요청하지 않은 ID와 ID 없는 항목은 대응할 행이 없어 raw_output에만 남는다.
         for failure in batch.failed:
             if failure.repository_id is not None:
                 failures.setdefault(
                     failure.repository_id,
-                    "llm_parse_failed" if failure.stage == "parse" else "llm_failed",
+                    ("llm_parse_failed" if failure.stage == "parse" else "llm_failed", failure),
                 )
 
     rows: list[dict[str, object]] = []
@@ -127,12 +130,16 @@ def to_repo_analysis_rows(
                 "result": data,
             }
         else:
+            code, cause = failures.get(item.repository_id, ("llm_failed", None))
             row |= {
                 "status": "failed",
-                "error_code": failures.get(item.repository_id, "llm_failed"),
+                "error_code": code,
                 "summary": None,
                 "tech_stack": [],
-                "result": None,
+                # BE 저장 전용 키다. 공개 error_code는 그대로 두고 AI가 구분한 단계·사유를 보존한다.
+                "result": None
+                if cause is None
+                else {"_failure": {"stage": cause.stage, "reason_summary": cause.reason_summary}},
             }
         rows.append(row)
     return rows

@@ -3,7 +3,7 @@
  "payload": {
   "turn": 3,
   "allowed_personas": ["tech_lead", "domain_lead"],
-  "persona_left": {"tech_lead": 4, "domain_lead": 2},
+  "persona_left": {"tech_lead": 5, "domain_lead": 2},
   "history": [{"turn": 1, "persona": "hr_manager", "question": "간단히 자기소개와 이 프로젝트에서 맡은 역할을 말씀해 주세요.", "answer": "백엔드를 맡았고 로그인과 토큰 재발급을 담당했습니다."}, {"turn": 2, "persona": "tech_lead", "question": "재발급 중 오류가 나면 토큰 폐기는 어떻게 되나요?", "answer": "폐기는 별도 트랜잭션으로 커밋되게 해서 오류가 나도 유지됩니다."}],
   "latest_analysis": {"evaluation_status": "evaluated", "sufficiency": "partial", "covered_points": ["폐기 유지 주장"], "missing_points": [], "needs_verification": true, "verification_requests": [{"claim_text": "폐기는 별도 트랜잭션으로 커밋된다", "purpose": "주장을 코드로 확인", "repository_id": "repo-1", "git_ref": "c0ffee1", "allowed_paths": ["src/main/java/app/auth/TokenService.java"]}]},
   "evidence": [],

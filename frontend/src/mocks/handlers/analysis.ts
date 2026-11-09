@@ -197,6 +197,10 @@ export const analysisHandlers = [
       if (runStatus(run) === 'running') {
         return errorResponse(409, 'not_ready', '아직 분석이 끝나지 않았어요.', { retryAfter: 3 });
       }
+      // BE는 DB succeeded·partial run만 결과를 준다. 진짜 실패한 run은 조회할 결과가 없다.
+      if (runStatus(run) === 'failed' && !run.partial) {
+        return errorResponse(409, 'not_ready', '분석 결과가 없어요.');
+      }
 
       await delay(200);
       const repositories =

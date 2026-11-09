@@ -24,6 +24,8 @@ SCORE_KEYS = {
     "contribution_clarity",
     "company_job_fit",
 }
+# Persona quota of one 9-turn interview (ADR 0008): history count + persona_left must equal this.
+PERSONA_QUOTA = {"tech_lead": 6, "domain_lead": 2, "hr_manager": 1}
 PAIR_ROLES = {"stronger", "weaker"}
 _PAIR_KEYS = {"pair_id", "role", "key", "min_gap"}
 
@@ -225,6 +227,10 @@ def _history(case: Case) -> list[dict[str, Any]]:
                 f"{case.case_id}: history needs int turn and str persona/question/answer"
             )
     numbers = [turn["turn"] for turn in history]
+    if len(set(numbers)) != len(
+        numbers
+    ):  # 비교 시트가 turn 번호로 답변을 모으므로 중복은 덮어쓴다.
+        raise CaseError(f"{case.case_id}: history turn numbers must be unique, got {numbers}")
     for turn in history:
         _check_contract(case.case_id, turn.get("question_contract"))
         follows = turn.get("follows")
@@ -270,6 +276,25 @@ def _check_pairs(cases: list[Case]) -> None:
             raise CaseError(f"pair {pair_id}: the two cases must differ in at least one answer")
 
 
+def _check_persona_quota(case: Case) -> None:
+    """persona_left is what remains, so past turns plus remaining must add up to the quota."""
+    left, history = case.payload.get("persona_left"), case.payload.get("history")
+    if left is None:
+        return
+    if not isinstance(left, dict) or not isinstance(history, list):
+        raise CaseError(f"{case.case_id}: persona_left needs a dict and a history list")
+    for persona in left:
+        if persona not in PERSONA_QUOTA:
+            raise CaseError(f"{case.case_id}: unknown persona in persona_left: {persona}")
+    for persona, quota in PERSONA_QUOTA.items():
+        done = sum(1 for t in history if isinstance(t, dict) and t.get("persona") == persona)
+        remaining = left.get(persona, 0)
+        if type(remaining) is not int or remaining < 0 or done + remaining != quota:
+            raise CaseError(
+                f"{case.case_id}: {persona} asked {done} + left {remaining} must equal {quota}"
+            )
+
+
 def load_cases(root: Path) -> list[Case]:
     """Load every input/expectation pair under root, or raise CaseError."""
     inputs = _load_dir(root / "inputs", _INPUT_KEYS)
@@ -304,5 +329,7 @@ def load_cases(root: Path) -> list[Case]:
     leaked = sorted(group for group, used in splits.items() if len(used) > 1)
     if leaked:
         raise CaseError(f"source_group_id used in both dev and holdout: {leaked}")
+    for case in cases:
+        _check_persona_quota(case)
     _check_pairs(cases)
     return cases

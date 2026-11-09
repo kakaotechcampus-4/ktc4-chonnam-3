@@ -187,15 +187,33 @@ async def test_repository_identity_and_public_status_precede_content_access(scop
     assert len(seen) == 1
 
 
-@pytest.mark.parametrize(
-    "mode,kind", [("120000", "blob"), ("160000", "commit"), ("040000", "tree")]
-)
-async def test_symlink_submodule_and_directory_are_never_read_as_files(scope, limits, mode, kind):
+@pytest.mark.parametrize("mode,kind", [("120000", "blob"), ("160000", "commit")])
+async def test_symlink_and_submodule_are_never_read_as_files(scope, limits, mode, kind):
     responses = replies()
     responses[f"{REPO}/git/trees/{ROOT_TREE}"]["tree"][0].update(mode=mode, type=kind)
     result, seen = await run(scope, limits, responses=responses)
     assert result.status == "tool_error" and not result.items
     assert not any("/contents/" in req.url.path for req in seen)
+
+
+@pytest.mark.parametrize(
+    "paths,status,found",
+    [(("src", "README.md"), "found", ["README.md"]), (("src",), "insufficient_analysis", [])],
+)
+async def test_directory_area_is_a_limitation_and_other_files_are_still_read(
+    limits, paths, status, found
+):
+    # 디렉터리는 열거·재귀 탐색 없이 분석 한계로만 남기고 감점 없는 검증 불가로 둔다.
+    scope = tools.EvidenceScope(
+        "repository-1", 42, "owner/project", COMMIT, frozenset({"README.md", "src"})
+    )
+    result, seen = await run(scope, limits, paths=paths)
+    assert result.status == status and result.error_code is None
+    assert [item.path for item in result.items] == found
+    assert "src" not in result.searched_scope
+    assert any(item.startswith("src:") for item in result.limitations)
+    assert not any(req.url.path.endswith(SRC_TREE) for req in seen)
+    assert not any(req.url.path.endswith("contents/src") for req in seen)
 
 
 @pytest.mark.parametrize(

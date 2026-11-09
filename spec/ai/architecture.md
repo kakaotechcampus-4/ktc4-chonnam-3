@@ -4,7 +4,7 @@
 
 이 문서는 서비스 AI의 책임·연결·개발 범위를 정의한다. 기존 확정사항을 정리하고, 상세 내부 설계는 Proposed로 구분한다. 현재 코드가 이 구조로 실행된다는 의미는 아니다. Claude 작업 진입점은 [ai/README.md](../../ai/README.md)다.
 
-코드 배치는 [승인된 패키지 설계](designs/2026-09-12-ai-package-structure.md)를 따른다. AI 소스 원본은 `ai/src/devon_ai/`이며 기존 BE API·worker가 로컬 패키지를 import한다. 별도 AI 서버는 없다. 내부 입력·출력 계약은 [0014](decisions/0014-minimal-change-revision.md)·[0015](decisions/0015-existing-contracts-and-tool-results.md)의 채택 범위와 아직 구현·검증하지 않은 상세를 구분한다.
+코드 배치는 [승인된 패키지 설계](designs/2026-09-12-ai-package-structure.md)를 따른다. AI 소스 원본은 `ai/src/devon_ai/`이며 기존 BE API·worker가 로컬 패키지를 import한다. 별도 AI 서버는 없다. 내부 입력·출력 계약은 [0014](decisions/0014-minimal-change-revision.md)·[0015](decisions/0015-existing-contracts-and-tool-results.md)의 채택 범위와 상세 구현·검증 조건을 구분한다. [상태 표현과 문서 역할](../../ai/README.md#ai-document-status)에 따라 승인 상태와 실제 적용·검증 현황을 구분한다.
 
 ## 문서 지도
 
@@ -12,13 +12,13 @@
 | --- | --- |
 | [원본 검토](source-audit.md) | context·ForAI·report·FE/BE/DB·스켈레톤 간 충돌과 적용 기준 |
 | [기준 결정](decisions/0001-ai-baseline.md) | FIX 유지와 승인 범위 |
-| [Sprint 1 vector 미도입](decisions/0002-sprint1-vector-search.md) | AI-L20의 승인 범위, BE 전달사항과 후속 보류 |
+| [Sprint 1 vector 미도입](decisions/0002-sprint1-vector-search.md) | AI-L20의 승인 범위, BE 반영 확인과 Sprint 2 검토 조건 |
 | [구현·검수 인계](../../ai/docs/pipeline.md#기존-id별-구현검수-인계) · [Sprint 2 후속 목록](features/extensions.md#sprint-2-착수-시-검토할-사항) | 채택한 방향의 실제 구현·검수와 후속 기능의 미정 범위를 구분 |
 | [내부 계약](contracts.md) | 데이터 소유권, LLM 출력 제안, 검증·재시도 |
 | [레포 분석·추천](features/repository-analysis.md) | L0/L1/L2, Wanted, 추천, 캐시, 부분 실패 |
 | [작업·면접 Context](features/job-context.md) | ARQ 입력, 준비 자료, 판단 입력 구성 |
 | [면접 진행](features/interviewer.md) | 단일 Director, Persona, 9턴, 질문 검증 |
-| [답변 평가](features/answer-evaluation.md) | 평가 범위, 충분성·정확성·기여, 보류 |
+| [답변 평가](features/answer-evaluation.md) | 평가 범위, 충분성·정확성·기여, 판단 유보의 범위와 이유 |
 | [근거 검색](features/evidence-retrieval.md) | 검색 범위, 출처, answer_vs_code |
 | [도메인 프레임](features/domain-frames.md) | Sprint 1 seed 후보와 역할 제한 |
 | [리포트·프로필](features/report-profile.md) | lazy 생성, 피드백, 확정 점수 구조와 세부 기준 검수 |
@@ -32,12 +32,14 @@
 - 면접 답변은 양방향 텍스트 WebSocket, 분석 진행 알림은 SSE다. 기존 계약에 없는 답변 POST나 면접 SSE를 추가하지 않는다.
 - 기본 9턴을 완료하면 종료한다. Director의 자율 조기 종료는 Sprint 1에 없다.
 - Sprint 1 LLM 모델은 [0011 결정](decisions/0011-sprint1-model-selection.md)에 따라 OpenAI `gpt-5.6-luna`다. 인증·SDK/client·호출 경로와 실제 모델 버전 기록은 기존 BE 소유권 안에서 구현한다. [0018](decisions/0018-existing-baseline-bulk-resolution.md)에 따라 상세 연결을 별도 사용자 질문으로 만들지 않으며 실제 계정 접근과 task별 품질은 검증한다.
-- Sprint 1 embedding/vector 검색과 pgvector extension 선설치는 [0002 결정](decisions/0002-sprint1-vector-search.md)에 따라 미도입이다. BE 반영 확인과 Sprint 2 도입 여부·세부 설계는 별도 대기다. 공개 리포트 점수는 0~100 score 6개와 단순 평균 `totalScore`를 사용하며, 항목별 세부 기준 seed는 자료 보강에 따라 갱신할 수 있다.
+- Sprint 1 embedding/vector 검색과 pgvector extension 선설치는 [0002 결정](decisions/0002-sprint1-vector-search.md)에 따라 미도입이다. BE 반영은 구현·검증에서 확인하고, Sprint 2 도입 여부·세부 설계는 해당 기능 착수 시 검토한다. 공개 리포트 점수는 0~100 score 6개와 단순 평균 `totalScore`를 사용하며, 항목별 세부 기준 seed는 자료 보강에 따라 갱신할 수 있다.
 - 선택 문서 preview와 GitHub URL 추출은 Sprint 1에 있다. 문서 Claim·STT/TTS·이미지 공고 판독은 후속이다.
 
 수정 중인 `context/AI.md`의 세 역할 재구성, HTTPS/SSE 면접, 조기 종료, 별도 면접 Worker는 [검토 기록](source-audit.md)의 변경 제안으로 남긴다. 이를 기존 API와 혼합하지 않는다.
 
 ## 현재 구현 상태
+
+현재 적용 범위·실행 결과·남은 작업의 원본은 [AI 구현·검증 기록](implementation.md)이다. 아래 기준 커밋과 초기 패키지·질문 경로의 설명은 당시 확인 범위를 보존한 이력이며, 현재 기능 전체의 미구현·미검증 근거로 사용하지 않는다.
 
 2026-09-22 사용자 선택에 따라 현재 검증 범위는 **팀 내부·실제 사용자 문답**이며 후속 내부 비교 검증을 위한 보관·재사용을 채택했다. 최종 내부 비교 검증 뒤에도 보관하며 별도의 자동 삭제 기한은 두지 않는다. [0018](decisions/0018-existing-baseline-bulk-resolution.md)의 범위를 따르고 상세 구현·자료 검수는 [작업 인계](../../ai/docs/pipeline.md#기존-id별-구현검수-인계)에서 확인한다. 외부 서비스 출시·자료 공개가 승인된 것은 아니다.
 
@@ -116,7 +118,7 @@ PostgreSQL을 원본으로 사용한다. Redis Context snapshot은 기본 TTL 2�
 - LLM 결과는 구조 검사 후 의미·권한·ref 검사를 통과해야 사용한다.
 - 외부 호출 전과 결과 저장 직전에 현재 session/Turn/선택 입력을 확인한다. 종료 이후 결과와 중복 질문을 확정하지 않는다.
 - 검색 실패·지원 범위 미발견·불충분한 분석은 구분한다. 사용자의 거짓·낮은 역량으로 자동 변환하지 않는다.
-- 미합의 항목은 관련 경로만 보류하고, 합의된 순수 로직·mock 검증은 계속할 수 있게 분리한다.
+- 실제 합의가 필요한 계약·정책은 해당 범위와 관계 팀을 구분하고, 이미 채택한 순수 로직·mock 검증은 독립적으로 진행한다. 기존 방향의 구현·연결·검증 조건을 새로운 사용자 선택 대기로 해석하지 않는다.
 
 ## 연결 완료의 조건
 
