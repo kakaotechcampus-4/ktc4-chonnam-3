@@ -230,3 +230,90 @@ async def enqueue(
             raise
         raise AppError(Reason.INTERNAL_ERROR) from None
     return request
+
+
+async def claim(
+    sessions: async_sessionmaker[AsyncSession], interview_id: UUID, request_id: UUID | None
+) -> UUID | None:
+    async with sessions.begin() as db:
+        interview = await db.get(InterviewSession, interview_id, with_for_update=True)
+        if interview is None or interview.status != "completed":
+            return None
+        if request_id is None:
+            if await db.scalar(
+                select(InterviewReport.id).where(
+                    InterviewReport.interview_session_id == interview_id
+                )
+            ):
+                return None
+            row = await latest(db, interview_id, active=True)
+            if row is not None and row.mode != "initial":
+                return None
+            if row is None:
+                previous = await latest(db, interview_id)
+                if previous is not None and previous.status in {"failed", "stale"}:
+                    return None
+                row = ReportGenerationRequest(
+                    id=uuid4(),
+                    interview_session_id=interview_id,
+                    mode="initial",
+                    status="queued",
+                    expected_revision=0,
+                    requested_by="legacy_worker",
+                    expires_at=datetime.now(UTC) + timedelta(seconds=JOB_SECONDS),
+                )
+                db.add(row)
+        else:
+            row = await db.get(ReportGenerationRequest, request_id, with_for_update=True)
+        if row is None or row.interview_session_id != interview_id or row.status != "queued":
+            return None
+        if row.expires_at <= datetime.now(UTC):
+            row.status, row.error_code = "stale", "generation_expired"
+            return None
+        row.status = "running"
+        row.expires_at = datetime.now(UTC) + timedelta(seconds=JOB_SECONDS)
+        return row.id
+
+
+async def fail(
+    sessions: async_sessionmaker[AsyncSession],
+    request_id: UUID,
+    code: str,
+    attempts: list[dict[str, object]] | None = None,
+) -> bool:
+    async with sessions.begin() as db:
+        # 상태를 바꾸는 순서는 면접→요청으로 통일한다.
+        source = await db.get(ReportGenerationRequest, request_id)
+        if source is None:
+            return False
+        await db.get(InterviewSession, source.interview_session_id, with_for_update=True)
+        row = await db.get(
+            ReportGenerationRequest, request_id, with_for_update=True, populate_existing=True
+        )
+        if row is None:
+            return False
+        if row.status not in ACTIVE:
+            if row.status == "stale" and attempts is not None:
+                row.attempts = attempts
+            return False
+        row.status, row.error_code = "failed", code
+        if attempts is not None:
+            row.attempts = attempts
+        return True
+
+
+async def release(
+    redis: ArqRedis, interview_id: UUID, owner: str, failure: str | None = None
+) -> None:
+    if failure is None:
+        await _eval(redis, _RELEASE, 1, f"report:gen:{interview_id}", owner)
+    else:
+        await _eval(
+            redis,
+            _FAIL,
+            2,
+            f"report:gen:{interview_id}",
+            f"report:fail:{interview_id}",
+            owner,
+            failure,
+        )
