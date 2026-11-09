@@ -207,6 +207,222 @@ async def _read_generation_input(
     return payload, prompts, {t.turn_no: t.id for t in turns}, _coverage(requirements, answered)
 
 
+def _input_snapshot(
+    payload: dict[str, object], prompts: dict[str, c.PromptSpec], llm: LLMSettings
+) -> tuple[str, dict[str, object]]:
+    snapshot = {
+        "payload": payload,
+        "prompts": {name: asdict(p) for name, p in prompts.items()},
+        "task_limits": {name: asdict(llm.call_limits(name)) for name in prompts},
+    }
+    encoded = json.dumps(snapshot, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(encoded.encode()).hexdigest(), json.loads(encoded)
+
+
+def _draft_values(
+    draft: ReportDraft, coverage: dict[str, object], prompts: dict[str, c.PromptSpec]
+) -> dict[str, object]:
+    return {
+        "headline": draft.headline,
+        "summary": draft.summary,
+        "total_score": draft.total_score,
+        "feedback_json": [
+            {
+                "persona": f.persona,
+                "tags": list(f.tags),
+                "strengths": list(f.strengths),
+                "improvements": list(f.improvements),
+            }
+            for f in draft.feedbacks
+        ],
+        "coverage_json": coverage,
+        "model": prompts[REPORT_PROMPT_TASKS[0]].model,
+        "prompt_version": "+".join(prompts[name].version for name in REPORT_PROMPT_TASKS),
+    }
+
+
+async def generate_report(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    interview_id: uuid.UUID,
+    llm: LLMSettings,
+    http_client: httpx.AsyncClient | None,
+    generator: ReportGenerator | None = None,
+    generation_request_id: uuid.UUID | None = None,
+) -> GenerateOutcome:
+    """원문 입력은 짧게 읽고 모델을 호출한다. 명시 승인·CAS 없이 성공본을 바꾸지 않는다."""
+    attempts: list[dict[str, object]] = []
+    try:
+        async with sessions.begin() as db:
+            interview = await db.get(InterviewSession, interview_id, with_for_update=True)
+            if interview is None or interview.status != "completed":
+                return "skipped"
+            request = (
+                await db.get(ReportGenerationRequest, generation_request_id, with_for_update=True)
+                if generation_request_id is not None
+                else None
+            )
+            if generation_request_id is not None and (
+                request is None
+                or request.interview_session_id != interview_id
+                or request.status != "running"
+                or request.expires_at <= datetime.now(UTC)
+            ):
+                return "skipped"
+            existing = await queries.get_report(db, interview_id=interview_id)
+            reassessment = request is not None and request.mode == "reassessment"
+            if existing is not None and not reassessment:
+                if request is not None:
+                    request.status, request.error_code = "stale", "report_already_exists"
+                return "exists"
+            if (
+                request is not None
+                and reassessment
+                and (existing is None or existing.current_revision != request.expected_revision)
+            ):
+                assert request is not None
+                request.status, request.error_code = "stale", "report_revision_changed"
+                return "skipped"
+            if not await queries.count_answered_turns(db, interview_id=interview_id):
+                if request is not None:
+                    request.status, request.error_code = "stale", "no_answered_turns"
+                return "skipped"
+            payload, prompts, turn_ids, coverage = await _read_generation_input(db, interview)
+            fingerprint, snapshot = _input_snapshot(payload, prompts, llm)
+            if request is not None:
+                request.input_fingerprint, request.input_snapshot = fingerprint, snapshot
+
+        def model_call_factory() -> ModelCall:
+            budget = CallBudget()
+
+            async def invoke(
+                request: c.ModelRequest, validator: Callable[[object], object]
+            ) -> c.ModelResult[object]:
+                request = replace(request, limits=llm.call_limits(request.prompt.task_name))
+                output = await call_model(
+                    request,
+                    validator,
+                    api_key=llm.openai_api_key,
+                    base_url=llm.llm_base_url,
+                    http_client=http_client,
+                    budget=budget,
+                )
+                attempts.append(
+                    {
+                        "task": request.prompt.task_name,
+                        "failure": asdict(output.failure) if output.failure else None,
+                        "attempts": [asdict(item) for item in output.attempts],
+                    }
+                )
+                return output
+
+            return invoke
+
+        raw = await (generator or resolve_generator())(
+            payload,
+            prompts=prompts,
+            limits=llm.call_limits(prompts["report"].task_name),
+            model_call_factory=model_call_factory,
+        )
+        draft = validate_draft(raw)
+        rows = _score_rows(draft, turn_ids)
+        values = _draft_values(draft, coverage, prompts)
+        for call in attempts:
+            if call.get("task") == "report":
+                for metadata in cast(list[dict[str, object]], call["attempts"]):
+                    if metadata.get("error_stage") is None and isinstance(
+                        metadata.get("model"), str
+                    ):
+                        values["model"] = metadata["model"]
+        async with sessions.begin() as db:
+            interview = await db.get(InterviewSession, interview_id, with_for_update=True)
+            request = (
+                await db.get(ReportGenerationRequest, generation_request_id, with_for_update=True)
+                if generation_request_id is not None
+                else None
+            )
+            if generation_request_id is not None:
+                if request is not None:
+                    request.attempts = attempts
+                if request is None or request.status != "running":
+                    return "skipped"
+            valid = interview is not None and interview.status == "completed"
+            if valid and request is not None:
+                assert interview is not None
+                current, active_prompts, _, _ = await _read_generation_input(db, interview)
+                valid = request.expires_at > datetime.now(UTC) and (
+                    _input_snapshot(current, active_prompts, llm)[0] == fingerprint
+                )
+            if not valid:
+                if request is not None:
+                    request.status, request.error_code = "stale", "report_input_changed"
+                return "skipped"
+            if reassessment:
+                assert request is not None
+                existing = await db.scalar(
+                    select(InterviewReport)
+                    .where(InterviewReport.interview_session_id == interview_id)
+                    .with_for_update()
+                )
+                review = await db.get(
+                    ReportDisagreement, request.disagreement_id, with_for_update=True
+                )
+                if (
+                    existing is None
+                    or existing.current_revision != request.expected_revision
+                    or review is None
+                    or review.status != "approved"
+                    or review.source_revision != request.expected_revision
+                ):
+                    request.status, request.error_code = "stale", "report_revision_changed"
+                    return "skipped"
+                await revisions.preserve(db, existing)
+                for name, value in values.items():
+                    setattr(existing, name, value)
+                existing.current_revision += 1
+                existing.generated_at = datetime.now(UTC)
+                await db.execute(delete(ReportScore).where(ReportScore.report_id == existing.id))
+                db.add_all(ReportScore(report_id=existing.id, **row) for row in rows)
+                await db.flush()
+                await revisions.preserve(db, existing)
+                review.status, review.applied_revision = "applied", existing.current_revision
+                outcome: GenerateOutcome = "revised"
+            else:
+                saved = await queries.insert_report(
+                    db,
+                    interview_id=interview_id,
+                    values=values,
+                    scores=rows,
+                    generated_at=datetime.now(UTC),
+                )
+                outcome = "created" if saved else "exists"
+            if outcome in {"created", "revised"}:
+                from app.features.profile.refresh_outbox import ensure_request
+
+                report = await db.scalar(
+                    select(InterviewReport).where(
+                        InterviewReport.interview_session_id == interview_id
+                    )
+                )
+                assert report is not None and interview is not None
+                # 보고서 commit 뒤 worker가 종료돼도 후속 전달 의도는 같은 DB에 남는다.
+                await ensure_request(
+                    db,
+                    user_id=interview.user_id,
+                    report_id=report.id,
+                    report_revision=report.current_revision,
+                )
+            if request is not None:
+                request.status, request.error_code = "succeeded", None
+        return outcome
+    except BaseException as error:
+        if generation_request_id is not None:
+            await asyncio.shield(
+                generation.fail(sessions, generation_request_id, failure_code(error), attempts)
+            )
+        raise
+
+
 def _build_payload(
     posting: JobPosting | None,
     turns: list[InterviewTurn],
@@ -215,21 +431,32 @@ def _build_payload(
     rubrics: Mapping[str, object],
 ) -> dict[str, object]:
     """AI 모듈 입력. rubric 은 활성 score_criteria 의 값을 구조 해석 없이 key 별로 전달한다."""
+    from app.features.report.jd_sources import jd_source_notes
+
+    source_notes, source_limits = jd_source_notes(posting, requirements, turns)
     return {
         "score_keys": list(SCORE_KEYS),
         "rubrics": {key: rubrics[key] for key in SCORE_KEYS},
         "position": posting.position if posting else None,
         "company_name": posting.company_name if posting else None,
         "requirements": [
-            {"id": str(r.id), "category": r.category, "text": r.text} for r in requirements
+            {
+                "id": str(r.id),
+                "category": r.category,
+                "text": r.text,
+                **({"source_field": "job_posting.source_blocks"} if r.source_refs else {}),
+            }
+            for r in requirements
         ],
+        "source_notes": source_notes,
+        "limitations": source_limits,
         "turns": [
             {
                 "turn_no": t.turn_no,
                 "persona": t.persona,
                 "question": t.question_text,
-                # 답하지 못한 턴은 빈 답변으로 보낸다. AI 는 이를 0단계로 판정한다.
-                "answer": t.answer_text or "",
+                # 질문했으나 답하지 않은 턴은 null로 보낸다. 미질문과 구분해 0단계로 판정한다.
+                "answer": t.answer_text if t.answer_text and t.answer_text.strip() else None,
                 "question_contract": t.question_contract,
                 "analysis": t.analysis,
                 "parent_turn_no": t.parent_turn_no,
@@ -298,22 +525,6 @@ def failure_code(error: BaseException) -> str:
         # 점수를 낼 수 없는 key 가 있으면 AI 가 실패시킨다. 점수 없음 계약 전까지 알려진 실패다.
         return "report_unscorable_key" if error.field == "unscorable key" else "llm_failed"
     return "internal_error"
-
-
-async def record_failure(redis: ArqRedis, interview_id: uuid.UUID, code: str) -> None:
-    """실패 이력을 Redis 에 남긴다. 기록 실패는 로그만 남기고 삼킨다."""
-    try:
-        await redis.set(REPORT_FAIL_KEY.format(interview_id=interview_id), code)
-    except RedisError:
-        logger.error("report_failure_record_failed", interview_id=str(interview_id), code=code)
-
-
-async def release_lock(redis: ArqRedis, interview_id: uuid.UUID) -> None:
-    """report:gen lock 을 푼다. 풀지 못하면 TTL 이 끝날 때까지 202 만 나간다."""
-    try:
-        await redis.delete(f"report:gen:{interview_id}")
-    except RedisError:
-        logger.error("report_lock_release_failed", interview_id=str(interview_id))
 
 
 async def get_interview_user_id(db: AsyncSession, interview_id: uuid.UUID) -> uuid.UUID:
