@@ -1,0 +1,12 @@
+diff --git a/backend/tests/test_configure_ai_runtime.py b/backend/tests/test_configure_ai_runtime.py
+--- a/backend/tests/test_configure_ai_runtime.py
++++ b/backend/tests/test_configure_ai_runtime.py
+@@ -31,7 +31,7 @@
+         "jd_extract_image",
+     }
+     assert {item.model for item in prompts.values()} == {"configured-model"}
+-    assert prompts["director"].version == "director_v4"
++    assert prompts["director"].version == "director_v8"
+     assert prompts["repo_shallow"].version == "repo_shallow_v3"
+     assert prompts["doc_claims"].version == "doc_claims_v2"
+     assert all(item.template.strip() for item in prompts.values())
