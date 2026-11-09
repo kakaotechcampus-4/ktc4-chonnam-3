@@ -14,11 +14,13 @@
 
 ## 현재 결정
 
+- [0012 저장한 답변을 보존하는 유한 질문 복구](0012-bounded-question-recovery.md) — Accepted for local implementation, 2026-11-09. 0010을 로컬 구현 범위에서 부분 대체한다. 안전한 후보 반려의 자동 1회와 명시 수동 1회, 진행 상태 조회·동일 요청 재확인과 기존 면접 이어가기를 정의한다. 팀 공통 적용 승인은 PR #228의 FE·BE 검토와 구분한다.
+
 - [0006 Task 11 분석 결과의 부분 실패 계약](0006-task11-analysis-result-contract.md) — Accepted, 2026-09-28. 현재 사용자 승인 범위의 구현 선택으로 결과 집계·실패 원소 형태와 기존 오류 코드를 연결한다. 팀 의결·FE 런타임 완료를 뜻하지 않는다.
 
 API 원본 구분은 [공통 계약 안내](../contracts/README.md)와 병합된 [PR #35](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/35)를 따른다. 과거 0001의 부분 이관 초안으로 현재 API 계약 전체를 미정 처리하지 않는다.
 
-- [0010 진행 중 질문 생성 실패의 question_failed는 recoverable false](0010-in-progress-question-failed-unrecoverable.md) — Accepted, 2026-11-07. 진행 중 T3·T4 실패는 `recoverable: false`로 보내 FE가 재연결을 멈추고 abandon 후 새 면접으로 안내한다. 복구 API는 추가하지 않는다. BE 구현, FE 화면은 남는다.
+- [0010 진행 중 질문 생성 실패의 question_failed는 recoverable false](0010-in-progress-question-failed-unrecoverable.md) — Partially Superseded by 0012 for local implementation. `recoverable: false`와 WS 재접속을 통한 모델 재실행 금지는 유지한다. T4 실패의 복구 API 미제공 범위는 0012로 부분 대체하며 T3·영구 오류의 중단 경계는 유지한다. 원문·기존 팀 승인 이력은 보존한다.
 - [0011 STT 공급자(MLAPI Whisper)와 무음 환각 대응](0011-stt-provider-mlapi-whisper.md) — Proposed, 2026-11-02. MLAPI Whisper를 STT로 쓰고 무음 환각은 최소 크기 검사와 문구 필터로 `empty_transcript` 처리한다. 팀 확인 대기.
 - [0007 음성 전용 면접 전환 — WS·REST 계약 변경](0007-voice-interview-contract.md) — Proposed, 2026-10-05. Sprint 2부터 답변은 음성만 받고 질문 음성은 `question-audio` URL로 전달한다. 꼬리질문 포함 9턴과 `totalTurns` 기존 의미를 유지하며 BE·AI 검토 대기.
 - [0005 JD 분류 category 통일](0005-jd-category-unification.md) — Proposed, 2026-09-27. DB·AI·API 모두 `category`(`required`/`preferred`/`responsibility`)로 통일하고 `requirement_type`·`unknown`과 변환 레이어를 폐기한다. 구동한 검토 대기.
