@@ -1,0 +1,25 @@
+diff --git a/backend/tests/contract/test_report_revision_contract.py b/backend/tests/contract/test_report_revision_contract.py
+--- a/backend/tests/contract/test_report_revision_contract.py
++++ b/backend/tests/contract/test_report_revision_contract.py
+@@ -2,8 +2,21 @@
+ 
+ from pathlib import Path
+ 
++import yaml
+ 
+ ROOT = Path(__file__).resolve().parents[3]
++
++
++def test_report_submission_documents_the_current_reason_and_revision_unit():
++    contract = yaml.safe_load(
++        (ROOT / "spec/shared/contracts/openapi.yaml").read_text(encoding="utf-8")
++    )
++    operation = contract["paths"]["/interviews/{id}/feedback-disagreements"]["post"]
++    conflict = operation["responses"]["409"]
++    assert conflict["content"]["application/json"]["schema"]["$ref"].endswith("/ApiError")
++    assert "report_unavailable" in conflict["description"]
++    assert "already_submitted" in conflict["description"]
++    assert "(interviewId, revision, persona)" in operation["description"]
+ 
+ 
+ def test_ws_error_details_are_optional_not_a_new_reason_or_required_payload():

@@ -1328,7 +1328,9 @@ Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시�
 | `evidenceCheck` | `repository` (string), `file` (string) |
 | `question` | `persona` (Persona), `text` (string), `turn` (number) |
 | `interviewEnd` | — |
-| `error` | `reason` (string), `recoverable` (boolean), `code` (string), `step` (PrepareStepKey 또는 null), `occurredAt` (string) |
+| `error` | `reason` (string), `recoverable` (boolean), `code` (string), `step` (PrepareStepKey 또는 null), `occurredAt` (string), `details` (object, 선택) |
+
+`error.details`는 선택적인 부가 정보다. 없거나 모르는 필드가 있어도 `reason`·`code`·`recoverable` 처리는 유지한다. 음성의 빈 전사는 `details.cause: "empty_transcript"`로 구분하며, details 자체를 새 오류 reason으로 해석하지 않는다.
 
 `prepareStep.status`는 `pending`·`running`·`completed`·`failed` 4개만 사용한다. `prepareStepKey` 4단계는 모두 필수 실행이므로 `skipped`가 오지 않는다 — `skipped`는 `stepKey`(#13 · #14) 전용이다.
 
