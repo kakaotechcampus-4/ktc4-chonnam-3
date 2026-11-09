@@ -1416,11 +1416,13 @@ def validate_deep_analysis(
         raise ContractError("semantic", "repository ref")
     if not 1 <= len(candidate.notable_areas) <= 5:
         raise ContractError("semantic", "notable area count")
-    _unique(tuple(area.path for area in candidate.notable_areas), "notable area paths")
-    source_by_path = {item.path: item for item in source.sources}
+    _unique(
+        tuple((area.path, area.scope) for area in candidate.notable_areas), "notable area paths"
+    )
+    source_by_scope = {(item.path, item.read_scope): item for item in source.sources}
     for area in candidate.notable_areas:
-        matched = source_by_path.get(area.path)
-        if matched is None or matched.read_scope != area.scope:
+        matched = source_by_scope.get((area.path, area.scope))
+        if matched is None:
             raise ContractError("semantic", "notable area source scope")
     return _checked(candidate)
 
@@ -1484,6 +1486,28 @@ class ScoreTurn(_Contract):
     answer: str | None
     question_contract: QuestionContract
     jd_requirements: tuple[LinkedRequirement, ...] = ()
+    # 기존 여섯 번째 위치 인자의 JD 본문 의미를 유지하고 신규 ID는 뒤에 추가한다.
+    jd_requirement_ids: tuple[str, ...] = ()
+    # 해당 턴이 실제 참조한 근거다. 이전 위치 인자와 과거 입력은 그대로 읽는다.
+    evidence_refs: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _unique(cast(tuple[object, ...], self.evidence_refs), "score evidence references")
+        for reference in self.evidence_refs:
+            _text(reference, "score evidence reference")
+        _references(
+            self.jd_requirement_ids,
+            frozenset(item.id for item in self.jd_requirements),
+            "score JD references",
+        )
+        if "company_job_fit" in self.question_contract.evaluation_keys and not self.jd_requirements:
+            raise ContractError("semantic", "job fit JD references")
+
+
+def score_candidate_keys(turn: ScoreTurn) -> tuple[ScoreKeyId, ...]:
+    """선언된 질문 범위만 평가한다. 구형 저장 계약은 기존 후보 정책으로 읽는다."""
+    return turn.question_contract.evaluation_keys or SCORE_CANDIDATE_KEYS[turn.persona]
 
 
 @dataclass(frozen=True)
@@ -1522,7 +1546,7 @@ def validate_score_judgments(
     if not turns:
         raise ContractError("semantic", "turns")
     _unique(tuple(turn.turn_id for turn in turns), "turn_id")
-    expected = {(t.turn_id, key) for t in turns for key in SCORE_CANDIDATE_KEYS[t.persona]}
+    expected = {(t.turn_id, key) for t in turns for key in score_candidate_keys(t)}
     pairs = tuple((item.turn_id, item.key) for item in candidate.judgments)
     _unique(pairs, "judgment")
     if set(pairs) != expected:
@@ -1563,6 +1587,7 @@ class ReportTurn(_Contract):
     analysis: AnswerAnalysis | None
     evidence_refs: tuple[str, ...]
     question_contract: QuestionContract
+    jd_requirement_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1578,6 +1603,38 @@ class ReportInput(_Contract):
     turns: tuple[ReportTurn, ...]
     evidence: tuple[Evidence, ...]
     tool_results: tuple[ReportToolResult, ...]
+    limitations: tuple[str, ...] = ()
+    supplemental_sources: tuple[SupplementalSource, ...] = ()
+    source_notes: tuple[JDSourceNote, ...] = ()
+
+
+def validate_supplemental_input(
+    sources: tuple[SupplementalSource, ...],
+    *,
+    contracts: tuple[QuestionContract, ...],
+    limitations: tuple[str, ...],
+) -> None:
+    """질문한 자료의 원문만 허용하고 예산 밖 참조는 명시적인 미확인 범위로 둔다."""
+    if type(sources) is not tuple or any(type(item) is not SupplementalSource for item in sources):
+        raise ContractError("schema", "supplemental sources")
+    if type(limitations) is not tuple:
+        raise ContractError("schema", "source limitations")
+    for item in limitations:
+        _text(item, "source limitations")
+    provided = tuple(BasisRef(item.kind, item.source_id) for item in sources)
+    _unique(cast(tuple[object, ...], provided), "supplemental sources")
+    required = {
+        ref
+        for contract in contracts
+        for ref in contract.basis_refs
+        if ref.kind
+        in {"document_claim", "document_claim_comparison", "document_visual", "external_source"}
+    }
+    if not set(provided) <= required:
+        raise ContractError("semantic", "unasked supplemental source")
+    for ref in required - set(provided):
+        if f"supplemental_source_outside_model_budget:{ref.kind}:{ref.id}" not in limitations:
+            raise ContractError("semantic", "missing supplemental source")
 
 
 @dataclass(frozen=True)
@@ -1621,6 +1678,26 @@ def validate_report_input(report_input: ReportInput) -> ReportInput:
     _convert(ReportInput, report_input, "report input", wire=False)
     if not report_input.turns:
         raise ContractError("semantic", "turns")
+    validate_supplemental_input(
+        report_input.supplemental_sources,
+        contracts=tuple(turn.question_contract for turn in report_input.turns),
+        limitations=report_input.limitations,
+    )
+    validate_jd_source_notes(
+        report_input.source_notes,
+        requirement_ids=frozenset(
+            identifier
+            for turn in report_input.turns
+            for identifier in (
+                *turn.jd_requirement_ids,
+                *(
+                    ref.id
+                    for ref in turn.question_contract.basis_refs
+                    if ref.kind == "jd_requirement"
+                ),
+            )
+        ),
+    )
     ids = tuple(turn.turn_id for turn in report_input.turns)
     _unique(ids, "turn_id")
     for index, turn in enumerate(report_input.turns):
@@ -1630,6 +1707,13 @@ def validate_report_input(report_input: ReportInput) -> ReportInput:
         raise ContractError("semantic", "tool result turn")
     registered = tuple(i.evidence_id for i in report_input.evidence if i.evidence_id)
     _unique(registered, "evidence_id")
+    source_by_id = {item.evidence_id: item for item in report_input.evidence if item.evidence_id}
+    for tool in report_input.tool_results:
+        if any(
+            item.evidence_id is None or source_by_id.get(item.evidence_id) != item
+            for item in tool.result.items
+        ):
+            raise ContractError("semantic", "tool result evidence")
     for item in report_input.turns:
         _references(item.evidence_refs, frozenset(registered), "turn evidence_refs")
     return report_input
