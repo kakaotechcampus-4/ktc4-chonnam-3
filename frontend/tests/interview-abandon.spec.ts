@@ -97,7 +97,7 @@ test('마이페이지 중단된 면접 행은 중단됨과 다시 도전하기�
   await expect(page).toHaveURL(/\/interview\/[^/]+\/prepare$/);
 });
 
-// 공통 0010: 진행 중 분석·질문 생성 실패는 question_failed recoverable false로 온다.
+// 공통 0012: 저장 답변 이어가기가 허용되지 않는 fixture의 기존 중단·새 면접 경로다.
 // 면접은 in_progress로 남으므로 abandon을 거쳐 새 면접이나 홈으로 보낸다(이슈 #200).
 const QUESTION_FAILED_CLOSED = [
   {
@@ -128,10 +128,9 @@ test('복구할 수 없는 질문 생성 실패는 같은 레포로 다시 시�
   });
 
   await page.goto(`/interview/${IN_PROGRESS}/session`);
-  await expect(page.getByRole('alert')).toContainText(
-    '다음 질문을 만들지 못해 면접을 이어갈 수 없어요.',
-    { timeout: 15_000 },
-  );
+  await expect(page.getByRole('alert')).toContainText('다음 질문을 준비하지 못했어요.', {
+    timeout: 15_000,
+  });
   await page.getByRole('button', { name: '같은 레포로 다시 시작' }).click();
 
   await expect(page).toHaveURL(/\/interview\/(?!a3d51c20-1005)[^/]+\/prepare$/);
