@@ -250,3 +250,121 @@ async def finish(
     if terminal is not None:
         logger.warning("profile_refresh_terminal", **terminal)
     return True
+
+
+async def generated_result(
+    sessions: Sessions, request_id: UUID, token: UUID, fingerprint: str
+) -> dict[str, object] | None:
+    async with sessions() as db:
+        row = await db.get(ProfileRefreshRequest, request_id)
+        if (
+            row is None
+            or row.status != "running"
+            or row.owner_token != token
+            or row.lease_expires_at is None
+            or row.lease_expires_at <= datetime.now(UTC)
+        ):
+            return None
+        saved = row.generated_result
+        return (
+            dict(saved) if saved is not None and saved.get("fingerprint") == fingerprint else None
+        )
+
+
+async def preserve_generated_result(
+    sessions: Sessions, request_id: UUID, token: UUID, result: dict[str, object]
+) -> bool:
+    # 모델 원문·프롬프트·키를 저장하지 않는다. 검증된 짧은 역할 요약과 재사용 지문만 받는다.
+    if (
+        set(result)
+        != {"fingerprint", "role_summary", "model", "prompt_version", "generation_limits"}
+        or len(json.dumps(result, ensure_ascii=False).encode()) > 16384
+    ):
+        raise ValueError("Invalid bounded profile generation result")
+    fingerprint, role = result["fingerprint"], result["role_summary"]
+    limits = result["generation_limits"]
+    if (
+        not isinstance(fingerprint, str)
+        or len(fingerprint) != 64
+        or any(char not in "0123456789abcdef" for char in fingerprint)
+        or not isinstance(role, str)
+        or not role.strip()
+        or len(role) > ROLE_SUMMARY_MAX_CHARS
+        or any(
+            not isinstance(result[key], str) or not 1 <= len(str(result[key]).strip()) <= maximum
+            for key, maximum in (("model", 200), ("prompt_version", 100))
+        )
+        or not isinstance(limits, dict)
+        or set(limits) != set(c.CallLimits.__dataclass_fields__)
+    ):
+        raise ValueError("Invalid bounded profile generation result")
+    TypeAdapter(c.CallLimits).validate_python(limits)
+    async with sessions.begin() as db:
+        row = await db.get(ProfileRefreshRequest, request_id, with_for_update=True)
+        if (
+            row is None
+            or row.status != "running"
+            or row.owner_token != token
+            or row.lease_expires_at is None
+            or row.lease_expires_at <= datetime.now(UTC)
+        ):
+            return False
+        row.generated_result = dict(result)
+        return True
+
+
+async def wake_user(sessions: Sessions, user_id: UUID) -> None:
+    async with sessions.begin() as db:
+        await db.execute(
+            update(ProfileRefreshRequest)
+            .where(
+                ProfileRefreshRequest.user_id == user_id,
+                ProfileRefreshRequest.status == "pending",
+                ProfileRefreshRequest.last_error == "profile_refresh_busy",
+            )
+            .values(next_attempt_at=datetime.now(UTC))
+        )
+
+
+async def recover(
+    sessions: Sessions,
+    redis: ArqRedis,
+    *,
+    now: datetime | None = None,
+    page_size: int = PAGE_SIZE,
+    max_pages: int = MAX_PAGES,
+) -> int:
+    if (
+        type(page_size) is not int
+        or not 1 <= page_size <= PAGE_SIZE
+        or type(max_pages) is not int
+        or not 1 <= max_pages <= MAX_PAGES
+    ):
+        raise ValueError("Profile recovery requires bounded pages")
+    now = now or datetime.now(UTC)
+    cursor = None
+    dispatched = 0
+    for _ in range(max_pages):
+        query = select(ProfileRefreshRequest.id, ProfileRefreshRequest.next_attempt_at).where(
+            _due(now)
+        )
+        if cursor is not None:
+            query = query.where(
+                tuple_(ProfileRefreshRequest.next_attempt_at, ProfileRefreshRequest.id) > cursor
+            )
+        async with sessions() as db:
+            rows = (
+                await db.execute(
+                    query.order_by(
+                        ProfileRefreshRequest.next_attempt_at, ProfileRefreshRequest.id
+                    ).limit(page_size)
+                )
+            ).all()
+        if not rows:
+            break
+        for identity, _ in rows:
+            dispatched += await dispatch(sessions, redis, identity, now=now)
+        cursor = (rows[-1][1], rows[-1][0])
+        if len(rows) < page_size:
+            break
+    return dispatched
