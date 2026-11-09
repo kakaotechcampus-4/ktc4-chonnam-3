@@ -793,3 +793,40 @@ async def test_old_success_never_rotates_after_answer_or_later_turn(agent_sessio
             await retry(agent_sessions, agent_seed, redis, request_id, http)
         assert error.value.reason.value == "question_retry_unavailable"
         assert len(redis.calls) == before and len(sent) == 2
+
+
+async def test_retry_retains_initial_lookup_summary_and_tool_result(
+    agent_sessions, agent_seed, monkeypatch
+):
+    from devon_ai import contracts as c
+
+    from app.features.interview import director_service
+
+    await failed_question(agent_sessions, agent_seed)
+    tool = c.ToolResult("not_found", (), ("actual-search-scope",), ("searched but absent",), None)
+    async with agent_sessions.begin() as db:
+        row = await db.get(InterviewSession, agent_seed["interview_id"])
+        row.context_state = {
+            **(row.context_state or {}),
+            "director_retry_inputs": {
+                "2": {"lookup_summary": "실제 조회 결과: 없음", "tool_results": [asdict(tool)]}
+            },
+        }
+    original = director_service.start_director
+    seen = []
+
+    async def inspect(*args, **kwargs):
+        seen.append((kwargs["lookup_summary"], kwargs["tool_results"]))
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(director_service, "start_director", inspect)
+    calls = []
+
+    async def handler(req):
+        calls.append(req)
+        return response(plan("tech_lead") if len(calls) == 1 else approved_review())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        await retry(agent_sessions, agent_seed, Redis(), uuid4(), http)
+    assert seen == [("실제 조회 결과: 없음", (tool,))]
+    assert len(calls) == 2
