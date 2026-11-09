@@ -209,7 +209,11 @@ def test_correction_analysis_reaches_the_next_question_input_unchanged(kit, run)
     question = c.Question(
         "tech_lead", "맡으신 설계 범위를 설명해 주세요.", "scope", next_contract, (), ()
     )
-    raw = {k: v for k, v in asdict(question).items() if k != "question_contract"}
+    raw = {
+        key: value
+        for key, value in asdict(question).items()
+        if key in {"persona", "text", "topic_code", "evidence_refs", "jd_requirement_ids"}
+    }
     provider = kit.Provider(raw)
 
     async def review(request, candidate):
