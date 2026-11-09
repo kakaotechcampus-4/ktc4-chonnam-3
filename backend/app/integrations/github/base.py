@@ -10,6 +10,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+# GitHub는 앱 식별 User-Agent가 없는 요청을 거절하므로 모든 조회 경로에서 공유한다.
+GITHUB_USER_AGENT = "DEVON"
+
 # repo_analyses.error_code / analysis_jobs.error_code (docs/error-reasons.md)
 GITHUB_ERROR_RATE_LIMITED = "rate_limited"
 GITHUB_ERROR_REPO_UNREACHABLE = "repo_unreachable"
@@ -72,6 +75,13 @@ class RepoSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class RepoSupportingFile:
+    path: str
+    content: str
+    is_truncated: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class RepoDetail:
     """L0-b 수집분.
 
@@ -93,6 +103,9 @@ class RepoDetail:
     repository_inaccessible: bool = False
     # 실제 확인한 필드만 저장한다. 정상 빈 값·README 부재와 실패·미호출을 구분한다.
     collected_fields: frozenset[str] = field(default_factory=frozenset)
+    structure: tuple[str, ...] = ()
+    supporting_files: tuple[RepoSupportingFile, ...] = ()
+    source_limitations: tuple[str, ...] = ()
 
     @property
     def is_partial(self) -> bool:

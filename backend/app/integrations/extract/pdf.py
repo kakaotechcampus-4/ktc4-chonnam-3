@@ -13,6 +13,7 @@ from pypdf.errors import PyPdfError
 from app.integrations.extract.base import (
     EXTRACT_ERROR_CORRUPTED,
     EXTRACT_ERROR_NO_TEXT_LAYER,
+    ExtractionBlock,
     ExtractionResult,
     failed,
     truncate,
@@ -44,8 +45,9 @@ def extract_pdf_text(data: bytes, *, max_chars: int = 0) -> ExtractionResult:
         return failed(EXTRACT_ERROR_CORRUPTED)
 
     chunks: list[str] = []
+    blocks: list[ExtractionBlock] = []
     extracted_pages = 0
-    for page in reader.pages:
+    for number, page in enumerate(reader.pages, 1):
         try:
             page_text = page.extract_text() or ""
         except (PyPdfError, ValueError, KeyError, TypeError):
@@ -54,6 +56,7 @@ def extract_pdf_text(data: bytes, *, max_chars: int = 0) -> ExtractionResult:
             continue
         if page_text.strip():
             chunks.append(page_text)
+            blocks.append(ExtractionBlock(page_text, page=number))
             extracted_pages += 1
 
     if extracted_pages == 0:
@@ -66,4 +69,5 @@ def extract_pdf_text(data: bytes, *, max_chars: int = 0) -> ExtractionResult:
         status=DocumentExtractStatus.PARTIAL if partial else DocumentExtractStatus.SUCCEEDED,
         is_truncated=is_truncated,
         details={"pageCount": page_count, "extractedPages": extracted_pages},
+        blocks=tuple(blocks),
     )
