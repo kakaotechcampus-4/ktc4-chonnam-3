@@ -1,0 +1,14 @@
+diff --git a/backend/tests/agents/test_director_repository_sources.py b/backend/tests/agents/test_director_repository_sources.py
+--- a/backend/tests/agents/test_director_repository_sources.py
++++ b/backend/tests/agents/test_director_repository_sources.py
+@@ -274,8 +274,8 @@
+     config = settings().model_copy(
+         update={
+             "director_prepare_max_requests": 4 if limit == "requests" else 8,
+-            "director_evidence_max_total_bytes": 4096,
+-            "director_evidence_max_response_bytes": 2048,
++            "director_prepare_max_total_bytes": 4096,
++            "director_prepare_max_response_bytes": 2048,
+         }
+     )
+     async with httpx.AsyncClient(transport=httpx.MockTransport(bounded_tree)) as http:
