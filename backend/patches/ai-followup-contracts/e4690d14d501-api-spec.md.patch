@@ -1,0 +1,228 @@
+diff --git a/frontend/docs/api-spec.md b/frontend/docs/api-spec.md
+--- a/frontend/docs/api-spec.md
++++ b/frontend/docs/api-spec.md
+@@ -6,6 +6,8 @@
+ 각 엔드포인트는 **Endpoint / Request / Response / UI states / Failure** 5단 구조로 기술한다. `UI states`는 이 API가 어느 화면에서 어떻게 쓰이는지(분기·배지·버튼 노출), `Failure`는 실패 응답 코드·reason만 담는다.
+ 
+ 일반 HTTP API의 요청·응답 원본은 [OpenAPI](../../spec/shared/contracts/openapi.yaml)다. 이 문서는 [공통 계약 안내](../../spec/shared/contracts/README.md)에 따라 WebSocket(#18), SSE(#13), 브라우저 이동(#1·#2·#7·#8)의 원본이며 나머지는 FE용 설명이다. 차이가 있으면 OpenAPI와 [이관·보류 현황](../../spec/shared/contracts/migration.md)을 먼저 확인한다. 문서의 확정 기준과 로컬 구현·mock의 반영 상태는 구분하며 과거 변경 이력은 당시 기록으로 보존한다.
++
++리포트 revision·이의 제기(#21)·실패한 생성의 명시 재시도(#26)는 [ADR 0035](../../spec/ai/decisions/0035-final-runtime-budgets-and-report-revisions.md)의 최종 서비스 추가 계약을 설명한다. 로컬 구현을 기준으로 공통 계약 PR에서 검토 중이며, Sprint 1의 이의 제기 비활성 기준이나 공유 계약·운영 승인을 소급 변경하지 않는다.
+ 
+ ## 공통 규약
+ 
+@@ -172,10 +174,11 @@
+ | 18 | GET *(Upgrade)* | `/ws/interviews/{sessionId}` | WebSocket |
+ | 25 | GET | `/interviews/{id}/turns/{turn}/question-audio` | Audio |
+ | 19 | GET | `/interviews/{id}/report` | fetch |
++| 26 | POST | `/interviews/{id}/report/retry` | fetch — 실패한 리포트 생성 재시도 |
+ | 20 | POST | `/interviews/{id}/retry` | fetch |
+-| 21 | POST | `/interviews/{id}/feedback-disagreements` | 계약 잔존, Sprint 1 제공·호출 제외 |
+-
+-참조 번호는 총 24개다(기존 22개 + 준비 재시도 #23 + 면접 중단 #24). #3은 Sprint 2 예약이고 #21은 계약이 잔존하지만 Sprint 1 제공·호출 대상에서 제외하므로 이 숫자를 실제 제공 API 수로 해석하지 않는다. 번호는 아래 "최종 엔드포인트 목록"·`shared/queryKeys.ts` 참조 번호와 같다. 22번은 `analysis-runs` 계열끼리 묶어 읽도록 15번 뒤에 배치했고, 23·24번은 준비·진행 화면 흐름을 따라 17번 뒤에 두었다.
++| 21 | POST | `/interviews/{id}/feedback-disagreements` | fetch — 현재 리포트 평가에 대한 의견 접수 |
++
++참조 번호는 총 26개다(기존 22개 + 준비 재시도 #23 + 면접 중단 #24 + 질문 음성 #25 + 리포트 생성 재시도 #26). #3은 Sprint 2 예약이다. 이 숫자는 구현 완료나 공유 계약 승인 수가 아니다. 기존 참조 번호는 유지하며 #26도 #19의 리포트 캐시를 사용한다. 22번은 `analysis-runs` 계열끼리 묶어 읽도록 15번 뒤에 배치했고, 23·24번은 준비·진행 화면 흐름을 따라 17번 뒤에 두었다.
+ 
+ > 브라우저 이동 경로는 `shared/api.ts`에 넣지 않는다. `<a href>` 또는 `window.location`으로 처리한다.
+ > 
+@@ -1444,6 +1447,8 @@
+ 
+ ## 19. GET /interviews/{id}/report
+ 
++본인 면접의 현재 리포트를 조회한다. 기존 리포트가 없으면 완료된 면접이며 답변 완료 턴이 1개 이상일 때 최초 생성을 요청한다. 생성 중에는 202를 반환한다. 생성 실패가 기록된 뒤에는 조회만으로 모델을 다시 실행하지 않으며, 사용자가 #26으로 명시 재시도한다.
++
+ **Response**
+ 
+ `200 OK`
+@@ -1451,6 +1456,7 @@
+ ```json
+ {
+   "interviewId": "iv_001",
++  "revision": 1,
+   "position": "Backend Developer",
+   "positionLabel": "토스뱅크 백엔드 개발자",
+   "totalScore": 74.5,
+@@ -1532,6 +1538,7 @@
+ | 필드 | 타입 | null |
+ | --- | --- | --- |
+ | `interviewId` | string | ❌ |
++| `revision` | integer (1 이상) | ❌ |
+ | `position` | string | ❌ |
+ | `positionLabel` | string | ❌ |
+ | `totalScore` | number | ❌ |
+@@ -1559,7 +1566,7 @@
+ 
+ `positionLabel`은 회사명이 포함된 표시용 문구다. `coverage`는 `company_job_fit` 점수의 근거로 함께 표시한다.
+ 
+-> 리포트는 면접당 1개이며 별도 `reportId`를 발급하지 않는다. 이의 제기(#21)도 `interviewId`를 식별자로 사용한다.
++> 현재 리포트는 면접당 1개이며 별도 `reportId`를 발급하지 않는다. 명시적 검토·재평가로 새 결과를 발행하면 `revision`이 증가하고 이전 결과는 보존한다. 이의 제기(#21)는 `interviewId`와 화면에서 읽은 `revision`을 사용한다. 의견 접수 자체가 재평가나 점수 변경을 실행하지 않는다.
+ >
+ 
+ **UI states**
+@@ -1569,18 +1576,26 @@
+ | 탭 | 필드 |
+ | --- | --- |
+ | 종합리포트 | `headline` · `totalScore` · `summary` · `scores` · `coverage` |
+-| 면접관별 피드백 | `agentFeedbacks` — Sprint 1 이의 제기 버튼은 비활성. `disagreementSubmitted` 연동은 #21의 후속 범위 |
++| 면접관별 피드백 | `agentFeedbacks` — 현재 `revision`을 #21에 전달하고, 해당 revision의 `disagreementSubmitted`로 접수 여부 표시 |
+ | 면접 기록 | `turns` |
+ 
+-**Failure**
+-
+-`409` — `report_unavailable` (진행된 턴 0개, 리포트 없이 안내)
++`report_unavailable`이면 #26의 `리포트 생성 다시 시도`를 제공한다. 서버가 완료 상태·답변·실패 이력과 기존 성공본 유무를 확인하며, 재시도 가능 여부를 오류 reason 하나만으로 확정하지 않는다. 이미 받은 리포트는 후속 조회가 실패해도 유지한다.
++
++**Failure**
++
++| 코드 | reason |
++| --- | --- |
++| 401 | `unauthenticated` |
++| 404 | `not_found` — 없는 면접 또는 다른 사용자의 면접 |
++| 409 | `report_unavailable` — 완료 전, 답변 완료 턴 없음 또는 기록된 생성 실패로 자동 생성 불가 |
+ 
+ ---
+ 
+ ## 20. POST /interviews/{id}/retry
+ 
+ 원본 면접 세션의 `runId`·레포 조합을 복사해 새 세션을 만든다.
++
++이 API는 새 면접에 재도전하는 경로다. 같은 면접의 실패한 리포트 생성을 다시 요청하는 #26과 구분한다.
+ 
+ 허용 상태는 `completed`와 시작 후 중단된 `abandoned`(`startedAt` 있음)다([공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md)). 그 외 상태는 `409 original_not_completed`다.
+ 
+@@ -1621,7 +1636,7 @@
+ 
+ ## 21. POST /interviews/{id}/feedback-disagreements
+ 
+-**범위 주의:** [이관 현황](../../spec/shared/contracts/migration.md)의 기존 결정에 따라 Sprint 1은 API 제공·호출 대상이 아니며 버튼은 비활성이다. OpenAPI·FE 타입·mock에 계약이 남아 있어 아래 구조와 번호를 보존하지만, 이를 Sprint 1 기능 활성화로 해석하지 않는다. 계약 파일 잔존 내용의 정합화와 실제 구현은 후속 작업이다.
++**범위 주의:** [이관 현황](../../spec/shared/contracts/migration.md)의 Sprint 1 기준은 API·버튼 비활성이다. 아래는 최종 서비스 추가 계약의 로컬 구현과 공유 PR 검토 범위다. 의견을 접수하며 제출만으로 점수·피드백을 바꾸지 않는다. 검토 결정과 명시 재평가는 별도 절차다.
+ 
+ `{id}`는 `interviewId`다. 리포트는 면접당 1개이고 `GET /interviews/{id}/report` 응답에 `reportId`가 없으므로, FE가 보유한 식별자는 `interviewId`뿐이다. 서버가 내부적으로 `reports` 행을 따로 관리하더라도 경로 파라미터는 `interviewId`를 받는다.
+ 
+@@ -1631,6 +1646,7 @@
+ {
+   "persona": "tech_lead",
+   "reasonType": "factual_error",
++  "expectedRevision": 1,
+   "comment": "TTL 근거를 설명했는데 반영되지 않았습니다."
+ }
+ ```
+@@ -1639,7 +1655,10 @@
+ | --- | --- | --- |
+ | `persona` | Persona | ✅ |
+ | `reasonType` | ReasonType | ✅ |
++| `expectedRevision` | integer (1 이상), #19에서 읽은 `revision` | FE는 항상 전달 |
+ | `comment` | string (최대 500자) | ❌ |
++
++서버는 기존 revision 1 클라이언트에 한해 `expectedRevision` 생략을 허용한다. revision 2 이상에서 생략하거나 현재 revision과 다르면 `409 report_unavailable`이다. FE 타입과 mock은 `expectedRevision`을 필수로 사용하며, 다른 revision으로 의견을 자동 이전하지 않는다.
+ 
+ `reasonType` 화면 표기
+ 
+@@ -1657,14 +1676,49 @@
+ 
+ **UI states**
+ 
+-Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagreementSubmitted: true`로 버튼 비활성(재조회 기반, 로컬 플래그 아님) → `interview(id).report` 캐시 무효화. 제출 단위는 `(interviewId, persona)`, persona당 1회. Sprint 1 호출·모달 구현 지시가 아니다.
++5c-v2 이의 제기 모달은 보고 있는 `revision`을 제출한다. 204 접수 후 리포트를 재조회하며 `disagreementSubmitted`는 현재 revision 기준이다. 제출 단위는 `(interviewId, revision, persona)`이며 같은 평가에 대해 한 번 접수한다. `already_submitted`는 접수됨으로 표시한다. `report_unavailable`이면 기존 revision의 재전송을 막고 최신 리포트를 다시 불러와 확인하게 한다.
+ 
+ **Failure**
+ 
+ | 코드 | reason |
+ | --- | --- |
+ | 404 | `not_found` |
+-| 409 | `already_submitted` |
++| 409 | `already_submitted` — 같은 리포트 revision·persona에 이미 접수 |
++| 409 | `report_unavailable` — 현재 리포트 없음, 완료 전 또는 revision 불일치 |
++
++요청 형식·의견 길이가 잘못되면 `400 invalid_request`, 로그인 세션이 없거나 유효하지 않으면 `401 unauthenticated`다.
++
++---
++
++## 26. POST /interviews/{id}/report/retry
++
++완료된 본인 면접의 실패한 리포트 생성을 명시적으로 다시 요청한다. 답변 완료 턴이 1개 이상이고 생성 실패·만료 이력이 있어야 하며, 기존 성공 리포트는 없어야 한다. 새 면접을 만들거나 성공한 리포트를 덮어쓰지 않는다.
++
++**Request**
++
++없음. 로그인 쿠키로 같은 `interviewId`에 POST한다.
++
++**Response**
++
++`202 Accepted`
++
++```json
++{ "status": "generating", "retryAfter": 3 }
++```
++
++같은 재시도 작업이 진행 중이면 추가 작업을 만들지 않고 202를 반환한다. 다른 종류의 생성·재평가 작업이 진행 중이면 `409 report_unavailable`이다.
++
++**UI states**
++
++`리포트 생성 다시 시도` 성공 응답을 #19의 리포트 캐시에 반영하고 즉시 재조회한다. 이후 `retryAfter`초 간격으로 #19를 폴링한다. 응답은 작업 접수를 뜻하며 생성 성공을 보장하지 않는다. 거절되면 면접 상태와 기존 리포트를 확인하도록 안내한다.
++
++**Failure**
++
++| 코드 | reason |
++| --- | --- |
++| 401 | `unauthenticated` |
++| 404 | `not_found` — 없는 면접 또는 다른 사용자의 면접 |
++| 409 | `report_unavailable` — 완료·답변·실패 이력 조건 불충족, 성공 리포트 존재 또는 다른 생성 작업 진행 중 |
+ 
+ ---
+ 
+@@ -1693,6 +1747,7 @@
+ | `POST /interviews/{id}/retry` | `interviews` |
+ | 면접 완료 (리포트 생성) | `home`, `interviews` |
+ | 피드백 이의 제출 | `interview(id).report` |
++| 실패한 리포트 생성 재시도 (#26) | `interview(id).report` — 202 응답 반영 후 재조회 |
+ | 재연동 state의 `GET /auth/github/callback` 복귀 (#8 호환 경로 포함) | `me`, `home` |
+ | `POST /auth/logout` | 전체 `clear()` |
+ | `401 unauthenticated` | 전체 `clear()` 후 `/login` |
+@@ -1723,13 +1778,14 @@
+ | 18 | GET *(Upgrade)* | `/ws/interviews/{sessionId}` | WebSocket | `devon_session` |
+ | 19 | GET | `/interviews/{id}/report` | fetch | `devon_session` |
+ | 20 | POST | `/interviews/{id}/retry` | fetch | `devon_session` |
+-| 21 | POST | `/interviews/{id}/feedback-disagreements` | 계약 잔존, Sprint 1 제공·호출 제외 | `devon_session` |
++| 21 | POST | `/interviews/{id}/feedback-disagreements` | fetch | `devon_session` |
+ | 22 | GET | `/analysis-runs/{runId}/candidates` | fetch | `devon_session` |
+ | 23 | POST | `/interviews/{id}/prepare/retry` | fetch | `devon_session` |
+ | 24 | POST | `/interviews/{id}/abandon` | fetch | `devon_session` |
+ | 25 | GET | `/interviews/{id}/turns/{turn}/question-audio` | Audio | `devon_session` |
+-
+-참조 번호는 총 25개다(기존 22개 + 준비 재시도 #23 + 면접 중단 #24 + 질문 음성 #25). #3은 Sprint 2 예약이고 #21은 계약이 잔존하지만 Sprint 1 제공·호출 대상에서 제외한다. 이 숫자는 실제 제공 API 수나 구현 완료 수가 아니다.
++| 26 | POST | `/interviews/{id}/report/retry` | fetch | `devon_session` |
++
++참조 번호는 총 26개다(기존 22개 + 준비 재시도 #23 + 면접 중단 #24 + 질문 음성 #25 + 리포트 생성 재시도 #26). #3은 Sprint 2 예약이다. 이 숫자는 실제 제공 API 수나 공유 계약 승인 수가 아니다.
+ 
+ `shared/api.ts`에 넣지 않는 것: 1, 2, 7, 8(브라우저 이동 또는 프론트 무관). 3은 Sprint 2 예약이므로 Sprint 1에서는 호출하지 않는다.
+ 
+@@ -1740,8 +1796,7 @@
+ | 브라우저 이동 | 1, 7 |
+ | 프론트 무관 (서버 302) | 2, 8 |
+ | `fetch` GET | 5, 6, 9, 10, 14, 15, 17, 19, 22 |
+-| `fetch` POST | 4, 12, 16, 20, 23 |
+-| 계약 잔존, Sprint 1 제공·호출 제외 | 21 (이의 제기, 기존 Sprint 2 범위) |
++| `fetch` POST | 4, 12, 16, 20, 21, 23, 24, 26 |
+ | Sprint 2 예약 | 3 (`POST /auth/refresh`) |
+ | `fetch` POST (multipart) | 11 |
+ | `EventSource` | 13 |
+@@ -1765,7 +1820,7 @@
+ | 면접 준비 | 5a2-v2 | `/interviews/{id}` R · `/ws/interviews/{sessionId}` S |
+ | 면접 준비 실패 | 1b | `/interviews/{id}` R (`lastError`·`runId`) · `/interviews/{id}/prepare/retry` W · `/analysis-runs/{runId}/result` R (레포 재선택) |
+ | 면접 진행 | 5b-v2 | `/ws/interviews/{sessionId}` S · `/interviews/{id}` R (재연결 복구) |
+-| 리포트 | 5c-v2 | `/interviews/{id}/report` R · `/interviews/{id}/retry` W. 이의 제기는 Sprint 1 호출 제외(#21 범위 주의) |
++| 리포트 | 5c-v2 | `/interviews/{id}/report` R · `/interviews/{id}/retry` W · `/interviews/{id}/report/retry` W · `/interviews/{id}/feedback-disagreements` W |
+ | 전역 | — | `/me` R (인증 가드) · `/auth/logout` W · 401 시 캐시 정리와 로그인 이동 |
+ 
+ > 화면별 상세 설명은 각 엔드포인트의 `UI states`를 참고한다. 이 표는 화면 하나가 여러 엔드포인트를 조합하는 지점만 빠르게 훑기 위한 색인이다.
+@@ -1807,7 +1862,9 @@
+   └─ 명시적 이탈 확인·레포 재선택 → status='abandoned' (연결 끊김·인증 만료만으로 전환하지 않음)
+ 
+ 5c-v2   리포트
+-  └─ POST /interviews/{id}/retry → 201 → 5a2-v2
++  ├─ POST /interviews/{id}/retry → 201 → 새 면접의 5a2-v2
++  ├─ 생성 실패 시 POST /interviews/{id}/report/retry → 202 → 같은 면접 리포트 재조회
++  └─ 현재 revision으로 POST /interviews/{id}/feedback-disagreements → 204 → 리포트 재조회
+ ```
+ 
+ `GET /interviews/{id}`의 `status`로 새로고침·재진입 시 도달할 화면을 결정한다.
