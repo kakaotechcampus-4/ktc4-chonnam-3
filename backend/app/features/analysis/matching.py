@@ -92,14 +92,9 @@ async def _record_recommended(
     candidates: list[tuple[AnalysisRepoCandidate, Repository]],
     rows: list[RepoMatchScore],
 ) -> None:
-    """추천 결과가 처음 저장될 때 run당 1건만 남긴다. 추천 0개도 결과로 기록한다.
-
-    refresh_matches 는 페이지마다 다시 호출되므로 이미 기록한 run 은 건너뛴다.
-    run 행 배타 잠금 안에서 확인하므로 동시 호출도 한 번만 기록한다.
-    중복 확인 SELECT 도 지표 기록의 일부이므로 SAVEPOINT 로 격리한다. 오류가 나면 바깥
-    트랜잭션을 유지한 채 기록만 건너뛰어 이미 저장한 추천 결과를 롤백하지 않는다.
-    """
+    """run의 첫 추천 저장 시점만 기록한다. 후속 페이지는 이 snapshot을 바꾸지 않는다."""
     try:
+        # run 잠금은 호출자가 유지한다. 중복 SELECT의 잠금·권한 오류도 업무와 격리한다.
         async with session.begin_nested():
             already = await session.scalar(
                 select(
@@ -108,18 +103,17 @@ async def _record_recommended(
                     )
                 )
             )
+            if already:
+                return
+            await record_event(
+                session,
+                "repo_recommended",
+                user_id=run.user_id,
+                analysis_job_id=run.id,
+                payload={
+                    "candidateCount": sum(c.filter_status != "excluded" for c, _ in candidates),
+                    "recommendedCount": sum(row.is_recommended for row in rows),
+                },
+            )
     except SQLAlchemyError:
-        logger.warning("event_dedup_check_failed", analysis_job_id=str(run.id), exc_info=True)
-        return
-    if already:
-        return
-    await record_event(
-        session,
-        "repo_recommended",
-        user_id=run.user_id,
-        analysis_job_id=run.id,
-        payload={
-            "candidateCount": sum(c.filter_status != "excluded" for c, _ in candidates),
-            "recommendedCount": sum(row.is_recommended for row in rows),
-        },
-    )
+        logger.warning("event_record_failed", event_name="repo_recommended", exc_info=True)
