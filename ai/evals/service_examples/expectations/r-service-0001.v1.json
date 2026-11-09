@@ -1,0 +1,24 @@
+{
+  "case_id": "r-service-0001",
+  "version": 1,
+  "allowed": [
+    {
+      "purpose": "Produce contract-valid scores and grounded observations without asserting unverified repository facts."
+    }
+  ],
+  "forbidden": [
+    {
+      "reason": "Do not treat synthetic inputs or missing evidence as verified personal contribution."
+    }
+  ],
+  "grader_controls": [],
+  "review": {
+    "status": "unreviewed",
+    "author": null,
+    "reviewer": null,
+    "reviewed_at": null,
+    "pending_notes": [
+      "Diagnostic service-input example only; human review and grounded scoring criteria are still required."
+    ]
+  }
+}

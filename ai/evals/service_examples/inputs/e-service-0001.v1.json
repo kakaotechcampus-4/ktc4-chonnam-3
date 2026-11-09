@@ -1,0 +1,90 @@
+{
+  "case_id": "e-service-0001",
+  "version": 1,
+  "control": {
+    "kind": "evidence",
+    "split": "dev",
+    "source_group_id": "synthetic-service-smoke",
+    "synthetic": true
+  },
+  "payload": {
+    "service_task": "answer_analysis",
+    "service_input": {
+      "context": {
+        "interview_id": "synthetic-smoke-session",
+        "current_turn_id": "synthetic-turn-1",
+        "turn_no": 1,
+        "total_turns": 9,
+        "persona_counts": [],
+        "allowed_personas": [
+          "hr_manager"
+        ],
+        "jd_requirements": [],
+        "repositories": [],
+        "history": [],
+        "current_question_contract": {
+          "purpose": "Describe your actual role and distinguish it from team responsibilities.",
+          "required_points": [
+            {
+              "key": "explanation",
+              "description": "Describe your actual role and distinguish it from team responsibilities."
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [],
+          "evaluation_scope": "Describe your actual role and distinguish it from team responsibilities.",
+          "evaluation_keys": [
+            "contribution_clarity",
+            "communication"
+          ]
+        },
+        "evidence": [],
+        "domain_frames": [],
+        "limits": {
+          "remaining_calls": 2,
+          "remaining_replans": 0,
+          "policy_version": "service-smoke"
+        },
+        "evaluation_targets": [
+          {
+            "persona": "hr_manager",
+            "keys": [
+              "contribution_clarity",
+              "communication"
+            ]
+          }
+        ],
+        "supplemental_sources": [],
+        "external_searches": [],
+        "supplemental_limitations": []
+      },
+      "question": {
+        "persona": "hr_manager",
+        "text": "What was your role in the project, and what did the team handle?",
+        "topic_code": "role",
+        "question_contract": {
+          "purpose": "Describe your actual role and distinguish it from team responsibilities.",
+          "required_points": [
+            {
+              "key": "explanation",
+              "description": "Describe your actual role and distinguish it from team responsibilities."
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [],
+          "evaluation_scope": "Describe your actual role and distinguish it from team responsibilities.",
+          "evaluation_keys": [
+            "contribution_clarity",
+            "communication"
+          ]
+        },
+        "evidence_refs": [],
+        "jd_requirement_ids": [],
+        "question_type": "main",
+        "parent_turn_id": null
+      },
+      "turn_id": "synthetic-turn-1",
+      "answer_text": "I do not know."
+    }
+  }
+}
