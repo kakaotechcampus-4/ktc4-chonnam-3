@@ -11,7 +11,7 @@ from app.agents.director.runtime_adapter import execute_director
 from app.core.config import Settings
 from app.integrations.llm.client import CallBudget, call_model
 
-PROMPT = c.PromptSpec("director", "fixture", "fixture-model", "fixture")
+PROMPT = c.PromptSpec("director", "director_v2", "fixture-model", "fixture")
 
 
 def context(remaining=2):
