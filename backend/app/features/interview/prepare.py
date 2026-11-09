@@ -34,7 +34,7 @@ from app.features.analysis.analysis_results import resolve_bound_analysis
 from app.features.interview import prepare_checkpoint, prepare_lease
 from app.features.interview.agent_context import AgentStateError
 from app.features.interview.answer_context import load_answer_context
-from app.features.interview.director_service import start_director
+from app.features.interview.director_service import log_recovery, start_director
 from app.features.interview.repository_sources import (
     SourceCollection,
     SourcePreparationError,
@@ -692,6 +692,7 @@ async def prepare_interview(
             preparation_guard=partial(_may_publish, job_id=job_id),
         )
         if outcome.turn_id is None:
+            log_recovery(outcome.failure, "prepare")
             async with sessions.begin() as db:
                 row = await _owned(db, user_id, interview_id)
                 if row is not None and prepare_lease.owns_preparation(row, job_id=job_id):

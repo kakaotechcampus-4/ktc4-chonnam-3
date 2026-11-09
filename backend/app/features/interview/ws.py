@@ -29,7 +29,7 @@ from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.db.models import InterviewSession, LLMCallRecord, Repository
 from app.features.interview.agent_context import AgentStateError
-from app.features.interview.director_service import AnswerExecution, process_answer
+from app.features.interview.director_service import AnswerExecution, log_recovery, process_answer
 from app.features.interview.queries import list_turns
 from app.features.interview.schemas import InterviewLastError
 from app.features.interview.service import (
@@ -595,6 +595,7 @@ async def interview_socket(socket: WebSocket, session_id: str) -> None:
                 await connection.close()
                 return
             if result.failure is not None or result.discard_reason is not None:
+                log_recovery(result.failure, "turn")
                 await connection.send(_error("question_failed", recoverable=False))
                 await connection.close()
                 return

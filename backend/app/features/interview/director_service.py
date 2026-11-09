@@ -19,6 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.agents.director.runtime_adapter import execute_director
 from app.agents.director.tools import EvidenceLimits, EvidenceScope, read_files
 from app.core.config import INTERVIEW_MAX_TURNS, LLMSettings, get_settings
+from app.core.errors import DIRECTOR_CANDIDATE_RECOVERY_CODES
+from app.core.logging import get_logger
 from app.db.models import (
     Evidence,
     EvidenceConflict,
@@ -41,6 +43,24 @@ from app.llm_tasks.prompt_loader import load_active_prompt
 from app.shared.events import record_event
 
 DEFAULT_LIMITS = c.ContextLimits(2, 0, "director-runtime.v1")
+logger = get_logger(__name__)
+
+
+def recovery_code(failure: c.CallFailure | None) -> str | None:
+    """AI가 알린 후보 복구 분류이면 그 error_code를, 아니면 None을 반환한다.
+
+    알려진 실패의 분류일 뿐이며 재호출·대체 질문·정상 종료를 실행하지 않는다.
+    """
+    if failure is not None and failure.error_code in DIRECTOR_CANDIDATE_RECOVERY_CODES:
+        return failure.error_code
+    return None
+
+
+def log_recovery(failure: c.CallFailure | None, phase: Literal["prepare", "turn"]) -> None:
+    """복구 분류 실패를 원문 없이 구조 로그로 남긴다. 분류가 없으면 아무것도 하지 않는다."""
+    code = recovery_code(failure)
+    if code is not None:
+        logger.warning("director_candidate_recovery_blocked", phase=phase, error_code=code)
 
 
 @dataclass(frozen=True)

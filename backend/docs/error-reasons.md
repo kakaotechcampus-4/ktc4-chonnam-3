@@ -133,6 +133,12 @@ GitHub가 만료·refresh 필드를 가진 유효한 토큰을 발급하면 `502
 - `jd_extraction_failed`
 - `not_a_job_posting`
 
+`llm_calls.failure.error_code`(Director 질문 후보 복구 분류):
+
+- `director_candidate_rewrite`, `director_candidate_replan`, `director_no_valid_candidate`
+
+AI가 `CallFailure.error_code`로만 전달하는 알려진 실패 분류다(AI ADR 0008). 재작성·재계획·재호출 실행 권한이 아니며 공개 reason·WS 이벤트·DB 컬럼이 아니다. 면접 준비 중이면 `preparing_failed`(`first_question_failed`), 진행 중이면 `question_failed` 후 연결 종료로 기존 실패 경로를 따르고, 시도 기록은 `llm_calls`에 보존한다. 정상 `finish`나 다른 질문으로 대체하지 않는다. 알 수 없는 코드는 이 분류를 쓰지 않는다. 재시도 정책·사용자 문구는 합의 전이다.
+
 ## GitHub 수집 오류의 계층
 
 GitHub 수집 실패는 세 층을 거치며, 각 층의 코드는 서로 다른 축이라 이름이 같아도 같은 값이 아니다.
