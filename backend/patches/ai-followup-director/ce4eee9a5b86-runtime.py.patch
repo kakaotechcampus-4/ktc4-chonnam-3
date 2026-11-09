@@ -216,12 +216,10 @@ diff --git a/ai/src/devon_ai/agents/director/runtime.py b/ai/src/devon_ai/agents
  def _plan_object(
      raw: object, expected: set[str], name: str, optional: frozenset[str] = frozenset()
  ) -> dict[str, object]:
-@@ -187,6 +369,33 @@
-     if not raw["plan_valid"] or not raw["context_valid"]:
-         return c.CandidateRecovery("replan", reason)
+@@ -189,6 +371,33 @@
      return c.CandidateRecovery("rewrite", reason)
-+
-+
+ 
+ 
 +def _turn_state(context: c.Context) -> dict[str, object]:
 +    """다음 질문 번호와 이미 확정된 답변 수를 혼동하지 않도록 코드에서 계산한다."""
 +    answered = len(context.history)
@@ -247,10 +245,21 @@ diff --git a/ai/src/devon_ai/agents/director/runtime.py b/ai/src/devon_ai/agents
 +        "is_final_question": context.turn_no == context.total_turns,
 +        "finish_authority": "controller_after_final_answer",
 +    }
- 
- 
++
++
  def _input_payload(
-@@ -253,16 +462,23 @@
+     context: c.Context,
+     prompt: c.PromptSpec,
+@@ -202,8 +411,6 @@
+         raise c.ContractError("schema", "Director context")
+     if type(prompt) is not c.PromptSpec or prompt.task_name != "director":
+         raise c.ContractError("schema", "Director prompt")
+-    if prompt.version.partition("@")[0] not in SUPPORTED_PROMPT_VERSIONS:
+-        raise c.ContractError("schema", "unsupported Director prompt version")
+     if prompt.version.partition("@")[0] not in SUPPORTED_PROMPT_VERSIONS:
+         raise c.ContractError("schema", "unsupported Director prompt version")
+     if type(limits) is not c.CallLimits:
+@@ -257,16 +464,23 @@
              "answer": current[0].answer,
              "question_contract": asdict(context.current_question_contract),
          }
@@ -279,7 +288,7 @@ diff --git a/ai/src/devon_ai/agents/director/runtime.py b/ai/src/devon_ai/agents
  
  
  async def run_director(
-@@ -275,6 +491,7 @@
+@@ -279,6 +493,7 @@
      reference_texts: Mapping[c.BasisRef, str] | None = None,
      prior_analyses: Mapping[str, c.ContractChecked[c.AnswerAnalysis]] | None = None,
      tool_results: tuple[c.ToolResult, ...] = (),
@@ -287,15 +296,21 @@ diff --git a/ai/src/devon_ai/agents/director/runtime.py b/ai/src/devon_ai/agents
  ) -> c.ModelResult[DirectorOutcome]:
      """목적·계약·초안을 한 번 생성하고 남은 한 번으로 독립 검토한다.
  
-@@ -292,6 +509,7 @@
+@@ -296,6 +511,13 @@
              prior_analyses,
              tool_results,
          )
-+        feedback = None if recovery_feedback is None else _feedback_payload(recovery_feedback)
++        # 과거 프롬프트에는 복구 참고자료의 취급 지침이 없으므로 입력을 소급 확장하지 않는다.
++        feedback = (
++            _feedback_payload(recovery_feedback)
++            if recovery_feedback is not None
++            and prompt.version.partition("@")[0] in {"director_v7", "director_v8"}
++            else None
++        )
      except c.ContractError as exc:
          return c.ModelResult(
              None,
-@@ -316,6 +534,7 @@
+@@ -320,6 +542,7 @@
      # 구형 출력 계약만 보존하고 새 버전·배포 suffix에서는 평가 기회 검증을 유지한다.
      legacy = prompt.version.partition("@")[0] in {"director_v1", "director_v2"}
      coverage = bool(context.evaluation_targets) and not legacy
@@ -303,7 +318,7 @@ diff --git a/ai/src/devon_ai/agents/director/runtime.py b/ai/src/devon_ai/agents
  
      def validate_plan(raw: object) -> _Plan:
          if type(raw) is not dict or set(raw) != {"question", "intent", "reason_summary"}:
-@@ -335,10 +554,20 @@
+@@ -339,10 +562,20 @@
      generated = await model_call(
          c.ModelRequest(
              prompt,
