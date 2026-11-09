@@ -1,0 +1,44 @@
+diff --git a/backend/app/workers/tasks/report_generate.py b/backend/app/workers/tasks/report_generate.py
+--- a/backend/app/workers/tasks/report_generate.py
++++ b/backend/app/workers/tasks/report_generate.py
+@@ -16,9 +16,12 @@
+ from typing import Any
+ 
+ from redis.exceptions import RedisError
++from sqlalchemy import select
+ 
+ from app.core.config import get_settings
+ from app.core.logging import get_logger
++from app.db.models import InterviewReport, ProfileRefreshRequest
++from app.features.profile import refresh_outbox
+ from app.features.report import generation, service
+ from app.workers.profile_refresh_queue import enqueue_refresh
+ 
+@@ -90,13 +93,25 @@
+ async def _enqueue_profile_summary(
+     ctx: dict[str, Any], interview_id: uuid.UUID, *, event_id: str | None = None
+ ) -> None:
+-    """성공본은 유지하고 기존 user-only 프로필 작업을 전달한다.
++    """성공한 report를 보존하고 영속 갱신 요청의 큐 전달만 시도한다.
+ 
+-    영속 outbox 생산자와 3인수 worker·reaper는 후속 묶음을 적용할 때 함께 활성화한다.
++    보고서별 job ID로 ARQ의 이전 결과 보존이 다음 갱신을 막지 않게 한다.
+     """
+     try:
+         async with ctx["session_factory"]() as db:
+             user_id = await service.get_interview_user_id(db, interview_id)
++            identity = await db.scalar(
++                select(ProfileRefreshRequest.id)
++                .join(InterviewReport, InterviewReport.id == ProfileRefreshRequest.report_id)
++                .where(
++                    InterviewReport.interview_session_id == interview_id,
++                    ProfileRefreshRequest.report_revision == InterviewReport.current_revision,
++                )
++            )
++        if identity is not None:
++            await refresh_outbox.dispatch(ctx["session_factory"], ctx["redis"], identity)
++            return
++        # 이전에 생성된 보고서와 기존 user-only job의 호출 호환성은 유지한다.
+         await enqueue_refresh(ctx["redis"], str(user_id), event_id=event_id or str(interview_id))
+     except Exception:
+         logger.error("profile_summary_enqueue_failed", interview_id=str(interview_id))

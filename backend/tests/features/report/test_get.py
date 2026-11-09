@@ -49,10 +49,33 @@ async def test_200_returns_stored_report(client, db, ctx) -> None:
         "domain_lead": False,
     }
     assert body["turns"] == [
-        {"turn": 1, "persona": "tech_lead", "question": "질문 1", "answer": "답변 1"}
+        {
+            "turn": 1,
+            "persona": "tech_lead",
+            "question": "질문 1",
+            "answer": "답변 1",
+            "mainIndex": 1,
+            "followUpDepth": 0,
+        }
     ]
     assert body["repositoryNames"] == [repo.name]
     assert body["headline"] == "헤드라인"
+
+
+async def test_report_restores_main_and_follow_up_positions(client, db, ctx) -> None:
+    interview, _ = ctx
+    await make_turn(db, interview, 2, answered=True, depth=2, parent_turn_no=1)
+    await make_turn(db, interview, 3, answered=True, depth=1)
+    await make_report(db, interview)
+    await db.commit()
+
+    body = (await client.get(url(interview.id))).json()
+
+    assert [(turn["mainIndex"], turn["followUpDepth"]) for turn in body["turns"]] == [
+        (1, 0),
+        (1, 1),
+        (2, 0),
+    ]
 
 
 async def test_200_does_not_enqueue(client, db, ctx, enqueue) -> None:

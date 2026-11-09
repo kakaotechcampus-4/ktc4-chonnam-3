@@ -1,7 +1,12 @@
-"""BE payload 가 AI 의 실제 generate_report 입력 계약을 통과하는지 본다(모델만 대역). task-16"""
+"""BE payload 가 AI 의 실제 generate_report 입력 계약을 통과하는지 본다(모델 호출만 대역). task-16
 
+AI 모듈에 generate_report 가 없으면(병합 전) 건너뛴다.
+"""
+
+import importlib
+
+import pytest
 from devon_ai import contracts as c
-from devon_ai.llm_tasks.report import generate_report as real_generate
 from sqlalchemy import select
 
 from app.db.models import Evidence, InterviewReport, InterviewTurn, ReportScore, TurnEvidence
@@ -9,6 +14,11 @@ from app.db.models.report import SCORE_KEYS
 
 from ..interview.factories import make_evidence, make_turn
 from .fakes import LLM
+
+real_generate = getattr(
+    importlib.import_module("devon_ai.llm_tasks.report"), "generate_report", None
+)
+pytestmark = pytest.mark.skipif(real_generate is None, reason="AI generate_report 미병합")
 
 CONTRACT = {
     "purpose": "목적",
@@ -121,8 +131,12 @@ async def test_be_payload_passes_the_real_generate_report(app, db, ctx, prompt):
     assert sent["git_ref"] == evidence.git_ref
 
 
-async def test_unanswered_turn_reaches_ai_as_none(app, db, ctx, prompt):
-    # BE 는 빈 답변을 보내고 AI 가 None(질문했지만 답하지 않음)으로 받는다.
-    outcome, score, _ = await _run(app, db, ctx, answer_third=False)
+async def test_unanswered_turn_is_sent_as_null_and_scored_at_level_zero(app, db, ctx, prompt):
+    outcome, score, narrative = await _run(app, db, ctx, answer_third=False)
     assert outcome == "created"
     assert {t["turn_id"]: t["answer"] for t in score.requests[0].payload["turns"]}["3"] is None
+    assert {t["turn_id"]: t["answer"] for t in narrative.requests[0].payload["turns"]}["3"] is None
+    contribution = await db.scalar(
+        select(ReportScore).where(ReportScore.score_key == "contribution_clarity")
+    )
+    assert contribution.score == 0
