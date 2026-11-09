@@ -38,3 +38,8 @@
 외부 연결에 필요한 호환 보완이며 새로운 FE 응답 필드나 자율 분석 Agent를 제안하지 않는다.
 실제 기능 검증·합성 입력 검사·통계적인 품질 평가·전체 서비스 완주를 별개로 보고한다.
 STT의 기존 설정명 호환과 TTS는 별도 확인 범위로 남긴다.
+
+
+## 관련 문서의 게시 위치
+
+이 문서의 설계 범위 중 공급자 공통 설정·0031·0038 및 단일 구현 기록은 [PR #213](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/213)이 소유한다. 레포·Director 연결은 [PR #216](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/216), 문서·이미지·도메인 연결은 [PR #217](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/217)이 소유한다. 위 상대 링크는 통합 문서 기준이며 각 Draft PR의 파일 존재나 구현 완료를 뜻하지 않는다. 후속 변경 근거는 [0045](0045-review-runtime-activation-and-source-recovery.md)와 단일 구현 기록을 따른다.
