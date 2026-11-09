@@ -252,3 +252,57 @@ async def test_oauth_callback_and_unmatched_request_never_log_their_raw_url(log_
         ("unmatched", 404),
     ]
     assert SECRET not in log_output.getvalue()
+
+
+async def test_unhandled_http_exception_records_500_and_is_not_swallowed(log_output):
+    from app.core.logging import RequestIdMiddleware
+
+    configure_logging(json_logs=True)
+    application = FastAPI()
+    original = RuntimeError(SECRET)
+
+    @application.get("/failure/{item_id}")
+    async def failure(item_id: str):
+        raise original
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=RequestIdMiddleware(application)), base_url="http://test"
+    ) as client:
+        with pytest.raises(RuntimeError) as raised:
+            await client.get(f"/failure/{SECRET}")
+    assert raised.value is original
+    assert _http_records(log_output)[0]["status_code"] == 500
+    assert _http_records(log_output)[0]["route"] == "/failure/{item_id}"
+    assert SECRET not in log_output.getvalue()
+    assert "request_id" not in structlog.contextvars.get_contextvars()
+
+
+async def test_health_requests_are_excluded_by_the_fixed_route_template(log_output):
+    from app.core.logging import RequestIdMiddleware
+
+    configure_logging(json_logs=True)
+    application = FastAPI()
+
+    @application.get("/api/health")
+    async def health():
+        return {"status": "ok"}
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=RequestIdMiddleware(application)), base_url="http://test"
+    ) as client:
+        response = await client.get("/api/health")
+    assert response.status_code == 200
+    assert _http_records(log_output) == []
+
+
+async def test_unknown_http_method_is_replaced_with_a_fixed_value(log_output):
+    from app.core.logging import RequestIdMiddleware
+
+    configure_logging(json_logs=True)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=RequestIdMiddleware(FastAPI())), base_url="http://test"
+    ) as client:
+        await client.request("SECRET-METHOD", f"/{SECRET}")
+    assert _http_records(log_output)[0]["method"] == "OTHER"
+    assert "SECRET-METHOD" not in log_output.getvalue()
+    assert SECRET not in log_output.getvalue()
