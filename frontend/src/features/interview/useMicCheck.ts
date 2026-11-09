@@ -69,7 +69,7 @@ function releaseMic(session: TestSession) {
  * 테스트는 녹음(최대 5초) 후 재생이다. 실시간으로 스피커에 내보내면 하울링이 나고,
  * 브라우저 에코 제거가 그 소리를 깎아 끊겨 들리기 때문이다.
  */
-export function useMicCheck() {
+export function useMicCheck({ enabled = true }: { enabled?: boolean } = {}) {
   // http(비보안 컨텍스트)에서는 mediaDevices 자체가 없다.
   const [status, setStatus] = useState<MicStatus>(() =>
     'mediaDevices' in navigator ? 'checking' : 'error',
@@ -108,7 +108,7 @@ export function useMicCheck() {
   }, []);
 
   useEffect(() => {
-    if (!('mediaDevices' in navigator)) return;
+    if (!enabled || !('mediaDevices' in navigator)) return;
     let disposed = false;
 
     const refresh = async () => {
@@ -119,7 +119,9 @@ export function useMicCheck() {
       setMics(inputs);
       setSpeakers(outputs);
       // 고른 장치가 빠졌으면(이어폰 분리 등) 첫 장치로 돌아간다.
-      setMicIdState((id) => (inputs.some((d) => d.deviceId === id) ? id : (inputs[0]?.deviceId ?? '')));
+      setMicIdState((id) =>
+        inputs.some((d) => d.deviceId === id) ? id : (inputs[0]?.deviceId ?? ''),
+      );
       setSpeakerIdState((id) => {
         const next = outputs.some((d) => d.deviceId === id) ? id : (outputs[0]?.deviceId ?? '');
         speakerIdRef.current = next;
@@ -165,7 +167,7 @@ export function useMicCheck() {
       if (permission) permission.onchange = null;
       stopTest();
     };
-  }, [stopTest, probeKey]);
+  }, [enabled, stopTest, probeKey]);
 
   /** 팝업을 그냥 닫았거나 다른 앱을 끈 뒤 다시 확인한다. 차단 상태면 그대로 거부된다. */
   const recheck = () => {

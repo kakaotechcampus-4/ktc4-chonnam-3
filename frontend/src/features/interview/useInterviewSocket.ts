@@ -194,5 +194,15 @@ export function useInterviewSocket({
     socketRef.current?.close();
   }, []);
 
-  return { wsStatus, dropCount, send, sendBinary, close };
+  /** 복구 API의 확정 성공 뒤 같은 sessionId로 질문 전달만 다시 연결한다. */
+  const reconnect = useCallback(() => {
+    sessionClosedRef.current = false;
+    reconnectSeqRef.current += 1;
+    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
+    pendingSendRef.current = null;
+    setAttempt((count) => count + 1);
+  }, []);
+
+  return { wsStatus, dropCount, send, sendBinary, close, reconnect };
 }
