@@ -493,3 +493,50 @@ async def collect_repository_sources(
 def _partial_source(source: c.SourceDocument) -> c.SourceDocument:
     end = len(source.content.splitlines()) + source.start_line - 1
     return replace(source, read_scope=f"lines {source.start_line}-{end}", end_line=end)
+
+
+def _cached_segments(
+    path: str,
+    text: str,
+    scopes: tuple[tuple[str, str], ...],
+    total_bytes: int,
+    max_segment_bytes: int,
+    *,
+    complete: bool = True,
+) -> tuple[tuple[c.SourceDocument, ...], tuple[str, ...]]:
+    """캐시 관찰의 정확한 원문 범위만 다시 읽는다. 현재 분할 규칙으로 범위를 바꾸지 않는다."""
+    lines = text.splitlines(keepends=True)
+    sources: list[c.SourceDocument] = []
+    limitations: list[str] = []
+    remaining = total_bytes
+    for candidate, scope in scopes:
+        if candidate != path:
+            continue
+        if scope == "entire file":
+            if not complete:
+                limitations.append(f"전체 파일 캐시를 부분 원문으로 확인할 수 없습니다: {path}")
+                continue
+            start, end = 1, len(lines)
+        else:
+            matched = re.fullmatch(r"lines ([1-9][0-9]*)-([1-9][0-9]*)", scope)
+            if matched is None:
+                limitations.append(f"캐시 원문 범위를 확인하지 못했습니다: {path}")
+                continue
+            start, end = map(int, matched.groups())
+        if not 1 <= start <= end <= len(lines):
+            limitations.append(f"캐시 원문 범위가 현재 원문과 다릅니다: {path}:{scope}")
+            continue
+        content = "".join(lines[start - 1 : end])
+        size = len(content.encode("utf-8"))
+        if size > min(remaining, max_segment_bytes):
+            limitations.append(
+                f"현재 원문 예산에서 캐시 범위를 다시 확인하지 못했습니다: {path}:{scope}"
+            )
+            continue
+        sources.append(
+            c.SourceDocument(path, "file", content, scope)
+            if scope == "entire file"
+            else c.SourceDocument(path, "file", content, scope, start, end)
+        )
+        remaining -= size
+    return tuple(sources), tuple(limitations)
