@@ -17,7 +17,8 @@ MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
 PREVIOUS = "0005_director_foundation_merge"
 CHECK_SQL = (
     "SELECT pg_get_constraintdef(oid) FROM pg_constraint "
-    "WHERE conname = 'ck_interview_sessions_answer_mode'"
+    "WHERE conname = 'ck_interview_sessions_answer_mode' "
+    "AND conrelid = 'interview_sessions'::regclass"
 )
 DEFAULT_SQL = (
     "SELECT column_default FROM information_schema.columns "
