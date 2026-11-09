@@ -441,3 +441,250 @@ async def _reserve(
             return entry, scope
     assert error is not None
     raise AppError(error)
+
+
+async def _expire(
+    db: AsyncSession, entry: dict[str, object], *, error: str = "execution_expired"
+) -> None:
+    entry["status"] = "failed"
+    entry["error"] = error
+    record = await db.get(LLMCallRecord, UUID(str(entry["call_id"])), with_for_update=True)
+    if (
+        record is not None
+        and record.turn_id is None
+        and record.failure is None
+        and record.discard_reason is None
+    ):
+        record.discard_reason = "question_retry_expired"
+
+
+async def _execute(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    user_id: UUID,
+    interview_id: UUID,
+    entry: dict[str, object],
+    scope: _Scope,
+    settings: LLMSettings,
+    http_client: httpx.AsyncClient | None,
+) -> QuestionExecution:
+    from devon_ai.agents.director.runtime import recovery_feedback_from_attempts
+
+    from app.features.interview.director_service import start_director
+
+    async def guard(db: AsyncSession, row: InterviewSession) -> bool:
+        saved = _ledger(row).get(str(entry["request_id"]))
+        if saved != entry or saved.get("status") != "running" or _expired(saved):
+            return False
+        try:
+            return (await _scope(db, row)).digest == scope.digest
+        except (AppError, AgentStateError, c.ContractError):
+            return False
+
+    failure = scope.failure.failure
+    assert failure is not None
+    code = failure.get("error_code")
+    feedback = recovery_feedback_from_attempts(
+        scope.failure.attempts, failure_code=code if isinstance(code, str) else ""
+    )
+    try:
+        async with asyncio.timeout(2 * settings.call_limits("director").timeout_seconds + 15):
+            outcome = await start_director(
+                sessions,
+                user_id=user_id,
+                interview_id=interview_id,
+                call_id=UUID(str(entry["call_id"])),
+                settings=settings,
+                http_client=http_client,
+                answer_analysis=scope.analysis,
+                lookup_summary=scope.lookup_summary,
+                tool_results=scope.tool_results,
+                preparation_guard=guard,
+                recovery_feedback=feedback,
+            )
+    except BaseException as error:
+        async with sessions.begin() as db:
+            row = await _owned(db, user_id, interview_id)
+            ledger = _ledger(row)
+            saved = ledger.get(str(entry["request_id"]))
+            if (
+                saved is not None
+                and saved.get("owner") == entry["owner"]
+                and saved.get("status") == "running"
+            ):
+                cause = (
+                    "execution_timeout"
+                    if isinstance(error, TimeoutError)
+                    else "execution_state_changed"
+                    if isinstance(error, AgentStateError)
+                    else "execution_expired"
+                )
+                await _expire(db, saved, error=cause)
+                _store(row, ledger)
+        if isinstance(error, (TimeoutError, AgentStateError)):
+            # 실행 중의 예상 가능한 복구 실패도 최초 응답부터 계약상 409로 반환한다.
+            # 실제 취소·프로그래밍 오류는 정리 후 원래 예외를 전파한다.
+            raise AppError(Reason.QUESTION_RETRY_FAILED) from None
+        raise
+    async with sessions.begin() as db:
+        row = await _owned(db, user_id, interview_id)
+        ledger = _ledger(row)
+        saved = ledger[str(entry["request_id"])]
+        # 동시 재전송이 질문 확정을 먼저 복원했다면 같은 실행의 성공을 만료로 뒤집지 않는다.
+        if (
+            saved.get("owner") == entry["owner"]
+            and saved.get("status") == "succeeded"
+            and outcome.turn_id is not None
+            and saved.get("turn_id") == str(outcome.turn_id)
+        ):
+            call = await db.get(LLMCallRecord, outcome.call_id)
+            turn = await db.get(InterviewTurn, outcome.turn_id)
+            if (
+                call is not None
+                and call.interview_session_id == interview_id
+                and call.task_name == "director"
+                and call.turn_id == outcome.turn_id
+                and call.failure is None
+                and call.discard_reason is None
+                and turn is not None
+                and turn.interview_session_id == interview_id
+                and turn.turn_no == saved.get("target")
+            ):
+                return outcome
+        if saved.get("owner") != entry["owner"] or saved.get("status") != "running":
+            return QuestionExecution(outcome.call_id, None, None, "question_retry_expired")
+        saved["status"] = "succeeded" if outcome.turn_id is not None else "failed"
+        if outcome.turn_id is not None:
+            saved["turn_id"] = str(outcome.turn_id)
+            saved["session_id"] = secrets.token_urlsafe(32)
+        else:
+            saved["error"] = (
+                outcome.failure.error_code if outcome.failure else outcome.discard_reason
+            )
+        _store(row, ledger)
+    return outcome
+
+
+async def _run(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    user_id: UUID,
+    interview_id: UUID,
+    entry: dict[str, object],
+    scope: _Scope,
+    settings: LLMSettings,
+    http_client: httpx.AsyncClient | None,
+) -> QuestionExecution:
+    # HTTP 응답 취소가 이미 시작한 생성 작업을 취소하거나 같은 requestId를 다시 실행하지 않는다.
+    task = asyncio.create_task(
+        _execute(
+            sessions,
+            user_id=user_id,
+            interview_id=interview_id,
+            entry=entry,
+            scope=scope,
+            settings=settings,
+            http_client=http_client,
+        )
+    )
+    _RUNNING.add(task)
+
+    def finished(done: asyncio.Task[QuestionExecution]) -> None:
+        _RUNNING.discard(done)
+        if not done.cancelled():
+            done.exception()
+
+    task.add_done_callback(finished)
+    return await asyncio.shield(task)
+
+
+async def retry_question(
+    sessions: async_sessionmaker[AsyncSession],
+    redis: Redis,
+    *,
+    user_id: UUID,
+    interview_id: UUID,
+    request_id: UUID,
+    settings: LLMSettings,
+    http_client: httpx.AsyncClient | None = None,
+) -> QuestionRetryResponse:
+    entry, scope = await _reserve(
+        sessions,
+        user_id=user_id,
+        interview_id=interview_id,
+        request_id=request_id,
+        kind="manual",
+        settings=settings,
+    )
+    if scope is not None:
+        outcome = await _run(
+            sessions,
+            user_id=user_id,
+            interview_id=interview_id,
+            entry=entry,
+            scope=scope,
+            settings=settings,
+            http_client=http_client,
+        )
+        if outcome.turn_id is None:
+            # 구버전 실패 뒤 명시 복구가 먼저 온 경우에도 미사용 자동 rewrite 한 번은 허용한다.
+            automatic = await auto_retry_question(
+                sessions,
+                user_id=user_id,
+                interview_id=interview_id,
+                failed=outcome,
+                settings=settings,
+                http_client=http_client,
+            )
+            if automatic is not None and automatic.turn_id is not None:
+                async with sessions.begin() as db:
+                    row = await _owned(db, user_id, interview_id)
+                    ledger = _ledger(row)
+                    saved = ledger[str(request_id)]
+                    saved.update(
+                        status="succeeded",
+                        turn_id=str(automatic.turn_id),
+                        completion="automatic_after_manual",
+                    )
+                    saved.setdefault("session_id", secrets.token_urlsafe(32))
+                    _store(row, ledger)
+                outcome = automatic
+        if outcome.turn_id is None:
+            raise AppError(Reason.QUESTION_RETRY_FAILED)
+    from app.features.interview.service import (
+        REALTIME_SESSION_TTL_SECONDS,
+        realtime_interview_key,
+        realtime_session_key,
+    )
+
+    # DB 행 잠금 안에서 현재 미답변 턴과 Redis 회전을 함께 확정한다.
+    async with sessions.begin() as db:
+        row = await _owned(db, user_id, interview_id)
+        entry = _ledger(row)[str(request_id)]
+        turn = await db.get(InterviewTurn, UUID(str(entry["turn_id"])))
+        target = int(str(entry["target"]))
+        if (
+            row.status != "in_progress"
+            or turn is None
+            or turn.interview_session_id != interview_id
+            or row.current_turn != target
+            or turn.turn_no != target
+            or turn.status != "asked"
+            or turn.answer_text is not None
+        ):
+            raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE)
+        session_id = str(entry["session_id"])
+        try:
+            execute = cast(Callable[..., Awaitable[object]], redis.eval)
+            await execute(
+                _ROTATE,
+                1,
+                realtime_interview_key(interview_id),
+                session_id,
+                json.dumps({"interviewId": str(interview_id), "userId": str(user_id)}),
+                REALTIME_SESSION_TTL_SECONDS,
+                realtime_session_key(""),
+            )
+        except RedisError:
+            raise AppError(Reason.INTERNAL_ERROR) from None
+    return QuestionRetryResponse(interview_id=interview_id, session_id=session_id, turn_no=target)
