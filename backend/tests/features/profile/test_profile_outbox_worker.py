@@ -1,0 +1,195 @@
+"""영속 전달을 실제 Redis 큐와 프로필 worker 인수·완료에 연결한다."""
+
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from redis.exceptions import ConnectionError
+from sqlalchemy import select
+from structlog.testing import capture_logs
+
+from app.db.models import InterviewReport, ProfileRefreshRequest
+from app.features.profile import refresh_outbox as signals
+from app.llm_tasks import profile_summary as tasks
+from app.workers.tasks import profile_summary as worker
+
+from ..interview.factories import make_repo
+from .fakes import LLM, FakeGenerator, completed_interview, read_summary
+
+
+async def test_last_busy_delivery_is_terminal_and_emits_safe_metadata(app, db, world, monkeypatch):
+    user, rid, ctx, generator = await prepare(app, db, world, monkeypatch)
+    row = await db.get(ProfileRefreshRequest, rid)
+    row.dispatch_attempts = signals.MAX_DISPATCH_ATTEMPTS - 1
+    await db.commit()
+    assert await signals.dispatch(app.state.session_factory, app.state.redis, rid)
+    await app.state.redis.set(f"profile:gen:{user.id}", "another-owner", ex=600)
+    with capture_logs() as logs:
+        await worker.profile_summary(ctx, str(user.id), str(rid), signals.MAX_DISPATCH_ATTEMPTS)
+    await db.refresh(row)
+    assert row.status == "failed" and row.last_error == "profile_refresh_busy"
+    assert row.dispatch_attempts == 5
+    assert generator.calls == []
+    event = next(item for item in logs if item["event"] == "profile_refresh_terminal")
+    assert event["terminal_cause"] == "attempt_limit"
+    assert event["error_code"] == "profile_refresh_busy"
+    assert event["request_id"] == str(rid)
+    assert event["report_revision"] == 1
+    assert await signals.recover(app.state.session_factory, app.state.redis) == 0
+
+
+async def test_expired_profile_delivery_is_observable_without_enqueue(app, db, world, monkeypatch):
+    _, rid, _, generator = await prepare(app, db, world, monkeypatch)
+    row = await db.get(ProfileRefreshRequest, rid)
+    row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    await db.commit()
+    with capture_logs() as logs:
+        assert not await signals.dispatch(app.state.session_factory, app.state.redis, rid)
+    await db.refresh(row)
+    assert row.status == "failed" and row.dispatch_attempts == 0
+    event = next(item for item in logs if item["event"] == "profile_refresh_terminal")
+    assert event["terminal_cause"] == "expired"
+    assert event["error_code"] == "profile_refresh_delivery_exhausted"
+    assert generator.calls == []
+
+
+async def prepare(app, db, world, monkeypatch):
+    user, run = world
+    interview = await completed_interview(
+        db, run, [await make_repo(db, run, languages={"Python": 1})]
+    )
+    report = InterviewReport(
+        interview_session_id=interview.id, headline="총평", summary="원본", total_score=70
+    )
+    db.add(report)
+    await db.flush()
+    rid = await signals.ensure_request(db, user_id=user.id, report_id=report.id, report_revision=1)
+    await db.commit()
+
+    class Settings:
+        def require_llm(self):
+            return LLM
+
+    monkeypatch.setattr(worker, "get_settings", Settings)
+    ctx = {
+        "session_factory": app.state.session_factory,
+        "redis": app.state.redis,
+        "http_client": None,
+    }
+    generator = FakeGenerator()
+    monkeypatch.setattr(tasks, "generate_role_summary", generator)
+    return user, rid, ctx, generator
+
+
+async def test_durable_job_is_claimed_once_and_acknowledged_after_saved_summary(
+    app, db, world, monkeypatch
+):
+    user, rid, ctx, generator = await prepare(app, db, world, monkeypatch)
+    assert await signals.dispatch(app.state.session_factory, app.state.redis, rid)
+    assert await app.state.redis.exists(f"arq:job:profile_summary:{user.id}:{rid}:1") == 1
+    await worker.profile_summary(ctx, str(user.id), str(rid), 1)
+    await worker.profile_summary(ctx, str(user.id), str(rid), 1)
+    assert len(generator.calls) == 1
+    assert await read_summary(db, user) is not None
+    signal = await db.get(ProfileRefreshRequest, rid, populate_existing=True)
+    assert signal.status == "succeeded"
+
+
+async def test_busy_profile_is_deferred_without_running_model_or_losing_signal(
+    app, db, world, monkeypatch
+):
+    user, rid, ctx, generator = await prepare(app, db, world, monkeypatch)
+    await signals.dispatch(app.state.session_factory, app.state.redis, rid)
+    await app.state.redis.set(f"profile:gen:{user.id}", "other-owner", ex=600)
+    await worker.profile_summary(ctx, str(user.id), str(rid), 1)
+    signal = await db.scalar(select(ProfileRefreshRequest).where(ProfileRefreshRequest.id == rid))
+    assert signal.status == "pending" and signal.last_error == "profile_refresh_busy"
+    assert generator.calls == []
+    await app.state.redis.delete(f"profile:gen:{user.id}")
+    await signals.wake_user(app.state.session_factory, user.id)
+    assert await signals.recover(app.state.session_factory, app.state.redis) == 1
+    await worker.profile_summary(ctx, str(user.id), str(rid), 2)
+    await db.refresh(signal)
+    assert signal.status == "succeeded" and len(generator.calls) == 1
+
+
+async def test_model_failure_is_terminal_and_never_requeued_by_recovery(
+    app, db, world, monkeypatch
+):
+    user, rid, ctx, _ = await prepare(app, db, world, monkeypatch)
+    generator = FakeGenerator(error=RuntimeError("invalid semantic result"))
+    monkeypatch.setattr(tasks, "generate_role_summary", generator)
+    await signals.dispatch(app.state.session_factory, app.state.redis, rid)
+    await worker.profile_summary(ctx, str(user.id), str(rid), 1)
+    signal = await db.get(ProfileRefreshRequest, rid, populate_existing=True)
+    assert signal.status == "failed" and len(generator.calls) == 1
+    assert await signals.recover(app.state.session_factory, app.state.redis) == 0
+
+
+@pytest.mark.parametrize("change_input", [False, True])
+async def test_redis_loss_after_generation_reuses_only_the_same_validated_input(
+    app, db, world, monkeypatch, change_input
+):
+    from app.db.models import InterviewTurn
+
+    from .fakes import ROLE
+
+    user, rid, ctx, generator = await prepare(app, db, world, monkeypatch)
+    original = worker.ProfileRefreshLease.current
+    interrupted = False
+
+    async def lose_after_generation(lease):
+        nonlocal interrupted
+        if generator.calls and not interrupted:
+            interrupted = True
+            raise ConnectionError("private connection must not be recorded")
+        return await original(lease)
+
+    monkeypatch.setattr(worker.ProfileRefreshLease, "current", lose_after_generation)
+    assert await signals.dispatch(app.state.session_factory, app.state.redis, rid)
+    await worker.profile_summary(ctx, str(user.id), str(rid), 1)
+    row = await db.get(ProfileRefreshRequest, rid, populate_existing=True)
+    assert row.status == "pending" and row.last_error == "profile_infrastructure_unavailable"
+    assert row.generated_result["role_summary"] == ROLE
+    assert len(generator.calls) == 1
+    assert await read_summary(db, user) is None
+    if change_input:
+        turn = await db.scalar(select(InterviewTurn))
+        turn.answer_text = "설정 검증과 테스트를 구현했습니다."
+        await db.commit()
+    due = row.next_attempt_at
+    assert await signals.dispatch(app.state.session_factory, app.state.redis, rid, now=due)
+    await worker.profile_summary(ctx, str(user.id), str(rid), 2)
+    await db.refresh(row)
+    assert row.status == "succeeded" and row.generated_result is None
+    assert len(generator.calls) == (2 if change_input else 1)
+    assert (await read_summary(db, user)).role_summary == ROLE
+
+
+async def test_profile_busy_and_running_deadlines_match_registered_worker_budget(
+    app, db, world, monkeypatch
+):
+    from app.workers.arq_app import WorkerSettings
+
+    user, rid, _, _ = await prepare(app, db, world, monkeypatch)
+    registered = next(
+        item
+        for item in WorkerSettings.functions
+        if getattr(item, "name", None) == "profile_summary"
+    )
+    assert registered.timeout_s == 600
+    assert await signals.dispatch(app.state.session_factory, app.state.redis, rid)
+    before = datetime.now(UTC)
+    token = await signals.claim(app.state.session_factory, rid, user.id, 1)
+    after = datetime.now(UTC)
+    row = await db.get(ProfileRefreshRequest, rid, populate_existing=True)
+    assert before + timedelta(seconds=630) <= row.lease_expires_at <= after + timedelta(seconds=630)
+    assert await signals.finish(
+        app.state.session_factory,
+        rid,
+        token,
+        success=False,
+        retry=True,
+        error="profile_refresh_busy",
+    )
+    await db.refresh(row)
+    assert row.next_attempt_at <= datetime.now(UTC) + timedelta(seconds=600)
