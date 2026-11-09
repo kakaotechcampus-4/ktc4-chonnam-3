@@ -1,0 +1,20 @@
+diff --git a/ai/tests/llm_tasks/test_report_score.py b/ai/tests/llm_tasks/test_report_score.py
+--- a/ai/tests/llm_tasks/test_report_score.py
++++ b/ai/tests/llm_tasks/test_report_score.py
+@@ -147,7 +147,15 @@
+ def test_linked_jd_requirements_reach_the_request_as_reference_only(run, kit):
+     requirement = c.LinkedRequirement("jd-1", "required", "Redis 운영 경험")
+     turns = tuple(
+-        c.ScoreTurn(t.turn_id, t.persona, t.question, t.answer, t.question_contract, (requirement,))
++        c.ScoreTurn(
++            t.turn_id,
++            t.persona,
++            t.question,
++            t.answer,
++            t.question_contract,
++            jd_requirement_ids=(requirement.id,),
++            jd_requirements=(requirement,),
++        )
+         if t.turn_id == "turn-4"
+         else t
+         for t in TURNS

@@ -1,0 +1,32 @@
+diff --git a/ai/tests/llm_tasks/test_generate_report.py b/ai/tests/llm_tasks/test_generate_report.py
+--- a/ai/tests/llm_tasks/test_generate_report.py
++++ b/ai/tests/llm_tasks/test_generate_report.py
+@@ -346,6 +346,28 @@
+     return payload(turns=turns, requirements=requirements)
+ 
+ 
++def test_missing_requirement_list_requires_an_explicit_legacy_replay():
++    raw = payload()
++    raw.pop("requirements")
++    with pytest.raises(c.ContractError, match="requirements"):
++        report._build_inputs(raw)
++    turns, _, _ = report._build_inputs(raw, allow_legacy_requirements=True)
++    assert all(turn.jd_requirements == () for turn in turns)
++
++
++@pytest.mark.parametrize("value", [None, {}, ""])
++def test_legacy_replay_does_not_accept_an_explicit_invalid_requirement_list(value):
++    with pytest.raises(c.ContractError, match="requirements"):
++        report._build_inputs(payload(requirements=value), allow_legacy_requirements=True)
++
++
++def test_legacy_missing_requirements_never_invents_a_linked_requirement():
++    raw = payload_with_requirements(["jd-1"])
++    raw.pop("requirements")
++    with pytest.raises(c.ContractError, match="jd_requirement_ids"):
++        report._build_inputs(raw, allow_legacy_requirements=True)
++
++
+ def test_linked_requirement_ids_are_resolved_to_text_for_the_score_request(run):
+     _, (score, _) = run(payload_with_requirements(["jd-1"]))
+     assert score.requests[0].payload["turns"][3]["jd_requirements"] == [

@@ -147,15 +147,7 @@ def test_a_model_call_returning_something_else_is_a_programming_error(run, kit):
 def test_linked_jd_requirements_reach_the_request_as_reference_only(run, kit):
     requirement = c.LinkedRequirement("jd-1", "required", "Redis 운영 경험")
     turns = tuple(
-        c.ScoreTurn(
-            t.turn_id,
-            t.persona,
-            t.question,
-            t.answer,
-            t.question_contract,
-            jd_requirement_ids=(requirement.id,),
-            jd_requirements=(requirement,),
-        )
+        c.ScoreTurn(t.turn_id, t.persona, t.question, t.answer, t.question_contract, (requirement,))
         if t.turn_id == "turn-4"
         else t
         for t in TURNS
@@ -164,10 +156,6 @@ def test_linked_jd_requirements_reach_the_request_as_reference_only(run, kit):
     assert run(provider, turns=turns).succeeded
     sent = provider.requests[0].payload["turns"]
     assert sent[3]["jd_requirements"] == [
-        {
-            "id": "jd-1",
-            "category": "required",
-            "text": "Redis 운영 경험",
-        }
+        {"id": "jd-1", "category": "required", "text": "Redis 운영 경험"}
     ]
     assert sent[0]["jd_requirements"] == []

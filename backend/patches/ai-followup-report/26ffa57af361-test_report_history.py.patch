@@ -16,10 +16,30 @@ diff --git a/backend/tests/features/report/test_report_history.py b/backend/test
  from app.features.report import service
  from app.llm_tasks.report import ReportDraftInvalidError
  
-@@ -99,6 +105,99 @@
+@@ -99,6 +105,119 @@
      session.context_state = {"evidence_tool_results": {str(turn.id): asdict(result)}}
      await db.commit()
      return turn.id, json.loads(json.dumps(asdict(initial))), json.loads(json.dumps(asdict(final)))
++
++
++@pytest.mark.parametrize("damaged", [False, True])
++async def test_absent_legacy_candidates_and_damaged_candidates_are_distinguished(
++    app, db, ctx, prompt, damaged
++):
++    await _history(db, ctx)
++    if damaged:
++        ctx[0].context_state = {**ctx[0].context_state, "repository_lookup_candidates": []}
++        await db.commit()
++    generator = FakeGenerator()
++    await service.generate_report(
++        app.state.session_factory,
++        interview_id=ctx[0].id,
++        llm=LLM,
++        http_client=None,
++        generator=generator,
++    )
++    notes = generator.calls[0]["limitations"]
++    assert ("historical_repository_candidates_invalid" in notes) is damaged
 +
 +
 +@pytest.mark.parametrize(
