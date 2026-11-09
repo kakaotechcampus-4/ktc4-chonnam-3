@@ -312,6 +312,152 @@ def _image_attempt_seconds(settings: Settings | None) -> float:
     return min(3600.0, image_seconds + 3 * model_seconds + 30)
 
 
+async def _reserve_image_attempt(
+    sessions: async_sessionmaker[AsyncSession], prepared: PreparedPosting, settings: Settings | None
+) -> PreparedPosting:
+    assert prepared.content is not None
+    snapshot = _snapshot_content(prepared.content)
+    source_hash = _image_source_hash(snapshot)
+    now = prepared.checked_at
+    async with sessions.begin() as db:
+        await lock_posting_url(db, prepared.normalized_url)
+        current = await get_current_successful_posting(db, prepared.normalized_url)
+        matching = await db.scalar(
+            select(JobPosting)
+            .where(
+                JobPosting.normalized_url == prepared.normalized_url,
+                JobPosting.raw_payload["_image_retry"]["source_hash"].astext == source_hash,
+            )
+            .order_by(JobPosting.created_at.desc(), JobPosting.id.desc())
+            .limit(1)
+        )
+        same_current = current is not None and _same_image_source(
+            current.raw_payload or {}, snapshot, source_hash
+        )
+        if matching is None and same_current:
+            matching = current
+        if (
+            current is not None
+            and (not _partial_image(current.raw_payload or {}) or same_current)
+            and await _reusable_success(db, current, now, timedelta(days=prepared.reuse_ttl_days))
+        ):
+            db.expunge(current)
+            return replace(prepared, cached=current)
+        previous = matching.raw_payload or {} if matching is not None else {}
+        state = previous.get("_image_retry")
+        until = _image_retry_until(previous)
+        if isinstance(state, dict) and until is not None and now < until:
+            if (
+                current is not None
+                and current.fetched_at is not None
+                and current.fetched_at >= now - timedelta(days=prepared.reuse_ttl_days)
+            ):
+                db.expunge(current)
+                return replace(prepared, cached=current)
+            raise JdExtractionError(
+                "jd_extraction_failed", "같은 공고의 이미지 분석이 진행 또는 대기 중"
+            )
+        # 같은 수집 원문의 이미 확정한 주기만 이어간다. 실제 HTTP 전에 횟수를 소비한다.
+        basis = {**snapshot, "_image_extraction": {"status": "partial"}}
+        prior = {**basis, **({"_image_retry": state} if isinstance(state, dict) else {})}
+        reserved = _next_image_retry(basis, prior, now)
+        assert reserved is not None
+        owner = str(uuid4())
+        reserved.update(
+            source_hash=source_hash,
+            owner=owner,
+            lease_expires_at=(
+                now + timedelta(seconds=_image_attempt_seconds(settings))
+            ).isoformat(),
+        )
+        if matching is None:
+            matching = _posting(
+                prepared.posting_url,
+                prepared.normalized_url,
+                prepared.content,
+                now,
+                error_code="jd_extraction_in_progress",
+            )
+            db.add(matching)
+        matching.raw_payload = {**(matching.raw_payload or snapshot), "_image_retry": reserved}
+        await db.flush()
+        return replace(prepared, image_reservation_id=matching.id, image_owner=owner)
+
+
+def _owned_image_state(
+    posting: JobPosting | None, prepared: PreparedPosting
+) -> dict[str, object] | None:
+    raw = posting.raw_payload if posting is not None else None
+    state = raw.get("_image_retry") if isinstance(raw, dict) else None
+    if not isinstance(state, dict) or state.get("owner") != prepared.image_owner:
+        return None
+    return {key: value for key, value in state.items() if key not in {"owner", "lease_expires_at"}}
+
+
+async def _save_posting_failure(
+    session_factory: async_sessionmaker[AsyncSession],
+    prepared: PreparedPosting,
+    error_code: str,
+) -> None:
+    async with session_factory.begin() as db:
+        await lock_posting_url(db, prepared.normalized_url)
+        if prepared.image_reservation_id is not None:
+            owned = await db.get(JobPosting, prepared.image_reservation_id)
+            state = _owned_image_state(owned, prepared)
+            if owned is not None and state is not None:
+                # 실패·취소도 물리 호출 예산을 되돌리지 않으며 다른 소유자의 예약은 건드리지 않는다.
+                failed_source: dict[str, object] = {}
+                if owned.parse_status == "failed" and prepared.content is not None:
+                    try:
+                        _validate_content(prepared.content)
+                    except PostingInvalidResponseError:
+                        # 방금 거절한 원문을 실패 정리에서 DB에 다시 넣지 않는다.
+                        pass
+                    else:
+                        failed_source = _snapshot_content(prepared.content)
+                owned.raw_payload = {
+                    **(owned.raw_payload or {}),
+                    **failed_source,
+                    "_image_retry": {**state, "last_error": error_code},
+                }
+                if owned.parse_status == "failed":
+                    owned.parse_error_code = error_code
+            return
+        current = await get_reusable_failed_posting(db, prepared.normalized_url)
+        if current is not None and isinstance(
+            (current.raw_payload or {}).get("_image_retry"), dict
+        ):
+            # 원티드 수집 실패가 이미 소비한 이미지 예산·진행 예약을 지워 재호출을 열면 안 된다.
+            current = None
+        if current is not None and current.updated_at > prepared.checked_at:
+            # 늦게 끝난 이전 요청이 더 최근 시도의 실패 상태를 덮어쓰지 않는다.
+            return
+        failure = _posting(
+            prepared.posting_url,
+            prepared.normalized_url,
+            prepared.content,
+            prepared.checked_at,
+            error_code=error_code,
+        )
+        # 같은 오류가 반복돼 ORM이 변경을 생략해도 마지막 시도 시각은 명시적으로 남긴다.
+        failure.updated_at = prepared.checked_at
+        if current is None:
+            db.add(failure)
+        else:
+            # 성공·참조 자료는 보존한다. 원문 없는 수집 실패로 바뀌면 이전 원문도 비운다.
+            for name in (
+                "raw_url",
+                "position",
+                "company_name",
+                "skill_tags",
+                "raw_payload",
+                "parse_error_code",
+                "fetched_at",
+                "updated_at",
+            ):
+                setattr(current, name, getattr(failure, name))
+
+
 async def fetch_posting(
     session_factory: async_sessionmaker[AsyncSession],
     posting_url: str,
@@ -350,7 +496,11 @@ async def fetch_posting(
 
 
 async def complete_posting(
-    session_factory: async_sessionmaker[AsyncSession], prepared: PreparedPosting
+    session_factory: async_sessionmaker[AsyncSession],
+    prepared: PreparedPosting,
+    *,
+    settings: Settings | None = None,
+    http_client: httpx.AsyncClient | None = None,
 ) -> JobPosting:
     """수집 원문을 추출·저장한다. 기존 ID 참조와 URL 잠금·재사용 정책을 유지한다."""
     if prepared.cached is not None:
@@ -358,35 +508,114 @@ async def complete_posting(
     content = prepared.content
     if content is None:
         raise ValueError("공고 원문 또는 캐시가 필요합니다.")
+    if content.image_urls:
+        prepared = await _reserve_image_attempt(session_factory, prepared, settings)
+        if prepared.cached is not None:
+            return prepared.cached
     try:
-        drafts = build_requirement_drafts(content)
+        drafts = (
+            build_requirement_drafts(content)
+            if content.is_structured or not content.image_urls
+            else []
+        )
+        source_refs: list[list[dict[str, object]]] = [[] for _ in drafts]
+        if content.image_urls:
+            async with asyncio.timeout(_image_attempt_seconds(settings)):
+                image = await extend_image_drafts(
+                    session_factory, content, drafts, settings=settings, http_client=http_client
+                )
+            content, drafts, source_refs = image.content, image.drafts, image.source_refs
+            prepared = replace(prepared, content=content)
+            _validate_content(content)
+        if not drafts:
+            raise JdExtractionError("jd_extraction_failed", "검증한 요구사항이 없음")
     except JdExtractionError as error:
         await _save_posting_failure(session_factory, prepared, error.code)
+        raise
+    except BaseException as error:
+        if prepared.image_reservation_id is not None:
+            await asyncio.shield(
+                _save_posting_failure(session_factory, prepared, "jd_extraction_failed")
+            )
+        if isinstance(error, TimeoutError):
+            raise JdExtractionError(
+                "jd_extraction_failed", "이미지 공고 분석 시간 예산 소진"
+            ) from None
         raise
     normalized_url = prepared.normalized_url
     checked_at = prepared.checked_at
     ttl = timedelta(days=prepared.reuse_ttl_days)
-    snapshot = asdict(content)
+    snapshot = _snapshot_content(content)
     async with session_factory.begin() as db:
         await lock_posting_url(db, normalized_url)
         current = await get_current_successful_posting(db, normalized_url)
-        if current is not None and await _reusable_success(db, current, checked_at, ttl):
-            # 수집 도중 다른 요청이 확정한 자료를 사용해 중복 INSERT와 늦은 덮어쓰기를 막는다.
+        owned = (
+            await db.get(JobPosting, prepared.image_reservation_id)
+            if prepared.image_reservation_id
+            else None
+        )
+        reserved = _owned_image_state(owned, prepared) if owned is not None else None
+        if prepared.image_reservation_id is not None and reserved is None:
+            # 만료 후 새 소유자가 재예약한 실행의 늦은 결과는 저장하지 않는다.
+            if current is not None:
+                db.expunge(current)
+                return current
+            raise JdExtractionError("jd_extraction_failed", "이미지 분석 예약이 변경됨")
+        if owned is not None and reserved is not None:
+            owned.raw_payload = {**(owned.raw_payload or {}), "_image_retry": reserved}
+        image_retry = reserved if reserved is not None and _partial_image(snapshot) else None
+        same_source = reserved is None
+        if reserved is not None and current is not None:
+            source_hash = reserved["source_hash"]
+            assert isinstance(source_hash, str)
+            same_source = _same_image_source(current.raw_payload or {}, snapshot, source_hash)
+        newer_completed = (
+            current is not None
+            and owned is not None
+            and current.created_at > owned.created_at
+            and current.fetched_at is not None
+            and current.fetched_at >= checked_at
+        )
+        if (
+            current is not None
+            and current.id != prepared.image_reservation_id
+            and (
+                same_source
+                and await _reusable_success(db, current, checked_at, ttl)
+                or newer_completed
+            )
+        ):
+            # 같은 원문의 캐시만 재사용한다. 먼저 잡힌 옛 원문의 lease가 새 원문을 가리지
+            # 않으며, 더 나중에 확인·완료한 새 버전은 늦게 끝난 옛 실행으로 덮지 않는다.
             result = current
         elif (
             current is not None
             and current.raw_payload is not None
             and _content(current.raw_payload) == _content(snapshot)
+            and _image_health(current.raw_payload) == _image_health(snapshot)
             and await _same_requirements(db, current, drafts)
         ):
             # 내용·요구사항 ID·최초 생성 시각은 불변이며 실제 재확인 시각만 갱신한다.
             current.fetched_at = checked_at
+            raw = {
+                key: value
+                for key, value in (current.raw_payload or {}).items()
+                if key != "_image_retry"
+            }
+            current.raw_payload = {**raw, **({"_image_retry": image_retry} if image_retry else {})}
             result = current
         else:
             result = _posting(prepared.posting_url, normalized_url, content, checked_at)
+            if image_retry is not None:
+                result.raw_payload = {**(result.raw_payload or {}), "_image_retry": image_retry}
             db.add(result)
             await db.flush()
-            db.add_all(JdRequirement(job_posting_id=result.id, **asdict(draft)) for draft in drafts)
+            db.add_all(
+                JdRequirement(
+                    job_posting_id=result.id, **asdict(draft), source_refs=source_refs[index]
+                )
+                for index, draft in enumerate(drafts)
+            )
         await db.flush()
         await db.refresh(result)
         # expire_on_commit=True인 호출자도 반환된 자료를 안전하게 읽을 수 있게 한다.
@@ -401,9 +630,10 @@ async def get_or_fetch_posting(
     client: httpx.AsyncClient | None = None,
     now: datetime | None = None,
     reuse_ttl_days: int = 7,
+    settings: Settings | None = None,
 ) -> JobPosting:
     """기존 호출자를 위해 수집과 추출을 순서대로 실행한다."""
     prepared = await fetch_posting(
         session_factory, posting_url, client=client, now=now, reuse_ttl_days=reuse_ttl_days
     )
-    return await complete_posting(session_factory, prepared)
+    return await complete_posting(session_factory, prepared, settings=settings, http_client=client)
