@@ -24,7 +24,7 @@ from app.db.models import InterviewSession, InterviewTurn, LLMCallRecord, Prompt
 from app.features.interview.agent_context import AgentStateError, load_context
 from app.features.interview.agent_service import QuestionExecution, _owned
 from app.features.interview.answer_context import prior_analyses, reference_texts
-from app.features.interview.schemas import QuestionRetryResponse
+from app.features.interview.schemas import QuestionRetryResponse, QuestionRetryState
 from app.shared.enums import Reason
 
 _KEY = "question_retry_v1"
@@ -37,9 +37,9 @@ local old = redis.call('GET', KEYS[1])
 if old and old ~= ARGV[1] then
   local owner = redis.call('GET', 'ws:lock:' .. old)
   if owner then redis.call('PUBLISH', 'ws:replace:' .. old, owner) end
-  redis.call('DEL', 'rt:' .. old)
+  redis.call('DEL', ARGV[4] .. old)
 end
-redis.call('SET', 'rt:' .. ARGV[1], ARGV[2], 'EX', ARGV[3])
+redis.call('SET', ARGV[4] .. ARGV[1], ARGV[2], 'EX', ARGV[3])
 redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[3])
 return 1
 """
@@ -52,6 +52,8 @@ class _Scope:
     failure: LLMCallRecord
     digest: str
     analysis: c.ContractChecked[c.AnswerAnalysis]
+    lookup_summary: str
+    tool_results: tuple[c.ToolResult, ...]
 
 
 def _ledger(row: InterviewSession) -> dict[str, dict[str, object]]:
@@ -73,6 +75,93 @@ def _expired(entry: Mapping[str, object]) -> bool:
         return type(value) is not str or datetime.fromisoformat(value) <= datetime.now(UTC)
     except (KeyError, ValueError, TypeError):
         return True
+
+
+def retryable_failure(failure: object, attempts: object) -> bool:
+    """공급자 영구 오류를 새 수동 라운드로 우회하지 않는다."""
+    if not isinstance(failure, dict):
+        return False
+    code, stage = failure.get("error_code"), failure.get("stage")
+    if stage == "semantic":
+        return code in {
+            "director_candidate_rewrite",
+            "director_candidate_replan",
+            "director_no_valid_candidate",
+        }
+    if stage == "timeout":
+        return code == "llm_timeout"
+    if stage != "provider":
+        return False
+    reason = failure.get("reason_summary")
+    if reason == "Provider transport failed.":
+        return True
+    if reason in {
+        f"Provider HTTP {status} request failed." for status in (408, 409, 500, 502, 503, 504)
+    }:
+        return True
+    if reason != "Provider HTTP 429 request failed." or not isinstance(attempts, list):
+        return False
+    # 429는 quota와 일시적 rate limit을 구분할 수 있을 때만 허용한다.
+    for item in attempts:
+        if not isinstance(item, dict) or not isinstance(item.get("raw_output"), str):
+            continue
+        try:
+            body = json.loads(item["raw_output"])
+        except (ValueError, TypeError):
+            return False
+        error = body.get("error") if isinstance(body, dict) else None
+        if not isinstance(error, dict):
+            return False
+        if error.get("code") in {
+            "insufficient_quota",
+            "credit_balance_exhausted",
+            "billing_limit_exceeded",
+            "organization_usage_limit_exceeded",
+        }:
+            return False
+        if error.get("code") == "rate_limit_exceeded" or error.get("type") == "rate_limit_error":
+            return True
+    return False
+
+
+def progress(row: InterviewSession) -> QuestionRetryState | None:
+    """새로고침은 저장된 수동 요청 ID를 복원하며 새 라운드를 소비하지 않는다."""
+    if row.status != "in_progress":
+        return None
+    candidates = [
+        entry
+        for entry in _ledger(row).values()
+        if entry.get("kind") == "manual"
+        and entry.get("target") in {row.current_turn, row.current_turn + 1}
+    ]
+    if not candidates:
+        return None
+    entry = max(candidates, key=lambda item: int(str(item["target"])))
+    try:
+        effective = entry
+        child_id = str(uuid5(UUID(str(entry["call_id"])), "automatic-rewrite"))
+        child = _ledger(row).get(child_id)
+        if child is not None and (
+            child.get("kind") == "auto"
+            and child.get("failed_call_id") == entry.get("call_id")
+            and child.get("target") == entry.get("target")
+            and child.get("previous_turn_id") == entry.get("previous_turn_id")
+            and child.get("binding") == entry.get("binding")
+        ):
+            effective = child
+        status = effective.get("status")
+        if status not in {"running", "succeeded", "failed"}:
+            return None
+        if status == "running" and _expired(effective):
+            status = "failed"
+        return QuestionRetryState(
+            request_id=UUID(str(entry["request_id"])),
+            turn_no=int(str(entry["target"])),
+            status=status,
+            expires_at=datetime.fromisoformat(str(effective["deadline"])),
+        )
+    except (KeyError, ValueError, TypeError):
+        return None
 
 
 async def _scope(db: AsyncSession, row: InterviewSession) -> _Scope:
@@ -117,7 +206,7 @@ async def _scope(db: AsyncSession, row: InterviewSession) -> _Scope:
         ),
         None,
     )
-    if failed is None:
+    if failed is None or not retryable_failure(failed.failure, failed.attempts):
         raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE)
     successful_t3 = list(
         await db.scalars(
@@ -144,7 +233,22 @@ async def _scope(db: AsyncSession, row: InterviewSession) -> _Scope:
             PromptVersion.task_name == "director", PromptVersion.is_active.is_(True)
         )
     )
+    stored_inputs = (row.context_state or {}).get("director_retry_inputs", {})
+    saved = stored_inputs.get(str(target)) if isinstance(stored_inputs, dict) else None
+    if isinstance(saved, dict):
+        summary = saved.get("lookup_summary", "")
+        raw_tools = saved.get("tool_results", [])
+    else:
+        summary = (previous.decision or {}).get("reason_summary", "")
+        traces = (row.context_state or {}).get("evidence_tool_results", {})
+        trace = traces.get(str(previous.id)) if isinstance(traces, dict) else None
+        raw_tools = [] if trace is None else [trace]
+    if not isinstance(summary, str) or not isinstance(raw_tools, list):
+        raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE)
+    tools = tuple(c.decode(c.ToolResult, value) for value in raw_tools)
     binding = {
+        "lookup_summary": summary,
+        "tool_results": [asdict(value) for value in tools],
         "context": asdict(context),
         "analysis": asdict(checked.data),
         "sources": sorted((ref.kind, ref.id, text) for ref, text in sources.items()),
@@ -155,7 +259,7 @@ async def _scope(db: AsyncSession, row: InterviewSession) -> _Scope:
     digest = hashlib.sha256(
         json.dumps(binding, ensure_ascii=False, sort_keys=True).encode()
     ).hexdigest()
-    return _Scope(target, previous.id, failed, digest, checked)
+    return _Scope(target, previous.id, failed, digest, checked, summary, tools)
 
 
 async def availability(db: AsyncSession, row: InterviewSession) -> tuple[bool, int]:
@@ -371,6 +475,8 @@ async def _execute(
                 settings=settings,
                 http_client=http_client,
                 answer_analysis=scope.analysis,
+                lookup_summary=scope.lookup_summary,
+                tool_results=scope.tool_results,
                 preparation_guard=guard,
                 recovery_feedback=feedback,
             )
@@ -512,26 +618,42 @@ async def retry_question(
                 outcome = automatic
         if outcome.turn_id is None:
             raise AppError(Reason.QUESTION_RETRY_FAILED)
+    from app.features.interview.service import (
+        REALTIME_SESSION_TTL_SECONDS,
+        realtime_interview_key,
+        realtime_session_key,
+    )
+
+    # DB 행 잠금 안에서 현재 미답변 턴과 Redis 회전을 함께 확정한다.
     async with sessions.begin() as db:
         row = await _owned(db, user_id, interview_id)
         entry = _ledger(row)[str(request_id)]
         turn = await db.get(InterviewTurn, UUID(str(entry["turn_id"])))
-        if row.status != "in_progress" or turn is None or turn.interview_session_id != interview_id:
+        target = int(str(entry["target"]))
+        if (
+            row.status != "in_progress"
+            or turn is None
+            or turn.interview_session_id != interview_id
+            or row.current_turn != target
+            or turn.turn_no != target
+            or turn.status != "asked"
+            or turn.answer_text is not None
+        ):
             raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE)
         session_id = str(entry["session_id"])
-        target = int(str(entry["target"]))
-    try:
-        execute = cast(Callable[..., Awaitable[object]], redis.eval)
-        await execute(
-            _ROTATE,
-            1,
-            f"rt:interview:{interview_id}",
-            session_id,
-            json.dumps({"interviewId": str(interview_id), "userId": str(user_id)}),
-            7200,
-        )
-    except RedisError:
-        raise AppError(Reason.INTERNAL_ERROR) from None
+        try:
+            execute = cast(Callable[..., Awaitable[object]], redis.eval)
+            await execute(
+                _ROTATE,
+                1,
+                realtime_interview_key(interview_id),
+                session_id,
+                json.dumps({"interviewId": str(interview_id), "userId": str(user_id)}),
+                REALTIME_SESSION_TTL_SECONDS,
+                realtime_session_key(""),
+            )
+        except RedisError:
+            raise AppError(Reason.INTERNAL_ERROR) from None
     return QuestionRetryResponse(interview_id=interview_id, session_id=session_id, turn_no=target)
 
 
