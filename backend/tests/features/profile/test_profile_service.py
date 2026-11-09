@@ -79,19 +79,173 @@ async def test_missing_language_data_keeps_previous_summary(app, db, world):
     assert _ratios(summary) == {"Python": 100.0}
 
 
-async def test_same_repo_set_does_not_call_llm_and_keeps_role_summary(app, db, world):
+async def test_new_completed_interview_and_input_regenerate_role_even_for_the_same_repo(
+    app, db, world
+):
     user, run = world
     repo = await make_repo(db, run, languages={"Python": 1})
     await completed_interview(db, run, [repo])
     await refresh_summary(app, user, FakeGenerator())
     repo.languages = {"Python": 1, "Go": 1}
     await completed_interview(db, run, [repo])
-    generator = FakeGenerator("바뀌면 안 되는 요약입니다.")
+    generator = FakeGenerator("새 면접 진술을 반영한 요약입니다.")
+    assert await refresh_summary(app, user, generator) == "updated"
+    assert len(generator.calls) == 1
+    summary = await read_summary(db, user)
+    assert summary.role_summary == "새 면접 진술을 반영한 요약입니다."
+    assert _ratios(summary) == {"Go": 50.0, "Python": 50.0}
+
+
+async def test_identical_profile_input_reuses_the_successful_role_summary(app, db, world):
+    user, run = world
+    repo = await make_repo(db, run, languages={"Python": 1})
+    await completed_interview(db, run, [repo])
+    await refresh_summary(app, user, FakeGenerator())
+    generator = FakeGenerator("재사용할 때 호출하면 안 됩니다.")
     assert await refresh_summary(app, user, generator) == "role_kept"
     assert generator.calls == []
-    summary = await read_summary(db, user)
-    assert summary.role_summary == ROLE
-    assert _ratios(summary) == {"Go": 50.0, "Python": 50.0}
+
+
+async def test_report_revision_only_change_reuses_actual_input_and_keeps_revision_audit(
+    app, db, world
+):
+    from app.db.models import InterviewReport
+    from app.features.profile import queries
+
+    user, run = world
+    repo = await make_repo(db, run, languages={"Python": 1})
+    interview = await completed_interview(db, run, [repo])
+    report = InterviewReport(
+        interview_session_id=interview.id, headline="총평", summary="원본", total_score=70
+    )
+    db.add(report)
+    await db.commit()
+    first = FakeGenerator()
+    assert await refresh_summary(app, user, first) == "updated"
+    prior_fingerprint = (await read_summary(db, user)).input_fingerprint
+    report.current_revision = 2
+    await db.commit()
+    unused = FakeGenerator()
+    assert await refresh_summary(app, user, unused) == "role_kept"
+    assert unused.calls == [] and len(first.calls) == 1
+    assert (await read_summary(db, user)).input_fingerprint == prior_fingerprint
+    versions = await queries.completed_versions(db, user_id=user.id, repo_ids=[repo.id])
+    assert versions[0]["report_revision"] == 2
+
+
+async def test_new_active_profile_prompt_invalidates_the_input_fingerprint(app, db, world):
+    from app.db.models import PromptVersion
+
+    user, run = world
+    repo = await make_repo(db, run, languages={"Python": 1})
+    await completed_interview(db, run, [repo])
+    await refresh_summary(app, user, FakeGenerator())
+    prior = (await db.scalars(select(PromptVersion))).one()
+    prior.is_active = False
+    db.add(
+        PromptVersion(
+            task_name="profile_summary",
+            version="fixture-v2",
+            model="fixture-model",
+            template="새 기준",
+            is_active=True,
+        )
+    )
+    await db.commit()
+    generator = FakeGenerator("새 기준에 따른 요약입니다.")
+    assert await refresh_summary(app, user, generator) == "updated"
+    assert len(generator.calls) == 1
+    assert (await read_summary(db, user)).prompt_version == "fixture-v2"
+
+
+async def test_changed_answer_during_generation_does_not_publish_a_stale_summary(app, db, world):
+    from sqlalchemy import update
+
+    from app.db.models import InterviewTurn
+
+    user, run = world
+    repo = await make_repo(db, run, languages={"Python": 1})
+    interview = await completed_interview(db, run, [repo])
+
+    class ChangingGenerator(FakeGenerator):
+        async def __call__(self, *args, **kwargs):
+            value = await super().__call__(*args, **kwargs)
+            async with app.state.session_factory.begin() as other:
+                await other.execute(
+                    update(InterviewTurn)
+                    .where(InterviewTurn.interview_session_id == interview.id)
+                    .values(answer_text="팀원이 담당했습니다.")
+                )
+            return value
+
+    assert await refresh_summary(app, user, ChangingGenerator()) == "skipped"
+    assert await read_summary(db, user) is None
+
+
+async def test_changed_reasoning_policy_invalidates_profile_role_cache(app, db, world):
+    from app.features.profile import service
+
+    from .fakes import LLM
+
+    user, run = world
+    repo = await make_repo(db, run, languages={"Python": 1})
+    await completed_interview(db, run, [repo])
+    await refresh_summary(app, user, FakeGenerator())
+    generator = FakeGenerator("변경된 추론 설정으로 확인한 요약입니다.")
+    assert (
+        await service.refresh_profile_summary(
+            app.state.session_factory,
+            user_id=user.id,
+            llm=LLM.model_copy(update={"llm_reasoning_effort": "high"}),
+            http_client=None,
+            generator=generator,
+        )
+        == "updated"
+    )
+    assert len(generator.calls) == 1
+
+
+async def test_profile_task_timeout_is_used_but_does_not_relabel_a_reused_result(app, db, world):
+    from app.features.profile import service
+
+    from .fakes import LLM
+
+    user, run = world
+    repo = await make_repo(db, run, languages={"Python": 1})
+    await completed_interview(db, run, [repo])
+
+    class Generator(FakeGenerator):
+        async def __call__(self, payload, *, prompt, limits, model_call, statements):
+            assert limits.timeout_seconds == 23
+            return await super().__call__(
+                payload, prompt=prompt, limits=limits, model_call=model_call, statements=statements
+            )
+
+    first = LLM.model_copy(update={"llm_task_timeouts": {"profile_summary": 23}})
+    assert (
+        await service.refresh_profile_summary(
+            app.state.session_factory,
+            user_id=user.id,
+            llm=first,
+            http_client=None,
+            generator=Generator(),
+        )
+        == "updated"
+    )
+    second = LLM.model_copy(update={"llm_task_timeouts": {"profile_summary": 29}})
+    unused = FakeGenerator()
+    assert (
+        await service.refresh_profile_summary(
+            app.state.session_factory,
+            user_id=user.id,
+            llm=second,
+            http_client=None,
+            generator=unused,
+        )
+        == "role_kept"
+    )
+    assert unused.calls == []
+    assert (await read_summary(db, user)).generation_limits["timeout_seconds"] == 23
 
 
 async def test_changed_repo_set_regenerates_role_summary(app, db, world):
