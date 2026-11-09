@@ -28,3 +28,25 @@ body {
 #root {
   min-height: 100svh;
 }
+
+/* 로딩 막대. Uiverse.io aryamitra06 "silent-lion-21"(MIT)의 색만 accent로 바꿨다. */
+@keyframes loader-bar {
+  20% {
+    background-color: var(--color-accent);
+    transform: scaleY(1.5);
+  }
+  40% {
+    transform: scaleY(1);
+  }
+}
+
+/* 물결 막대. Uiverse.io mrpumps31232 "strange-dragonfly-94"(MIT)를 문장 옆 크기로 줄였다. */
+@keyframes loading-wave {
+  0%,
+  100% {
+    height: 4px;
+  }
+  50% {
+    height: 14px;
+  }
+}

@@ -60,7 +60,7 @@ test('202 응답에 retryAfter가 없어도 기본 간격으로 폴링을 이어
     };
   });
   await page.goto(REPORT_URL);
-  await expect(page.getByText('리포트를 만들고 있어요...')).toBeVisible();
+  await expect(page.getByText('레포트를 만들고 있어요...')).toBeVisible();
   await expect
     .poll(
       () =>
@@ -99,7 +99,7 @@ test('생성 중 폴링이 실패하면 생성 중 문구 대신 오류를 보�
   await expect(page.getByRole('alert')).toHaveText('리포트를 불러오지 못했어요.', {
     timeout: 10_000,
   });
-  await expect(page.getByText('리포트를 만들고 있어요...')).toHaveCount(0);
+  await expect(page.getByText('레포트를 만들고 있어요...')).toHaveCount(0);
   // 첫 202, 실패 1회, 자동 재시도 1회 뒤에는 더 호출하지 않는다.
   await page.waitForTimeout(4_000);
   const count = await page.evaluate(

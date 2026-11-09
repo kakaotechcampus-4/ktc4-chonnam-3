@@ -502,6 +502,16 @@ export default function InterviewScreen() {
     ? Math.floor(Math.min(MAX_ANSWER_MS, now - recorder.startedAt) / 1000)
     : 0;
   const showText = isTextMode || showQuestionText || questionAudio.state === 'failed';
+  /**
+   * 다음 질문을 기다리는 동안. 질문 텍스트 표시 설정과 무관하게 생성 중으로 보여 준다.
+   * 마지막 턴의 답변 뒤에는 다음 질문이 없고 interviewEnd로 넘어가므로 제외한다.
+   */
+  const generatingQuestion =
+    !error &&
+    (thinking ||
+      !question ||
+      (current.phase === 'submitted' &&
+        (!interview?.totalTurns || question.turn < interview.totalTurns)));
   const draft = question && textDraft?.turn === question.turn ? textDraft.text : '';
 
   /**
@@ -777,7 +787,20 @@ export default function InterviewScreen() {
           )}
         </div>
 
-        {showText ? (
+        {generatingQuestion ? (
+          <p className="mt-4 flex items-end gap-2 text-[17px] font-bold leading-relaxed text-muted">
+            질문 생성 중
+            <span aria-hidden className="mb-[7px] flex h-[14px] items-end gap-[3px]">
+              {['0s', '.1s', '.2s', '.3s'].map((delay) => (
+                <span
+                  key={delay}
+                  style={{ animationDelay: delay }}
+                  className="h-1 w-1 animate-[loading-wave_1s_ease-in-out_infinite] rounded-full bg-accent motion-reduce:animate-none"
+                />
+              ))}
+            </span>
+          </p>
+        ) : showText ? (
           <>
             <p className="mt-4 text-[17px] font-bold leading-relaxed">
               {question?.text ?? '다음 질문을 준비하고 있어요'}

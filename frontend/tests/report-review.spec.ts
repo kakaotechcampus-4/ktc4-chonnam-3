@@ -93,7 +93,7 @@ test('실패한 리포트는 새 면접 없이 리포트 생성만 다시 요청
     if (request.method() === 'POST') posts.push(new URL(request.url()).pathname);
   });
   await page.getByRole('button', { name: '리포트 생성 다시 시도' }).click();
-  await expect(page.getByText('리포트를 만들고 있어요...')).toBeVisible();
+  await expect(page.getByText('레포트를 만들고 있어요...')).toBeVisible();
   await expect(
     page.getByRole('heading', { name: '결제 도메인의 장애 대응 근거가 뚜렷한 지원자입니다' }),
   ).toBeVisible({ timeout: 15_000 });
