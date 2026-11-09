@@ -115,6 +115,18 @@ paths:
       description: >-
         Called in the background as soon as a file is selected. The client must not
         set Content-Type - the browser generates the multipart boundary.
+        docType identifies the selected document role and defaults to portfolio
+        for existing clients. The default upload limits are 20 MiB for portfolio
+        and 10 MiB for cover_letter. PDF, DOCX, TXT and MD have native extraction;
+        configured Vision may supplement scanned PDFs and layout, and is required
+        for PNG, JPG, JPEG, PPT and PPTX. An unavailable or incomplete extraction
+        never establishes that unread content is absent. Unsupported formats
+        return 415; extraction status distinguishes succeeded, partial and failed.
+      x-max-file-bytes-by-doc-type:
+        portfolio: 20971520
+        cover_letter: 10485760
+      x-native-file-extensions: [pdf, docx, txt, md]
+      x-vision-file-extensions: [png, jpg, jpeg, ppt, pptx]
       requestBody:
         required: true
         content:
@@ -126,7 +138,12 @@ paths:
                 file:
                   type: string
                   format: binary
-                  description: .pdf (text layer only), .docx, .txt or .md. Max 20MB (20971520 bytes).
+                  description: Document bytes; supported format and size depend on docType and configured extraction providers.
+                docType:
+                  type: string
+                  enum: [portfolio, cover_letter]
+                  default: portfolio
+                  description: Document role, preserved independently of its upload filename.
       responses:
         '200':
           description: Preview result
@@ -305,6 +322,95 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
+  /interviews/{id}/turns/{turn}/question-audio:
+    get:
+      operationId: getInterviewQuestionAudio
+      summary: Play the saved question using its persona voice
+      description: >-
+        Authenticated access to a question owned by the current user. The WebSocket
+        question includes this same-origin URL when TTS is enabled. The server
+        reuses cached audio or synthesizes the saved question within the explicitly
+        initialized free character allowance. Missing configuration, budget,
+        synthesis or cache failures return not_ready; the client keeps the question
+        text visible. Audio failure never submits an answer or advances the turn.
+      parameters:
+        - $ref: '#/components/parameters/InterviewId'
+        - name: turn
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: MP3 question audio. Cache-Control is private, no-store.
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: not_found when the interview or question is absent or belongs to another user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: not_ready. Keep displaying the question text and allow text fallback.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /interviews/{id}/question/retry:
+    post:
+      operationId: retryInterviewQuestion
+      summary: Resume the same interview without resubmitting saved answers
+      description: >-
+        Explicitly regenerates the missing next question after saved answer analysis
+        succeeded and Director generation failed. The server preserves prior turns,
+        analyses, evidence, selected code versions and failed call records. Permanent
+        authentication or quota failures are not eligible. On refresh GET returns
+        questionRetryState so the same requestId can be restored. A replay may rotate
+        realtime session only for the current unanswered target turn. One manual
+        round is allowed per target question; each round has one Plan and one independent
+        Review. A safe rewrite rejection also permits one automatic round. Including
+        initial generation, the target question has at most six provider attempts.
+        Reusing requestId replays its result without another model call. A successful
+        response issues a new realtime sessionId; reconnect to receive the saved next
+        question. STT, answer analysis and repository analysis are not rerun.
+      parameters:
+        - $ref: '#/components/parameters/InterviewId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestionRetryRequest'
+      responses:
+        '200':
+          description: The reviewed next question is saved in the same interview.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestionRetryResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: >-
+            question_retry_in_progress while the claimed round is running;
+            question_retry_unavailable outside a recoverable next-question state;
+            question_retry_failed after a completed round is rejected;
+            question_retry_limit after the manual allowance is consumed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /interviews/{id}/prepare/retry:
     post:
       operationId: retryInterviewPrepare
@@ -388,6 +494,12 @@ paths:
                 $ref: '#/components/schemas/GeneratingResponse'
         '401':
           $ref: '#/components/responses/Error'
+        '404':
+          description: not_found when the interview does not exist or belongs to another user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '409':
           $ref: '#/components/responses/Error'
   /interviews/{id}/retry:
@@ -431,7 +543,11 @@ paths:
       summary: Disagree with one persona's feedback
       description: >-
         The path parameter is interviewId. A report is unique per interview, so no
-        separate reportId is issued.
+        separate reportId is issued. Submission records a concern only and never
+        changes scores automatically. expectedRevision must match the displayed
+        report; omission is accepted only for the original revision 1. The unique
+        submission unit is (interviewId, revision, persona); a new published
+        revision does not inherit a previous revision's submitted flag.
       parameters:
         - $ref: '#/components/parameters/InterviewId'
       requestBody:
@@ -447,8 +563,46 @@ paths:
           $ref: '#/components/responses/Error'
         '401':
           $ref: '#/components/responses/Error'
-        '409':
+        '404':
           $ref: '#/components/responses/Error'
+        '409':
+          description: >-
+            already_submitted for the same report revision and persona;
+            report_unavailable when the interview is not completed, no report
+            exists, or expectedRevision does not match the current revision.
+            This reason alone does not distinguish absence from a stale revision.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /interviews/{id}/report/retry:
+    post:
+      operationId: retryReportGeneration
+      summary: Explicitly retry a failed report without a successful result
+      description: >-
+        Only the owner of a completed interview with an answered turn may retry.
+        Requires a recorded generation failure and no successful report. Duplicate
+        requests for the same active retry return 202 without another job. This
+        endpoint never replaces a successful report or starts a new interview.
+      parameters:
+        - $ref: '#/components/parameters/InterviewId'
+      responses:
+        '202':
+          description: Explicit retry queued or already in progress
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeneratingResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: report_unavailable when no eligible failure or a successful report exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
 components:
   securitySchemes:
     sessionCookie:
@@ -757,7 +911,13 @@ components:
           description: Sprint 1 accepts Wanted URLs only.
         documentId:
           type: string
-          description: Must come from POST /documents/preview. Omit to skip doc_extract.
+          nullable: true
+          description: Owned portfolio ID from POST /documents/preview; used as a repository recommendation hint and interview source. Omit to skip portfolio doc_extract.
+        coverLetterDocumentId:
+          type: string
+          nullable: true
+          format: uuid
+          description: Owned cover_letter ID from POST /documents/preview. Optional and independent of documentId; used for interview claims, never substituted for the portfolio recommendation hint. A changed selection creates a distinct analysis input.
 
     CreateAnalysisRunResponse:
       type: object
@@ -1001,9 +1161,52 @@ components:
         interviewId:
           type: string
 
+    QuestionRetryRequest:
+      type: object
+      additionalProperties: false
+      required: [requestId]
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          description: Reuse this value when the preceding HTTP result is unknown.
+
+    QuestionRetryState:
+      type: object
+      required: [requestId, turnNo, status, expiresAt]
+      properties:
+        requestId:
+          type: string
+          format: uuid
+        turnNo:
+          type: integer
+          minimum: 1
+          maximum: 9
+        status:
+          type: string
+          enum: [running, succeeded, failed]
+        expiresAt:
+          type: string
+          format: date-time
+
+    QuestionRetryResponse:
+      type: object
+      required: [interviewId, sessionId, turnNo]
+      properties:
+        interviewId:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          description: Newly issued realtime session for the preserved interview.
+        turnNo:
+          type: integer
+          minimum: 2
+          maximum: 9
+
     InterviewTurn:
       type: object
-      required: [turn, persona, question, answer]
+      required: [turn, persona, question, answer, mainIndex, followUpDepth]
       properties:
         turn:
           type: integer
@@ -1014,7 +1217,14 @@ components:
         answer:
           type: string
           nullable: true
-
+        mainIndex:
+          type: integer
+          minimum: 1
+          description: Main question index calculated from the stored parent chain.
+        followUpDepth:
+          type: integer
+          minimum: 0
+          description: Follow-up depth calculated from the stored parent chain.
     InterviewLastError:
       type: object
       required: [reason, code, step, recoverable, occurredAt]
@@ -1089,6 +1299,24 @@ components:
           nullable: true
           allOf:
             - $ref: '#/components/schemas/InterviewLastError'
+        canRetryQuestion:
+          type: boolean
+          default: false
+          description: Saved answer analysis succeeded but a missing next question can be explicitly regenerated.
+        questionRetryCount:
+          type: integer
+          minimum: 0
+          maximum: 1
+          default: 0
+          description: Manual recovery rounds claimed for the current missing target question.
+        questionRetryState:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/QuestionRetryState'
+          description: >-
+            Optional persisted manual request state. Restore requestId on refresh and
+            poll GET while running. Expiry or unknown transport results never authorize
+            a new requestId or model round. Null when no relevant manual request exists.
 
     ScoreItem:
       type: object
@@ -1140,6 +1368,7 @@ components:
       type: object
       required:
         - interviewId
+        - revision
         - position
         - positionLabel
         - totalScore
@@ -1154,6 +1383,10 @@ components:
       properties:
         interviewId:
           type: string
+        revision:
+          type: integer
+          minimum: 1
+          description: Current published report revision; earlier results remain archived.
         position:
           type: string
         positionLabel:
@@ -1212,3 +1445,7 @@ components:
         comment:
           type: string
           maxLength: 500
+        expectedRevision:
+          type: integer
+          minimum: 1
+          description: Displayed report revision; required after revision 1 to prevent stale submissions.
