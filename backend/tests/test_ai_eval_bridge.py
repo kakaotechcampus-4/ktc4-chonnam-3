@@ -453,3 +453,26 @@ def test_cli_dry_run_writes_reproducible_diagnostics_without_an_api_key(tmp_path
     assert saved["summary"]["quality_denominator"] == 0
     assert len(saved["metadata"]["working_source_sha256"]) == 64
     assert saved["metadata"]["prompts"][0]["model"] == "fixture"
+
+
+async def test_service_examples_are_executable_inputs_but_not_approved_quality_cases():
+    from eval_cases import load_cases
+
+    examples = load_cases(TEST_REPO_ROOT / "ai/evals/service_examples")
+
+    def forbidden():
+        pytest.fail("input validation must not call the provider")
+
+    prompts = {
+        task: c.PromptSpec(
+            task, f"{task}_v3" if task == "director" else f"{task}_v2", "fixture", "fixture"
+        )
+        for task in ("director", "answer_analysis", "report", "report_score")
+    }
+    executor = ServiceExecutor(
+        prompts, c.CallLimits(5, 1024, 65536, 65536), forbidden, dry_run=True
+    )
+    assert {case.kind for case in examples} == {"question", "evidence", "report"}
+    for case in examples:
+        assert case.expectation["review"]["status"] == "unreviewed"
+        assert (await executor(case.kind, case.model_input())).validated_only
