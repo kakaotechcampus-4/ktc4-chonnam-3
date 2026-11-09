@@ -7,8 +7,7 @@ from eval_cases import Case
 from eval_runner import Execution, run_cases
 
 
-@pytest.mark.asyncio
-async def test_completed_cases_are_checkpointed_before_next_executor_can_be_cancelled():
+def test_completed_cases_are_checkpointed_before_next_executor_can_be_cancelled():
     cases = [
         Case(str(n), 1, "question", "dev", "source", {}, {"review": {"status": "unreviewed"}})
         for n in (1, 2)
@@ -24,6 +23,6 @@ async def test_completed_cases_are_checkpointed_before_next_executor_can_be_canc
         return Execution({"answer": "checked"})
 
     with pytest.raises(asyncio.CancelledError):
-        await run_cases(cases, execute, metadata={}, checkpoint=checkpoint)
+        asyncio.run(run_cases(cases, execute, metadata={}, checkpoint=checkpoint))
     assert checkpoints[-1]["cases"][0]["output"] == {"answer": "checked"}
     assert checkpoints[-1]["checkpoint"] == {"completed": 1, "total": 2, "current_case": "2.v1"}
