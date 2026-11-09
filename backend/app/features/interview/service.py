@@ -28,6 +28,7 @@ from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.db.models import InterviewSession, SessionRepository
 from app.features.interview import queries
+from app.features.interview.queue import enqueue_interview_prep
 from app.features.interview.schemas import (
     InterviewDetailResponse,
     InterviewLastError,
@@ -100,17 +101,20 @@ async def create_interview(
     interview_id = interview.id
     try:
         session_id = await _issue_session_id(redis, interview_id=interview_id, user_id=user_id)
-        await redis.enqueue_job("interview_prep", str(interview_id))
     except RedisError:
-        # 준비 job 없는 preparing 행이 남으면 같은 run 의 새 면접이 영구히 막히므로 되돌린다.
+        # sessionId 를 못 받은 클라이언트의 preparing 행은 같은 run 의 새 면접을 막으므로 되돌린다.
         try:
             await db.delete(interview)
             await db.commit()
         except SQLAlchemyError:
-            # ponytail: 되돌리기 실패 행은 id 로그만 남긴다. 자동 정리는 준비 job reaper 에서.
+            # 되돌리기에 실패한 행도 아래 준비 reaper 가 enqueue 하거나 만료 처리한다.
             logger.error("interview_create_rollback_failed", interview_id=str(interview_id))
         raise AppError(Reason.INTERNAL_ERROR) from None
-    # 준비 job 까지 접수된 뒤에만 남긴다 — 위 되돌리기 경로에 이벤트가 새지 않게 한다.
+    # enqueue 실패는 행을 지우지 않는다. preparing 행이 복구 근거이고 reaper 가 재등록한다.
+    if not await enqueue_interview_prep(redis, interview_id):
+        logger.warning("interview_create_enqueue_deferred", interview_id=str(interview_id))
+    # 선택은 이미 commit 됐으므로 큐 접수 여부와 무관하게 1회 남긴다.
+    # sessionId 발급 실패의 되돌리기 경로는 위에서 raise 하므로 이벤트가 새지 않는다.
     await record_event(
         db,
         "repo_selected",
