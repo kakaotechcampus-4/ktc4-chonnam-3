@@ -1,0 +1,35 @@
+diff --git a/backend/app/core/config.py b/backend/app/core/config.py
+--- a/backend/app/core/config.py
++++ b/backend/app/core/config.py
+@@ -230,6 +230,7 @@
+     api_prefix: str = "/api"
+     frontend_origin: str = "http://localhost:5173"
+     log_level: LogLevel = "INFO"
++    log_json: bool = False
+ 
+     # ── DB / Redis ──
+     database_url: str = Field(
+@@ -370,14 +371,20 @@
+     interview_duration_seconds: int = 1200
+     # 원래 enqueue 와 겹치지 않도록 이 시간 이상 preparing 인 면접만 reaper 가 재등록한다.
+     interview_prep_reaper_min_age_seconds: int = Field(default=60, gt=0)
+-    # 원문 byte 상한은 준비·진행 중 근거 조회에서 공유하고 PREPARE 상한은 준비에만 쓴다.
++    # 진행 중 근거 재조회는 작은 기존 상한을 유지한다.
+     director_evidence_max_response_bytes: LLMInteger = Field(default=131072, gt=0)
+     director_evidence_max_total_bytes: LLMInteger = Field(default=262144, gt=0)
+-    director_prepare_max_entries: LLMInteger = Field(default=512, gt=0, le=4096)
+-    director_prepare_max_depth: LLMInteger = Field(default=8, gt=0, le=20)
++    # 준비는 고정 tree의 구조 목록도 읽는다. 원문 입력량·후속 Tool 예산과 분리한다.
++    # 공개 서비스 tree 실측 1111590 bytes/4209항목을 수용하되 유한 상한을 유지한다.
++    director_prepare_max_response_bytes: LLMInteger = Field(default=2097152, gt=0)
++    director_prepare_max_total_bytes: LLMInteger = Field(default=8388608, gt=0)
++    director_prepare_max_source_bytes: LLMInteger = Field(default=262144, gt=0)
++    director_prepare_max_entries: LLMInteger = Field(default=8192, gt=0, le=8192)
++    director_prepare_max_depth: LLMInteger = Field(default=12, gt=0, le=20)
+     director_prepare_max_requests: LLMInteger = Field(default=32, gt=0, le=128)
+     director_prepare_max_files: LLMInteger = Field(default=8, gt=0, le=16)
+     director_prepare_max_file_bytes: LLMInteger = Field(default=32768, gt=0)
++    # 선정 모델의 대기는 제외한 원문 HTTP 처리 전체의 시간 예산이다.
+     director_prepare_timeout_seconds: LLMTimeout = Field(default=30.0, gt=0, allow_inf_nan=False)
+     # NoDecode — pydantic-settings 가 dict 를 JSON 으로 먼저 파싱하지 않게 한다.
+     #            .env 는 `tech_lead:6,...` 형식이라 아래 validator 가 직접 해석한다.
