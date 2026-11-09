@@ -9,7 +9,6 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.db.models.analysis import AnalysisJob, AnalysisRepoCandidatePage
 from app.db.models.document import UserDocument
@@ -23,6 +22,7 @@ from app.features.analysis.pipeline.run_support import (
     batch_outcome,
     collect,
     failure_code,
+    unexpected_failure_fields,
 )
 from app.features.analysis.pipeline.steps.repo_analyze import (
     analyze_collected_batch,
@@ -176,7 +176,7 @@ async def run_analysis(ctx: dict[str, Any], run_id: UUID) -> None:
             "analysis_run_failed",
             run_id=str(run_id),
             error_code=code,
-            exc_info=not isinstance(error, (RunFailure, AppError)),
+            **unexpected_failure_fields(error),
         )
         await finish_run(ctx, run_id, "failed", code)
 
@@ -228,6 +228,6 @@ async def run_candidate_page(ctx: dict[str, Any], run_id: UUID, page: int) -> No
             run_id=str(run_id),
             page=page,
             error_code=code,
-            exc_info=not isinstance(error, (RunFailure, AppError)),
+            **unexpected_failure_fields(error),
         )
         await finish_page(ctx, run_id, page, code)
