@@ -1,0 +1,118 @@
+diff --git a/backend/tests/features/report/test_report_history.py b/backend/tests/features/report/test_report_history.py
+--- a/backend/tests/features/report/test_report_history.py
++++ b/backend/tests/features/report/test_report_history.py
+@@ -8,7 +8,13 @@
+ from devon_ai import contracts as c
+ from sqlalchemy import select
+ 
+-from app.db.models import InterviewSession, InterviewTurn, LLMCallRecord, TurnEvidence
++from app.db.models import (
++    InterviewSession,
++    InterviewTurn,
++    LLMCallRecord,
++    SessionRepository,
++    TurnEvidence,
++)
+ from app.features.report import service
+ from app.llm_tasks.report import ReportDraftInvalidError
+ 
+@@ -99,6 +105,99 @@
+     session.context_state = {"evidence_tool_results": {str(turn.id): asdict(result)}}
+     await db.commit()
+     return turn.id, json.loads(json.dumps(asdict(initial))), json.loads(json.dumps(asdict(final)))
++
++
++@pytest.mark.parametrize(
++    "snapshot_case",
++    ["matching", "different_sha", "malformed", "unselected", "missing_pin", "other_owner"],
++)
++async def test_report_replays_unread_lookup_candidates_only_from_owned_pinned_selection(
++    app, db, ctx, prompt, snapshot_case
++):
++    from ..interview.factories import make_repo, make_run, make_user
++
++    turn_id, initial, _ = await _history(db, ctx)
++    interview, repo = ctx
++    selected = await db.scalar(select(SessionRepository))
++    selected.snapshot_head_sha = "a" * 40
++    request_repo_id = str(repo.id)
++    snapshot_repo_id = request_repo_id
++    snapshot = {"head_sha": "a" * 40, "paths": ["src/unread.py"], "limitations": []}
++    if snapshot_case == "different_sha":
++        snapshot["head_sha"] = "b" * 40
++    elif snapshot_case == "malformed":
++        snapshot["paths"] = ["src/unread.py", "../outside.py"]
++    elif snapshot_case == "unselected":
++        request_repo_id = snapshot_repo_id = str(uuid4())
++    elif snapshot_case == "missing_pin":
++        selected.snapshot_head_sha = None
++    elif snapshot_case == "other_owner":
++        other_user = await make_user(db)
++        other_run = await make_run(db, other_user)
++        other_repo = await make_repo(db, other_run)
++        db.add(
++            SessionRepository(
++                interview_session_id=interview.id,
++                repository_id=other_repo.id,
++                is_primary=False,
++                display_order=1,
++                snapshot_head_sha="a" * 40,
++            )
++        )
++        request_repo_id = snapshot_repo_id = str(other_repo.id)
++    turn = await db.get(InterviewTurn, turn_id)
++    request = {
++        "claim_text": turn.answer_text,
++        "purpose": "아직 읽지 않은 주변 구현 확인",
++        "repository_id": request_repo_id,
++        "git_ref": "a" * 40,
++        "allowed_paths": ["src/unread.py"],
++    }
++    record = await db.scalar(select(LLMCallRecord))
++    raw = json.loads(record.attempts[0]["raw_output"])
++    raw.update(needs_verification=True, verification_requests=[request])
++    record.attempts = [{**record.attempts[0], "raw_output": json.dumps(raw)}]
++    interview.context_state = {
++        **interview.context_state,
++        "repository_lookup_candidates": {snapshot_repo_id: snapshot},
++    }
++    original_attempts = json.loads(json.dumps(record.attempts))
++    await db.commit()
++    generator = FakeGenerator()
++    if snapshot_case != "matching":
++        with pytest.raises(ReportDraftInvalidError, match="history"):
++            await service.generate_report(
++                app.state.session_factory,
++                interview_id=interview.id,
++                llm=LLM,
++                http_client=None,
++                generator=generator,
++            )
++        assert generator.calls == []
++    else:
++        assert (
++            await service.generate_report(
++                app.state.session_factory,
++                interview_id=interview.id,
++                llm=LLM,
++                http_client=None,
++                generator=generator,
++            )
++            == "created"
++        )
++        payload = generator.calls[0]
++        assert payload["turns"][0]["analysis"]["verification_requests"] == [request]
++        # 조회 후보는 권한 범위일 뿐, 읽은 원문이나 Tool 성공 결과로 승격하지 않는다.
++        assert all(item["path"] != "src/unread.py" for item in payload["turns"][0]["evidences"])
++        assert all(
++            item["path"] != "src/unread.py"
++            for result in payload["tool_results"]
++            for item in result["result"]["items"]
++        )
++    await db.refresh(turn)
++    await db.refresh(record)
++    assert turn.analysis == initial
++    assert record.attempts == original_attempts
+ 
+ 
+ async def test_report_receives_final_checked_analysis_and_partial_tool_result(app, db, ctx, prompt):
