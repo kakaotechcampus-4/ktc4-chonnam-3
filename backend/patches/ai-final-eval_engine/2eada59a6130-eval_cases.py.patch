@@ -1,0 +1,85 @@
+diff --git a/ai/evals/eval_cases.py b/ai/evals/eval_cases.py
+--- a/ai/evals/eval_cases.py
++++ b/ai/evals/eval_cases.py
+@@ -162,7 +162,8 @@
+     """Question Contract subset a report payload carries (ai/evals/README.md)."""
+     keys = ("purpose", "required_points", "evaluation_scope")
+     points: Any = contract.get("required_points") if isinstance(contract, dict) else None
+-    ok = isinstance(contract, dict) and set(contract) == set(keys)
++    optional = {"assumptions", "basis_refs", "evaluation_keys"}
++    ok = isinstance(contract, dict) and set(keys) <= set(contract) <= set(keys) | optional
+     ok = ok and _text(contract["purpose"]) and _text(contract["evaluation_scope"])
+     ok = ok and isinstance(points, list) and bool(points)
+     ok = ok and all(
+@@ -214,12 +215,35 @@
+ 
+ def _history(case: Case) -> list[dict[str, Any]]:
+     history = case.payload.get("history")
++    explicit = case.payload.get("service_task") == "report"
++    if explicit:
++        service = case.payload.get("service_input")
++        turns = service.get("turns") if isinstance(service, dict) else None
++        if not isinstance(turns, list) or not all(isinstance(turn, dict) for turn in turns):
++            raise CaseError(f"{case.case_id}: runtime report needs service_input.turns")
++        history = [
++            {
++                "turn": turn.get("turn_no"),
++                "persona": turn.get("persona"),
++                "question": turn.get("question"),
++                "answer": turn.get("answer"),
++                "question_contract": turn.get("question_contract"),
++                **(
++                    {"follows": turn["parent_turn_no"]}
++                    if turn.get("parent_turn_no") is not None
++                    else {}
++                ),
++            }
++            for turn in turns
++        ]
+     turns_ok = isinstance(history, list) and all(isinstance(t, dict) for t in history)
+     if not turns_ok or not history:
+         raise CaseError(f"{case.case_id}: a report case needs a non-empty payload.history list")
+     for turn in history:
+-        if type(turn.get("turn")) is not int or not all(
+-            isinstance(turn.get(k), str) for k in ("persona", "question", "answer")
++        if (
++            type(turn.get("turn")) is not int
++            or not all(isinstance(turn.get(k), str) for k in ("persona", "question"))
++            or not (isinstance(turn.get("answer"), str) or explicit and turn.get("answer") is None)
+         ):
+             raise CaseError(
+                 f"{case.case_id}: history needs int turn and str persona/question/answer"
+@@ -234,6 +258,19 @@
+             raise CaseError(f"{case.case_id}: follows must name an earlier turn")
+     _check_links(case, history)
+     return list(history)
++
++
++def _report_frame(case: Case) -> dict[str, Any]:
++    """쌍 비교에서 답변만 제외하고 원문·rubric·계약을 모두 보존한다."""
++    frame = copy.deepcopy(case.payload)
++    turns = (
++        frame["service_input"]["turns"]
++        if frame.get("service_task") == "report"
++        else frame["history"]
++    )
++    for turn in turns:
++        turn.pop("answer", None)
++    return frame
+ 
+ 
+ def _check_pairs(cases: list[Case]) -> None:
+@@ -257,12 +294,7 @@
+         frames, answers = [], []
+         for case in (first, second):
+             history = _history(case)
+-            frames.append(
+-                (
+-                    [{k: v for k, v in turn.items() if k != "answer"} for turn in history],
+-                    {k: v for k, v in case.payload.items() if k != "history"},
+-                )
+-            )
++            frames.append(_report_frame(case))
+             answers.append([turn.get("answer") for turn in history])
+         if frames[0] != frames[1]:
+             raise CaseError(f"pair {pair_id}: questions, personas and evidence must be identical")
