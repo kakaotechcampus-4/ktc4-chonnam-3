@@ -3,9 +3,11 @@
 import asyncio
 import hashlib
 import json
-from uuid import uuid4
+from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
 
 import httpx
+import pytest
 from sqlalchemy import select
 
 from app.core.config import Settings
@@ -29,7 +31,47 @@ from tests.features.interview.factories import make_interview, make_repo, make_r
 SHA = "b" * 40
 
 
-async def seed(app, *, claim_type="implementation", with_code=True):
+async def test_expired_same_job_comparison_can_be_reclaimed(app, monkeypatch):
+    import pytest
+
+    from app.features.documents import claim_comparison as module
+
+    interview_id, job_id, claim_id, _, evidence_id = await seed(app)
+
+    async def crash(*args, **kwargs):
+        raise RuntimeError("simulated lost worker")
+
+    original = module.compare_document_claims
+    monkeypatch.setattr(module, "compare_document_claims", crash)
+    with pytest.raises(RuntimeError, match="lost worker"):
+        await prepare_selected_claim_comparisons(
+            app.state.session_factory, interview_id, settings(), job_id=job_id
+        )
+    async with app.state.session_factory.begin() as db:
+        row = await db.get(InterviewSession, interview_id)
+        previous_run = row.context_state["document_claim_comparison_run_id"]
+        row.context_state = {
+            **row.context_state,
+            "document_claim_comparison_expires_at": (
+                datetime.now(UTC) - timedelta(seconds=1)
+            ).isoformat(),
+        }
+    monkeypatch.setattr(module, "compare_document_claims", original)
+    calls = []
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(provider(claim_id, evidence_id, calls))
+    ) as http:
+        await prepare_selected_claim_comparisons(
+            app.state.session_factory, interview_id, settings(), http, job_id=job_id
+        )
+    assert len(calls) == 1
+    async with app.state.session_factory() as db:
+        row = await db.get(InterviewSession, interview_id)
+        assert row.context_state["document_claim_comparison_status"] == "succeeded"
+        assert row.context_state["document_claim_comparison_run_id"] != previous_run
+
+
+async def seed(app, *, claim_type="implementation", with_code=True, prompt_version="claim_code_v1"):
     source = "API uses a cache"
     version = hashlib.sha256(source.encode()).hexdigest()
     async with app.state.session_factory.begin() as db:
@@ -87,7 +129,7 @@ async def seed(app, *, claim_type="implementation", with_code=True):
         db.add(
             PromptVersion(
                 task_name="claim_code",
-                version="claim_code_v1",
+                version=prompt_version,
                 model="fixture",
                 template="Compare only supplied sources",
                 is_active=True,
@@ -145,8 +187,9 @@ def provider(claim_id, evidence_id, calls):
     return respond
 
 
-async def test_comparison_is_saved_reused_and_has_independent_source_version(app):
-    interview_id, job_id, claim_id, _, evidence_id = await seed(app)
+@pytest.mark.parametrize("version", ["claim_code_v1", "claim_code_v1@luna-local"])
+async def test_comparison_is_saved_reused_and_has_independent_source_version(app, version):
+    interview_id, job_id, claim_id, _, evidence_id = await seed(app, prompt_version=version)
     calls = []
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(provider(claim_id, evidence_id, calls))
@@ -159,6 +202,9 @@ async def test_comparison_is_saved_reused_and_has_independent_source_version(app
     async with app.state.session_factory() as db:
         row = await db.scalar(select(DocumentClaimComparison))
         assert row.status == "consistent" and row.execution_status == "succeeded"
+        assert row.prompt_version == version
+        record = await db.get(LLMCallRecord, row.run_id)
+        assert record.attempts[0]["prompt_version"] == version
         assert row.code_sources[0]["git_ref"] == SHA
         assert row.code_sources[0]["path"] == "app.py"
         interview = await db.get(InterviewSession, interview_id)
@@ -299,3 +345,48 @@ async def test_concurrent_same_preparation_reserves_only_one_model_batch(app):
             release.set()
         await first
     assert len(calls) == 1
+
+
+async def test_expired_batch_late_result_cannot_replace_reclaimed_batch(app):
+    interview_id, job_id, claim_id, _, evidence_id = await seed(app)
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls = []
+    respond = provider(claim_id, evidence_id, calls)
+
+    async def paused(request):
+        entered.set()
+        await release.wait()
+        return respond(request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(paused)) as old_http:
+        first = asyncio.create_task(
+            prepare_selected_claim_comparisons(
+                app.state.session_factory, interview_id, settings(), old_http, job_id=job_id
+            )
+        )
+        await asyncio.wait_for(entered.wait(), 5)
+        async with app.state.session_factory.begin() as db:
+            row = await db.get(InterviewSession, interview_id)
+            old_run = row.context_state["document_claim_comparison_run_id"]
+            row.context_state = {
+                **row.context_state,
+                "document_claim_comparison_expires_at": (
+                    datetime.now(UTC) - timedelta(seconds=1)
+                ).isoformat(),
+            }
+        try:
+            async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+                await prepare_selected_claim_comparisons(
+                    app.state.session_factory, interview_id, settings(), http, job_id=job_id
+                )
+        finally:
+            release.set()
+            await asyncio.wait_for(first, 5)
+    assert len(calls) == 2
+    async with app.state.session_factory() as db:
+        row = await db.get(InterviewSession, interview_id)
+        old = await db.get(LLMCallRecord, UUID(old_run))
+        assert old.discard_reason == "preparation_changed"
+        assert row.context_state["document_claim_comparison_status"] == "succeeded"
+        assert row.context_state["document_claim_comparison_run_id"] != old_run
+        assert len(list(await db.scalars(select(DocumentClaimComparison)))) == 1

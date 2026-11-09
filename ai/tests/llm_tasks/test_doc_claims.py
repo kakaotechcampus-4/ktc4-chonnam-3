@@ -81,6 +81,17 @@ def test_payload_numbers_non_empty_lines_and_keeps_text_as_is() -> None:
     assert provider.requests[0].schema_version == "1"
 
 
+@pytest.mark.parametrize("version", ["doc_claims_v1@local-luna", "doc_claims_v2@local-luna"])
+def test_deployment_version_keeps_full_identity_and_checked_original(version) -> None:
+    from dataclasses import replace
+
+    provider = Provider({"claims": [_claim()]})
+    result = _extract(provider, prompt=replace(PROMPT, version=version))
+    assert result.failure is None
+    assert provider.requests[0].prompt.version == version
+    assert result.claims[0].source_line == TEXT.splitlines()[2]
+
+
 def test_claims_are_returned_with_line_number_and_source_line() -> None:
     role = _claim(
         claim_text="4인 팀에서 백엔드를 전담했다.", claim_type="role", tech_tags=[], line_id="L2"

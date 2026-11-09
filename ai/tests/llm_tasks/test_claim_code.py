@@ -1,6 +1,7 @@
 """문서의 주장과 실제 코드 구간만 대조하며 개인 기여를 확정하지 않는다."""
 
 import asyncio
+from dataclasses import replace
 
 from devon_ai import contracts as c
 from devon_ai.llm_tasks.claim_code import ClaimForComparison, compare_claims
@@ -41,12 +42,12 @@ def output(**changes):
     return {"comparisons": [{**item, **changes}]}
 
 
-def run(raw, *, claims=None, evidences=None):
+def run(raw, *, claims=None, evidences=None, prompt=PROMPT):
     requests = []
 
     async def model(request, validator):
         requests.append(request)
-        attempts = (c.AttemptMetadata(1, "fixture", "fixture", PROMPT.version, "1", 1, 1, 1),)
+        attempts = (c.AttemptMetadata(1, "fixture", "fixture", prompt.version, "1", 1, 1, 1),)
         try:
             return c.ModelResult(validator(raw), None, attempts)
         except c.ContractError as error:
@@ -58,7 +59,7 @@ def run(raw, *, claims=None, evidences=None):
         compare_claims(
             claims or (claim(),),
             (evidence(),) if evidences is None else evidences,
-            prompt=PROMPT,
+            prompt=prompt,
             limits=LIMITS,
             model_call=model,
         )
@@ -73,6 +74,14 @@ def test_comparison_preserves_code_and_document_versions_in_input():
     assert requests[0].payload["evidences"][0]["git_ref"] == "b" * 40
     assert result.data[0].status == "consistent"
     assert "not_personal_contribution_evidence" in result.data[0].limitations
+
+
+def test_comparison_accepts_deployment_and_keeps_full_prompt_identity():
+    prompt = replace(PROMPT, version="claim_code_v1@luna-local")
+    result, requests = run(output(), prompt=prompt)
+    assert result.succeeded
+    assert requests[0].prompt is prompt
+    assert result.attempts[0].prompt_version == prompt.version
 
 
 def test_unread_or_invented_evidence_cannot_confirm_or_conflict():

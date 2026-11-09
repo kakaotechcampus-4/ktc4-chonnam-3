@@ -120,5 +120,5 @@ async def test_missing_domain_prompt_is_recorded_as_failure_without_failing_post
     async with session_factory() as db:
         stored = await db.get(JobPosting, posting_id)
         assert stored.parse_status == "succeeded"
-        assert stored.domain_category == "etc"
+        assert stored.domain_category is None
         assert stored.raw_payload["_domain_classification"]["status"] == "failed"
