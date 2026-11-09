@@ -2745,6 +2745,246 @@ r1~r8의 v2 입력에는 원래 전역 자료 m1/m2가 빠져 있었고,
 이 결과만으로 운영이 조회를 생략하거나 보고서 내부 참조가 없다고 결론내리지 않는다.
 
 ### 보고서 자료 연결과 내부 관찰의 추가 보완
+
+기존 v1·v2 자료와 실제 실행·판정은 보존하고 별도
+[보고서 v3 코호트](../../ai/evals/report_source_binding_cohort/binding-manifest.json)를 구성했다.
+원래 m1/m2 원문과 명시 경로·줄 표기를 그대로 사용한다.
+새 연결은 가상 평가의 사용 가능 자료라는 전제이며 원래 질문 당시 사용 이력의 복원이 아니다.
+필요한 ref는 기존 합성 snapshot에 연결하고 실제 코드 버전을 증명한 것으로 취급하지 않는다.
+질문·답변·질문 계약·허용/금지 기준·control은 바꾸지 않고 검수는 `unreviewed`로 유지한다.
+
+평가 bridge는 실제 모델의 검증된 `ReportNarrative`를 같은 입력으로 다시 검증한 뒤
+`validated-report-claims.v1` artifact를 만든다. 문구·section·persona·claim_index·turn_refs·
+evidence_refs를 함께 보존하고 공개 `output_hash`와 별도의 `artifacts_hash`를 기록한다.
+공개 보고서·DB·서비스 런타임을 변경하거나 공개 문자열에서 참조를 만들어 붙이지 않는다.
+[artifact 검증](../../ai/evals/eval_artifacts.py)과 재판정은 형식·버전·해시 쌍·변조를 검사하고,
+원래 artifact가 없는 결과에는 숨은 근거를 만들어 채우지 않는다.
+
+이 관찰을 읽는 v3 Judge는 기존 기본 v2와 분리했다.
+`--judge-prompt ai/prompts/evaluation-judge-v3.md --judge-prompt-version evaluation-judge-v3`를 명시한다.
+내부에만 있는 항목이 공개 응답에 표시됐다고 간주하거나 공개 누락을 대신 충족할 수는 없다.
+
+[q7 v3 코호트](../../ai/evals/component_regression/binding-manifest.json)는
+`director_verification` 단계의 실제 `verification_decision`만 실행한다.
+요청·경로·SHA는 입력과 일치했고 model factory·HTTP·다음 Director는 모두 0회였다.
+이는 조회 판단 함수의 자동 검증이며 실제 원문 조회는 앞선 별도 실검증 결과를 참조한다.
+새 manifest의 출처 지문은 `utf8_lf`로 정규화하고 원본 raw 지문은 별도로 보존했다.
+Windows CRLF·Linux LF에서 같은 의미의 자료가 해시 차이만으로 실패하지 않는 회귀도 확인했다.
+
+추가 보완 후 AI 전체 782개, BE 평가 관련 42개가 통과했다.
+기존 전체 BE 2409개 이후의 평가 연결 변경에 대한 별도 영향 검사이며 두 수치를 합산하지 않는다.
+Ruff 전체·format 530파일·mypy app+scripts 228소스도 통과했고 검사 대상 713파일은 전후 같았다.
+원본 58개 자료, v2 코호트 66개 JSON과 BE app 212파일도 이전 동결본과 같았다.
+산출물은 `report-source-observation-verification-01/`과
+`followups-final-validation/backend-static-post-artifacts/`에 있다.
+
+### 최종 이미지와 임시 검증 프로세스
+
+추가 평가 코드와 v3 prompt를 포함한 runtime·평가 이미지를 새로 빌드했다.
+평가 이미지의 실제 실행 파일 7개 해시가 작업본과 같았고 키·사례·holdout 내장 파일은 없었다.
+네트워크 없이 기존 32개·새 보고서 8개·조회 결정 1개의 입력 계약이 모두 통과했다.
+그 실행에서는 서비스·Judge 예산을 생성하지 않았다. 실제 모델 실행과는 별도 결과다.
+산출물은 `followups-final-validation/images-artifacts-final/`에 있다.
+
+시험 로그인 세션을 폐기하고 임시 API 컨테이너·Vite를 종료했다.
+DB·Redis의 검증 이력과 TTS 예산은 보존했으며 5173·8000 포트는 해제됐다.
+이는 평상시 `.env`의 DB 적용이나 운영 배포를 완료한 상태가 아니다.
+정리 도우미의 인코딩·부분 정리 후 재실행 오류도 기록하고 마지막 정리 결과와 구분했다.
+산출물은 `runtime/cleanup/attempt-03/result.json`이다.
+
+### 자료·관찰 보완 후 실제 9개 검증의 확정 결과
+
+`source-binding-observation-live-01/`에서 기존 실행과 분리해 실제 sol로 검증했다.
+새 보고서 v3 8개와 조회 결정 q7 v3 1개이며 기존 공개 출력·기준을 고쳐 통과시키지 않았다.
+
+| 항목 | 실제 결과 |
+| --- | --- |
+| 입력·실행 | 9/9 통과. 조회 결정 1개는 실제 함수만 실행했고 model factory·HTTP·다음 Director는 0회였다. |
+| 보고서 형식 | 8/8 통과. 점수·서술 모델은 각각 8회, 총 16/20시도를 사용했다. |
+| 내부 근거 | 실제 검증된 모델 Narrative와 최종 artifact의 문구·구분·담당·순번·턴/Evidence 참조가 8/8 일치했다. 별도 artifact 해시·참조 그래프 대조도 통과했다. |
+| Judge 실행 | 명시한 v3 Judge 9/9 실행 성공, 9/16시도 사용. 재시도·실행 실패 0회다. |
+| 진단 판정 | accept 8·reject 1. 사람의 정답 승인이나 전체 서비스 품질 합격으로 승격하지 않는다. |
+| 보존 | 기존 자료·v2 결과·31개 재판정·제어 출력 교정과 새 실행 전후 소스 지문이 같다. |
+
+남은 reject는 `r-0008.v3`이다. m1/m2가 실제 모델 입력에 모두 있고,
+최종 Claim 24개도 검증된 모델 결과와 같지만 구조화된 evidence_refs에는 m2만 사용했다.
+Redis 보완 관찰은 실제 턴 2·6으로 연결했고 `build.gradle:38~43`은 한계 문장에만 언급했다.
+Judge는 해당 a3의 m1 근거 연결을 충족하지 못했다고 판정했다.
+이제 자료 누락·관찰 손실과 구분되는 특정 인용 품질 진단이며, 기준은 여전히 미검수다.
+사람 기여·성과를 확정하거나 환각이라고 단정하지 않았고 재실행·기준 완화로 결과를 바꾸지 않았다.
+
+이번 후속 구현과 기능·형식·참조·실행의 상태는 **자동 검증 완료**다.
+내용의 모든 품질 판정이 통과한 것은 아니며 사람의 rubric·평가셋 검수는 **사람 검수 대기**로 유지한다.
+운영 적용·게시·배포, 실제 공개 Wanted 이미지 공고, 물리 마이크의 전체 9턴,
+모든 언어·규모와 운영 동시성·SLO는 이번 완료 범위에서 확인하지 않았다.
+
+원본 모델 입력·결과·판정과 독립 대조는 `source-binding-observation-live-01/`의
+`result.json`, `summary.json`, `preservation.json`에 있다.
+겹치는 검사 수를 합산하지 않은 최종 색인은 `followups-final-validation/final-summary.json`이다.
+원본 worktree 371파일·patch·status는 그대로이며 공개 대상 1104파일에서 실제 키 값은 검출되지 않았다.
+
+
+## 2026-11-08 — 게시 PR #212~#219의 의존 관계 정리
+
+사용자 요청에 따라 게시 당시 신규 403경로만 대상으로 정리한다.
+게시 후 별도로 변경한 45경로는 원본 그대로 보존하고 이번 게시에서 제외한다.
+기존 PR 번호와 develop 기준은 유지하며 원본 8개 HEAD 뒤에 후속 커밋을 추가한다.
+
+- 공통 모델·마이그레이션·런타임 프롬프트·검색·준비 lease·이벤트 기반은
+  #213에서 제공하고 문서·JD → Director·레포 → 리포트·프로필 순으로 소비한다.
+- 평가 실행은 #214, 데이터 의존 검사와 CI 연결은 #215, REST·WebSocket과
+  음성·FE 최종 통합 검사는 #219에 둔다. 파일별 신규 변경의 소유자는 한 곳이다.
+- 준비 실패 후 실제 REST·큐·worker 재시도를 확인하는 테스트 한 개만
+  `test_director_prepare.py`에서 `test_director_ws.py`로 옮긴다.
+  기존 검사 본문·fixture·도우미와 전체 테스트 정의를 보존한다.
+- 선행 PR과 겹치는 19개 패치는 미적용 후속 변경이다. 선행 반영 이후
+  적용·재기준화·통합 재검증이 필요하며, 단독 CI 통과나 즉시 병합 가능으로
+  보고하지 않는다. 이번 변경으로 선행 PR을 병합하지 않는다.
+
+원동결 1104파일에서 새로 실행한 자동 검증은 AI 782건 통과, BE 2413건 수집,
+AI·BE Ruff/format/mypy, 공통 계약 검사와 앱 import 검사 통과다.
+Windows 표준 asyncio socketpair를 차단했던 검증 도구 오류는 제품 변경 없이
+검증 도구만 고쳐 해당 검사를 재실행했다. 초기 실패 기록도 보존한다.
+테스트 이동 후 통합 전수 검증과 각 게시본 단독 검증은 별도로 실행·기록하며,
+기존 실제 공급자 실행 결과를 이번 변경의 새 결과로 재사용하지 않는다.
+외부 모델·STT·TTS·Vision·검색 유료 호출과 사람 평가는 이번에 실행하지 않는다.
+지속되는 결정은 [0041](decisions/0041-published-pr-dependency-order.md)에 남긴다.
+
+
+## 2026-11-08 — 기존 작업의 신규 변경 게시와 실제 자료 후속 보완
+
+사용자 요청에 따라 기존 작업을 먼저 게시하고, 별도 `feature/ai-real-source-hardening-20261108`에서 후속 구현을 시작했다.
+기존 통합본·index·원본 1104파일과 선행 PR은 보존했다. 초기 설계·task·testing 문서는 변경하지 않는다.
+후속 결정은 [0039](decisions/0039-real-source-coverage-and-official-snapshots.md)다.
+
+### 신규 부분만 게시한 PR
+
+모든 base는 `develop@18f4105b2e7e9885df118d283badbf59692ec5b4`다.
+선행 기준본과 동결 원본을 대조한 신규 변경은 403경로이며 추가 263·수정 140·삭제 0이다.
+직접 변경 384개·후속 patch 19개와 적용 안내 12개로 총 415경로를 게시했고 그룹 간 중복은 0개다.
+선행 tip·상속 커밋은 제외했으며 341커밋 모두 추가+삭제가 300줄 이하이고 최대 270줄이다.
+독립 재생에서 403개를 모두 적용한 전체 1104파일이 동결본과 UTF-8 LF 지문까지 일치했다.
+
+| PR | 범위 | 파일 | 커밋 | 추가/삭제 |
+| --- | --- | ---: | ---: | ---: |
+| [#212](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/212) | 공개 API와 AI 내부 계약 정의 | 5 | 3 | +337/-23 |
+| [#213](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/213) | 공급자·실행 설정 및 개발 초기화 | 44 | 80 | +4749/-28 |
+| [#214](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/214) | 평가 실행·근거 기반 Judge·CLI·CI | 26 | 23 | +3786/-18 |
+| [#215](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/215) | 서비스 평가 사례·원문 연결·회귀 자료 | 98 | 83 | +15742/-0 |
+| [#216](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/216) | Director·답변 분석·레포 원문·근거 Tool | 104 | 41 | +7549/-218 |
+| [#217](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/217) | 문서 Claim·공고 이미지·도메인 연결 | 52 | 26 | +4762/-161 |
+| [#218](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/218) | 리포트 재시도·검토·버전과 프로필 갱신 | 47 | 71 | +5045/-170 |
+| [#219](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/219) | 질문 음성·예산과 FE 계약 실행 연결 | 39 | 14 | +2451/-235 |
+
+8개 모두 Draft다. **patch는 PR 병합만으로 실행되지 않는다.** 선행 반영, 기준 지문 확인, 신규 patch 적용과 최종 통합 검증이 필요하다.
+원격 HEAD·base·Draft·전체 파일 목록·커밋 목록·규모·UTF-8 본문을 게시 후 실제 다시 읽어 대조했다.
+직접 게시 Python·JSON·YAML 329개, 그룹별 diff 검사와 현재 materialized 공통 형식 검사는 통과했다.
+후속 patch 계약까지 검증한 결과는 아니며 구현 그룹의 단독 수집 실패도 그대로 PR에 기록했다.
+원격 #212의 BE CI는 1736통과·1skip, migration CI도 통과했다.
+#213~219의 CI 실패 13 job은 제외한 선행·다른 그룹·비활성 patch 누락으로 설명됐으며 실패 상태를 통과로 바꾸지 않았다.
+완전한 게시 조합의 CI 통과나 잔존 결함 0을 증명한 것은 아니다.
+공개 415파일을 실제 민감 설정 10개와 메모리에서 대조해 값 일치 0건을 확인했고 private 환경 파일은 게시하지 않았다.
+근거는 보존한 `ai-final-publication-20261108/`의 `publication-verification.json`, `branch-verification.json`, `validation-summary.json`, `remote-prs.json`, `remote-ci-audit.json`이다.
+
+### 게시 전 실제 자료 검증에서 확인한 범위
+
+- Memos는 실제 8원문·58659bytes·1698줄을 읽었다. Umami도 실제 8원문을 분석했다. 전체 레포 실행·개인 기여 검증은 아니다.
+- Healthchecks의 기본 L1 50초 timeout과 개행 전용 겹침 구간 오류는 보존했다. 별도 timeout 진단 성공을 원래 실행 성공으로 바꾸지 않았다.
+- Halo의 옛 L2는 설정 8개에 편중됐으며 Java·테스트 원문은 0개였다. 이를 전체 Java 프로젝트 분석 성공으로 세지 않는다.
+- 실제 Wanted 개발자 공고 361487은 API→제품→격리 DB에서 요구사항 20건의 원문 인용을 확인했다. 구조화 본문이므로 모델·Vision 0회가 정상이며 기존 9턴의 합성 JD와 다른 검증이다.
+- 자소설의 2015년 실제 이미지 공고는 Vision 31블록·sol 후보 6개를 얻었지만 기존 분류 제목 검사에서 최종 0개를 채택했다. 후보의 인용·참조 6/6은 맞았다. Wanted 이미지나 새 사이트 adapter 완료 증거가 아니다.
+
+### 별도 개발본의 후속 보완
+
+이미지 제목의 명시 별칭·bullet을 인식하도록 보완했다. 저장된 실제 출력 재생에서 업무 2·우대 4·필수 0이며 인용·참조·기술명은 그대로다.
+문장 속 단어, 우대의 필수 승격, 모호한 절과 불일치 인용은 계속 거절한다. 회귀 18 RED 뒤 관련 35 GREEN, 이 변경 후 AI 전체 809·Ruff·format·mypy가 통과했다. 외부 모델 재호출은 0회다.
+별도 Halo 구조 진단은 같은 SHA의 공개 GET 1회로 1111590bytes·4209항목·일반 파일 3323·Java 1386·test Java 383을 확인했다.
+이 진단은 구조 크기·범위 계측이며 실제 collector의 canonical tree chain이나 선정·L2 성공으로 세지 않는다.
+L1 180초·기타 작업 시간 예시를 정렬했고 설정/준비 deadline 31개 회귀가 통과했다. sol·xhigh·stream·출력 128000과 worker 1800초는 보존했다.
+FE API 문서의 revision·이의제기·명시 리포트 재시도 설명을 실제 동작에 맞추고 GET report의 기존 404 누락을 OpenAPI에 추가했다. 공개 동작을 새로 만들지 않았다.
+이후 구조 inventory/window 분리와 공유 공식 snapshot 경로를 구현했다. 구체적인 검증 범위는 아래와 같다.
+이 후속 변경은 #212~219에 추가 게시하지 않았다. 사람 검수는 계속 `사람 검수 대기`이며 자동 통과만 `자동 검증 완료`로 기록한다.
+
+### 실제 구조·원문과 공식 자료의 후속 검증
+
+준비 collector의 구조 응답·전체 수집·원문·모델 입력 예산을 분리했다.
+`repository_sources.py`와 `repository_source_selection.py`는 전체 inventory와 실제 모델 선정 window를 따로 보존한다.
+`prepare._save_analysis`는 경로·SHA·전달 범위·미확인 범위를 저장하며 기존 면접 중 조회 권한을 확장하지 않는다.
+저장된 Halo 실제 tree의 오프라인 계측에서는 4209항목 중 후보 3328개를 1437개 window로 제한한 요청이 262127/262144bytes였다.
+별도 live matrix의 실제 선정 요청은 후보 1435개·262141/262144bytes·HTTP 200이었다. 사전 계측과 실제 모델 전송 수치를 같은 회차로 합치지 않는다.
+Java 1386개·test Java 383개를 전체 목록에서 확인했고, 실제 선정된 8원문에는 Java·테스트·설정·frontend가 포함됐다.
+개행 전용 겹침 구간은 빈 SourceDocument로 만들지 않으며 원래 줄 위치와 생략 한계를 보존한다.
+
+새 실제 레포 matrix에서 Healthchecks·Umami·Memos는 L1→실제 파일 선정→L2 각각 5개 관찰의 저장용 결과까지 성공했다.
+Halo는 L1·선정 성공 후 L2 120초 timeout으로 실패했다. 이 원본 실패는 그대로 보존했다.
+같은 저장 입력·schema·전송 body의 별도 180초 진단은 약 113초에 5개 관찰로 완료됐다.
+입력 토큰 대부분이 cache hit였으므로 180초가 필수이거나 timeout 확대만이 성공 원인이라고 해석하지 않는다.
+matrix 12회와 별도 진단 1회로 총 실제 모델 13/16회를 사용했고 진단의 GitHub·DB 호출은 0회다.
+독립 대조는 32파일·34구간에서 SHA·경로·줄 위치·모델 입력·저장용 UUID/참조를 확인했다.
+30파일은 전체 Git blob을 대조했고 Healthchecks와 Memos의 큰 파일 각 1개는 prefix 범위만 확인했다.
+Python AST·JSON reader와 나머지 원문 구간 처리는 검증했지만 모든 언어의 전용 해석기나 TOML 실자료 검증을 주장하지 않는다.
+
+공식 자료는 `official_catalog.json`의 8개 항목과 명시 CLI→Tavily 추출→공유 불변 snapshot→면접별 소유 원문 경로를 추가했다.
+JS shell인 TourAPI 항목은 부적합으로 남기고, URL 접근 확인을 실제 본문·요청 절 추출 성공과 구분했다.
+`OfficialSourceSnapshot`은 사용자·면접 FK 없이 원문·추출 Markdown 줄·hash·시각·한계를 저장한다.
+기존 `InterviewExternalSource`에는 snapshot FK를 남기며 소유권·인용·검색 상태·부족 시 Tavily fallback을 유지한다.
+실제 MDN·Python URL의 Tavily 추출 1회는 HTTP 200이었다. MDN 원문 4306자를 격리 PostgreSQL에 저장했고
+첫 수집 시 사용자·면접 행이 없는 상태와 이후 면접별 원문 복사·재사용을 추가 외부 HTTP 0회로 확인했다.
+Python의 실제 캡처는 링크가 포함된 Markdown 제목 때문에 최초 절 추출에 실패했다.
+제목 인식 수정 후 같은 캡처 재생에서 Task Groups 절 165~201줄을 확인했다. 추가 API·DB 쓰기는 0회다.
+모든 catalog 항목의 provider 실추출 성공이나 다국어 의미 매칭의 완전성을 증명한 결과는 아니다.
+legacy 캐시 키 순서, 유데이터 downgrade 거절, CLI URL query 우회 거절·실제 DB 확인도 회귀로 보완했다.
+관련 70개 테스트·정적 검사·migration 정합성 검증이 통과했으며 기존 원문과 최초 실패 기록을 덮어쓰지 않았다.
+
+### 긴 실제 면접에서 확인한 입력 중복과 재검증
+
+실제 Wanted 361487의 요구사항 20건과 고정 SHA의 Umami 원문·분석을 재사용했다.
+사용자·소유 관계와 지원자 답변은 검증용 합성 입력이다. 실제 개인의 기여·성과 검증은 아니다.
+`actual-01`은 3턴 뒤 지원자 답변 생성용 검증 입력의 50초 timeout으로 중단됐다.
+별도 명시한 `actual-02`는 미답변 4번 질문부터 정상 답변을 제출했지만 6턴 분석 뒤 질문 7의 입력 상한에서 중단됐다.
+당시 Director 요청 264553bytes가 262144 상한을 초과해 provider 시도 0회로 거절됐고, 6개 답변·분석과 호출 기록은 남았다.
+이 두 회차의 실패를 완료로 변경하지 않았으며 누적 실제 모델 호출은 26회였다.
+
+[0040](decisions/0040-director-single-copy-source-input.md)에 따라 `agent._model_reference_texts`와 `runtime._input_payload`에서
+Context의 같은 원문을 `reference_texts`에 중복 전달하는 부분만 제거했다.
+서버의 전체 참조 검증 map, 모든 Context·원문 위치·SHA·문답 이력·기여 정정과 현재·과거 분석은 그대로다.
+Context 밖에서 허용한 `job_posting` 원문은 별도로 전달하며 출력 계약·프롬프트·독립 Plan/Review 두 시도는 바꾸지 않았다.
+실제 실패 입력의 무모델 재구성은 264553→174853bytes였으며 상한 확대나 과거 이력 삭제는 하지 않았다.
+9번째 질문·8이력·큰 원문·최신 기여 정정·위조 근거 ID의 실제 gateway 회귀는 2 RED→2 GREEN이었다.
+수정 뒤 AI 전체 809개와 Ruff·format 119파일·mypy 28소스, root의 동일 gateway 회귀 2개가 통과했다.
+
+수정 전 전체 BE 검사에서는 격리 DB 이름의 fixture 조건 불일치와 의미가 부족한 원문 mock을 먼저 발견했다.
+실패 회차를 보존하고 DB 접두사·실제 의미 원문 fixture·MYPYPATH를 올바르게 지정한 별도 실행에서
+2472통과·1skip, 전체 Ruff·format·mypy 235소스·공통 형식 검사를 확인했다. 외부 provider 호출은 0회다.
+이는 Director 중복 제거 전 결과다. 수정 후 별도 BE 전수 회차는 2474통과·1skip·12warning이었다.
+전체 Ruff·format·mypy 235소스·공통 계약 부분 형식 검사도 통과했고, 검사 전후 537개 Python 소스 지문이 일치했다.
+격리 PostgreSQL/Redis와 외부 네트워크 차단으로 실행했으며 provider 호출 0회다.
+실제 모델의 새 9턴 검증과 단독 게시본의 CI 성공으로 이 결과를 확대하지 않는다.
+
+수정 후 runtime/evaluation 이미지를 새 `20261108-director-budget` 태그로 빌드했다.
+외부 네트워크 없이 실제 설치된 AI와 각각 305·313파일의 지문·catalog 8개·민감 환경 파일 미포함을 확인했다.
+컨테이너의 평가 입력 계약 검사는 `--split all`로 32+8+1=41건 `validated_only`이며 모델·DB 호출 0회다.
+최초 기본 dev split 29건만 검사한 명령의 단언 실패는 보존하고 전체 split 검사와 구분했다.
+이 검사는 Judge 내용 평가·사람 승인·운영 release gate 통과를 뜻하지 않는다.
+
+### 수정 후 새 정상 면접의 최종 실행
+
+`actual-03`은 이전 실패 세션의 Director를 강제로 다시 실행하지 않았다.
+제품 `abandon_interview`→`retry_interview`로 새 세션을 만들고, 전용 Redis의 실제 queue에서
+`interview_prep` ARQ 작업 1건을 소비했다. 준비 작업은 complete 1·failed 0이었다.
+새 세션의 기본 `answer_mode=voice`는 보존했으며, 이후 문답은 STT 뒤의 텍스트 입력에 해당하는
+`process_answer` 서비스 함수로 검증했다. 실제 STT/TTS·브라우저·OAuth의 전체 경로 검증은 아니다.
+리포트·프로필도 실제 서비스 함수를 호출했으며 해당 후처리 ARQ worker 전체 실행으로 세지 않는다.
+
+실제 Wanted 요구사항과 Umami 고정 SHA의 유효한 분석을 재사용했다.
+이번 준비에서 새 L1/L2 모델을 재실행한 것으로 세지 않으며, 새 9턴의 모델 호출은 실제 연결이다.
+지원자 답변·사용자·소유 관계는 검증용 합성 입력이다.
+
+| 저장·실행 항목 | 실제 결과 |
+| --- | --- |
+| 면접 | `completed`, 문답 9개·답변 분석 9개 |
+| 페르소나 | HR 1·기술 6·도메인 2 |
+| 리포트 | `created`, 점수 6개와 본문 저장 |
 <a id="jd-heading-fix-20261109"></a>
 
 ## 2026-11-09 JD 소제목 추출 오류와 기존 캐시 보완
