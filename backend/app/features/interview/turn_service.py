@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Evidence, InterviewSession, InterviewTurn, TurnEvidence
 from app.db.models.interview import PERSONAS
+from app.shared.events import record_event
 
 
 class TurnRejected(StrEnum):
@@ -124,6 +125,12 @@ async def save_question(
             await db.rollback()
             raise ValueError("evidence_ids 에 이 면접의 근거가 아닌 id 가 있다")
 
+    await record_event(
+        db,
+        "turn_asked",
+        interview_session_id=interview_id,
+        payload={"turnNo": turn_no, "depth": depth, "persona": persona},
+    )
     await db.commit()
     return turn
 
@@ -138,6 +145,18 @@ async def save_answer(
     ALREADY_ANSWERED 는 재전송이다. 재전송으로 다음 질문을 다시 만들지 않는다 — 실패한 LLM
     작업을 재호출하지 않는 규칙(spec/ai/features/interviewer.md:93), 복구는 재접속 후속 작업.
     """
+    # 중단·종료·T3/T4와 같은 부모 행부터 잠근다. 존재 확인만 하면 중단 확정 뒤에도
+    # 오래된 스냅샷으로 답변을 쓸 수 있으므로 잠금을 얻은 뒤 상태를 재확인한다.
+    current = await db.scalar(
+        select(InterviewSession)
+        .where(InterviewSession.id == interview_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if current is None or current.status != "in_progress":
+        return TurnRejected.NOT_IN_PROGRESS
+    if current.current_turn != turn_no:
+        return TurnRejected.NOT_CURRENT_TURN
     now = datetime.now(UTC)
     is_current = exists().where(
         InterviewSession.id == interview_id,
@@ -164,6 +183,9 @@ async def save_answer(
     )
     if saved is None:  # 쓴 게 없어 rollback 하지 않는다 (save_question 참고)
         return await _answer_rejection(db, interview_id, turn_no)
+    await record_event(
+        db, "turn_answered", interview_session_id=interview_id, payload={"turnNo": turn_no}
+    )
     await db.commit()
     return None
 
@@ -193,6 +215,7 @@ async def complete_interview(db: AsyncSession, *, interview_id: uuid.UUID) -> bo
     )
     if done is None:  # 쓴 게 없어 rollback 하지 않는다 (save_question 참고)
         return False
+    await record_event(db, "interview_completed", interview_session_id=interview_id)
     await db.commit()
     return True
 
