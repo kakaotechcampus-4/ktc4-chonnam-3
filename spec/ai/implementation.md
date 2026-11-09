@@ -2985,6 +2985,195 @@ Context 밖에서 허용한 `job_posting` 원문은 별도로 전달하며 출�
 | 면접 | `completed`, 문답 9개·답변 분석 9개 |
 | 페르소나 | HR 1·기술 6·도메인 2 |
 | 리포트 | `created`, 점수 6개와 본문 저장 |
+| 프로필 | `updated`, 저장 행 존재 |
+| 모델 호출 | 신규 39회, 이전 실패 회차 26회를 계승해 누적 65/90회 |
+| 입력 상한 | 신규 39개 실제 wire의 최대 189194/262144bytes |
+| 원본 보존 | 이전 6답변·13호출 기록과 모든 `actual-01/02` 산출물 불변 |
+| 실행본 보존 | 305개 제품 파일·private 환경 파일 지문 불변, cleanup/export 오류 0 |
+
+7~9번 질문의 실제 Plan/Review 요청은 각각 174184/174916, 178024/179179, 187656/189194bytes였다.
+독립 감사에서 39개 전송 body의 실제 byte/hash와, 72회 문답 이력·페르소나·과거 분석 대조가 일치했다.
+Evidence 5개도 원래 L2 원문·줄 범위·고정 SHA와 일치했다. 새 조회 허용 범위나 개인 기여를 추정하지 않았다.
+이번 9턴의 추가 레포 조회 요청·외부 검색 요청·Tool trace·외부 원문 행은 모두 0건이었다.
+따라서 이 체인이 검색·보완 분석 분기의 실재발생까지 검증했다고 표현하지 않는다.
+해당 분기의 이전 별도 검증과 이번 공식 snapshot 수집·재사용 검증은 서로 구분한다.
+
+이 결과는 해당 입력·모델·설정에서의 기능 실행 **자동 검증 완료**다.
+미검수 rubric에 따른 점수·질문 내용의 품질 승인과 사람 검수는 대체하지 않는다.
+기존 `r-0008.v3`의 reject나 사람 검수 대기 상태도 새 기능 성공으로 변경하지 않았다.
+원본 실행·DB export·보존 기록은 `hardening/real-service-chain/actual-03/`,
+전수 검사는 `backend-verification-director/`, 새 이미지 검사는 `image-checks-director/`에 보존했다.
+게시한 PR 8개는 앞선 동결본의 신규 부분이며, 여기의 후속 보완은 별도 로컬 개발본에만 있다.
+선행 반영·후속 patch 적용·게시 조합 재검증과 운영 배포를 이번 로컬 실행 완료로 대신하지 않는다.
+
+## 2026-11-09 — 두 모델의 새 전체 연쇄 검증과 Director 입력 보완
+
+### 범위와 설계 결정
+
+기존 로컬 hardening 원본을 보존하고 별도 `ai-full-model-validation-20261108` 작업본에서 진행한다.
+사용자 요청의 기본 방향은 개발에 Luna를 사용하면서 Sol과 같은 조건으로 실제 기능 연쇄를 확인하는 것이다.
+설계 결정은 [0043](decisions/0043-director-turn-state-and-reference-constraints.md)에 기록했다.
+이 절은 공개 PR 게시·병합이나 운영 DB·환경 적용 완료를 뜻하지 않는다.
+
+Director의 [runtime](../../ai/src/devon_ai/agents/director/runtime.py)은 확정된 이력으로
+`next_question_no`, `answered_turn_count`, 직전 답변의 번호·ID와 남은 질문 수를 계산한다.
+8개 답변 이후의 9번 질문과 9개 답변을 모두 받은 종료 시점을 구분하며, 종료 권한은 Controller에 둔다.
+v6 Plan schema `director-plan.v3`는 실제 등록된 근거 종류별 ID·Evidence·JD·과거 parent·허용 페르소나를
+선택하도록 제한한다. 기존 semantic 검증과 Plan/Review 총 2시도는 유지하며 UUID 자동 보정은 하지 않는다.
+`director-runtime-v4.md`·v5 본문은 보존하고 새 v6 본문과 runtime recipe를 사용한다.
+공개 API와 기존 `Context` dataclass는 변경하지 않았다.
+
+[개발 환경 예시](../../backend/.env.example)는 Luna slot 1과 `OPENAI_MODEL=gpt-6-luna`를 기본 방향으로 두고
+Sol slot 3을 보존한다. 실제 task 모델은 DB 프롬프트에서 읽으므로 각 검증 DB에 모델별 새 deployment를 등록한다.
+각 실제 모델 실행 동안 private 환경 파일과 제품 소스를 고정했다.
+완료 뒤 수행한 로컬 기본 모델 전환은 아래의 실제 활성화 결과와 구분해 기록한다.
+
+### 완료된 자동 검사와 독립 task 실호출
+
+v6 반영 후 AI 전체 **840개**, BE 영향 검사 **56개**와 관련 정적 검사가 통과했다.
+이 수치는 해당 코드의 **자동 검증 완료**이며 새 전체 면접 연쇄의 완료 결과와 합산하지 않는다.
+원문 인용·참조 ID·마지막 질문·구버전 호환의 검증을 유지했고, 기존 의미 검증을 완화하지 않았다.
+
+고정 입력 재생에서 별도로 남았던 아래 네 task는 Sol/Luna 각각 실제 공급자로 실행했다.
+각 모델에서 task당 1회, 총 4회 호출로 모두 제품 검증을 통과했다.
+
+| 독립 task | 확인한 범위 |
+| --- | --- |
+| `domain_category` | 원문 기반 분류와 실패 없는 계약 반환 |
+| `doc_claims` | 합성 문서의 Claim 추출과 원문 줄 연결 |
+| `claim_code` | 기술 주장과 공개 코드 대조, 개인 역할·성과의 미확인 보존 |
+| `jd_extract_image` | 제공한 이미지 추출 블록에서 JD 요구사항과 참조 구성 |
+
+검증 입력은 공개 자료와 합성 문서·주장 fixture가 포함된 독립 사례다.
+새 사이트 URL adapter 지원이나 실제 개인 기여 검증, 모든 이미지 레이아웃의 성공으로 확대하지 않는다.
+산출물은 private `full-validation/tasks-{luna,sol}-01/tasks/summary.json`에 보존했다.
+
+### 모델이 요청한 보완 조회 분기의 실제 연결
+
+별도 자연 발생 조회 사례에서 각 모델은 실제 T3→레포 원문 조회→T3 재분석→다음 Plan/Review의 4회 모델 호출을 수행했다.
+모델이 요청한 Umami 고정 SHA의 구현·테스트 원문 2개를 실제 GitHub 응답과 blob hash로 대조했다.
+같은 원문·ID가 재분석 T3와 다음 Plan/Review 입력에 전달됐고, 다음 질문은 새 코드 근거 2개를 참조했다.
+이는 합성 질문·지원자 답변·소유 관계 fixture에서 제품 `process_answer`를 실행한 결과다.
+
+외부 자료 검색은 그 T3 재분석 이후에 실행되고 결과·한계가 다음 Director 입력으로 전달됐다.
+Luna의 해당 질의는 `insufficient_analysis`, `query_terms_missing`, 채택 원문 0건이었다.
+Sol은 MDN 원문 1건을 `found`로 전달했다. Sol의 다음 질문이 그 외부 원문을 별도로 인용한 것은 아니다.
+부족한 검색 결과를 `found`로 승격하거나 외부 자료가 당해 T3에 이미 반영됐다고 기록하지 않는다.
+두 모델의 코드 원문 전달·외부 상태·wire/참조 무결성에 대한 저장 산출물 감사는 통과했다.
+근거는 `full-validation/tool-natural-{luna,sol}-01/`과 `tool-natural-binding-audit-02.json`이다.
+이 독립 분기의 성공은 새 전체 9턴에서 같은 분기가 반드시 발생한다는 보장이 아니다.
+
+### 첫 전체 실행의 실패 보존과 같은 조건의 재검증
+
+첫 회차는 새 DB·Redis·DB 프롬프트에서 L1을 새로 생성하고, 그 모델이 선정한 원문으로 L2와 면접을 이어 갔다.
+Wanted 361487의 실제 요구사항 20건과 Umami SHA `559e3c607c23d2c72d9bd4f6481bda428255323c`를 사용했다.
+두 실행의 Wanted 원문·요구사항 hash가 일치했다. 과거 L1/L2 분석 결과는 서비스에 주입하지 않았다.
+지원자 답변은 두 실행 모두 별도 Luna 모델·같은 공개 원문 사실은행·합성 팀 역할을 사용했다.
+실제 개인의 경력·운영 경험·성과는 확인한 것으로 처리하지 않는다.
+
+- `luna-full-01`: 실제 모델 17회 후 3번 답변의 다음 Plan에서 Evidence UUID 오타가 semantic 검증에 걸려 중단됐다.
+  올바른 basis ID가 함께 있더라도 잘못된 `evidence_refs`를 자동 보정하거나 저장하지 않았다.
+- `sol-full-01`: 실제 모델 4회 후 L2가 원본 설정의 120초 한도에서 timeout되어 준비가 중단됐다.
+  L1·파일 선정 성공과 L2 실패를 구분하며, 200 stream 응답의 미완료 상태를 분석 성공으로 세지 않았다.
+
+두 회차의 DB·모델 입출력·호출 비용·원문·실패 상태는 그대로 보존했다.
+새 v6와 L1 180초/L2 160초를 양 모델에 공통 적용한 `luna-full-02`·`sol-full-02`를 별도로 실행했다.
+검증 중에는 프로세스 설정만 바꾸고 원본 환경 파일과 첫 회차의 설정·실패 기록은 보존했다.
+재검증은 첫 회차와 조건이 다르므로 최초 비교의 실패를 없애거나 같은 조건의 승리로 바꾸지 않는다.
+
+재검증의 목표는 새 L1→자체 파일 선정·실원문→새 L2→9턴 T3/Director→실제 report ARQ→profile outbox worker다.
+모델별 새 DB·Redis·deployment, 총 60회 호출·2400초 상한과 동일한 후보 응답 정책을 적용한다.
+
+### 실제 전체 연쇄 결과와 복구 경로
+
+| 실행 | 실제 결과 | 분리해서 해석할 사항 |
+| --- | --- | --- |
+| `luna-full-02` | 자체 새 L1/L2와 7답변·7분석 저장 후 다음 질문의 독립 Review가 `replan`으로 반려 | 질문이 `identify`의 조건부 identity 갱신을 무조건으로 표현했다. 원문 기반 안전 반려이며 schema 오류와 다르다. |
+| `sol-full-02` | 자체 새 L1/L2→9답변·9분석→6점수·리포트 저장 | burst 검증기가 report 완료 중 추가된 profile job을 다시 poll하지 않아 중단했다. 제품 report 생성 실패로 분류하지 않는다. |
+| `sol-profile-continue-01` | 실제 만료 delivery 소비→공식 reaper 재전달→profile worker 성공 | 기존 9문답·리포트·점수·원 호출 행 전체 불변, outbox `succeeded`, 캐시 GET 추가 모델 0회. 새 모델 1회. |
+| `luna-public-retry-01` | 공개 abandon→retry로 새 면접을 시작해 9답변·9분석 완료 | 원래 7문답은 보존하고 자기 유효 L1/L2를 재사용한 warm 복구다. 리포트 입력 복원 오류로 당시 report/profile은 생성되지 않았다. |
+| `luna-report-retry-01` | 아래 제품 수정 후 같은 9문답에서 공개 report retry→report worker→profile worker 완료 | 원 실패 요청 불변·새 retry 요청 1개 성공·6점수·report/profile/outbox 저장·캐시 GET 2회의 추가 모델 0회. 새 모델 3회. |
+
+두 최종 면접 모두 HR 1·기술 6·도메인 2의 9문답이며 마지막 답변까지 저장·분석한 뒤 종료됐다.
+Luna의 단일 cold 실행 완주나 Sol의 최초 burst 실행 완주로 기록하지 않는다.
+위 복구는 현재 공개 정책과 공식 큐 재전달 경로를 사용했고, 내부 질문 재생성 우회나 DB 상태 강제 변경은 없다.
+각 실패의 `campaign-result.json`은 실패 상태 그대로 보존했다.
+
+기본 연쇄 안에서도 실제 보완 조회가 발생했다.
+Luna cold 2회차의 첫 답변은 `route.test.ts:1–925` 1개 원문을 조회했고, public retry의 8번 답변은
+`getEventData.ts:1–150`·`getEventDataEvents.ts:1–157` 2개 원문을 조회했다.
+GitHub blob·원문·좌표·wire 지문과 후속 T3/Plan/Review 입력의 동일 원문을 대조했다.
+두 회차에서 바로 다음 질문이 새 source ID를 직접 인용한 것은 아니므로, 입력 반영과 직접 인용을 구분한다.
+앞의 독립 자연 발생 Tool 사례에서는 두 모델 모두 새 코드 근거를 다음 질문에서 직접 참조했다.
+
+### 실제 검증에서 발견한 리포트 복원 오류와 수정
+
+[report history](../../backend/app/features/report/history.py)는 기존 Evidence와 L2 경로만으로
+과거 T3의 `verification_requests`를 재검증해, 면접 당시 허용한 주변 후보 경로를 누락했다.
+실제 실패 요청의 6경로는 모두 저장한 16개 후보와 고정 SHA에 포함됐지만 `verification scope`에서 거절됐다.
+report 모델 호출 전의 제품 입력 구성 오류이며, 모델의 잘못된 출력으로 분류하지 않는다.
+
+공통 `repository_candidates.STATE_KEY`·`snapshot_paths`를 재사용해 소유한 선택 레포의 같은 SHA 후보만 복원했다.
+후보는 조회 권한으로만 사용하고 Evidence·Tool item·원문을 만들지 않는다.
+프롬프트·ID·schema·semantic 검증과 저장된 분석·원응답은 유지했다.
+새 독립 PostgreSQL DB에서 정상 후보 실패를 RED로 재현하고, 같은 SHA 정상·다른 SHA·손상 후보·미선택 레포·
+snapshot 누락·다른 소유자의 6개 회귀를 GREEN으로 확인했다.
+이어서 report/profile·AI facade·answer wire history 관련 **201개**가 단일 실행에서 통과했다.
+Ruff·format 2파일과 mypy 1소스도 통과했다. 앞의 AI 840·BE 56과 겹치는 범위가 있어 수치를 합산하지 않는다.
+실제 실패 DB에서는 read-only transaction으로 입력 구성 3단계를 다시 검증했고 모델 호출·DB 쓰기는 0회였다.
+
+### 사용량·참고 비용과 비교의 범위
+
+2026-11-09 KST 최종 감사는 이번 15개 campaign의 실제 HTTP 원응답·SSE usage·요청 지문을 대조했다.
+이전 고정 입력 36회 비교는 포함하지 않는다. 같은 입력으로 실제 재호출한 요청은 중복으로 삭제하지 않았다.
+
+| 실제 호출 모델 | 시도 | 확인된 사용량의 참고액 |
+| --- | ---: | ---: |
+| Luna | 110 | 732.585043원 |
+| Sol | 47 | 5,975.973231원 + usage 미상 1건 |
+| 합계 | 157 | **6,708.558274원 + 미상 비용** |
+
+156회는 usage를 확인했고 초기 Sol L2 timeout 1회는 확인하지 못했다.
+서비스 호출 129회의 참고액은 6,552.035143원, 검증용 합성 지원자 생성 28회는 156.523131원이다.
+독립 task·Tool·실패·복구 비용까지 포함한 실험 합계이며 서비스 면접 1회의 평균 비용은 아니다.
+2026-11-08 Elice에 표시된 100만 토큰당 원화 단가(Luna 입력141/캐시14/출력708,
+Sol 입력2835/캐시141/출력14175)로 계산했다. 추론 토큰은 출력에 이미 포함돼 중복 가산하지 않았다.
+실제 청구액·VAT·별도 캐시 쓰기 단가·비LLM API 비용은 이 계산으로 확정하지 않는다.
+Luna의 안전 반려와 복구·자기 캐시 재사용, 모델별로 달라진 질문·출력을 고려해야 하므로
+이 한 사례로 모델 품질의 동등성이나 운영 평균 지연·완주율을 확정하지 않는다.
+
+### 로컬 Luna 활성화와 새 프로세스 검증
+
+원본 환경 파일을 private 영역에 보존한 뒤 원본·검증 작업본의 `backend/.env`를 같은 설정으로 맞췄다.
+`LLM_CONNECTION_SLOT=1`, Luna 연결, L1 180초·L2 160초를 적용하고 Sol slot 3·다른 공급자 설정은 보존했다.
+기존 로컬 DB 주소 55432/devon_local과 Redis 56379를 유지했다.
+이전에 연결할 DB가 없어 새 전용 PostgreSQL container·volume을 만들고 migration 0014까지 적용했다.
+검증 면접을 이 서비스 DB로 복사하지 않았으며 초기 사용자 fixture는 0명이다.
+이 개발 DB에 새 deployment `luna-local-v6-20261109`의 **11개 활성 task 프롬프트**를 등록했다.
+개발 지식은 `unreviewed`로 보존하며 사람 승인으로 바꾸지 않았다.
+
+새 작업본 소스로 Uvicorn 프로세스를 띄워 실제 HTTP health·OpenAPI·미로그인 `/api/me`의 401을 확인했다.
+DB SELECT 1·migration·Redis PING, 설정과 11개 task/model/version의 정확한 일치 및 준비 시간 예산도 통과했다.
+스모크 검사의 외부 공급자 호출·DB/Redis 쓰기는 0회이며 생성한 API 프로세스는 검사 후 종료했다.
+실행 대상은 이 통합 작업본이며 원본 `develop`에 구현을 병합·게시한 상태를 뜻하지 않는다.
+
+### 판정과 근거 산출물
+
+실제 공급자·PostgreSQL·Redis·ARQ를 사용한 위 AI 기능 연쇄와 독립 task·Tool 경로는
+명시한 입력·복구 경로·설정 범위에서 **자동 검증 완료**다.
+이번 회차에서 STT·Vision·TTS 공급자를 새로 호출하거나 음성 9턴·실제 로그인·FE 브라우저 전체 흐름을 검사하지 않았다.
+이미지 JD 독립 task는 이전 실제 공개 이미지에서 추출·보존한 블록을 사용했다.
+이번 모델 비교의 주 레포는 고정 Umami 1개이며, 이 결과를 모든 언어·규모의 레포와 부하/SLO로 확대하지 않는다.
+사람의 질문·평가 품질 검수, 기존 `r-0008.v3` reject, 운영 배포·원격 PR/CI 상태는 별도 범위다.
+
+산출물은 작업본의 `.claude/scratch/full-validation/`에 보존했다.
+전체 감사 `campaign-usage-audit-04.json/.md`, 독립 scope `privatefinal-scope-audit.json/.md`,
+보완 회귀 `report-scope-fix-result.json`, 원인 재현 `luna-public-retry-report-readonly-diagnosis-{01,03}.json`,
+각 campaign의 원입출력·usage·DB export, 활성화 `runtime-activation/{activation-result,smoke-result}.json`이 근거다.
+공통 계약 검사는 기존 전용 venv를 재사용해 schema 2개·positive/negative fixture 7개·부분 OpenAPI가 통과했다.
+backend venv에 해당 검사 패키지가 없어 첫 시도는 미실행(exit 2)이었으며 새 패키지는 설치하지 않았다.
+초기 설계·testing 원본은 보존했고 구현 결과는 이 절로 통일했다. 커밋·push·PR은 수행하지 않았다.
+
 <a id="jd-heading-fix-20261109"></a>
 
 ## 2026-11-09 JD 소제목 추출 오류와 기존 캐시 보완
