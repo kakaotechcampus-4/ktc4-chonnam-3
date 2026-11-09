@@ -1,0 +1,26 @@
+diff --git a/backend/app/features/interview/prepare.py b/backend/app/features/interview/prepare.py
+--- a/backend/app/features/interview/prepare.py
++++ b/backend/app/features/interview/prepare.py
+@@ -489,7 +489,21 @@
+                 "paths": list(sources.candidate_paths),
+                 "limitations": list(sources.limitations),
+             }
+-            row.context_state = {**state, STATE_KEY: candidates}
++            # 전체 구조 목록은 선정 입력·조회 권한·읽은 원문 Evidence와 분리한다.
++            previous_inventory = state.get("repository_source_inventories", {})
++            inventory = dict(previous_inventory) if isinstance(previous_inventory, dict) else {}
++            if sources.inventory_paths:
++                inventory[repo.scope.repository_id] = {
++                    "head_sha": repo.scope.git_ref,
++                    "paths": list(sources.inventory_paths),
++                    "model_candidate_paths": list(sources.selection_paths),
++                    "limitations": list(sources.inventory_limitations),
++                }
++            row.context_state = {
++                **state,
++                STATE_KEY: candidates,
++                "repository_source_inventories": inventory,
++            }
+             by_scope = {(item.path, item.read_scope): item for item in sources.item.sources}
+             for area in analysis.notable_areas:
+                 source = by_scope.get((area.path, area.scope))

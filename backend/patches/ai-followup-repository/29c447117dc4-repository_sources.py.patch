@@ -1,0 +1,221 @@
+diff --git a/backend/app/features/interview/repository_sources.py b/backend/app/features/interview/repository_sources.py
+--- a/backend/app/features/interview/repository_sources.py
++++ b/backend/app/features/interview/repository_sources.py
+@@ -3,7 +3,7 @@
+ import asyncio
+ import re
+ from collections import deque
+-from dataclasses import asdict, dataclass, replace
++from dataclasses import dataclass, replace
+ from typing import cast
+ 
+ import httpx
+@@ -12,6 +12,7 @@
+ from app.agents.director.tools import EvidenceScope
+ from app.core.config import Settings
+ from app.features.interview.repository_candidates import MAX_CANDIDATES, neighbor_candidates
++from app.features.interview.repository_source_selection import selection_window
+ from app.features.interview.repository_structure import recursive_files
+ from app.features.interview.source_segments import segment_text
+ from app.integrations.github.evidence import EvidenceReader, EvidenceReadError
+@@ -42,6 +43,9 @@
+     attempts: tuple[c.AttemptMetadata, ...]
+     limitations: tuple[str, ...]
+     candidate_paths: tuple[str, ...] = ()
++    inventory_paths: tuple[str, ...] = ()
++    selection_paths: tuple[str, ...] = ()
++    inventory_limitations: tuple[str, ...] = ()
+ 
+ 
+ # 항목 상한에 걸려도 핵심 코드가 먼저 수집되도록 같은 디렉터리 안에서 읽는 순서를 정한다.
+@@ -196,14 +200,16 @@
+ ) -> SourceCollection:
+     """경로 선택과 뒤따르는 L2 분석은 같은 CallBudget을 사용한다.
+ 
+-    캐시 관찰 경로를 명시하면 모델 선택 없이 해당 파일만 다시 읽는다. 전체 tree 재귀 조회,
+-    전역 검색이나 기본 브랜치 내용을 사용하지 않는다. 구간은 원문 위치와 미확인 범위를 보존한다.
++    캐시 관찰 경로를 명시하면 모델 선택 없이 해당 파일만 다시 읽는다. 고정 SHA의 유한 구조
++    목록만 열거하며 전역 검색이나 기본 브랜치 내용을 사용하지 않는다. 구간 위치를 보존한다.
+     """
+     attempts: list[c.AttemptMetadata] = attempt_sink if attempt_sink is not None else []
+     limitations: list[str] = []
+     sources: list[c.SourceDocument] = []
+     neighbors: tuple[str, ...] = ()
+     candidates: tuple[str, ...] = ()
++    model_candidates: tuple[str, ...] = ()
++    inventory_limitations: tuple[str, ...] = ()
+     active_path: str | None = None
+     try:
+         # 앱 자격은 공개 데이터 quota용이다. 사용자 저장소 token을 원문 조회로 확대하지 않는다.
+@@ -216,14 +222,21 @@
+             http_client,
+             scope.full_name,
+             max_requests=settings.director_prepare_max_requests,
+-            max_response_bytes=settings.director_evidence_max_response_bytes,
+-            max_total_bytes=settings.director_evidence_max_total_bytes,
++            max_response_bytes=settings.director_prepare_max_response_bytes,
++            max_total_bytes=settings.director_prepare_max_total_bytes,
+             timeout_seconds=settings.director_prepare_timeout_seconds,
+             public_app_auth=app_auth,
+         )
+         if shallow.repository_id != scope.repository_id or shallow.head_sha != scope.git_ref:
+             raise SourcePreparationError("l1_snapshot_mismatch")
+-        async with asyncio.timeout(settings.director_prepare_timeout_seconds):
++        llm = settings.require_llm() if paths is None else None
++        selection_seconds = llm.call_limits(prompt.task_name).timeout_seconds if llm else 0
++        # HTTP 예산과 선정 모델 예산을 더하되 모델 대기를 HTTP 시간으로 중복 소비하지 않는다.
++        # 지정 경로 재검증은 모델을 호출하지 않으므로 원래의 HTTP 상한만 갖는다.
++        async with (
++            asyncio.timeout(settings.director_prepare_timeout_seconds + selection_seconds),
++            asyncio.timeout(settings.director_prepare_timeout_seconds) as network_timeout,
++        ):
+             repository = await reader.get("")
+             if (
+                 repository is None
+@@ -255,7 +268,25 @@
+                 selection_limit = min(settings.director_prepare_max_files, reader.requests_left)
+                 if selection_limit == 0:
+                     raise EvidenceReadError("evidence_budget_exhausted")
+-                llm = settings.require_llm()
++                assert llm is not None
++                inventory_limitations = tuple(limitations)
++                selection_request, model_candidates, window_notes = selection_window(
++                    shallow=shallow,
++                    prompt=prompt,
++                    candidates=candidates,
++                    limitations=tuple(limitations),
++                    max_selected_files=selection_limit,
++                    limits=llm.call_limits(prompt.task_name),
++                )
++                limitations.extend(window_notes)
++                if not model_candidates:
++                    raise SourcePreparationError(
++                        "repository_selection_input_too_large",
++                        limitations=tuple(limitations),
++                        failure=c.CallFailure(
++                            "budget", "llm_failed", "Source selection request exceeds byte limit."
++                        ),
++                    )
+ 
+                 def validate(raw: object) -> tuple[str, ...]:
+                     if (
+@@ -267,49 +298,33 @@
+                     selected = raw["selected_paths"]
+                     if (
+                         not 1 <= len(selected) <= selection_limit
+-                        or any(type(path) is not str or path not in candidates for path in selected)
++                        or any(
++                            type(path) is not str or path not in model_candidates
++                            for path in selected
++                        )
+                         or len(set(selected)) != len(selected)
+                     ):
+                         raise c.ContractError("semantic", "source selection scope")
+                     return tuple(selected)
+ 
+-                result = await call_model(
+-                    c.ModelRequest(
+-                        prompt=prompt,
+-                        payload={
+-                            "operation": "select",
+-                            "repository_id": scope.repository_id,
+-                            "head_sha": scope.git_ref,
+-                            "shallow": asdict(shallow),
+-                            "candidates": [{"path": path, "kind": "file"} for path in candidates],
+-                            "limitations": limitations,
+-                            "max_selected_files": selection_limit,
+-                        },
+-                        schema_name="RepoDeepSourceSelection",
+-                        schema_version="1",
+-                        output_schema={
+-                            "type": "object",
+-                            "properties": {
+-                                "selected_paths": {
+-                                    "type": "array",
+-                                    "minItems": 1,
+-                                    "maxItems": selection_limit,
+-                                    "items": {"type": "string", "enum": list(candidates)},
+-                                }
+-                            },
+-                            "required": ["selected_paths"],
+-                            "additionalProperties": False,
+-                        },
+-                        limits=llm.call_limits(prompt.task_name),
+-                        max_attempts=1,
+-                    ),
+-                    validate,
+-                    api_key=llm.openai_api_key,
+-                    base_url=llm.llm_base_url,
+-                    http_client=http_client,
+-                    budget=budget,
+-                    attempt_sink=attempts,
+-                )
++                deadline = network_timeout.when()
++                assert deadline is not None
++                network_seconds_left = max(0, deadline - asyncio.get_running_loop().time())
++                network_timeout.reschedule(None)
++                try:
++                    result = await call_model(
++                        selection_request,
++                        validate,
++                        api_key=llm.openai_api_key,
++                        base_url=llm.llm_base_url,
++                        http_client=http_client,
++                        budget=budget,
++                        attempt_sink=attempts,
++                    )
++                finally:
++                    network_timeout.reschedule(
++                        asyncio.get_running_loop().time() + network_seconds_left
++                    )
+                 if result.data is None:
+                     raise SourcePreparationError(
+                         "l2_source_selection_failed",
+@@ -334,9 +349,11 @@
+                         ),
+                     )
+                     limitations.extend(extra)
++                    inventory_limitations = tuple(extra)
+                 except EvidenceReadError:
+                     candidates = ()
+                     limitations.append("추가 조회 후보 구조는 현재 예산에서 확인하지 못했습니다.")
++                    inventory_limitations = (limitations[-1],)
+             candidate_limit = min(MAX_CANDIDATES, max(1, settings.director_prepare_max_files * 2))
+             # 실제 읽은 선정 경로도 area 채택 여부와 무관하게 재조회할 수 있어야 한다.
+             neighbors = tuple(paths[:candidate_limit])
+@@ -345,12 +362,9 @@
+                 neighbors += neighbor_candidates(candidates, paths, limit=remaining)
+             replace(scope, allowed_paths=frozenset(paths))
+             # 원문 외의 식별자·L1·구간 메타데이터가 차지할 입력 공간을 남겨 둔다.
+-            llm_input_limit = (
+-                settings.llm_max_input_bytes or settings.director_evidence_max_total_bytes
+-            )
+-            source_bytes_left = min(
+-                settings.director_evidence_max_total_bytes, llm_input_limit // 2
+-            )
++            raw_source_limit = settings.director_prepare_max_source_bytes
++            llm_input_limit = settings.llm_max_input_bytes or raw_source_limit
++            source_bytes_left = min(raw_source_limit, llm_input_limit // 2)
+             for position, path in enumerate(paths):
+                 active_path = path
+                 try:
+@@ -432,6 +446,9 @@
+                 tuple(attempts),
+                 tuple(limitations),
+                 neighbors,
++                candidates,
++                model_candidates,
++                inventory_limitations,
+             )
+     except (EvidenceReadError, c.ContractError) as error:
+         code = error.code if isinstance(error, EvidenceReadError) else "repository_source_invalid"
+@@ -446,6 +463,9 @@
+                 tuple(attempts),
+                 tuple(limitations),
+                 neighbors,
++                candidates,
++                model_candidates,
++                inventory_limitations,
+             )
+         raise SourcePreparationError(
+             "repository_source_timeout",
