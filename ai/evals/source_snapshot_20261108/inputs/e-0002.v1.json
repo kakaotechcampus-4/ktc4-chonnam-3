@@ -1,0 +1,6 @@
+{"case_id": "e-0002", "version": 1,
+ "control": {"kind": "evidence", "split": "dev", "source_group_id": "sg-r1", "synthetic": true},
+ "payload": {"question": "rotate()가 롤백돼도 토큰 전체 폐기가 유지된다고 말할 수 있나요? 확인한 자료만으로 답하세요.",
+  "materials": [
+   {"ref": "m1", "path": "src/main/java/app/auth/TokenService.java", "lines": "52-56", "text": "    // revokeAll() runs in REQUIRES_NEW, so the revocation is committed\n    // even if this transaction rolls back.\n    @Transactional\n    public Tokens rotate(String refreshToken) {\n        // ...\n"}
+  ]}}
