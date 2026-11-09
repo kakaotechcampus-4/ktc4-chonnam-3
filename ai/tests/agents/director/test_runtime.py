@@ -17,6 +17,15 @@ def runtime():
     return importlib.import_module("devon_ai.agents.director.runtime")
 
 
+@pytest.mark.parametrize("version", ["unregistered_runtime", "director_v999@deployment"])
+def test_expanded_consumer_keeps_unknown_versions_out_of_the_model(version):
+    provider = Provider(plan(), review())
+    result = run_version(provider, context(), version=version)
+    assert result.failure is not None
+    assert result.failure.error_code == "director_input_invalid"
+    assert result.attempts == () and provider.requests == []
+
+
 def context(**changes):
     return replace(
         c.Context(
