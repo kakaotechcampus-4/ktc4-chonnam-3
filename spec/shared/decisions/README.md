@@ -14,8 +14,6 @@
 
 ## 현재 결정
 
-- [0011 저장한 답변을 보존하는 유한 질문 복구](0011-bounded-question-recovery.md) — Accepted for local implementation, 2026-11-09. 안전한 후보 반려의 자동 1회와 명시 수동 1회, 검토·호출 상한과 기존 면접 이어가기를 정의한다. 0010의 T4 복구 후속 범위이며 원기록·팀 검토 상태를 보존한다.
-
 - [0006 Task 11 분석 결과의 부분 실패 계약](0006-task11-analysis-result-contract.md) — Accepted, 2026-09-28. 현재 사용자 승인 범위의 구현 선택으로 결과 집계·실패 원소 형태와 기존 오류 코드를 연결한다. 팀 의결·FE 런타임 완료를 뜻하지 않는다.
 
 API 원본 구분은 [공통 계약 안내](../contracts/README.md)와 병합된 [PR #35](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/35)를 따른다. 과거 0001의 부분 이관 초안으로 현재 API 계약 전체를 미정 처리하지 않는다.
