@@ -1,0 +1,28 @@
+diff --git a/ai/src/devon_ai/llm_tasks/jd_extract_image.py b/ai/src/devon_ai/llm_tasks/jd_extract_image.py
+--- a/ai/src/devon_ai/llm_tasks/jd_extract_image.py
++++ b/ai/src/devon_ai/llm_tasks/jd_extract_image.py
+@@ -14,8 +14,13 @@
+         r"|required(?: qualifications)?|requirements"
+     ),
+     "preferred": r"우대(?:\s*사항|\s*조건)?|preferred(?: qualifications)?",
+-    "responsibility": r"주요\s*업무|담당\s*업무|responsibilities",
++    "responsibility": (
++        r"(?:주요\s*|담당\s*|수행\s*)?업무(?:\s*내용)?|직무\s*내용"
++        r"|(?:job\s+)?responsibilities"
++    ),
+ }
++# 제목 앞의 장식만 허용한다. 본문·인용을 정규화하거나 문장 속 단어를 제목으로 만들지 않는다.
++_HEADING_PREFIX = r"[^\S\r\n]*(?:[-*▪•●○■□◆◇▶▷▸▹][^\S\r\n]*)*"
+ 
+ 
+ @dataclass(frozen=True)
+@@ -38,7 +43,8 @@
+     prefix = text[: text.find(excerpt)] if excerpt in text else text
+     found = []
+     for category, pattern in _HEADINGS.items():
+-        for match in re.finditer(r"^\s*(?:" + pattern + r")\s*[:：]?\s*$", prefix, re.I | re.M):
++        expression = r"^" + _HEADING_PREFIX + r"(?:" + pattern + r")[^\S\r\n]*[:：]?[^\S\r\n]*$"
++        for match in re.finditer(expression, prefix, re.I | re.M):
+             found.append((match.start(), category))
+     return {max(found)[1]} if found else set()
+ 

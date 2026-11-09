@@ -1,0 +1,24 @@
+diff --git a/backend/tests/agents/test_director_runtime_service.py b/backend/tests/agents/test_director_runtime_service.py
+--- a/backend/tests/agents/test_director_runtime_service.py
++++ b/backend/tests/agents/test_director_runtime_service.py
+@@ -191,7 +191,10 @@
+                 "results": [
+                     {
+                         "url": "https://elice.io/reference",
+-                        "raw_content": "Actual official session reference",
++                        "raw_content": (
++                            "Redis session architecture stores session keys with expirations "
++                            "and validates their TTL."
++                        ),
+                     }
+                 ],
+                 "failed_results": [],
+@@ -246,7 +249,7 @@
+     assert searches == ["/search", "/extract"]
+     assert plans[0]["context"]["external_searches"][0]["status"] == "found"
+     assert plans[0]["context"]["supplemental_sources"][0]["content"] == (
+-        "Actual official session reference"
++        "Redis session architecture stores session keys with expirations and validates their TTL."
+     )
+     async with agent_sessions() as db:
+         turn = await db.get(InterviewTurn, result.next_turn_id)
