@@ -1,0 +1,20 @@
+diff --git a/backend/app/db/models/external_source.py b/backend/app/db/models/external_source.py
+--- a/backend/app/db/models/external_source.py
++++ b/backend/app/db/models/external_source.py
+@@ -26,6 +26,16 @@
+     interview_session_id: Mapped[uuid.UUID] = mapped_column(
+         UUID(as_uuid=True), ForeignKey("interview_sessions.id", ondelete="CASCADE"), nullable=False
+     )
++    # 공통 원문은 별도로 보존하며 면접별 소유권·원문 재생 경로는 기존 표에 유지한다.
++    official_snapshot_id: Mapped[uuid.UUID | None] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey(
++            "official_source_snapshots.id",
++            name="fk_external_source_official_snapshot",
++            ondelete="RESTRICT",
++        ),
++        nullable=True,
++    )
+     query_text: Mapped[str] = mapped_column(Text, nullable=False)
+     url: Mapped[str] = mapped_column(Text, nullable=False)
+     title: Mapped[str | None] = mapped_column(Text, nullable=True)

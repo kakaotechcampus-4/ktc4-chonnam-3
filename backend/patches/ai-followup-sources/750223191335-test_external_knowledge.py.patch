@@ -1,0 +1,30 @@
+diff --git a/backend/tests/features/interview/test_external_knowledge.py b/backend/tests/features/interview/test_external_knowledge.py
+--- a/backend/tests/features/interview/test_external_knowledge.py
++++ b/backend/tests/features/interview/test_external_knowledge.py
+@@ -41,7 +41,7 @@
+                 "results": [
+                     {
+                         "url": "https://elice.io/reference",
+-                        "raw_content": "Actual official document text",
++                        "raw_content": "Actual official Redis session architecture document text",
+                     }
+                 ],
+                 "failed_results": [],
+@@ -60,7 +60,7 @@
+     )
+     first = await retrieve_external_knowledge(app.state.session_factory, **args)
+     assert first.status == "found"
+-    assert first.sources[0].content == "Actual official document text"
++    assert first.sources[0].content == "Actual official Redis session architecture document text"
+     assert first.sources[0].location == "https://elice.io/reference"
+     second = await retrieve_external_knowledge(app.state.session_factory, **args)
+     assert second.sources[0].source_id == first.sources[0].source_id
+@@ -154,7 +154,7 @@
+                 else [
+                     {
+                         "url": "https://elice.io/reference",
+-                        "raw_content": "Same immutable original passage",
++                        "raw_content": "Same immutable Redis architecture reliability passage",
+                     }
+                 ],
+                 "usage": {"credits": 1 if req.url.path == "/search" else 0},
