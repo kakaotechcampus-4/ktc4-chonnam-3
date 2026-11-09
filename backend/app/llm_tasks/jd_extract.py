@@ -33,6 +33,37 @@ _CATEGORY_SOURCES: dict[JdCategory, str] = {
 # 뒤에 공백이 오거나 기호만 있는 줄일 때만 뗀다.
 _LEADING_BULLET = re.compile(r"^(?:[•∘◦▪■●○]+|[-*]+(?=\s|$))\s*")
 
+# 섹션명과 장식만 있는 줄을 걸러낸다. 문장 속 키워드나 비슷한 단어는 제거하지 않는다.
+_SECTION_HEADINGS = frozenset(
+    {
+        "필수역량",
+        "필수요건",
+        "필수사항",
+        "자격요건",
+        "자격사항",
+        "지원자격",
+        "요구사항",
+        "우대역량",
+        "우대요건",
+        "우대사항",
+        "우대조건",
+        "주요역할",
+        "주요업무",
+        "담당업무",
+        "업무내용",
+    }
+)
+_HEADING_PREFIX = re.compile(r"^(?:#{1,6}\s+|(?:\d{1,2}[.)]|\(\d{1,2}\)|[①-⑳])\s*)")
+_HEADING_WRAPPERS = (
+    ("**", "**"),
+    ("__", "__"),
+    ("*", "*"),
+    ("_", "_"),
+    ("[", "]"),
+    ("(", ")"),
+    ("【", "】"),
+)
+
 
 @dataclass(frozen=True, slots=True)
 class JdRequirementDraft:
@@ -80,7 +111,8 @@ def build_requirement_drafts(posting: PostingContent) -> list[JdRequirementDraft
     동일한 `posting.skill_tags`를 붙인다. 이 태그는 공고 전체의 기술 목록이며,
     각 문장에서 해당 기술을 직접 요구한다는 뜻은 아니다.
 
-    줄머리 목록 기호는 떼어낸다. 합계가 `MAX_REQUIREMENTS`를 넘으면 필수 요건을 먼저 담고,
+    줄머리 목록 기호는 떼어내고, 독립된 섹션 제목은 개수 배분 전에 제외한다.
+    합계가 `MAX_REQUIREMENTS`를 넘으면 필수 요건을 먼저 담고,
     남은 자리는 우대부터 주요 업무와 한 줄씩 번갈아 나눈다 — 우대가 길다는 이유로 주요 업무가
     통째로 잘리지 않게 한다. 남는 항목의 표시 순서는 카테고리별 원문 순서 그대로다.
 
@@ -95,7 +127,11 @@ def build_requirement_drafts(posting: PostingContent) -> list[JdRequirementDraft
         )
 
     texts_by_category = {
-        category: [t for t in (_strip_bullet(raw) for raw in getattr(posting, field)) if t]
+        category: [
+            text
+            for text in (_strip_bullet(raw) for raw in getattr(posting, field))
+            if text and not is_requirement_heading(text)
+        ]
         for category, field in _CATEGORY_SOURCES.items()
     }
     quota = _quota({c: len(ts) for c, ts in texts_by_category.items()})
@@ -121,6 +157,26 @@ def build_requirement_drafts(posting: PostingContent) -> list[JdRequirementDraft
 
 def _strip_bullet(text: str) -> str:
     return _LEADING_BULLET.sub("", text).strip()
+
+
+def is_requirement_heading(text: str) -> bool:
+    """한 줄 전체가 요구사항 섹션 제목인지 판별하며 입력 문자열은 바꾸지 않는다."""
+    # 장식을 비교용 사본에서만 벗겨 원본과 실제 요구사항 문구를 보존한다.
+    candidate = text.strip()
+    while candidate:
+        stripped = _HEADING_PREFIX.sub("", _strip_bullet(candidate)).strip().rstrip(":：").strip()
+        for opening, closing in _HEADING_WRAPPERS:
+            if (
+                len(stripped) >= len(opening) + len(closing)
+                and stripped.startswith(opening)
+                and stripped.endswith(closing)
+            ):
+                stripped = stripped[len(opening) : -len(closing)].strip()
+                break
+        if stripped == candidate:
+            break
+        candidate = stripped
+    return re.sub(r"\s+", "", candidate) in _SECTION_HEADINGS
 
 
 def _quota(counts: dict[JdCategory, int]) -> dict[JdCategory, int]:

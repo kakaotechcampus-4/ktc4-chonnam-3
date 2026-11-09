@@ -23,16 +23,18 @@ export const interviewSocket = ws.link(path('/ws/interviews/:sessionId'));
  * 열린 연결. `interviewSocket.clients`는 msw가 비동기 저장소를 거쳐 채우는데
  * 테스트 브라우저에서 비어 있는 채로 남아 직접 추적한다.
  */
-const openClients = new Set<Client & { close: (code?: number, reason?: string) => void }>();
+const openClients = new Set<
+  Client & { url: URL | string; close: (code?: number, reason?: string) => void }
+>();
 
 /**
  * 이 세션에 열려 있는 연결. 준비 재시도가 REST 로 들어오므로(0010 결정)
- * REST 핸들러가 진행 상황을 흘려보낼 상대를 찾아야 한다.
+ * REST 핸들러가 진행 상황을 흘려보낼 상대를 찾아야 한다. abandon도 이 연결을 닫는다.
  * 열린 연결이 없으면 빈 배열이고, 다음 연결이 경과 시간 기준으로 이어받는다.
  */
 export function clientsForSession(sessionId: string) {
-  return [...interviewSocket.clients].filter(
-    (client) => new URL(client.url).pathname.endsWith(`/${sessionId}`),
+  return [...openClients].filter((client) =>
+    new URL(client.url).pathname.endsWith(`/${sessionId}`),
   );
 }
 

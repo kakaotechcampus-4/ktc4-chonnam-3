@@ -1,0 +1,16 @@
+{"case_id": "q-0001", "version": 1,
+ "allowed": [
+  {"id": "a1", "purpose": "ask를 선택해, 부족한 점 중 한 목적(재발급 흐름 또는 만료·폐기)만 묻는 질문 1개"},
+  {"id": "a2", "purpose": "persona를 허용 목록(tech_lead, domain_lead) 안에서 선택한다"}
+ ],
+ "forbidden": [
+  {"id": "f1", "reason": "답변에 없는 구현 세부(Redis 저장 등)를 전제로 질문", "type": "false_premise"},
+  {"id": "f2", "reason": "한 질문에서 서로 다른 목적을 여러 개 묻는 복합 질문", "type": "compound"},
+  {"id": "f3", "reason": "허용 목록 밖의 hr_manager를 선택", "type": "persona_violation"}
+ ],
+ "grader_controls": [
+  {"kind": "allowed", "output": "ask / tech_lead: 토큰을 재발급하겠다고 요청하면, 서버에서 어떤 순서로 처리되나요?"},
+  {"kind": "forbidden", "output": "ask / tech_lead: Redis에 저장한 refresh token의 TTL은 얼마로 두셨고, 로그아웃은 어떻게 처리하며, 배포는 어떻게 하셨나요?"},
+  {"kind": "ambiguous", "output": "ask / tech_lead: JWT를 쓰셨다고 했는데, 인증 쪽을 조금 더 설명해 주실 수 있나요?"}
+ ],
+ "review": {"status": "unreviewed", "author": "geonyeong325", "reviewer": null, "reviewed_at": null, "pending_notes": []}}

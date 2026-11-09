@@ -32,10 +32,21 @@ FEEDBACK = [
 COVERAGE = {"totalRequirements": 8, "coveredRequirements": 5, "uncoveredRequirements": ["Kafka"]}
 
 
-async def seed_criteria(db: AsyncSession) -> None:
-    """score_criteria 6행. display_order 는 SCORE_KEYS 순서다."""
+def sample_rubric(key: str) -> dict[str, Any]:
+    """운영 seed 와 같은 {"0".."4": 문구} 모양. BE 는 구조를 해석하지 않고 그대로 전달한다."""
+    return {str(level): f"{key} {level}단계" for level in range(5)}
+
+
+async def seed_criteria(db: AsyncSession, *, active: bool = True) -> None:
+    """score_criteria 6행. display_order 는 SCORE_KEYS 순서다. 운영 seed 는 아직 비활성이다."""
     db.add_all(
-        ScoreCriterion(score_key=key, label_ko=LABELS[key], display_order=i)
+        ScoreCriterion(
+            score_key=key,
+            label_ko=LABELS[key],
+            display_order=i,
+            rubric=sample_rubric(key),
+            is_active=active,
+        )
         for i, key in enumerate(SCORE_KEYS)
     )
     await db.flush()

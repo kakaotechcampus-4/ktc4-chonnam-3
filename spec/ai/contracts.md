@@ -6,6 +6,8 @@
 
 아래 필드 표와 enum은 명시적으로 Accepted인 범위 외에는 fixture로 검토할 후보이며, 이 문서만으로 migration·공개 API·WS enum 추가를 승인하지 않는다. 기존 FIX와 [0008 후보 정책](decisions/0008-ai-candidate-policy.md) 등 명시된 Accepted 정책만 승인 범위에서 확정된 요구사항이다.
 
+여기서 Proposed·미채택은 명시한 상세 계약의 승인 상태다. 채택된 범위의 구현·연결·검증 조건과 구분하며, 현재 적용 여부·실행 결과는 [구현 기록](implementation.md)에서 확인한다. 공통 해석은 [상태 표현과 문서 역할](../../ai/README.md#ai-document-status)을 따른다.
+
 원본: [아키텍처](architecture.md), [레이어 규칙](../../backend/docs/layer-rules.md), [DB 명세](../../backend/docs/db-schema.md), [미결정 기록](decisions/0001-ai-baseline.md). 과거 원본 `ForAI.md`는 현재 저장소에 없으며, 당시 검토 내역은 [원본 감사 기록](source-audit.md)을 참고한다.
 
 ## 계약 계층
@@ -28,7 +30,7 @@
 - `null`은 미확인·미적용 중 문서에서 정의한 경우에만 허용한다. 모르는 값에 0이나 빈 문자열을 넣지 않는다.
 - enum 외 값, 필요한 값 누락, 과도한 컬렉션, 중복 참조, 근거 없는 위치·인용은 검증 실패다.
 - 사전 수집된 관찰과 LLM 해석은 별도 필드다. 문자열 인용은 해당 원문 또는 답변에서 확인할 수 있어야 한다.
-- 아래 길이·token·도구 횟수 상한의 운영값은 미결정이다. 설정 스키마에서 양수·일관성 검사하고, 실제 모델 실행 전에 값을 기록한다.
+- 아래 길이·token·도구 횟수 상한의 운영값은 문서에 고정하지 않는다. [0018](decisions/0018-existing-baseline-bulk-resolution.md)에 따라 기존 범위의 운영 조건·대표 사례 실측으로 정하고, 설정 스키마에서 양수·일관성 검사한 뒤 실제 모델 실행 전에 값을 기록한다.
 
 ## Context 입력
 

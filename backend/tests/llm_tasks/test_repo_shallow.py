@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from unittest.mock import ANY
 
 import httpx
 import pytest
@@ -75,6 +76,10 @@ def _response(text: str) -> dict[str, object]:
 
 def _batch(*items: dict[str, object]) -> str:
     return json.dumps({"repositories": list(items)}, ensure_ascii=False)
+
+
+def _failure(stage: str, reason: object) -> dict[str, object]:
+    return {"_failure": {"stage": stage, "reason_summary": reason}}
 
 
 def _transport(replies: list[object], sent: list[httpx.Request]) -> httpx.MockTransport:
@@ -206,7 +211,50 @@ async def test_semantic_failure_is_stored_without_retry_or_default_values() -> N
 
     assert len(sent) == 1
     assert row["status"] == "failed" and row["error_code"] == "llm_failed"
-    assert row["summary"] is None and row["tech_stack"] == [] and row["result"] is None
+    assert row["summary"] is None and row["tech_stack"] == []
+    # 실패 행 result에는 AI가 구분한 단계·사유만 남고 분석 기본값은 없다.
+    assert row["result"] == {"_failure": {"stage": "semantic", "reason_summary": ANY}}
+
+
+async def test_item_failures_keep_stage_and_reason_per_repository() -> None:
+    unknown = str(uuid.UUID(int=9))
+    first = _batch(_item(REPO_1), _item(REPO_1), _item(REPO_3, purpose=3), _item(unknown))
+    inputs = (_input(REPO_1), _input(REPO_2), _input(REPO_3))
+    result, sent = await _run([first, _batch(_item(REPO_3, purpose=4))], *inputs)
+    rows = repo_shallow.to_repo_analysis_rows(result, inputs, PROMPT)
+
+    assert len(sent) == 2
+    # 공개 error_code는 그대로 두고 중복·누락·항목 schema 실패를 행마다 구분해 남긴다.
+    assert [(row["error_code"], row["result"]) for row in rows] == [
+        ("llm_failed", _failure("semantic", "duplicate repository result")),
+        ("llm_failed", _failure("semantic", "missing repository result")),
+        ("llm_failed", _failure("schema", "invalid field: purpose")),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("replies", "error_code", "failure"),
+    [
+        (
+            [httpx.ReadTimeout("timed out")] * 2,
+            "llm_timeout",
+            _failure("timeout", "Provider request timed out."),
+        ),
+        (["not-json"] * 2, "llm_parse_failed", _failure("parse", ANY)),
+        (
+            [json.dumps({"repositories": [], "extra": 1})] * 2,
+            "llm_failed",
+            _failure("schema", ANY),
+        ),
+    ],
+)
+async def test_whole_call_failure_keeps_its_stage_on_every_row(
+    replies, error_code, failure
+) -> None:
+    result, _ = await _run(replies, _input(REPO_1), _input(REPO_2))
+    rows = repo_shallow.to_repo_analysis_rows(result, (_input(REPO_1), _input(REPO_2)), PROMPT)
+
+    assert [(row["error_code"], row["result"]) for row in rows] == [(error_code, failure)] * 2
 
 
 async def test_whole_call_timeout_fails_every_repository_with_llm_timeout() -> None:
@@ -331,3 +379,5 @@ async def test_unrequested_repository_in_retry_keeps_its_first_record() -> None:
         ("failed", 1),
     ]
     assert rows[2]["raw_output"] == first
+    # 재응답의 미등록 ID 실패가 첫 호출의 실패 사유를 덮지 않는다.
+    assert rows[2]["result"] == _failure("semantic", "invalid field: head_sha mismatch")

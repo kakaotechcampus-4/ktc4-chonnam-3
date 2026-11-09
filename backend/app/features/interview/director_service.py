@@ -40,6 +40,7 @@ from app.features.interview.answer_context import (
 from app.integrations.llm.client import CallBudget
 from app.llm_tasks.answer_analysis import analyze_answer
 from app.llm_tasks.prompt_loader import load_active_prompt
+from app.shared.events import record_event
 
 DEFAULT_LIMITS = c.ContextLimits(2, 0, "director-runtime.v1")
 logger = get_logger(__name__)
@@ -245,6 +246,13 @@ async def start_director(
             )
             db.add(turn)
             await db.flush()
+            await record_event(
+                db,
+                "turn_asked",
+                user_id=user_id,
+                interview_session_id=interview_id,
+                payload={"turnNo": context.turn_no, "persona": question.persona},
+            )
             db.add_all(
                 TurnEvidence(turn_id=turn.id, evidence_id=UUID(value), usage="question_basis")
                 for value in question.evidence_refs
@@ -428,6 +436,13 @@ async def process_answer(
         turn.answer_text, turn.status, turn.answered_at = text, "answered", now
         if turn.asked_at is not None:
             turn.answer_duration_sec = max(0, int((now - turn.asked_at).total_seconds()))
+        await record_event(
+            db,
+            "turn_answered",
+            user_id=user_id,
+            interview_session_id=interview_id,
+            payload={"turnNo": turn_no},
+        )
         db.add(
             LLMCallRecord(
                 id=call_id,
@@ -583,14 +598,17 @@ async def process_answer(
                 )
                 turn.decision = c.to_data(decision)
                 interview.status, interview.completed_at = "completed", datetime.now(UTC)
+                await record_event(
+                    db, "interview_completed", user_id=user_id, interview_session_id=interview_id
+                )
                 _save_context_snapshot(interview, current.context, turn, turn, phase="completed")
-            elif summary:
+            elif tool_result is not None:
                 from devon_ai.agents.director.runtime import verification_decision
 
                 lookup = verification_decision(
                     loaded.context, initial.data, allowed_locations=locations
                 )
-                if lookup is not None:
+                if not isinstance(lookup, str):
                     turn.decision = asdict(
                         replace(
                             lookup.data, reason_summary=lookup.data.reason_summary + "\n" + summary
@@ -640,8 +658,9 @@ async def _retrieve(
     from devon_ai.agents.director.runtime import verification_decision
 
     decision = verification_decision(context, analysis, allowed_locations=locations)
-    if decision is None:
-        return None, ""
+    if isinstance(decision, str):
+        # 미조회 사유는 Tool 결과(not_found)를 만들지 않고 기존 판단 요약에만 남긴다(0014).
+        return None, "근거 미조회; 이유: " + decision
     assert context.current_turn_id is not None
     request = decision.data.tool_requests[0]
     requested = f"{request.repository_id}@{request.git_ref}: " + ", ".join(request.allowed_paths)

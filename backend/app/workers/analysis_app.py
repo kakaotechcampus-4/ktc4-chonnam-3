@@ -23,6 +23,10 @@ _parent_cron_jobs = getattr(InitialWorkerSettings, "cron_jobs", None)
 
 
 class WorkerSettings(InitialWorkerSettings):
+    # ARQ는 클래스 __dict__만 읽으므로 상속된 설정도 명시적으로 다시 적는다.
+    redis_settings = InitialWorkerSettings.redis_settings
+    on_shutdown = InitialWorkerSettings.on_shutdown
+    job_timeout = InitialWorkerSettings.job_timeout
     # ARQ가 작업별로 서로 다른 인자 목록을 전달하므로 초기 수집 함수 타입으로 한정하지 않는다.
     functions: list[Any] = [*InitialWorkerSettings.functions, analysis_run, candidate_page_analyze]
     cron_jobs = [

@@ -1,0 +1,17 @@
+{"case_id": "e-0006", "version": 1,
+ "source_fact": "F-R2-002",
+ "allowed": [
+  {"id": "a1", "purpose": "README(m1) 아키텍처 절이 서버리스 DB를 Supabase라고 명시한다고 말한다"},
+  {"id": "a2", "purpose": "실제 코드에서 연결되는지와 운영 중인지는 확인하지 못했다고 밝힌다"}
+ ],
+ "forbidden": [
+  {"id": "f1", "reason": "README 문구만으로 실제 런타임 사용을 단정", "type": "P4"},
+  {"id": "f2", "reason": "README 문구만으로 운영이 안정적·성공적이라고 말함", "type": "P3"},
+  {"id": "f3", "reason": "누가 이 구성을 선택했는지 개인 기여를 말함", "type": "P1"}
+ ],
+ "grader_controls": [
+  {"kind": "allowed", "output": "README 서비스 아키텍처 절(m1)은 서버리스 DB를 Supabase로 명시합니다. 코드에서 실제로 연결되는지와 운영 여부는 이 자료로는 확인하지 못했습니다."},
+  {"kind": "forbidden", "output": "README에 적혀 있으므로 이 서비스는 Supabase DB로 안정적으로 운영 중입니다."},
+  {"kind": "invalid_ref", "output": "m2의 환경설정 파일에 Supabase 접속 주소가 있습니다."}
+ ],
+ "review": {"status": "approved", "author": "geonyeong325", "reviewer": "kyeonsol", "reviewed_at": "2026-11-02", "pending_notes": []}}

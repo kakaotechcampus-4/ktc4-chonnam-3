@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 
 import httpx
 import pytest
@@ -62,6 +63,29 @@ async def test_fetch_parses_structured_fields():
     assert posting.main_tasks == ["결제 API 개발", "정산 배치 운영"]
     assert posting.skill_tags == ["Python", "Django", "Redis"]
     assert posting.is_structured is True
+
+
+async def test_heading_filter_preserves_wanted_raw_fields_and_requirement_categories():
+    payload = deepcopy(FIXTURE_PAYLOAD)
+    payload["job"]["detail"].update(
+        requirements=["**필수역량**", "Python 개발 경험"],
+        preferred_points=["[우대사항]:", "Redis 운영 경험"],
+        main_tasks=["1. 주요역할", "결제 API 개발"],
+    )
+    original = deepcopy(payload)
+    async with _mock_client(payload) as client:
+        posting = await WantedAdapter(client=client).fetch(WANTED_URL)
+    posting_before = deepcopy(posting)
+
+    drafts = build_requirement_drafts(posting)
+
+    assert [(draft.text, draft.category, draft.source_field) for draft in drafts] == [
+        ("Python 개발 경험", "required", "requirements"),
+        ("Redis 운영 경험", "preferred", "preferred_points"),
+        ("결제 API 개발", "responsibility", "main_tasks"),
+    ]
+    assert posting == posting_before
+    assert payload == original
 
 
 async def test_fetch_404_raises_unreachable():

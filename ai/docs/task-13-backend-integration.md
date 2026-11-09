@@ -1,6 +1,6 @@
 # task-13 - Backend 통합과 인계
 
-상태: 구현 가이드. AI package 설치 smoke, 공통 호출·Director 질문 경로의 HTTP adapter 검사가 존재한다. 실제 면접 service·저장·WS 연결은 미구현이다.
+상태: 구현 가이드. 현재 구현·검증 범위와 남은 연결은 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
 
 ## 목표
 
@@ -58,7 +58,7 @@
   [ARQ 설정](../../backend/app/workers/arq_app.py): lazy 생성, enqueue와 worker 등록을 소유한다.
 
 새 AI server, provider package, gateway package, Controller, worker나 Context Builder Agent를
-추가하지 않는다. 현재 BE 연결 파일이 docstring이라는 이유로 미승인 facade signature를 만든다거나
+추가하지 않는다. BE 연결 구현이 없더라도 미승인 facade signature를 만든다거나
 AI source를 BE에 복사하지 않는다.
 
 ## 작업
@@ -91,8 +91,8 @@ AI source를 BE에 복사하지 않는다.
 
 ## 검증
 
-추가 예정, 현재 없음: `backend/tests/agents/test_ai_integration.py`.
-Workflow별 추가 예정, 현재 없음: `backend/tests/features/` 아래 해당 기능 통합 테스트.
+계획한 통합 테스트 경로는 `backend/tests/agents/test_ai_integration.py`와 `backend/tests/features/` 아래
+해당 기능 테스트다. 실제 테스트 구성·실행 결과는 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
 
 - [ ] adapter가 승인된 입력만 전달하고 typed 성공·실패를 service에 반환하는지 검사한다.
 - [ ] fake provider로 성공, timeout, parse/schema 실패와 1회 재시도 소유권을 검사한다.

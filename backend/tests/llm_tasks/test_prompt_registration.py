@@ -119,3 +119,53 @@ async def test_initial_seed_still_rejects_new_versions_even_with_all_seven_tasks
         await seeds.seed_prompt_versions(session, prompts)
 
     assert session.sql == []
+
+
+async def test_report_score_can_be_registered_with_its_own_version():
+    session = _SeedSession()
+    prompt = PromptSpec("report_score", "report_score_v1", "local-model", "검수된 점수 판정 본문")
+
+    await seeds.register_prompt_versions(session, [prompt])
+
+    assert session.rows[("report_score", "report_score_v1")]["is_active"] is True
+    assert session.locked == {"report_score"}
+
+
+async def test_initial_seed_stays_at_the_seven_fixed_tasks_without_report_score():
+    # report_score는 초기 seed에 끼우지 않는다: 일곱 task + report_score는 거절된다.
+    session = _SeedSession()
+    prompts = [
+        PromptSpec(task, version, "model", "검수된 본문")
+        for task, version in (seeds.PROMPT_VERSIONS | seeds.ADDITIONAL_PROMPT_VERSIONS).items()
+    ]
+
+    with pytest.raises(seeds.PromptSeedValidationError):
+        await seeds.seed_prompt_versions(session, prompts)
+
+    assert session.sql == []
+    assert "report_score" not in seeds.PROMPT_VERSIONS
+
+
+async def test_unknown_task_is_still_rejected_for_registration():
+    session = _SeedSession()
+    with pytest.raises(seeds.PromptSeedValidationError):
+        await seeds.register_prompt_versions(session, [PromptSpec("report_other", "v1", "m", "b")])
+    assert session.sql == []
+
+
+def test_register_prompt_cli_accepts_report_score_and_rejects_unknown_tasks(
+    capsys, monkeypatch, tmp_path
+):
+    from scripts import register_prompt
+
+    async def fake_register(task, version, template):
+        return PromptSpec(task, version, "local-model", "검수된 본문")
+
+    monkeypatch.setattr(register_prompt, "register", fake_register)
+    args = ["--version", "v1", "--template", str(tmp_path / "body.md")]
+
+    assert register_prompt.main(["--task", "report_score", *args]) == 0
+    assert "task=report_score" in capsys.readouterr().out
+    with pytest.raises(SystemExit):
+        register_prompt.main(["--task", "report_other", *args])
+    assert "invalid choice" in capsys.readouterr().err

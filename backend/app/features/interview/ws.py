@@ -108,11 +108,11 @@ async def _script(redis: Redis, script: str, key_count: int, *values: object) ->
     return await execute("EVAL", script, key_count, *values)
 
 
-def _error(reason: str, *, step: str | None = None) -> dict[str, object]:
+def _error(reason: str, *, step: str | None = None, recoverable: bool = True) -> dict[str, object]:
     return {
         "type": "error",
         "reason": reason,
-        "recoverable": True,
+        "recoverable": recoverable,
         "code": "ERR_" + reason.upper(),
         "step": step,
         "occurredAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -391,7 +391,9 @@ class _Connection:
                 await self.send({"type": "prepareCompleted"})
             await self.send(state.question)
             return self.connected
-        event = _error("question_failed")
+        # 진행 중 면접은 재접속해도 실패한 분석·질문 생성을 다시 실행하지 않는다. 복구할 수
+        # 없는 실패이므로 FE가 재연결을 멈추고 abandon 후 새 면접으로 안내하게 한다(공통 0010).
+        event = _error("question_failed", recoverable=state.status != "in_progress")
         if state.status == "preparing_failed" and state.last_error:
             try:
                 last = InterviewLastError.model_validate(state.last_error)
@@ -587,12 +589,14 @@ async def interview_socket(socket: WebSocket, session_id: str) -> None:
                 if exc.reason == "answer_turn_invalid":
                     await connection.send(_error("answer_stale_turn"))
                     continue
-                await connection.send(_error("question_failed"))
+                # 다른 연결이 작업 중이거나 이 연결이 교체된 경우만 재접속으로 풀린다.
+                recoverable = exc.reason == "connection_replaced_or_busy"
+                await connection.send(_error("question_failed", recoverable=recoverable))
                 await connection.close()
                 return
             if result.failure is not None or result.discard_reason is not None:
                 log_recovery(result.failure, "turn")
-                await connection.send(_error("question_failed"))
+                await connection.send(_error("question_failed", recoverable=False))
                 await connection.close()
                 return
             if not await connection.restore(user_id):
