@@ -42,7 +42,9 @@ test('더 보기는 분석 중 안내 뒤 카드를 붙이고 선택을 유지�
   expect([...new Set(pages)]).toEqual(['2', '3']);
 });
 
-test('page 분석이 실패하면 안내하고 다음 더 보기는 다음 page를 부른다', async ({ page }) => {
+test('page 분석이 실패하면 같은 클릭에서 다음 page로 넘어가고 표시하지 못한 레포를 알린다', async ({
+  page,
+}) => {
   const pages = candidatePages(page);
   await openRepoSelect(page, [
     {
@@ -55,14 +57,14 @@ test('page 분석이 실패하면 안내하고 다음 더 보기는 다음 page�
   ]);
 
   await page.getByRole('button', { name: '내 레포 더 보기' }).click();
-  await expect(page.getByRole('alert')).toHaveText(
-    '이 묶음의 레포를 분석하지 못했어요. 더 보기로 다음 레포를 볼 수 있어요.',
-  );
-  await page.getByRole('button', { name: '내 레포 더 보기' }).click();
-  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByText('일부 레포는 분석하지 못해 목록에 표시하지 않았어요.')).toBeVisible({
+    timeout: 10_000,
+  });
+  // page 3은 마지막(빈 배열)이라 한 번의 클릭으로 버튼까지 사라진다.
   await expect(
     page.getByRole('button', { name: /내 레포 더 보기|레포를 분석하고 있어요/ }),
   ).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.getByRole('alert')).toHaveCount(0);
   // 실패한 page 2를 다시 부르지 않는다. BE는 같은 page를 다시 분석하지 않는다.
   expect([...new Set(pages)]).toEqual(['2', '3']);
 });

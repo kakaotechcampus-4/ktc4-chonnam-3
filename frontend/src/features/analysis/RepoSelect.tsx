@@ -45,7 +45,6 @@ const CREATE_ERROR: Record<string, string> = {
 
 // GET /analysis-runs/{runId}/candidates 실패 안내. 목록에 없는 reason은 다시 시도 안내로 처리한다.
 const MORE_ERROR: Record<string, string> = {
-  candidate_page_failed: '이 묶음의 레포를 분석하지 못했어요. 더 보기로 다음 레포를 볼 수 있어요.',
   run_expired: CREATE_ERROR.run_expired,
   not_ready: '지금은 레포를 더 불러올 수 없어요.',
 };
@@ -96,6 +95,7 @@ export default function RepoSelect() {
   const [moreRepos, setMoreRepos] = useState<RepositoryItem[]>([]);
   const [nextPage, setNextPage] = useState(2);
   const [moreEnded, setMoreEnded] = useState(false);
+  const [moreSkipped, setMoreSkipped] = useState(false);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -106,28 +106,43 @@ export default function RepoSelect() {
   const loadMore = useMutation({
     // 첫 요청에 그 page 분석이 시작되어 202 analyzing이 온다. retryAfter 뒤 같은 page를 다시 부르고,
     // 화면을 떠나면 폴링을 멈춘다.
-    mutationFn: async (page: number) => {
+    mutationFn: async (start: number) => {
+      let page = start;
+      let skipped = false;
       for (;;) {
-        const response = await api.getAnalysisRunCandidates(runId, page);
-        if (!('status' in response)) return response.repositories;
+        let response;
+        try {
+          response = await api.getAnalysisRunCandidates(runId, page);
+        } catch (error) {
+          // page 전체 실패에는 카드가 오지 않고, BE는 실패한 page를 다시 분석하지 않는다.
+          // 같은 클릭 안에서 다음 page로 넘어간다. ponytail: BE에 재분석이 생기면 다시 시도로 바꾼다.
+          if (isApiError(error) && error.error.reason === 'candidate_page_failed') {
+            skipped = true;
+            page += 1;
+            continue;
+          }
+          throw error;
+        }
+        if (!('status' in response)) {
+          return { repositories: response.repositories, nextPage: page + 1, skipped };
+        }
         await new Promise((resolve) => setTimeout(resolve, (response.retryAfter || 3) * 1000));
         if (!mountedRef.current) return null;
       }
     },
-    onSuccess: (repositories) => {
-      if (repositories === null) return;
+    onSuccess: (result) => {
+      if (result === null) return;
+      if (result.skipped) setMoreSkipped(true);
       // 빈 배열은 더 배정할 후보가 없다는 뜻이다(BE get_candidates).
-      if (repositories.length === 0) setMoreEnded(true);
+      if (result.repositories.length === 0) setMoreEnded(true);
       else {
-        setMoreRepos((prev) => [...prev, ...repositories]);
-        setNextPage((page) => page + 1);
+        setMoreRepos((prev) => [...prev, ...result.repositories]);
+        setNextPage(result.nextPage);
       }
     },
     onError: (error) => {
       const reason = isApiError(error) ? error.error.reason : null;
-      // BE는 실패한 page를 다시 분석하지 않는다. 다음 더 보기는 다음 page를 부른다.
-      if (reason === 'candidate_page_failed') setNextPage((page) => page + 1);
-      else if (reason === 'run_expired' || reason === 'not_ready') setMoreEnded(true);
+      if (reason === 'run_expired' || reason === 'not_ready') setMoreEnded(true);
     },
   });
   const moreErrorReason = isApiError(loadMore.error) ? loadMore.error.error.reason : null;
@@ -309,6 +324,11 @@ export default function RepoSelect() {
                     >
                       {loadMore.isPending ? '레포를 분석하고 있어요...' : '내 레포 더 보기'}
                     </button>
+                  )}
+                  {moreSkipped && (
+                    <p className="mt-2 text-[11.5px] text-muted">
+                      일부 레포는 분석하지 못해 목록에 표시하지 않았어요.
+                    </p>
                   )}
                   {moreError && (
                     <p role="alert" className="mt-2 text-[11.5px] text-error">
