@@ -199,16 +199,22 @@ async def collect_repository_sources(
     http_client: httpx.AsyncClient,
     budget: CallBudget,
     paths: tuple[str, ...] | None = None,
+    read_scopes: tuple[tuple[str, str], ...] | None = None,
+    inventory: SourceInventory | None = None,
     attempt_sink: list[c.AttemptMetadata] | None = None,
 ) -> SourceCollection:
     """경로 선택과 뒤따르는 L2 분석은 같은 CallBudget을 사용한다.
 
-    캐시 관찰 경로를 명시하면 모델 선택 없이 해당 파일만 다시 읽는다. 전체 tree 재귀 조회,
-    전역 검색, 기본 브랜치의 내용을 사용하지 않으며 파일 원문을 임의로 잘라 성공시키지 않는다.
+    캐시 관찰 경로를 명시하면 모델 선택 없이 해당 파일만 다시 읽는다. 고정 SHA의 유한 구조
+    목록만 열거하며 전역 검색이나 기본 브랜치 내용을 사용하지 않는다. 구간 위치를 보존한다.
     """
     attempts: list[c.AttemptMetadata] = attempt_sink if attempt_sink is not None else []
     limitations: list[str] = []
     sources: list[c.SourceDocument] = []
+    neighbors: tuple[str, ...] = ()
+    candidates: tuple[str, ...] = ()
+    model_candidates: tuple[str, ...] = ()
+    inventory_limitations: tuple[str, ...] = ()
     active_path: str | None = None
     try:
         # 앱 자격은 공개 데이터 quota용이다. 사용자 저장소 token을 원문 조회로 확대하지 않는다.
@@ -221,14 +227,23 @@ async def collect_repository_sources(
             http_client,
             scope.full_name,
             max_requests=settings.director_prepare_max_requests,
-            max_response_bytes=settings.director_evidence_max_response_bytes,
-            max_total_bytes=settings.director_evidence_max_total_bytes,
+            max_response_bytes=settings.director_prepare_max_response_bytes,
+            max_total_bytes=settings.director_prepare_max_total_bytes,
             timeout_seconds=settings.director_prepare_timeout_seconds,
             public_app_auth=app_auth,
         )
         if shallow.repository_id != scope.repository_id or shallow.head_sha != scope.git_ref:
             raise SourcePreparationError("l1_snapshot_mismatch")
-        async with asyncio.timeout(settings.director_prepare_timeout_seconds):
+        if inventory is not None and inventory.head_sha != scope.git_ref:
+            raise SourcePreparationError("repository_inventory_mismatch")
+        llm = settings.require_llm() if paths is None else None
+        selection_seconds = llm.call_limits(prompt.task_name).timeout_seconds if llm else 0
+        # HTTP 예산과 선정 모델 예산을 더하되 모델 대기를 HTTP 시간으로 중복 소비하지 않는다.
+        # 지정 경로 재검증은 모델을 호출하지 않으므로 원래의 HTTP 상한만 갖는다.
+        async with (
+            asyncio.timeout(settings.director_prepare_timeout_seconds + selection_seconds),
+            asyncio.timeout(settings.director_prepare_timeout_seconds) as network_timeout,
+        ):
             repository = await reader.get("")
             if (
                 repository is None
@@ -240,10 +255,48 @@ async def collect_repository_sources(
             if root is None:
                 raise SourcePreparationError("repository_snapshot_unavailable")
             if paths is None:
-                candidates, limitations = await _structure(reader, root, scope, settings)
+                # 설정된 파일 수·응답 상한을 기준으로 원문 몫을 남긴다. 작은 전체 예산에서는
+                # 남은 요청·바이트의 절반까지만 예약해 최소 한 번의 구조 조회도 가능하게 한다.
+                candidates, limitations = await _structure(
+                    reader,
+                    root,
+                    scope,
+                    settings,
+                    reserve_requests=min(
+                        settings.director_prepare_max_files, reader.requests_left // 2
+                    ),
+                    reserve_bytes=min(
+                        reader.bytes_left // 2,
+                        settings.director_prepare_max_files * reader.response_limit,
+                    ),
+                )
                 if not candidates:
                     raise SourcePreparationError("repository_sources_unavailable")
-                llm = settings.require_llm()
+                selection_limit = min(settings.director_prepare_max_files, reader.requests_left)
+                if selection_limit == 0:
+                    raise EvidenceReadError("evidence_budget_exhausted")
+                assert llm is not None
+                inventory_limitations = tuple(limitations)
+                limitations = list(summarized_limitations(inventory_limitations))
+                selection_request, model_candidates, window_notes = selection_window(
+                    shallow=shallow,
+                    prompt=prompt,
+                    candidates=candidates,
+                    limitations=tuple(limitations),
+                    max_selected_files=selection_limit,
+                    limits=llm.call_limits(prompt.task_name),
+                    max_enum_values=settings.repository_selection_max_enum_values,
+                    max_enum_characters=settings.repository_selection_max_enum_characters,
+                )
+                limitations.extend(window_notes)
+                if not model_candidates:
+                    raise SourcePreparationError(
+                        "repository_selection_input_too_large",
+                        limitations=tuple(limitations),
+                        failure=c.CallFailure(
+                            "budget", "llm_failed", "Source selection request exceeds byte limit."
+                        ),
+                    )
 
                 def validate(raw: object) -> tuple[str, ...]:
                     if (
@@ -254,50 +307,34 @@ async def collect_repository_sources(
                         raise c.ContractError("schema", "selected_paths")
                     selected = raw["selected_paths"]
                     if (
-                        not 1 <= len(selected) <= settings.director_prepare_max_files
-                        or any(type(path) is not str or path not in candidates for path in selected)
+                        not 1 <= len(selected) <= selection_limit
+                        or any(
+                            type(path) is not str or path not in model_candidates
+                            for path in selected
+                        )
                         or len(set(selected)) != len(selected)
                     ):
                         raise c.ContractError("semantic", "source selection scope")
                     return tuple(selected)
 
-                result = await call_model(
-                    c.ModelRequest(
-                        prompt=prompt,
-                        payload={
-                            "operation": "select",
-                            "repository_id": scope.repository_id,
-                            "head_sha": scope.git_ref,
-                            "shallow": asdict(shallow),
-                            "candidates": [{"path": path, "kind": "file"} for path in candidates],
-                            "limitations": limitations,
-                            "max_selected_files": settings.director_prepare_max_files,
-                        },
-                        schema_name="RepoDeepSourceSelection",
-                        schema_version="1",
-                        output_schema={
-                            "type": "object",
-                            "properties": {
-                                "selected_paths": {
-                                    "type": "array",
-                                    "minItems": 1,
-                                    "maxItems": settings.director_prepare_max_files,
-                                    "items": {"type": "string", "enum": list(candidates)},
-                                }
-                            },
-                            "required": ["selected_paths"],
-                            "additionalProperties": False,
-                        },
-                        limits=llm.call_limits(),
-                        max_attempts=1,
-                    ),
-                    validate,
-                    api_key=llm.openai_api_key,
-                    base_url=llm.llm_base_url,
-                    http_client=http_client,
-                    budget=budget,
-                    attempt_sink=attempts,
-                )
+                deadline = network_timeout.when()
+                assert deadline is not None
+                network_seconds_left = max(0, deadline - asyncio.get_running_loop().time())
+                network_timeout.reschedule(None)
+                try:
+                    result = await call_model(
+                        selection_request,
+                        validate,
+                        api_key=llm.openai_api_key,
+                        base_url=llm.llm_base_url,
+                        http_client=http_client,
+                        budget=budget,
+                        attempt_sink=attempts,
+                    )
+                finally:
+                    network_timeout.reschedule(
+                        asyncio.get_running_loop().time() + network_seconds_left
+                    )
                 if result.data is None:
                     raise SourcePreparationError(
                         "l2_source_selection_failed",
@@ -308,21 +345,106 @@ async def collect_repository_sources(
                 paths = result.data
             if len(paths) > settings.director_prepare_max_files or len(set(paths)) != len(paths):
                 raise SourcePreparationError("repository_source_limit")
+            if read_scopes is not None and inventory is not None:
+                # 같은 분석을 재사용할 때도 당시 보존한 구조만 후보로 삼는다.
+                candidates = inventory.paths
+                model_candidates = inventory.model_candidate_paths
+                inventory_limitations = inventory.limitations
+                limitations.extend(summarized_limitations(inventory_limitations))
+            elif read_scopes is not None:
+                # 캐시 재검증 때도 새 모델 호출 없이 실제 구조를 확인하되 원문 예산을 남긴다.
+                try:
+                    candidates, extra = await _structure(
+                        reader,
+                        root,
+                        scope,
+                        settings,
+                        reserve_requests=min(len(paths), reader.requests_left // 2),
+                        reserve_bytes=min(
+                            reader.bytes_left // 2, len(paths) * reader.response_limit
+                        ),
+                    )
+                    limitations.extend(summarized_limitations(tuple(extra)))
+                    inventory_limitations = tuple(extra)
+                except EvidenceReadError:
+                    candidates = ()
+                    limitations.append("추가 조회 후보 구조는 현재 예산에서 확인하지 못했습니다.")
+                    inventory_limitations = (limitations[-1],)
+            candidate_limit = min(MAX_CANDIDATES, max(1, settings.director_prepare_max_files * 2))
+            # 실제 읽은 선정 경로도 area 채택 여부와 무관하게 재조회할 수 있어야 한다.
+            neighbors = tuple(paths[:candidate_limit])
+            remaining = candidate_limit - len(neighbors)
+            if remaining and set(paths).issubset(candidates):
+                neighbors += neighbor_candidates(candidates, paths, limit=remaining)
             replace(scope, allowed_paths=frozenset(paths))
-            for path in paths:
+            # 원문 외의 식별자·L1·구간 메타데이터가 차지할 입력 공간을 남겨 둔다.
+            raw_source_limit = settings.director_prepare_max_source_bytes
+            llm_input_limit = settings.llm_max_input_bytes or raw_source_limit
+            source_bytes_left = min(raw_source_limit, llm_input_limit // 2)
+            for position, path in enumerate(paths):
                 active_path = path
                 try:
                     blob = await reader.regular_blob(root, path)
                     if blob is None:
                         limitations.append(f"고정 ref에서 파일을 찾지 못했습니다: {path}")
                         continue
-                    text = await reader.file_text(path, scope.git_ref, blob)
-                    if not text.strip():
-                        limitations.append(f"빈 파일은 분석 원문에서 제외했습니다: {path}")
-                    elif len(text.encode("utf-8")) > settings.director_prepare_max_file_bytes:
-                        limitations.append(f"파일 크기 상한으로 원문을 분석하지 않았습니다: {path}")
+                    file_budget = (
+                        source_bytes_left
+                        if read_scopes is not None
+                        else (source_bytes_left // (len(paths) - position))
+                    )
+                    expected_size = reader.blob_sizes.get(blob)
+                    complete = True
+                    if (
+                        expected_size is not None
+                        and expected_size > settings.director_prepare_max_file_bytes
+                    ):
+                        text, complete = await reader.file_text_prefix(
+                            path,
+                            scope.git_ref,
+                            blob,
+                            max_bytes=file_budget,
+                            expected_size=expected_size,
+                        )
+                        if not complete:
+                            limitations.append(
+                                f"큰 파일에서 원문 예산 내의 앞부분만 읽었습니다: {path}; "
+                                f"읽은 줄 {len(text.splitlines())}, 전체 {expected_size} bytes"
+                            )
                     else:
-                        sources.append(c.SourceDocument(path, "file", text, "entire file"))
+                        text = await reader.file_text(path, scope.git_ref, blob)
+                    if not complete and not text.strip():
+                        limitations.append(
+                            f"현재 원문 예산 안에서 완성된 텍스트 줄을 읽지 못했습니다: {path}"
+                        )
+                        continue
+                    if read_scopes is not None:
+                        chunks, notes = _cached_segments(
+                            path,
+                            text,
+                            read_scopes,
+                            source_bytes_left,
+                            settings.director_prepare_max_file_bytes,
+                            complete=complete,
+                        )
+                    else:
+                        # 앞의 큰 모듈 하나가 뒤의 설정·테스트 자료를 모두 밀어내지 않게 나눈다.
+                        chunks, notes = segment_text(
+                            path,
+                            text,
+                            max_segment_bytes=settings.director_prepare_max_file_bytes,
+                            total_bytes=file_budget,
+                        )
+                        if not complete:
+                            chunks = tuple(
+                                _partial_source(chunk)
+                                if chunk.read_scope == "entire file"
+                                else chunk
+                                for chunk in chunks
+                            )
+                    sources.extend(chunks)
+                    limitations.extend(notes)
+                    source_bytes_left -= sum(len(chunk.content.encode("utf-8")) for chunk in chunks)
                 except EvidenceReadError as error:
                     limitations.append(
                         f"파일 원문 조회를 완료하지 못했습니다: {path}: {error.code}"
@@ -339,6 +461,10 @@ async def collect_repository_sources(
                 c.DeepRepoInput(scope.repository_id, scope.git_ref, shallow, tuple(sources)),
                 tuple(attempts),
                 tuple(limitations),
+                neighbors,
+                candidates,
+                model_candidates,
+                inventory_limitations,
             )
     except (EvidenceReadError, c.ContractError) as error:
         code = error.code if isinstance(error, EvidenceReadError) else "repository_source_invalid"
@@ -352,9 +478,18 @@ async def collect_repository_sources(
                 c.DeepRepoInput(scope.repository_id, scope.git_ref, shallow, tuple(sources)),
                 tuple(attempts),
                 tuple(limitations),
+                neighbors,
+                candidates,
+                model_candidates,
+                inventory_limitations,
             )
         raise SourcePreparationError(
             "repository_source_timeout",
             tuple(attempts),
             limitations=tuple(limitations),
         ) from None
+
+
+def _partial_source(source: c.SourceDocument) -> c.SourceDocument:
+    end = len(source.content.splitlines()) + source.start_line - 1
+    return replace(source, read_scope=f"lines {source.start_line}-{end}", end_line=end)
