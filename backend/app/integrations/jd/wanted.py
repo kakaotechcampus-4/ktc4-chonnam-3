@@ -25,6 +25,7 @@ from app.integrations.jd.base import (
     PostingUnreachableError,
     UnsupportedSiteError,
 )
+from app.integrations.jd.body_images import body_image_urls, body_text
 
 WANTED_HOSTS = {"www.wanted.co.kr", "wanted.co.kr"}
 _WANTED_PATH_RE = re.compile(r"/wd/(?P<job_id>[0-9]+)/?")
@@ -108,10 +109,23 @@ class WantedAdapter:
         company_name = _optional_text(company.get("name"))
         industry = _optional_text(company.get("industry_name"))
 
-        requirements = _split_paragraphs(detail.get("requirements"))
-        preferred_points = _split_paragraphs(detail.get("preferred_points"))
-        main_tasks = _split_paragraphs(detail.get("main_tasks"))
-        intro = _optional_text(detail.get("intro"))
+        html_images: list[str] = []
+
+        def paragraphs(key: str) -> list[str]:
+            lines = []
+            for raw in _split_paragraphs(detail.get(key)):
+                text, images = body_text(raw)
+                lines.extend(text.splitlines())
+                html_images.extend(images)
+            return lines
+
+        requirements = paragraphs("requirements")
+        preferred_points = paragraphs("preferred_points")
+        main_tasks = paragraphs("main_tasks")
+        raw_intro = _optional_text(detail.get("intro"))
+        intro, intro_images = body_text(raw_intro) if raw_intro else (raw_intro, [])
+        html_images.extend(intro_images)
+        image_urls, source_limitations = body_image_urls(detail, html_images, fetch_url)
 
         # 실제 응답(job id 341487)엔 태그 이름이 "name"이 아니라 "text" 키에 있었음
         tag_values = job.get("skill_tags")
@@ -140,13 +154,17 @@ class WantedAdapter:
         ]
         raw_text = "\n".join(raw_text_parts)
 
-        if not raw_text and not requirements and not preferred_points and not main_tasks:
+        if not raw_text and not image_urls:
             raise PostingContentEmptyError(f"원티드 공고 본문이 비어있음: {fetch_url}")
 
         return PostingContent(
             site_adapter=self.site_adapter,
             fetch_url=fetch_url,
-            content_form="text",
+            content_form=(
+                "mixed" if intro or requirements or preferred_points or main_tasks else "image"
+            )
+            if image_urls
+            else "text",
             raw_text=raw_text,
             position=position,
             company_name=company_name,
@@ -155,6 +173,17 @@ class WantedAdapter:
             preferred_points=preferred_points,
             main_tasks=main_tasks,
             skill_tags=skill_tags,
+            intro=intro,
+            image_urls=image_urls,
+            source_limitations=source_limitations,
+            source_metadata={
+                "wanted_fields": {
+                    key: detail.get(key)
+                    for key in ("intro", "requirements", "preferred_points", "main_tasks")
+                }
+            }
+            if image_urls
+            else {},
         )
 
 
