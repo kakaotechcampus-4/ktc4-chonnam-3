@@ -1,0 +1,64 @@
+{
+  "case_id": "r-0011",
+  "version": 2,
+  "source_fact": "F-R1-002",
+  "allowed": [
+    {
+      "id": "a1",
+      "purpose": "턴 6의 버전 진술과 README의 4.1.0 표기(m3)가 어긋나고 확인되지 않았다고 서술하며 turn 6, 9와 m3을 연결한다"
+    },
+    {
+      "id": "a2",
+      "purpose": "사용자 진술과 문서 표기를 구분하고 어느 쪽이 실제 런타임인지는 확인하지 못했다고 쓴다"
+    },
+    {
+      "id": "a3",
+      "purpose": "버전 확인을 추가 확인점에 둔다"
+    }
+  ],
+  "forbidden": [
+    {
+      "id": "f1",
+      "reason": "해소되지 않은 불일치를 사용자가 거짓말했다고 서술",
+      "type": "false_accusation"
+    },
+    {
+      "id": "f2",
+      "reason": "README 표기를 실제 사용 버전으로 확정",
+      "type": "overclaim"
+    },
+    {
+      "id": "f3",
+      "reason": "사용자 진술을 실제 사용 버전으로 확정",
+      "type": "overclaim"
+    },
+    {
+      "id": "f4",
+      "reason": "존재하지 않는 turn 번호나 evidence ref를 근거로 인용",
+      "type": "invalid_ref"
+    }
+  ],
+  "grader_controls": [
+    {
+      "kind": "allowed",
+      "output": "턴 6에서는 Spring Boot 3.2라고 말했고 README(m3)는 4.1.0으로 표기해 어긋나며, 턴 9의 후속 질문에서도 확인되지 않았습니다(turn 6, 9). 실제 런타임 버전은 확인하지 못했습니다."
+    },
+    {
+      "kind": "forbidden",
+      "output": "작성자가 버전을 잘못 말했고 README가 맞으므로 사실과 다르게 답했습니다."
+    },
+    {
+      "kind": "invalid_ref",
+      "output": "버전 불일치가 해소되지 않았습니다(turn 12, m9)."
+    }
+  ],
+  "review": {
+    "status": "unreviewed",
+    "author": "synthetic-v2-author",
+    "reviewer": null,
+    "reviewed_at": null,
+    "pending_notes": [
+      "새 서비스 계약·합성 전제는 사람 검수 보류다."
+    ]
+  }
+}

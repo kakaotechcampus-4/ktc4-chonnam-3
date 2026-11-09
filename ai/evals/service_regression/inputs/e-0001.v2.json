@@ -1,0 +1,143 @@
+{
+  "case_id": "e-0001",
+  "version": 2,
+  "control": {
+    "kind": "evidence",
+    "split": "dev",
+    "source_group_id": "sg-r1",
+    "synthetic": true
+  },
+  "payload": {
+    "service_task": "answer_analysis",
+    "service_input": {
+      "context": {
+        "interview_id": "e-0001",
+        "current_turn_id": "e-0001-answer",
+        "turn_no": 2,
+        "total_turns": 9,
+        "persona_counts": [],
+        "allowed_personas": [
+          "tech_lead"
+        ],
+        "jd_requirements": [],
+        "repositories": [
+          {
+            "repository_id": "synthetic-repo-sg-r1",
+            "git_ref": "70a6816bba2e328de436952d69d14395ba13d2e4",
+            "primary": true,
+            "analysis_refs": [],
+            "limitations": [
+              "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+              "제공된 원문 구간 밖의 구현은 확인하지 않았다."
+            ]
+          }
+        ],
+        "history": [],
+        "current_question_contract": {
+          "purpose": "이 프로젝트는 Redis를 사용하고 있나요? 확인한 자료만으로 말할 수 있는 것을 답하세요.",
+          "required_points": [
+            {
+              "key": "verified_scope",
+              "description": "제공 원문에서 확인되는 사실과 미확인을 구분한다."
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "m1"
+            }
+          ],
+          "evaluation_scope": "이 프로젝트는 Redis를 사용하고 있나요? 확인한 자료만으로 말할 수 있는 것을 답하세요.",
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ]
+        },
+        "evidence": [
+          {
+            "evidence_id": "m1",
+            "repository_id": "synthetic-repo-sg-r1",
+            "git_ref": "70a6816bba2e328de436952d69d14395ba13d2e4",
+            "source_kind": "code",
+            "path": "build.gradle",
+            "metadata_key": null,
+            "content": "dependencies {\n    implementation 'org.springframework.boot:spring-boot-starter-web'\n    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'\n    implementation 'org.springframework.boot:spring-boot-starter-data-redis'\n    runtimeOnly 'com.mysql:mysql-connector-j'\n}",
+            "tool_name": null,
+            "start_line": 38,
+            "end_line": 43
+          }
+        ],
+        "domain_frames": [
+          {
+            "id": "synthetic-domain-frame",
+            "category": "etc",
+            "version": "v2",
+            "text": "가정한 서비스에서 접근 권한·보존 기간·장애 영향을 어떻게 확인할지 묻는다."
+          }
+        ],
+        "limits": {
+          "remaining_calls": 2,
+          "remaining_replans": 0,
+          "policy_version": "explicit-synthetic-v2"
+        },
+        "evaluation_targets": [
+          {
+            "persona": "tech_lead",
+            "keys": [
+              "project_understanding",
+              "communication"
+            ]
+          }
+        ],
+        "supplemental_sources": [],
+        "external_searches": [],
+        "supplemental_limitations": [
+          "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+          "제공된 원문 구간 밖의 구현은 확인하지 않았다."
+        ]
+      },
+      "question": {
+        "persona": "tech_lead",
+        "text": "이 프로젝트는 Redis를 사용하고 있나요? 확인한 자료만으로 말할 수 있는 것을 답하세요.",
+        "topic_code": "synthetic-topic",
+        "question_contract": {
+          "purpose": "이 프로젝트는 Redis를 사용하고 있나요? 확인한 자료만으로 말할 수 있는 것을 답하세요.",
+          "required_points": [
+            {
+              "key": "verified_scope",
+              "description": "제공 원문에서 확인되는 사실과 미확인을 구분한다."
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "m1"
+            }
+          ],
+          "evaluation_scope": "이 프로젝트는 Redis를 사용하고 있나요? 확인한 자료만으로 말할 수 있는 것을 답하세요.",
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "m1"
+        ],
+        "jd_requirement_ids": [],
+        "question_type": "main",
+        "parent_turn_id": null
+      },
+      "turn_id": "e-0001-answer",
+      "answer_text": "Redis 의존성이 있으므로 이 프로젝트는 실제 운영에서 Redis를 사용합니다.",
+      "allowed_locations": [
+        [
+          "synthetic-repo-sg-r1",
+          "70a6816bba2e328de436952d69d14395ba13d2e4",
+          "build.gradle"
+        ]
+      ]
+    }
+  }
+}

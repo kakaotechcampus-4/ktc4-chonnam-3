@@ -59,6 +59,79 @@ def test_valid_pair_loads_and_model_sees_only_payload(tmp_path):
         assert leaked not in seen
 
 
+def test_explicit_runtime_report_payload_keeps_full_contract_and_unanswered_turn(tmp_path):
+    inp = _input(kind="report")
+    inp["payload"] = {
+        "service_task": "report",
+        "service_input": {
+            "turns": [
+                {
+                    "turn_no": 1,
+                    "persona": "hr_manager",
+                    "question": "role",
+                    "answer": None,
+                    "parent_turn_no": None,
+                    "question_contract": {
+                        "purpose": "role",
+                        "required_points": [{"key": "role", "description": "role"}],
+                        "assumptions": [],
+                        "basis_refs": [],
+                        "evaluation_scope": "role",
+                        "evaluation_keys": ["contribution_clarity", "communication"],
+                    },
+                    "evidences": [],
+                }
+            ],
+            "rubrics": {},
+        },
+    }
+    _pair(tmp_path, inp=inp)
+    (loaded,) = load_cases(tmp_path)
+    assert loaded.model_input() == inp["payload"]
+
+
+def test_explicit_report_pair_can_change_answers_but_cannot_change_source_rubrics(tmp_path):
+    import copy
+
+    template = {
+        "service_task": "report",
+        "service_input": {
+            "turns": [
+                {
+                    "turn_no": 1,
+                    "persona": "hr_manager",
+                    "question": "role",
+                    "answer": "one",
+                    "question_contract": {
+                        "purpose": "role",
+                        "required_points": [{"key": "role", "description": "role"}],
+                        "evaluation_scope": "role",
+                    },
+                }
+            ],
+            "rubrics": {"immutable": "source rubric"},
+        },
+    }
+    for number, role in ((1, "stronger"), (2, "weaker")):
+        inp, exp = _input(f"r-{number}", kind="report"), _expectation(f"r-{number}")
+        inp["payload"] = copy.deepcopy(template)
+        inp["payload"]["service_input"]["turns"][0]["answer"] = str(number)
+        exp["pair"] = {
+            "pair_id": "runtime-pair",
+            "role": role,
+            "key": "communication",
+            "min_gap": 5,
+        }
+        _pair(tmp_path, inp, exp)
+    assert len(load_cases(tmp_path)) == 2
+    target = tmp_path / "inputs" / "r-2.v1.json"
+    altered = json.loads(target.read_text(encoding="utf-8"))
+    altered["payload"]["service_input"]["rubrics"]["immutable"] = "changed"
+    target.write_text(json.dumps(altered), encoding="utf-8")
+    with pytest.raises(CaseError, match="must be identical"):
+        load_cases(tmp_path)
+
+
 def test_model_input_is_a_copy(tmp_path):
     _pair(tmp_path)
     (case,) = load_cases(tmp_path)

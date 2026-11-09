@@ -1,0 +1,95 @@
+name: AI and evaluation CI
+
+on:
+  pull_request:
+    branches: [develop, release]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - 'ai/**'
+      - 'backend/scripts/ai_eval_bridge.py'
+      - 'backend/scripts/ai_model_judge.py'
+      - 'backend/scripts/run_ai_evaluation.py'
+      - 'backend/tests/test_ai_eval*.py'
+      - 'backend/tests/test_ai_model_judge.py'
+      - '.github/workflows/ai-ci.yml'
+  push:
+    branches: [develop]
+    paths:
+      - 'ai/**'
+      - 'backend/scripts/ai_eval_bridge.py'
+      - 'backend/scripts/ai_model_judge.py'
+      - 'backend/scripts/run_ai_evaluation.py'
+      - 'backend/tests/test_ai_eval*.py'
+      - 'backend/tests/test_ai_model_judge.py'
+      - '.github/workflows/ai-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ai:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ai
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: ai/uv.lock
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run pytest -q --junitxml=report/ai-pytest.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai-regression-results
+          path: ai/report/ai-pytest.xml
+
+  evaluation-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: uv sync --locked
+      # 공급자 키를 주입하지 않는다. 실제 서비스 입력 검증과 주입한 HTTP 응답만 사용한다.
+      - name: Validate typed cases and evaluation isolation
+        run: >-
+          uv run pytest -q tests/test_ai_eval_bridge.py tests/test_ai_eval_service_dataset.py
+          tests/test_ai_evaluation_cli.py tests/test_ai_model_judge.py
+          --junitxml=report/evaluation-contracts.xml
+      - name: Collect automatic input-contract results
+        run: >-
+          uv run python -m scripts.run_ai_evaluation
+          --cases ../ai/evals/service_regression
+          --manifest ../ai/evals/service_regression/manifest.json
+          --split all --dry-run --output report/evaluation-input-validation.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evaluation-contract-results
+          path: |
+            backend/report/evaluation-contracts.xml
+            backend/report/evaluation-input-validation.json

@@ -1,0 +1,224 @@
+{
+  "case_id": "q-0010",
+  "version": 2,
+  "control": {
+    "kind": "question",
+    "split": "dev",
+    "source_group_id": "sg-r1",
+    "synthetic": true
+  },
+  "payload": {
+    "service_task": "director",
+    "service_input": {
+      "context": {
+        "interview_id": "q-0010",
+        "current_turn_id": "q-0010-turn-2",
+        "turn_no": 3,
+        "total_turns": 9,
+        "persona_counts": [
+          {
+            "persona": "hr_manager",
+            "count": 1
+          },
+          {
+            "persona": "tech_lead",
+            "count": 1
+          }
+        ],
+        "allowed_personas": [
+          "tech_lead",
+          "domain_lead"
+        ],
+        "jd_requirements": [],
+        "repositories": [
+          {
+            "repository_id": "synthetic-repo-sg-r1",
+            "git_ref": "70a6816bba2e328de436952d69d14395ba13d2e4",
+            "primary": true,
+            "analysis_refs": [],
+            "limitations": [
+              "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+              "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+              "이전 후보는 Redis 사용 선언만으로 캐시 설계 경험을 전제하여 거절됐다. 이번에는 새 질문 행동으로만 판정하며 recovery enum을 출력하라고 요구하지 않는다."
+            ]
+          }
+        ],
+        "history": [
+          {
+            "turn_id": "q-0010-turn-1",
+            "persona": "hr_manager",
+            "question": "간단히 자기소개와 이 프로젝트에서 맡은 역할을 말씀해 주세요.",
+            "answer": "백엔드를 맡았고 로그인과 토큰 재발급을 담당했습니다.",
+            "analysis_ref": null
+          },
+          {
+            "turn_id": "q-0010-turn-2",
+            "persona": "tech_lead",
+            "question": "사용하신 기술 스택을 말씀해 주세요.",
+            "answer": "Spring Boot, MySQL, Redis를 사용했습니다.",
+            "analysis_ref": null
+          }
+        ],
+        "current_question_contract": {
+          "purpose": "사용하신 기술 스택을 말씀해 주세요.",
+          "required_points": [
+            {
+              "key": "covered-0",
+              "description": "기술 스택 나열"
+            },
+            {
+              "key": "missing-0",
+              "description": "각 기술의 사용 맥락"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "ev1"
+            }
+          ],
+          "evaluation_scope": "사용하신 기술 스택을 말씀해 주세요.",
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ]
+        },
+        "evidence": [
+          {
+            "evidence_id": "ev1",
+            "repository_id": "synthetic-repo-sg-r1",
+            "git_ref": "70a6816bba2e328de436952d69d14395ba13d2e4",
+            "source_kind": "code",
+            "path": "build.gradle",
+            "metadata_key": null,
+            "content": "    implementation 'org.springframework.boot:spring-boot-starter-data-redis'",
+            "tool_name": null,
+            "start_line": 38,
+            "end_line": 38
+          }
+        ],
+        "domain_frames": [
+          {
+            "id": "synthetic-domain-frame",
+            "category": "etc",
+            "version": "v2",
+            "text": "가정한 서비스에서 접근 권한·보존 기간·장애 영향을 어떻게 확인할지 묻는다."
+          }
+        ],
+        "limits": {
+          "remaining_calls": 2,
+          "remaining_replans": 0,
+          "policy_version": "explicit-synthetic-v2"
+        },
+        "evaluation_targets": [
+          {
+            "persona": "tech_lead",
+            "keys": [
+              "project_understanding",
+              "communication"
+            ]
+          },
+          {
+            "persona": "domain_lead",
+            "keys": [
+              "communication"
+            ]
+          }
+        ],
+        "supplemental_sources": [],
+        "external_searches": [],
+        "supplemental_limitations": [
+          "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+          "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+          "이전 후보는 Redis 사용 선언만으로 캐시 설계 경험을 전제하여 거절됐다. 이번에는 새 질문 행동으로만 판정하며 recovery enum을 출력하라고 요구하지 않는다."
+        ]
+      },
+      "question": {
+        "persona": "tech_lead",
+        "text": "사용하신 기술 스택을 말씀해 주세요.",
+        "topic_code": "synthetic-topic",
+        "question_contract": {
+          "purpose": "사용하신 기술 스택을 말씀해 주세요.",
+          "required_points": [
+            {
+              "key": "covered-0",
+              "description": "기술 스택 나열"
+            },
+            {
+              "key": "missing-0",
+              "description": "각 기술의 사용 맥락"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "ev1"
+            }
+          ],
+          "evaluation_scope": "사용하신 기술 스택을 말씀해 주세요.",
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "ev1"
+        ],
+        "jd_requirement_ids": [],
+        "question_type": "main",
+        "parent_turn_id": null
+      },
+      "answer_text": "Spring Boot, MySQL, Redis를 사용했습니다.",
+      "answer_analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "partial",
+        "covered_points": [
+          {
+            "key": "covered-0",
+            "answer_quotes": [
+              "Spring Boot, MySQL, Redis를 사용했습니다."
+            ]
+          }
+        ],
+        "missing_points": [
+          "missing-0"
+        ],
+        "technical_assessment": {
+          "explanation": "합성 원문의 명시적 관찰만 전달한다.",
+          "answer_quotes": [
+            "Spring Boot, MySQL, Redis를 사용했습니다."
+          ],
+          "evidence_refs": [],
+          "limitations": [
+            "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+            "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+            "이전 후보는 Redis 사용 선언만으로 캐시 설계 경험을 전제하여 거절됐다. 이번에는 새 질문 행동으로만 판정하며 recovery enum을 출력하라고 요구하지 않는다."
+          ]
+        },
+        "contribution_scope": {
+          "scope": "unknown",
+          "answer_quotes": [
+            "Spring Boot, MySQL, Redis를 사용했습니다."
+          ]
+        },
+        "claim_checks": [],
+        "needs_verification": false,
+        "verification_requests": [],
+        "limitations": [
+          "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+          "제공된 원문 구간 밖의 구현은 확인하지 않았다."
+        ],
+        "external_queries": []
+      },
+      "allowed_locations": [
+        [
+          "synthetic-repo-sg-r1",
+          "70a6816bba2e328de436952d69d14395ba13d2e4",
+          "build.gradle"
+        ]
+      ]
+    }
+  }
+}

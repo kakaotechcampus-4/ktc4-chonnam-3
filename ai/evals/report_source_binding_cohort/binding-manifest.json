@@ -1,0 +1,244 @@
+{
+  "format_version": 1,
+  "binding_semantics": "new_synthetic_available_materials_not_historical_usage",
+  "purpose": "보존된 v1 전역 원문이 typed 보고서 입력에서 빠진 관찰 결함을 별도 코호트로 확인한다.",
+  "approval_status": "unreviewed",
+  "human_review_status": "deferred",
+  "original_corpus_modified": false,
+  "removed_unrelated_premise": "v2의 report들에 복사된 q10 recovery enum 문구는 해당 report의 원문 전제가 아니므로 이 새 버전에서 제외했다.",
+  "cases": [
+    {
+      "case": "r-0001.v3",
+      "source_case": "r-0001.v1",
+      "prior_binding": "r-0001.v2",
+      "source_sha256": "ab3c5f5da4f47714565724026ee88285e6389aba5936a62e24f96cf784d094a8",
+      "prior_binding_sha256": "768a347679e042e1253ab5ff9e9e7d684dc991b3c49babf09157d3e3d163ce54",
+      "prior_expectation_sha256": "eb83a37afaf6514f5afe80f135d0bebcfb70c3599e953703dd8aae79ac397124",
+      "source_group_id": "sg-r1",
+      "original_turn_material_relations": "not_provided",
+      "new_available_material_links": {
+        "m1": [
+          2,
+          6
+        ],
+        "m2": [
+          3,
+          5
+        ]
+      },
+      "snapshot_template": "../service_regression/inputs/r-0009.v2.json",
+      "snapshot_template_sha256": "db097a98d8986bd2ae323f0bf5e99c506c31011cd5637d4daf2edb65f09c461a",
+      "limitations": [
+        "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+        "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+        "기존 v2의 합성 SHA를 구조·위치 일치 검증용 snapshot binding으로 재사용하며, v1 원문의 실제 코드 버전이나 개인 기여를 증명하지 않는다.",
+        "v1의 전역 자료를 이 코호트에서 새로 명시한 available-material evaluation binding으로 연결했다. 해당 질문 당시 실제 열람하거나 사용했다는 뜻은 아니다."
+      ],
+      "human_review_status": "deferred"
+    },
+    {
+      "case": "r-0002.v3",
+      "source_case": "r-0002.v1",
+      "prior_binding": "r-0002.v2",
+      "source_sha256": "21993e980f6394bd11d3e64aca19537789b36788c51b7aa989fd80f5d7ad3bb8",
+      "prior_binding_sha256": "8553a2be6ab56857dc2113e3aede705353019e2828e625aed9318dd9faf3d235",
+      "prior_expectation_sha256": "c5d2ded1a3e117936b230db0cf3faea82479319a953dcec59eb9d66401905f38",
+      "source_group_id": "sg-r1",
+      "original_turn_material_relations": "not_provided",
+      "new_available_material_links": {
+        "m1": [
+          2,
+          6
+        ],
+        "m2": [
+          3,
+          5
+        ]
+      },
+      "snapshot_template": "../service_regression/inputs/r-0009.v2.json",
+      "snapshot_template_sha256": "db097a98d8986bd2ae323f0bf5e99c506c31011cd5637d4daf2edb65f09c461a",
+      "limitations": [
+        "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+        "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+        "기존 v2의 합성 SHA를 구조·위치 일치 검증용 snapshot binding으로 재사용하며, v1 원문의 실제 코드 버전이나 개인 기여를 증명하지 않는다.",
+        "v1의 전역 자료를 이 코호트에서 새로 명시한 available-material evaluation binding으로 연결했다. 해당 질문 당시 실제 열람하거나 사용했다는 뜻은 아니다."
+      ],
+      "human_review_status": "deferred"
+    },
+    {
+      "case": "r-0003.v3",
+      "source_case": "r-0003.v1",
+      "prior_binding": "r-0003.v2",
+      "source_sha256": "07025da38c9ad83517a116c899ca8a1a2c2046171451cfad86b215cd71ed71d4",
+      "prior_binding_sha256": "6515d0d154139583bee5d03aa445a20524060866af19e6f79ccf0c88d090583b",
+      "prior_expectation_sha256": "7df4c75efaa31be9a1be8a407c2549ee92173544c46c9c183c90d5040bdb8b01",
+      "source_group_id": "sg-r1",
+      "original_turn_material_relations": "not_provided",
+      "new_available_material_links": {
+        "m1": [
+          2,
+          6
+        ],
+        "m2": [
+          3,
+          5
+        ]
+      },
+      "snapshot_template": "../service_regression/inputs/r-0009.v2.json",
+      "snapshot_template_sha256": "db097a98d8986bd2ae323f0bf5e99c506c31011cd5637d4daf2edb65f09c461a",
+      "limitations": [
+        "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+        "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+        "기존 v2의 합성 SHA를 구조·위치 일치 검증용 snapshot binding으로 재사용하며, v1 원문의 실제 코드 버전이나 개인 기여를 증명하지 않는다.",
+        "v1의 전역 자료를 이 코호트에서 새로 명시한 available-material evaluation binding으로 연결했다. 해당 질문 당시 실제 열람하거나 사용했다는 뜻은 아니다."
+      ],
+      "human_review_status": "deferred"
+    },
+    {
+      "case": "r-0004.v3",
+      "source_case": "r-0004.v1",
+      "prior_binding": "r-0004.v2",
+      "source_sha256": "1623e7e589b0969c00ff31d3be662c0dfe32de0b03b2c96d6734d1a20c05f862",
+      "prior_binding_sha256": "e6b8a8978638f74ac49c3b33dc3d554b8541c83bef9335a7c4f337ec713ad30e",
+      "prior_expectation_sha256": "138575377d024c35e355e6ea7a0c97fb7d2acedddbcec76cd71ce90df5b2035a",
+      "source_group_id": "sg-r1",
+      "original_turn_material_relations": "not_provided",
+      "new_available_material_links": {
+        "m1": [
+          2,
+          6
+        ],
+        "m2": [
+          3,
+          5
+        ]
+      },
+      "snapshot_template": "../service_regression/inputs/r-0009.v2.json",
+      "snapshot_template_sha256": "db097a98d8986bd2ae323f0bf5e99c506c31011cd5637d4daf2edb65f09c461a",
+      "limitations": [
+        "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+        "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+        "기존 v2의 합성 SHA를 구조·위치 일치 검증용 snapshot binding으로 재사용하며, v1 원문의 실제 코드 버전이나 개인 기여를 증명하지 않는다.",
+        "v1의 전역 자료를 이 코호트에서 새로 명시한 available-material evaluation binding으로 연결했다. 해당 질문 당시 실제 열람하거나 사용했다는 뜻은 아니다."
+      ],
+      "human_review_status": "deferred"
+    },
+    {
+      "case": "r-0005.v3",
+      "source_case": "r-0005.v1",
+      "prior_binding": "r-0005.v2",
+      "source_sha256": "1ea9d8d4c50d1864e4f53b242402d03bc59e8b3276af60d362bde9af038f85e6",
+      "prior_binding_sha256": "816efaf9ab052f5c538ed28c39df6981a4abb6314ebedacfa2d7998731487199",
+      "prior_expectation_sha256": "7fb0a3833222f227d2f39af5bf846bb7761d57fd2900ad8e24eaef2535ee182a",
+      "source_group_id": "sg-r1",
+      "original_turn_material_relations": "not_provided",
+      "new_available_material_links": {
+        "m1": [
+          2,
+          6
+        ],
+        "m2": [
+          3,
+          5
+        ]
+      },
+      "snapshot_template": "../service_regression/inputs/r-0009.v2.json",
+      "snapshot_template_sha256": "db097a98d8986bd2ae323f0bf5e99c506c31011cd5637d4daf2edb65f09c461a",
+      "limitations": [
+        "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+        "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+        "기존 v2의 합성 SHA를 구조·위치 일치 검증용 snapshot binding으로 재사용하며, v1 원문의 실제 코드 버전이나 개인 기여를 증명하지 않는다.",
+        "v1의 전역 자료를 이 코호트에서 새로 명시한 available-material evaluation binding으로 연결했다. 해당 질문 당시 실제 열람하거나 사용했다는 뜻은 아니다."
+      ],
+      "human_review_status": "deferred"
+    },
+    {
+      "case": "r-0006.v3",
+      "source_case": "r-0006.v1",
+      "prior_binding": "r-0006.v2",
+      "source_sha256": "9eb25294e748bb9eab0863af0c073578c0a9e6bc61588b263ecb5a21c340e8b1",
+      "prior_binding_sha256": "b3af5d8b33087e42592a9e3d4478cfc51f1be5e5aeb6d6f4d08e2b42d2e67515",
+      "prior_expectation_sha256": "b658c5c69eeaada2b010324bea94e14d18249ad425e9b9ee2bbdeb188d5c29b0",
+      "source_group_id": "sg-r1",
+      "original_turn_material_relations": "not_provided",
+      "new_available_material_links": {
+        "m1": [
+          2,
+          6
+        ],
+        "m2": [
+          3,
+          5
+        ]
+      },
+      "snapshot_template": "../service_regression/inputs/r-0009.v2.json",
+      "snapshot_template_sha256": "db097a98d8986bd2ae323f0bf5e99c506c31011cd5637d4daf2edb65f09c461a",
+      "limitations": [
+        "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+        "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+        "기존 v2의 합성 SHA를 구조·위치 일치 검증용 snapshot binding으로 재사용하며, v1 원문의 실제 코드 버전이나 개인 기여를 증명하지 않는다.",
+        "v1의 전역 자료를 이 코호트에서 새로 명시한 available-material evaluation binding으로 연결했다. 해당 질문 당시 실제 열람하거나 사용했다는 뜻은 아니다."
+      ],
+      "human_review_status": "deferred"
+    },
+    {
+      "case": "r-0007.v3",
+      "source_case": "r-0007.v1",
+      "prior_binding": "r-0007.v2",
+      "source_sha256": "98bb9214e54073d7de4cfdf7a41a2a772b98701569cb059846d4eee3cb43f4e9",
+      "prior_binding_sha256": "d906c2b680f05a1cbf221066650fcf4bb6bb75a57295f760766654595e2e0eac",
+      "prior_expectation_sha256": "8b5bfda970ab86599cc1cf6425ac2e6c12f95c89d799c33c1b9452fe4c61d0de",
+      "source_group_id": "sg-r1",
+      "original_turn_material_relations": "not_provided",
+      "new_available_material_links": {
+        "m1": [
+          2,
+          6
+        ],
+        "m2": [
+          3,
+          5
+        ]
+      },
+      "snapshot_template": "../service_regression/inputs/r-0009.v2.json",
+      "snapshot_template_sha256": "db097a98d8986bd2ae323f0bf5e99c506c31011cd5637d4daf2edb65f09c461a",
+      "limitations": [
+        "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+        "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+        "기존 v2의 합성 SHA를 구조·위치 일치 검증용 snapshot binding으로 재사용하며, v1 원문의 실제 코드 버전이나 개인 기여를 증명하지 않는다.",
+        "v1의 전역 자료를 이 코호트에서 새로 명시한 available-material evaluation binding으로 연결했다. 해당 질문 당시 실제 열람하거나 사용했다는 뜻은 아니다."
+      ],
+      "human_review_status": "deferred"
+    },
+    {
+      "case": "r-0008.v3",
+      "source_case": "r-0008.v1",
+      "prior_binding": "r-0008.v2",
+      "source_sha256": "899d9ef787f06251e1aaf6fe855904cff7c701a85ac2e6722a27525da2a74ffc",
+      "prior_binding_sha256": "eaf9a65f95a53e9e27237bb7549be9fc5d20ad549adfc5a108d000feffade72e",
+      "prior_expectation_sha256": "7db596161a6ca73211d586c4c588e9abae1fd36beb015923764c931b0696b27f",
+      "source_group_id": "sg-r1",
+      "original_turn_material_relations": "not_provided",
+      "new_available_material_links": {
+        "m1": [
+          2,
+          6
+        ],
+        "m2": [
+          3,
+          5
+        ]
+      },
+      "snapshot_template": "../service_regression/inputs/r-0009.v2.json",
+      "snapshot_template_sha256": "db097a98d8986bd2ae323f0bf5e99c506c31011cd5637d4daf2edb65f09c461a",
+      "limitations": [
+        "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+        "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+        "기존 v2의 합성 SHA를 구조·위치 일치 검증용 snapshot binding으로 재사용하며, v1 원문의 실제 코드 버전이나 개인 기여를 증명하지 않는다.",
+        "v1의 전역 자료를 이 코호트에서 새로 명시한 available-material evaluation binding으로 연결했다. 해당 질문 당시 실제 열람하거나 사용했다는 뜻은 아니다."
+      ],
+      "human_review_status": "deferred"
+    }
+  ],
+  "source_hash_format": "utf8_lf"
+}

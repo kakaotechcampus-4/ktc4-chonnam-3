@@ -1,0 +1,170 @@
+{
+  "case_id": "q-holdout-0001",
+  "version": 1,
+  "control": {
+    "kind": "question",
+    "split": "holdout",
+    "source_group_id": "new-logistics-role",
+    "synthetic": true
+  },
+  "payload": {
+    "service_task": "director",
+    "service_input": {
+      "context": {
+        "interview_id": "q-holdout-0001",
+        "current_turn_id": "h2",
+        "turn_no": 3,
+        "total_turns": 9,
+        "persona_counts": [
+          {
+            "persona": "hr_manager",
+            "count": 1
+          },
+          {
+            "persona": "tech_lead",
+            "count": 1
+          }
+        ],
+        "allowed_personas": [
+          "tech_lead"
+        ],
+        "jd_requirements": [],
+        "repositories": [
+          {
+            "repository_id": "synthetic-repo-new-logistics-role",
+            "git_ref": "bb72f4e681b167fdfd7d6c8c41f006ef7540dd67",
+            "primary": true,
+            "analysis_refs": [],
+            "limitations": [
+              "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+              "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+              "이전 후보는 Redis 사용 선언만으로 캐시 설계 경험을 전제하여 거절됐다. 이번에는 새 질문 행동으로만 판정하며 recovery enum을 출력하라고 요구하지 않는다."
+            ]
+          }
+        ],
+        "history": [
+          {
+            "turn_id": "h1",
+            "persona": "hr_manager",
+            "question": "물류 시스템에서 맡은 역할은 무엇인가요?",
+            "answer": "저는 입력 검증을 맡았습니다.",
+            "analysis_ref": null
+          },
+          {
+            "turn_id": "h2",
+            "persona": "tech_lead",
+            "question": "배송 경로 최적화를 직접 설계한 이유를 설명해 주세요.",
+            "answer": "그 최적화는 동료가 구현했습니다. 저는 주소 입력 검증을 맡았습니다.",
+            "analysis_ref": null
+          }
+        ],
+        "current_question_contract": {
+          "purpose": "배송 경로 최적화를 직접 설계한 이유를 설명해 주세요.",
+          "required_points": [
+            {
+              "key": "role",
+              "description": "실제 작업 범위 정정을 보존한다."
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [],
+          "evaluation_scope": "배송 경로 최적화를 직접 설계한 이유를 설명해 주세요.",
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ]
+        },
+        "evidence": [],
+        "domain_frames": [
+          {
+            "id": "synthetic-domain-frame",
+            "category": "etc",
+            "version": "v2",
+            "text": "가정한 서비스에서 접근 권한·보존 기간·장애 영향을 어떻게 확인할지 묻는다."
+          }
+        ],
+        "limits": {
+          "remaining_calls": 2,
+          "remaining_replans": 0,
+          "policy_version": "explicit-synthetic-v2"
+        },
+        "evaluation_targets": [
+          {
+            "persona": "tech_lead",
+            "keys": [
+              "project_understanding",
+              "communication"
+            ]
+          }
+        ],
+        "supplemental_sources": [],
+        "external_searches": [],
+        "supplemental_limitations": [
+          "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+          "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+          "이전 후보는 Redis 사용 선언만으로 캐시 설계 경험을 전제하여 거절됐다. 이번에는 새 질문 행동으로만 판정하며 recovery enum을 출력하라고 요구하지 않는다."
+        ]
+      },
+      "question": {
+        "persona": "tech_lead",
+        "text": "배송 경로 최적화를 직접 설계한 이유를 설명해 주세요.",
+        "topic_code": "synthetic-topic",
+        "question_contract": {
+          "purpose": "배송 경로 최적화를 직접 설계한 이유를 설명해 주세요.",
+          "required_points": [
+            {
+              "key": "role",
+              "description": "실제 작업 범위 정정을 보존한다."
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [],
+          "evaluation_scope": "배송 경로 최적화를 직접 설계한 이유를 설명해 주세요.",
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ]
+        },
+        "evidence_refs": [],
+        "jd_requirement_ids": [],
+        "question_type": "main",
+        "parent_turn_id": null
+      },
+      "answer_text": "그 최적화는 동료가 구현했습니다. 저는 주소 입력 검증을 맡았습니다.",
+      "answer_analysis": {
+        "evaluation_status": "not_evaluable",
+        "sufficiency": null,
+        "covered_points": [],
+        "missing_points": [],
+        "technical_assessment": {
+          "explanation": "합성 원문의 명시적 관찰만 전달한다.",
+          "answer_quotes": [
+            "그 최적화는 동료가 구현했습니다. 저는 주소 입력 검증을 맡았습니다."
+          ],
+          "evidence_refs": [],
+          "limitations": [
+            "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+            "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+            "이전 후보는 Redis 사용 선언만으로 캐시 설계 경험을 전제하여 거절됐다. 이번에는 새 질문 행동으로만 판정하며 recovery enum을 출력하라고 요구하지 않는다."
+          ]
+        },
+        "contribution_scope": {
+          "scope": "teammate",
+          "answer_quotes": [
+            "그 최적화는 동료가 구현했습니다. 저는 주소 입력 검증을 맡았습니다."
+          ]
+        },
+        "claim_checks": [],
+        "needs_verification": false,
+        "verification_requests": [],
+        "limitations": [
+          "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+          "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+          "이전 후보는 Redis 사용 선언만으로 캐시 설계 경험을 전제하여 거절됐다. 이번에는 새 질문 행동으로만 판정하며 recovery enum을 출력하라고 요구하지 않는다.",
+          "동료의 최적화 구현은 본인의 설계 경험으로 평가하지 않는다."
+        ],
+        "external_queries": []
+      }
+    }
+  }
+}

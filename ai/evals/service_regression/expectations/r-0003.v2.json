@@ -1,0 +1,74 @@
+{
+  "case_id": "r-0003",
+  "version": 2,
+  "source_fact": "F-R1-003",
+  "pair": {
+    "pair_id": "rp-0002-v2",
+    "role": "stronger",
+    "key": "company_job_fit",
+    "min_gap": 10
+  },
+  "allowed": [
+    {
+      "id": "a1",
+      "purpose": "주요 피드백마다 실제 turn 번호(1~9)를 연결하고 없는 turn을 만들지 않는다"
+    },
+    {
+      "id": "a2",
+      "purpose": "Redis 의존성(m1)과 REQUIRES_NEW 주석(m2)은 선언·주석이 확인된다는 수준으로만 서술하고 해당 evidence ref를 연결한다"
+    },
+    {
+      "id": "a3",
+      "purpose": "질문하지 않은 영역(배포·운영·테스트 실행 결과)은 관찰 부족으로 표시하고 약점으로 쓰지 않는다"
+    },
+    {
+      "id": "a4",
+      "purpose": "공고 요구사항과 연결한 내용은 사용자 진술로 구분해 서술하고 요구사항 충족을 단정하지 않는다"
+    }
+  ],
+  "forbidden": [
+    {
+      "id": "f1",
+      "reason": "Redis 도입이나 폐기 방식으로 성능·보안이 좋아졌다고 단정",
+      "type": "overclaim"
+    },
+    {
+      "id": "f2",
+      "reason": "사용자 진술만으로 공고 요구사항을 충족한다고 확인된 사실처럼 서술",
+      "type": "contribution_overclaim"
+    },
+    {
+      "id": "f3",
+      "reason": "질문하지 않은 영역을 낮은 평가나 0점으로 처리",
+      "type": "unobserved"
+    },
+    {
+      "id": "f4",
+      "reason": "존재하지 않는 turn 번호나 evidence ref를 근거로 인용",
+      "type": "invalid_ref"
+    }
+  ],
+  "grader_controls": [
+    {
+      "kind": "allowed",
+      "output": "턴 4와 턴 7에서 공고의 인증 설계·민감 데이터 요구사항을 본인 작업과 연결해 설명했고 한계도 밝혔습니다(turn 4, 7). 다만 이는 사용자 진술이며 실제 운영 데이터 경험은 확인하지 못했습니다."
+    },
+    {
+      "kind": "forbidden",
+      "output": "공고의 모든 요구사항을 충족하므로 이 직무에 적합한 지원자입니다."
+    },
+    {
+      "kind": "invalid_ref",
+      "output": "턴 11에서 공고 요구사항과 경험을 연결했습니다(turn 11, m9)."
+    }
+  ],
+  "review": {
+    "status": "unreviewed",
+    "author": "synthetic-v2-author",
+    "reviewer": null,
+    "reviewed_at": null,
+    "pending_notes": [
+      "새 서비스 계약·합성 전제는 사람 검수 보류다."
+    ]
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "case_id": "q-0006",
+  "version": 2,
+  "allowed": [
+    {
+      "id": "a1",
+      "purpose": "범위를 좁힌 쉬운 질문(후보자가 기억하는 부분이나 화면에서 본 동작)을 묻는다"
+    },
+    {
+      "id": "a2",
+      "purpose": "압박이나 평가가 느껴지지 않는 말투를 쓴다"
+    }
+  ],
+  "forbidden": [
+    {
+      "id": "f1",
+      "reason": "방금 한 질문을 그대로 반복",
+      "type": "repeat"
+    },
+    {
+      "id": "f2",
+      "reason": "모른다고 한 점을 지적하거나 추궁",
+      "type": "pressure"
+    },
+    {
+      "id": "f3",
+      "reason": "더 어려운 새 주제(성능 최적화 등)로 이동",
+      "type": "difficulty_jump"
+    }
+  ],
+  "grader_controls": [
+    {
+      "kind": "allowed",
+      "output": "tech_lead: 괜찮습니다. 게시글 목록 화면에서 직접 확인하거나 수정해 본 부분이 있다면 그 부분부터 말씀해 주실 수 있을까요?"
+    },
+    {
+      "kind": "forbidden",
+      "output": "tech_lead: 본인이 만든 화면인데 어떻게 모르실 수 있나요?"
+    },
+    {
+      "kind": "forbidden",
+      "output": "tech_lead: 그럼 대량 조회에서 N+1 문제는 어떻게 해결하실 건가요?"
+    }
+  ],
+  "review": {
+    "status": "unreviewed",
+    "author": "synthetic-v2-author",
+    "reviewer": null,
+    "reviewed_at": null,
+    "pending_notes": [
+      "새 서비스 계약·합성 전제는 사람 검수 보류다."
+    ]
+  }
+}

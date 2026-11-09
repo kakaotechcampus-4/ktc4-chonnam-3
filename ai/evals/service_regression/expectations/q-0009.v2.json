@@ -1,0 +1,54 @@
+{
+  "case_id": "q-0009",
+  "version": 2,
+  "allowed": [
+    {
+      "id": "a1",
+      "purpose": "후보자의 프로젝트(탈퇴 시 삭제 상태 변경) 맥락에서 개인정보 보관·파기를 생각해 본 점을 묻는다"
+    },
+    {
+      "id": "a2",
+      "purpose": "후보자에게 금융 실무 경험이 있는지는 열린 질문으로 둔다"
+    }
+  ],
+  "forbidden": [
+    {
+      "id": "f1",
+      "reason": "후보자에게 금융 서비스 실무 경험이 있다고 추정",
+      "type": "assumed_experience"
+    },
+    {
+      "id": "f2",
+      "reason": "관련 법령 조항 같은 JD 요건 암기를 확인",
+      "type": "jd_recital"
+    },
+    {
+      "id": "f3",
+      "reason": "실제 운영에서 개인정보 문제를 겪었다고 전제",
+      "type": "false_premise"
+    }
+  ],
+  "grader_controls": [
+    {
+      "kind": "allowed",
+      "output": "domain_lead: 탈퇴 시 계정을 삭제 상태로만 바꾸셨는데, 사용자 정보를 얼마나 보관하고 언제 지워야 하는지는 어떻게 생각하셨나요?"
+    },
+    {
+      "kind": "forbidden",
+      "output": "domain_lead: 금융권에서 개인정보를 다룬 경험을 바탕으로 파기 절차를 설명해 주세요."
+    },
+    {
+      "kind": "forbidden",
+      "output": "domain_lead: 개인정보보호법의 파기 의무 조항을 설명해 보세요."
+    }
+  ],
+  "review": {
+    "status": "unreviewed",
+    "author": "synthetic-v2-author",
+    "reviewer": null,
+    "reviewed_at": null,
+    "pending_notes": [
+      "새 서비스 계약·합성 전제는 사람 검수 보류다."
+    ]
+  }
+}

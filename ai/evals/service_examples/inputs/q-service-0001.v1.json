@@ -1,0 +1,48 @@
+{
+  "case_id": "q-service-0001",
+  "version": 1,
+  "control": {
+    "kind": "question",
+    "split": "dev",
+    "source_group_id": "synthetic-service-smoke",
+    "synthetic": true
+  },
+  "payload": {
+    "service_task": "director",
+    "service_input": {
+      "context": {
+        "interview_id": "synthetic-smoke-session",
+        "current_turn_id": null,
+        "turn_no": 1,
+        "total_turns": 9,
+        "persona_counts": [],
+        "allowed_personas": [
+          "hr_manager"
+        ],
+        "jd_requirements": [],
+        "repositories": [],
+        "history": [],
+        "current_question_contract": null,
+        "evidence": [],
+        "domain_frames": [],
+        "limits": {
+          "remaining_calls": 2,
+          "remaining_replans": 0,
+          "policy_version": "service-smoke"
+        },
+        "evaluation_targets": [
+          {
+            "persona": "hr_manager",
+            "keys": [
+              "contribution_clarity",
+              "communication"
+            ]
+          }
+        ],
+        "supplemental_sources": [],
+        "external_searches": [],
+        "supplemental_limitations": []
+      }
+    }
+  }
+}
