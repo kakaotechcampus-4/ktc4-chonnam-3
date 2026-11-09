@@ -32,8 +32,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+        configure_logging(settings.log_level, json_logs=settings.is_prod or settings.log_json)
         settings.validate_auth()
-        configure_logging(settings.log_level, json_logs=settings.is_prod)
         async with AsyncExitStack() as stack:
             engine = create_async_engine(settings.database_url, pool_pre_ping=True)
             stack.push_async_callback(engine.dispose)
