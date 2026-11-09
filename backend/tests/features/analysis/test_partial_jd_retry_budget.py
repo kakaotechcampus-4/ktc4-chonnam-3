@@ -247,3 +247,172 @@ async def test_unrelated_fetch_failure_cannot_erase_an_initial_image_attempt_bud
             if isinstance(row.raw_payload, dict) and "_image_retry" in row.raw_payload
         ]
         assert len(budget) == 1 and budget[0]["attempts"] == 1
+
+
+async def test_expired_lease_is_reclaimed_with_the_attempt_count_preserved(
+    session_factory, monkeypatch
+):
+    identity, _ = await saved_partial(session_factory)
+    async with session_factory.begin() as db:
+        row = await db.get(JobPosting, identity)
+        row.raw_payload = {
+            **row.raw_payload,
+            "_image_retry": {
+                **row.raw_payload["_image_retry"],
+                "owner": "lost-worker",
+                "source_hash": service._image_source_hash(service._snapshot_content(source())),
+                "lease_expires_at": (NOW - timedelta(seconds=1)).isoformat(),
+            },
+        }
+    seen = []
+
+    async def extract(sessions, content, drafts, **kwargs):
+        async with sessions() as db:
+            state = (await db.get(JobPosting, identity)).raw_payload["_image_retry"]
+            assert state["owner"] != "lost-worker" and state["attempts"] == 2
+            seen.append(state["owner"])
+        return ImageDrafts(
+            replace(content, source_metadata={"image_extraction": {"status": "partial"}}),
+            drafts,
+            [[] for _ in drafts],
+        )
+
+    monkeypatch.setattr(service, "extend_image_drafts", extract)
+    result = await service.complete_posting(
+        session_factory, service.PreparedPosting(URL, URL, NOW, 7, content=source())
+    )
+    assert len(seen) == 1 and result.raw_payload["_image_retry"]["attempts"] == 2
+    assert "owner" not in result.raw_payload["_image_retry"]
+
+
+async def test_invalid_provider_content_keeps_the_valid_reservation_and_original_error(
+    session_factory, monkeypatch
+):
+    async def invalid(sessions, content, drafts, **kwargs):
+        return ImageDrafts(
+            replace(content, skill_tags=["Python\x00invalid"]), drafts, [[] for _ in drafts]
+        )
+
+    monkeypatch.setattr(service, "extend_image_drafts", invalid)
+    with pytest.raises(service.PostingInvalidResponseError):
+        await service.complete_posting(
+            session_factory, service.PreparedPosting(URL, URL, NOW, 7, content=source())
+        )
+    async with session_factory() as db:
+        row = await db.scalar(select(JobPosting))
+        assert row.raw_payload["skill_tags"] == ["Python"]
+        assert row.raw_payload["_image_retry"]["attempts"] == 1
+        assert "owner" not in row.raw_payload["_image_retry"]
+
+
+async def test_new_source_is_not_blocked_or_overwritten_by_an_older_inflight_source(
+    session_factory, monkeypatch
+):
+    await saved_partial(session_factory)
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def extract(sessions, content, drafts, **kwargs):
+        if content.position == "개발자":
+            entered.set()
+            await release.wait()
+        return ImageDrafts(
+            replace(
+                content,
+                source_metadata={
+                    "image_extraction": {"status": "partial"},
+                },
+            ),
+            drafts,
+            [[] for _ in drafts],
+        )
+
+    monkeypatch.setattr(service, "extend_image_drafts", extract)
+    old = asyncio.create_task(
+        service.complete_posting(
+            session_factory, service.PreparedPosting(URL, URL, NOW, 7, content=source())
+        )
+    )
+    await asyncio.wait_for(entered.wait(), 5)
+    try:
+        fresh = await service.complete_posting(
+            session_factory,
+            service.PreparedPosting(
+                URL,
+                URL,
+                NOW + timedelta(seconds=1),
+                7,
+                content=replace(source(), position="변경된 원문"),
+            ),
+        )
+        assert fresh.position == "변경된 원문"
+        assert fresh.raw_payload["_image_retry"]["attempts"] == 1
+    finally:
+        release.set()
+        late = await asyncio.wait_for(old, 5)
+    async with session_factory() as db:
+        current = await service.get_current_successful_posting(db, URL)
+        assert current.id == fresh.id == late.id
+        assert current.position == "변경된 원문"
+
+
+async def test_partial_image_cooldown_reuses_saved_requirements_without_http(session_factory):
+    async with session_factory.begin() as db:
+        posting = JobPosting(
+            raw_url=URL,
+            normalized_url=URL,
+            position="개발자",
+            company_name="회사",
+            skill_tags=["Python"],
+            parse_status="succeeded",
+            fetched_at=NOW - timedelta(minutes=3),
+            raw_payload={
+                "position": "개발자",
+                "image_urls": ["https://static.wanted.co.kr/jd.png"],
+                "_image_extraction": {"status": "partial"},
+                "_image_retry": {
+                    "attempts": 3,
+                    "cycle_started_at": (NOW - timedelta(minutes=3)).isoformat(),
+                    "next_retry_at": (NOW + timedelta(minutes=57)).isoformat(),
+                },
+            },
+        )
+        db.add(posting)
+        await db.flush()
+        identity = posting.id
+        requirement = JdRequirement(
+            job_posting_id=identity,
+            category="required",
+            text="Python 개발 경험",
+            tech_tags=["Python"],
+            display_order=0,
+        )
+        db.add(requirement)
+
+    def unexpected_http(request):
+        raise AssertionError("A cooling partial result must not restart Wanted/Vision/LLM")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(unexpected_http)) as http:
+        result = await service.get_or_fetch_posting(session_factory, URL, client=http, now=NOW)
+    assert result.id == identity
+    assert result.raw_payload["_image_extraction"]["status"] == "partial"
+    assert result.fetched_at == NOW - timedelta(minutes=3)
+
+
+def test_partial_retry_cycle_is_bounded_and_source_changes_start_a_new_cycle():
+    snapshot = {"position": "개발자", "_image_extraction": {"status": "partial"}}
+    state = None
+    for offset in (0, 61, 182):
+        previous = {**snapshot, **({"_image_retry": state} if state else {})}
+        state = service._next_image_retry(snapshot, previous, NOW + timedelta(seconds=offset))
+    assert state["attempts"] == 3
+    assert datetime.fromisoformat(state["next_retry_at"]) == NOW + timedelta(hours=1)
+    changed_failure = {**snapshot, "source_limitations": ["another_provider_error"]}
+    retained = service._next_image_retry(
+        changed_failure,
+        {**snapshot, "_image_retry": state},
+        NOW + timedelta(seconds=200),
+    )
+    assert retained["attempts"] == 3 and retained["next_retry_at"] == state["next_retry_at"]
+    changed = {**snapshot, "position": "다른 공고"}
+    reset = service._next_image_retry(changed, {**snapshot, "_image_retry": state}, NOW)
+    assert reset["attempts"] == 1
