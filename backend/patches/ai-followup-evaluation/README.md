@@ -1,3 +1,20 @@
+# 현재 리뷰 보완과 적용 조건
+
+기존 develop의 eval_cases에 이번 legacy opt-in·원문 binding 검사만 활성 반영했습니다. 중복 2eada59a6130 패치는 제거했습니다. 기본 호출은 여전히 Question Contract를 엄격히 검사하며 검수 도구만 축약 과거 자료를 명시적으로 읽습니다.
+
+최신 develop 6caa681a의 canonical은 29사례입니다. approved 6·pending 4·unreviewed 19를 유지하며 과거 snapshot의 승인 상태로 바꾸지 않습니다. 과거 원본 59개와 provenance·속성 파일은 #226 원래 Git blob의 바이트를 보존합니다.
+
+#214·#215에만 있는 실행기·코호트의 후속 변경은 계속 대기 패치입니다. 세 코호트를 복사하는 checkout 회귀도 같은 묶음으로 보존해 없는 디렉터리를 활성 테스트가 참조하지 않게 했습니다. 선행의 실제 병합 커밋에서 재기준하고 binding 검사 소비와 autocrlf true·false를 통합 검증한 뒤 활성화합니다.
+
+이번에 개별 재생한 패치만 아래에 적습니다. 각 원문에서 git apply --check·실제 적용·목표 SHA 대조를 통과했으며 전체 PR 순서 적용·서비스 통합 통과를 뜻하지 않습니다. 나머지 기존 코호트 패치는 선행 통합 후 재기준·검증해야 합니다.
+
+| 패치 | 대상 | 적용 전 SHA256 | 적용 후 SHA256 | patch SHA256 |
+| --- | --- | --- | --- | --- |
+| `create-test_eval_snapshot_checkout.py.patch` | `ai/tests/test_eval_snapshot_checkout.py` | `없음` | `fd5eb01e902d76258fa122dd42c0eb63e8a76944ba1a51539d9c1f31897c6ac8` | `7d21cedf3171678ac22cc4a6e40466c2c26254467bb8a44fb42548f01c7c4967` |
+
+<details>
+<summary>이전 안내와 과거 지문</summary>
+
 # 평가 자료의 과거 출처 보존과 호환 후속 변경
 
 기존 미병합 구현을 중복 게시하지 않고 이번 수정 구간만 보존한 패치다.
@@ -32,3 +49,5 @@
 | `ai/tests/test_eval_verification_component.py` | [03d1e93c9ac8-test_eval_verification_component.py.patch](03d1e93c9ac8-test_eval_verification_component.py.patch) | `d7f8170b5f46c5c0af7a8af80ab58af880943c95247a8438489196cfa541dadf` | `519c6e3e294466b5e940194b12a1d59bd5d2167de483a5f0ae0fbf70b9402e87` |
 | `backend/scripts/run_ai_evaluation.py` | [dfcdb304c81b-run_ai_evaluation.py.patch](dfcdb304c81b-run_ai_evaluation.py.patch) | `7ca60270393950d0a6e74da1345932a2f8b1c281c591e80e4e9f62d612ef53f9` | `17a97d454ffe6761c63cb9c31cfc423957ecdd8d41c2ff3dfb0cc3f633f97504` |
 | `backend/tests/test_ai_eval_service_dataset.py` | [d12258abaa89-test_ai_eval_service_dataset.py.patch](d12258abaa89-test_ai_eval_service_dataset.py.patch) | `30ad37e384b8ce9f46180ea1d4fa667de4518217b85c6a4c2cc78e1837620dea` | `0640b30b74fba08ac85d24bf5ed6c77a30b355da20048d3f8898c2de1b485778` |
+
+</details>
