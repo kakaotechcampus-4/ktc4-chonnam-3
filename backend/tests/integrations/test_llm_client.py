@@ -90,6 +90,55 @@ async def test_missing_base_url_rejects_proxy_token_before_http():
 
 
 @pytest.mark.asyncio
+async def test_request_size_matches_the_actual_unicode_and_schema_envelope():
+    configured = replace(request(), payload={"원문": '한글 "인용"', "paths": ["src/자료.py"]})
+    sent = []
+
+    def transport(req):
+        sent.append(req)
+        return httpx.Response(200, json=response())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        result = await client.call_model(
+            configured,
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://provider.example.test/v1",
+            http_client=http,
+        )
+    assert result.succeeded and len(sent) == 1
+    assert client.request_size(configured) == len(sent[0].content)
+    assert client.request_size(configured) > len(
+        json.dumps(configured.payload, ensure_ascii=False).encode("utf-8")
+    )
+
+
+@pytest.mark.asyncio
+async def test_request_size_boundary_prevents_http_when_the_full_envelope_does_not_fit():
+    configured = request()
+    configured = replace(
+        configured,
+        limits=replace(configured.limits, max_input_bytes=client.request_size(configured) - 1),
+    )
+    sent = []
+
+    def transport(req):
+        sent.append(req)
+        return httpx.Response(200, json=response())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        result = await client.call_model(
+            configured,
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://provider.example.test/v1",
+            http_client=http,
+        )
+    assert result.failure is not None and result.attempts == ()
+    assert sent == []
+
+
+@pytest.mark.asyncio
 async def test_validated_result_records_actual_model_and_injects_only_task_input():
     sent = []
 

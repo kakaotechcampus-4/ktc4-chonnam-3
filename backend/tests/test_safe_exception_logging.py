@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import logging
+import traceback
 from uuid import uuid4
 
 import httpx
@@ -138,6 +139,27 @@ def _settings():
         github_client_secret="synthetic-secret",
         token_encryption_key=base64.b64encode(bytes(range(32))).decode(),
     )
+
+
+@pytest.mark.parametrize("json_logs", [False, True])
+@pytest.mark.parametrize("as_argument", [False, True])
+def test_preformatted_standard_traceback_does_not_reveal_messages_or_source(
+    log_output, json_logs, as_argument
+):
+    configure_logging(json_logs=json_logs)
+    try:
+        _raise_sql_failure()
+    except StatementError:
+        rendered = traceback.format_exc()
+    target = logging.getLogger("arq.worker")
+    if as_argument:
+        target.error("job failed: %s", rendered)
+    else:
+        target.error(rendered)
+    output = log_output.getvalue()
+    assert SECRET not in output and SQL not in output
+    assert "Traceback (most recent call last)" not in output
+    assert "Application exception" in output
 
 
 async def test_worker_startup_initializes_safe_json_logging_without_database_calls(
