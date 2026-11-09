@@ -238,3 +238,76 @@ diff --git a/ai/src/devon_ai/agents/director/runtime.py b/ai/src/devon_ai/agents
              "answer": current[0].answer,
              "question_contract": asdict(context.current_question_contract),
          }
+-    return {
++    payload: dict[str, object] = {
+         "context": asdict(context),
+         "current_answer": current_answer,
+-        "reference_texts": [
+-            {"kind": ref.kind, "id": ref.id, "text": text} for ref, text in sources.items()
+-        ],
++        "reference_texts": _model_reference_texts(sources),
+         "answer_analysis": analysis,
+         "prior_analyses": previous,
+         "tool_results": [asdict(result) for result in tool_results],
+-    }, sources
++    }
++    if prompt.version.partition("@")[0] in {
++        "director_v5",
++        "director_v6",
++        "director_v7",
++        "director_v8",
++    }:
++        # 기존 버전의 입력을 바꾸지 않고 새 배포에만 명시적인 턴 의미를 제공한다.
++        payload["turn_state"] = _turn_state(context)
++    return payload, sources
+ 
+ 
+ async def run_director(
+@@ -273,6 +477,7 @@
+     reference_texts: Mapping[c.BasisRef, str] | None = None,
+     prior_analyses: Mapping[str, c.ContractChecked[c.AnswerAnalysis]] | None = None,
+     tool_results: tuple[c.ToolResult, ...] = (),
++    recovery_feedback: RecoveryFeedback | None = None,
+ ) -> c.ModelResult[DirectorOutcome]:
+     """목적·계약·초안을 한 번 생성하고 남은 한 번으로 독립 검토한다.
+ 
+@@ -290,6 +495,7 @@
+             prior_analyses,
+             tool_results,
+         )
++        feedback = None if recovery_feedback is None else _feedback_payload(recovery_feedback)
+     except c.ContractError as exc:
+         return c.ModelResult(
+             None,
+@@ -314,6 +520,7 @@
+     # 구형 출력 계약만 보존하고 새 버전·배포 suffix에서는 평가 기회 검증을 유지한다.
+     legacy = prompt.version.partition("@")[0] in {"director_v1", "director_v2"}
+     coverage = bool(context.evaluation_targets) and not legacy
++    bounded_ids = prompt.version.partition("@")[0] in {"director_v6", "director_v7", "director_v8"}
+ 
+     def validate_plan(raw: object) -> _Plan:
+         if type(raw) is not dict or set(raw) != {"question", "intent", "reason_summary"}:
+@@ -333,10 +540,20 @@
+     generated = await model_call(
+         c.ModelRequest(
+             prompt,
+-            {**payload, "operation": "plan"},
++            {
++                **payload,
++                "operation": "plan",
++                **({"recovery_feedback": feedback} if feedback is not None else {}),
++            },
+             "DirectorPlan",
+-            "director-plan.v2" if coverage else "director-plan.v1",
+-            _plan_schema(coverage),
++            "director-plan.v3"
++            if bounded_ids
++            else "director-plan.v2"
++            if coverage
++            else "director-plan.v1",
++            _bounded_plan_schema(context, sources, coverage)
++            if bounded_ids
++            else _plan_schema(coverage),
+             limits,
+             max_attempts=1,
+         ),
