@@ -85,23 +85,19 @@ async def _abort_queue(
 
 
 async def latest(
-    db: AsyncSession, interview_id: UUID, *, active: bool = False
+    db: AsyncSession, interview_id: UUID, *, active: bool = False, for_update: bool = True
 ) -> ReportGenerationRequest | None:
     query = select(ReportGenerationRequest).where(
         ReportGenerationRequest.interview_session_id == interview_id
     )
     if active:
         query = query.where(ReportGenerationRequest.status.in_(ACTIVE))
-    return cast(
-        ReportGenerationRequest | None,
-        await db.scalar(
-            query.order_by(
-                ReportGenerationRequest.created_at.desc(), ReportGenerationRequest.id.desc()
-            )
-            .limit(1)
-            .with_for_update()
-        ),
-    )
+    query = query.order_by(
+        ReportGenerationRequest.created_at.desc(), ReportGenerationRequest.id.desc()
+    ).limit(1)
+    if for_update:
+        query = query.with_for_update()
+    return cast(ReportGenerationRequest | None, await db.scalar(query))
 
 
 async def locked_interview(

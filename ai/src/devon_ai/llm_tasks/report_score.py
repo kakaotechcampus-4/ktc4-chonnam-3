@@ -10,6 +10,7 @@ from typing import get_args
 from devon_ai import contracts as c
 
 type ScoreChecked = c.ContractChecked[c.ScoreJudgments]
+SUPPORTED_PROMPT_VERSIONS = frozenset({"report_score_v1", "report_score_v2"})
 
 # 점수를 낼 수 없는 key가 있어 실패했을 때의 error_code. 공통 호출 계층은 검증 실패를 일반 코드로
 # 바꾸므로 판정 task가 이 코드로 다시 구분해 BE 실패 기록이 사유를 잃지 않게 한다.
@@ -17,7 +18,7 @@ UNSCORABLE_CODE = "report_score_unscorable"
 
 
 def _referenced_jd(turn: c.ScoreTurn) -> frozenset[str]:
-    return frozenset(turn.jd_requirement_ids) | frozenset(
+    return frozenset(item.id for item in turn.jd_requirements) | frozenset(
         ref.id for ref in turn.question_contract.basis_refs if ref.kind == "jd_requirement"
     )
 
@@ -74,9 +75,7 @@ def _payload(
                 "question_contract": asdict(turn.question_contract),
                 "candidate_keys": list(c.score_candidate_keys(turn)),
                 "jd_requirement_ids": list(turn.jd_requirement_ids),
-                "jd_requirements": [
-                    asdict(item) for item in turn.jd_requirements if item.id in _referenced_jd(turn)
-                ],
+                "jd_requirements": [asdict(item) for item in turn.jd_requirements],
             }
             for turn in turns
         ],

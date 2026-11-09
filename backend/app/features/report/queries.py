@@ -28,7 +28,7 @@ from app.db.models import (
 
 
 async def get_owned_interview(
-    db: AsyncSession, *, user_id: uuid.UUID, interview_id: uuid.UUID
+    db: AsyncSession, *, user_id: uuid.UUID, interview_id: uuid.UUID, shared: bool = False
 ) -> tuple[InterviewSession, JobPosting] | None:
     """본인 면접과 그 공고. 입력: 사용자 id, interviewId. 출력: 없거나 남의 것이면 None."""
     row = (
@@ -37,7 +37,8 @@ async def get_owned_interview(
             .join(JobPosting, JobPosting.id == InterviewSession.job_posting_id)
             .where(InterviewSession.id == interview_id, InterviewSession.user_id == user_id)
             # 공개 본문과 점수를 읽는 동안 재평가의 버전 교체가 끼어들지 않게 한다.
-            .with_for_update(of=InterviewSession)
+            .with_for_update(of=InterviewSession, read=shared)
+            .execution_options(populate_existing=True)
         )
     ).first()
     return None if row is None else (row[0], row[1])

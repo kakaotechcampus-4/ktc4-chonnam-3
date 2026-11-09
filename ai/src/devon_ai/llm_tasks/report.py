@@ -14,6 +14,7 @@ from devon_ai.llm_tasks import report_score
 from devon_ai.report_scores import compute_scores
 
 type NarrativeChecked = c.ContractChecked[c.ReportNarrative]
+SUPPORTED_PROMPT_VERSIONS = frozenset({"report_v1", "report_v2"})
 
 
 def _object(properties: dict[str, object]) -> dict[str, object]:
@@ -198,13 +199,11 @@ def _build_inputs(
     report_turns: list[c.ReportTurn] = []
     requirements = tuple(
         c.decode(
-            c.JDRequirement,
+            c.LinkedRequirement,
             {
-                **_mapping(raw, "requirement"),
-                "source_field": _mapping(raw, "requirement").get(
-                    "source_field", "jd_requirements.text"
-                ),
-                "tech_tags": [],
+                "id": _mapping(raw, "requirement").get("id"),
+                "category": _mapping(raw, "requirement").get("category"),
+                "text": _mapping(raw, "requirement").get("text"),
             },
         )
         for raw in _items(payload.get("requirements", []), "requirements")
@@ -237,7 +236,9 @@ def _build_inputs(
                     turn.get("jd_requirement_ids", []), "jd_requirement_ids"
                 ),
                 "jd_requirements": [
-                    {**asdict(item), "tech_tags": list(item.tech_tags)} for item in requirements
+                    asdict(item)
+                    for item in requirements
+                    if item.id in _items(turn.get("jd_requirement_ids", []), "jd_requirement_ids")
                 ],
             },
         )

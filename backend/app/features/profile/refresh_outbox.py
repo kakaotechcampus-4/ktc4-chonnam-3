@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.core.logging import get_logger
 from app.db.models import InterviewReport, InterviewSession, ProfileRefreshRequest, User
 from app.features.interview.prepare_lease import JOB_TIMEOUT_SECONDS, LEASE_SECONDS
 from app.workers.profile_refresh_queue import enqueue_refresh
@@ -17,6 +18,7 @@ MAX_DISPATCH_ATTEMPTS = 5
 MAX_PAGES = 10
 PAGE_SIZE = 100
 type Sessions = async_sessionmaker[AsyncSession]
+logger = get_logger(__name__)
 
 
 async def ensure_request(
@@ -80,14 +82,36 @@ def _defer(row: ProfileRefreshRequest, now: datetime, error: str) -> None:
         seconds=min(300, 5 * 2 ** max(0, row.dispatch_attempts - 1))
     )
     if error == "profile_refresh_busy":
-        # 정상 집계와의 경합만으로 빠르게 전달 상한을 소진하지 않는다.
+        # busy도 전달 회차에 포함한다. 회차는 오래된 worker를 막는 fencing 값이므로 줄이지 않는다.
+        # 정상 집계와 경합한 경우 다음 전달은 worker 전체 상한 뒤로 늦춘다(최대 5회·24시간 유지).
         row.next_attempt_at = now + timedelta(seconds=JOB_TIMEOUT_SECONDS)
+
+
+def _terminal_metadata(row: ProfileRefreshRequest, now: datetime) -> dict[str, object] | None:
+    if row.status != "failed":
+        return None
+    cause = (
+        "expired"
+        if row.expires_at <= now
+        else "attempt_limit"
+        if row.dispatch_attempts >= MAX_DISPATCH_ATTEMPTS
+        else "task_failed"
+    )
+    return {
+        "request_id": str(row.id),
+        "report_id": str(row.report_id),
+        "report_revision": row.report_revision,
+        "dispatch_attempts": row.dispatch_attempts,
+        "terminal_cause": cause,
+        "error_code": row.last_error,
+    }
 
 
 async def dispatch(
     sessions: Sessions, redis: ArqRedis, request_id: UUID, *, now: datetime | None = None
 ) -> bool:
     now = now or datetime.now(UTC)
+    terminal = None
     async with sessions.begin() as db:
         row = await db.get(ProfileRefreshRequest, request_id, with_for_update=True)
         if row is None or row.status not in {"pending", "queued", "running"}:
@@ -108,12 +132,17 @@ async def dispatch(
                 "profile_refresh_delivery_exhausted" if active else "profile_user_inactive",
             )
             row.owner_token = None
-            return False
-        row.status, row.owner_token = "queued", None
-        row.dispatch_attempts += 1
-        row.lease_expires_at = now + timedelta(seconds=LEASE_SECONDS)
-        row.next_attempt_at = row.lease_expires_at
-        user_id, attempt = row.user_id, row.dispatch_attempts
+            terminal = _terminal_metadata(row, now)
+        else:
+            row.status, row.owner_token = "queued", None
+            row.dispatch_attempts += 1
+            row.lease_expires_at = now + timedelta(seconds=LEASE_SECONDS)
+            row.next_attempt_at = row.lease_expires_at
+            user_id, attempt = row.user_id, row.dispatch_attempts
+    if terminal is not None:
+        # 확정된 종료만 기록한다. 본문·예외 문자열·공급자 주소는 포함하지 않는다.
+        logger.warning("profile_refresh_terminal", **terminal)
+        return False
     try:
         # 전달 회차는 DB가 발급한다. 완료 결과가 남은 이전 job ID와 충돌하지 않는다.
         await enqueue_refresh(
@@ -129,6 +158,9 @@ async def dispatch(
             row = await db.get(ProfileRefreshRequest, request_id, with_for_update=True)
             if row is not None and row.status == "queued" and row.dispatch_attempts == attempt:
                 _defer(row, now, "queue_unavailable")
+                terminal = _terminal_metadata(row, now)
+        if terminal is not None:
+            logger.warning("profile_refresh_terminal", **terminal)
         return False
 
 
@@ -201,7 +233,10 @@ async def finish(
         else:
             row.status, row.last_error = ("succeeded", None) if success else ("failed", error)
             row.owner_token, row.lease_expires_at = None, None
-        return True
+        terminal = _terminal_metadata(row, datetime.now(UTC))
+    if terminal is not None:
+        logger.warning("profile_refresh_terminal", **terminal)
+    return True
 
 
 async def wake_user(sessions: Sessions, user_id: UUID) -> None:

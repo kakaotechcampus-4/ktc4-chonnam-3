@@ -82,22 +82,34 @@ async def get_report(
     입력: 요청 사용자 id, interviewId. 없거나 남의 면접이면 not_found,
     생성할 수 없는 면접이면 report_unavailable.
     """
-    row = await queries.get_owned_interview(db, user_id=user_id, interview_id=interview_id)
-    if row is None:
-        raise AppError(Reason.NOT_FOUND)
-    interview, posting = row
-
-    report = await queries.get_report(db, interview_id=interview.id)
-    if report is not None:
-        return await _build_report(db, interview, posting, report)
-
-    if interview.status != "completed":
-        raise AppError(Reason.REPORT_UNAVAILABLE)
-    if await queries.count_answered_turns(db, interview_id=interview.id) < 1:
-        raise AppError(Reason.REPORT_UNAVAILABLE)
-    if await _has_failure_history(redis, interview.id):
-        raise AppError(Reason.REPORT_UNAVAILABLE)
-    await generation.enqueue(db, redis, interview_id=interview.id, user_id=user_id)
+    has_failure = False
+    # 성공본·진행 상태는 공유 잠금으로 읽는다. 생성 예약 시에는 공유 잠금을 해제한 뒤
+    # 배타 잠금으로 다시 검사하므로 동시 GET의 잠금 승격 교착을 만들지 않는다.
+    for shared in (True, False):
+        row = await queries.get_owned_interview(
+            db, user_id=user_id, interview_id=interview_id, shared=shared
+        )
+        if row is None:
+            raise AppError(Reason.NOT_FOUND)
+        interview, posting = row
+        report = await queries.get_report(db, interview_id=interview_id)
+        if report is not None:
+            response = await _build_report(db, interview, posting, report)
+            return response
+        if interview.status != "completed":
+            raise AppError(Reason.REPORT_UNAVAILABLE)
+        if await queries.count_answered_turns(db, interview_id=interview_id) < 1:
+            raise AppError(Reason.REPORT_UNAVAILABLE)
+        active = await generation.latest(db, interview_id, active=True, for_update=False)
+        if active is not None and active.expires_at > datetime.now(UTC):
+            # 명시 재시도의 폴링도 같은 영구 요청을 읽는다. Redis 응답을 기다리지 않는다.
+            return GeneratingResponse(retry_after=RETRY_AFTER_SECONDS)
+        if shared:
+            await db.rollback()
+            has_failure = await _has_failure_history(redis, interview_id)
+        elif has_failure:
+            raise AppError(Reason.REPORT_UNAVAILABLE)
+    await generation.enqueue(db, redis, interview_id=interview_id, user_id=user_id)
     return GeneratingResponse(retry_after=RETRY_AFTER_SECONDS)
 
 
@@ -255,6 +267,8 @@ async def generate_report(
             existing = await queries.get_report(db, interview_id=interview_id)
             reassessment = request is not None and request.mode == "reassessment"
             if existing is not None and not reassessment:
+                if request is not None:
+                    request.status, request.error_code = "stale", "report_already_exists"
                 return "exists"
             if (
                 request is not None
@@ -265,6 +279,8 @@ async def generate_report(
                 request.status, request.error_code = "stale", "report_revision_changed"
                 return "skipped"
             if not await queries.count_answered_turns(db, interview_id=interview_id):
+                if request is not None:
+                    request.status, request.error_code = "stale", "no_answered_turns"
                 return "skipped"
             payload, prompts, turn_ids, coverage = await _read_generation_input(db, interview)
             fingerprint, snapshot = _input_snapshot(payload, prompts, llm)
@@ -375,22 +391,6 @@ async def generate_report(
                     generated_at=datetime.now(UTC),
                 )
                 outcome = "created" if saved else "exists"
-            if outcome in {"created", "revised"}:
-                from app.features.profile.refresh_outbox import ensure_request
-
-                report = await db.scalar(
-                    select(InterviewReport).where(
-                        InterviewReport.interview_session_id == interview_id
-                    )
-                )
-                assert report is not None and interview is not None
-                # 보고서 commit 뒤 worker가 종료돼도 후속 전달 의도는 같은 DB에 남는다.
-                await ensure_request(
-                    db,
-                    user_id=interview.user_id,
-                    report_id=report.id,
-                    report_revision=report.current_revision,
-                )
             if request is not None:
                 request.status, request.error_code = "succeeded", None
         return outcome
