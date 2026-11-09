@@ -1,8 +1,12 @@
-"""긴 준비·리포트 작업만 별도 ARQ 제한을 사용한다."""
+"""준비·리포트의 긴 실행 상한과 프로필의 기본 상한·복구 여유를 구분한다."""
 
 from arq.worker import Worker
 
 from app.features.interview.prepare_lease import JOB_TIMEOUT_SECONDS
+from app.features.profile.timeouts import (
+    PROFILE_DELIVERY_LEASE_SECONDS,
+    PROFILE_JOB_TIMEOUT_SECONDS,
+)
 from app.workers.arq_app import WorkerSettings
 
 
@@ -10,13 +14,16 @@ async def test_registered_jobs_keep_names_and_scope_long_timeouts():
     worker = Worker(
         WorkerSettings.functions, job_timeout=WorkerSettings.job_timeout, handle_signals=False
     )
-    assert {"initial_sync", "interview_prep", "report_generate"} <= set(worker.functions)
+    assert {"initial_sync", "interview_prep", "report_generate", "profile_summary"} <= set(
+        worker.functions
+    )
     assert WorkerSettings.job_timeout == 600
     assert worker.functions["interview_prep"].timeout_s == JOB_TIMEOUT_SECONDS == 1800
     assert worker.functions["report_generate"].timeout_s == 1800
     assert worker.functions["initial_sync"].timeout_s is None
-    if "profile_summary" in worker.functions:
-        assert worker.functions["profile_summary"].timeout_s is None
+    assert worker.functions["profile_summary"].timeout_s == PROFILE_JOB_TIMEOUT_SECONDS == 600
+    # 실행 중인 프로필 작업을 재전달하지 않도록 복구 예약에 30초 여유를 둔다.
+    assert PROFILE_DELIVERY_LEASE_SECONDS == PROFILE_JOB_TIMEOUT_SECONDS + 30 == 630
 
 
 def test_legacy_two_argument_preparation_budget_remains_compatible():
