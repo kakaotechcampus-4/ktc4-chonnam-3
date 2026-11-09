@@ -25,6 +25,7 @@ async def collect_repo_details(
     login: str | None = None,
     readme_max_chars: int = DEFAULT_README_MAX_CHARS,
     on_rate_limited: RateLimitRecorder | None = None,
+    include_context: bool = False,
 ) -> dict[str, RepoDetail]:
     """후보 레포만 L0-b 로 승격한다.
 
@@ -42,7 +43,10 @@ async def collect_repo_details(
 
     for index, repo in enumerate(repos):
         detail = await client.fetch_repo_detail(
-            repo, login=login, readme_max_chars=readme_max_chars
+            repo,
+            login=login,
+            readme_max_chars=readme_max_chars,
+            **({"include_context": True} if include_context else {}),
         )
         results[repo.full_name] = detail
         if GITHUB_ERROR_RATE_LIMITED in detail.errors:

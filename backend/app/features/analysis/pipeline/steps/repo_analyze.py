@@ -13,7 +13,12 @@ from app.features.analysis.candidates import repository_summary
 from app.features.analysis.matching import refresh_matches
 from app.features.analysis.partial_cache import record_truncation_cache
 from app.features.analysis.pipeline.steps.repo_detail import RateLimitRecorder, collect_repo_details
-from app.integrations.github.base import RepoDetail, RepoSummary
+from app.integrations.github.base import (
+    GITHUB_ERROR_RATE_LIMITED,
+    GITHUB_ERROR_TOKEN_INVALID,
+    RepoDetail,
+    RepoSummary,
+)
 from app.integrations.github.client import DEFAULT_README_MAX_CHARS, GithubClient
 from app.llm_tasks.prompt_loader import load_active_prompt
 from app.llm_tasks.repo_shallow import analyze_repositories, to_repo_analysis_rows
@@ -107,6 +112,7 @@ async def collect_candidate_batch(
             login=login,
             readme_max_chars=readme_max_chars,
             on_rate_limited=on_rate_limited,
+            include_context=True,
         )
 
     inputs: list[c.ShallowRepoInput] = []
@@ -144,7 +150,21 @@ async def collect_candidate_batch(
             details[repo.full_name] = detail
         if detail.repository_inaccessible:
             inaccessible.add(repository_id)
-        if detail.head_sha is not None and not detail.repository_inaccessible:
+        stop_error = next(
+            (
+                error
+                for error in detail.errors
+                if error in {GITHUB_ERROR_RATE_LIMITED, GITHUB_ERROR_TOKEN_INVALID}
+            ),
+            None,
+        )
+        # SHA를 먼저 얻었어도 수집 중단분으로 L1을 시작하지 않는다. 확보한 필드는 저장하되
+        # 호출 제한·토큰 오류가 불완전한 입력의 LLM 실패로 바뀌지 않게 원인을 보존한다.
+        if (
+            detail.head_sha is not None
+            and not detail.repository_inaccessible
+            and stop_error is None
+        ):
             try:
                 inputs.append(
                     c.ShallowRepoInput(
@@ -163,6 +183,21 @@ async def collect_candidate_batch(
                         commit_count=detail.commit_count,
                         user_commit_count=detail.user_commit_count,
                         collection_errors=tuple(dict.fromkeys(detail.errors)),
+                        structure=detail.structure,
+                        supporting_files=tuple(
+                            c.SourceDocument(
+                                item.path,
+                                "file",
+                                item.content,
+                                f"lines 1-{len(item.content.splitlines())}"
+                                if item.is_truncated
+                                else "entire file",
+                                1,
+                                len(item.content.splitlines()),
+                            )
+                            for item in detail.supporting_files
+                        ),
+                        source_limitations=detail.source_limitations,
                     )
                 )
                 continue
@@ -180,7 +215,7 @@ async def collect_candidate_batch(
             detail.head_sha,
             None,
             "failed",
-            detail.errors[0] if detail.errors else "repo_unreachable",
+            stop_error or (detail.errors[0] if detail.errors else "repo_unreachable"),
         )
 
     async with session_factory() as session, session.begin():
