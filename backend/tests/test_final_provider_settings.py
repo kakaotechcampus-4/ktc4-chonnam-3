@@ -89,3 +89,32 @@ def test_explicit_vision_endpoint_never_receives_implicit_common_credentials():
     )
     with pytest.raises(ValueError):
         settings.require_vision()
+
+
+@pytest.mark.parametrize("empty", ["", "   ", SecretStr("")])
+def test_blank_optional_credentials_are_unset_without_overriding_dedicated_urls(empty):
+    settings = Settings(
+        _env_file=None,
+        tts_access_token=empty,
+        tts_api_key="dedicated-tts",
+        vision_api_key=empty,
+        tavily_api_key=empty,
+        helpy_vision_document_proxy_url="https://legacy.example/v1",
+        proxy_token="legacy-secret",
+    )
+    assert settings.tts_access_token is None
+    assert settings.tavily_api_key is None
+    assert settings.require_vision().api_key.get_secret_value() == "legacy-secret"
+    with pytest.raises(ValueError):
+        settings.require_tavily()
+    explicit = settings.model_copy(update={"vision_base_url": "https://dedicated.example"})
+    with pytest.raises(ValueError):
+        explicit.require_vision()
+
+
+def test_blank_env_oauth_token_does_not_mask_api_key(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("TTS_ACCESS_TOKEN=\nTTS_API_KEY=fixture-key\n", encoding="utf-8")
+    settings = Settings(_env_file=env_file)
+    assert settings.tts_access_token is None
+    assert settings.tts_api_key.get_secret_value() == "fixture-key"

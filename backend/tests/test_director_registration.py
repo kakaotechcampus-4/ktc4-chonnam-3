@@ -28,5 +28,7 @@ def test_interview_prepare_is_registered_in_the_actual_worker():
     from app.workers.arq_app import WorkerSettings
     from app.workers.tasks.interview_prep import interview_prep
 
-    assert interview_prep in WorkerSettings.functions
+    assert any(
+        getattr(item, "coroutine", item) is interview_prep for item in WorkerSettings.functions
+    )
     assert WorkerSettings.max_tries == 1

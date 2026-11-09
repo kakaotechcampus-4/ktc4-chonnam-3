@@ -17,33 +17,9 @@ ENV_LINE = re.compile(r"^(?P<key>[A-Z][A-Z0-9_]*)=(?P<value>[^#]*)")
 # .env.example 에만 있고 Settings 에 없어도 되는 키 (스프린트2 예약 등).
 UNMAPPED_KEYS: set[str] = set()
 
-# 운영 연결 예시는 안전한 무설정 fallback과 구분하며, 의도한 차이만 정확히 허용한다.
-OPERATIONAL_EXAMPLES: dict[str, object] = {
-    "OPENAI_MODEL": "gpt-6-luna",
-    "LLM_CONNECTION_SLOT": 3,
-    "LLM_TASK_TIMEOUTS": {
-        "repo_deep": 120,
-        "answer_analysis": 120,
-        "director": 120,
-        "report_score": 180,
-        "report": 180,
-    },
-    "OPENAI_MODEL_2": "gpt-6.1-terra",
-    "OPENAI_MODEL_3": "gpt-6.1-sol",
-    "LLM_TIMEOUT_SECONDS": 50,
-    "LLM_MAX_OUTPUT_TOKENS": 128000,
-    "LLM_MAX_INPUT_BYTES": 262144,
-    "LLM_MAX_RESPONSE_BYTES": 67108864,
-    "LLM_REASONING_EFFORT": "xhigh",
-    "LLM_STREAM": True,
-    "TTS_PROVIDER": "google_cloud",
-    "TTS_VOICE_MAP": {
-        "tech_lead": "ko-KR-Chirp3-HD-Charon",
-        "domain_lead": "ko-KR-Chirp3-HD-Kore",
-        "hr_manager": "ko-KR-Chirp3-HD-Aoede",
-    },
-    "TTS_MONTHLY_CHARACTER_LIMIT": 1000000,
-}
+# 기본 모델 선택만 공유 예제에 명시한다. 공급자별 개발 예산은 별도 선택 프로필이다.
+EXAMPLE_OVERRIDES = {"OPENAI_MODEL"}
+DEVELOPMENT_PROFILE = ENV_EXAMPLE.parent / "config/ai-development.env.example"
 PRIVATE_PLACEHOLDERS = {
     "GITHUB_CLIENT_ID",
     "GITHUB_CLIENT_SECRET",
@@ -116,10 +92,7 @@ def test_env_example_defaults_match_settings() -> None:
         != getattr(settings, key.lower())
     }
 
-    assert diff == set(OPERATIONAL_EXAMPLES), f"의도한 운영 예시와 실제 차이의 키: {sorted(diff)}"
-    for key, expected in OPERATIONAL_EXAMPLES.items():
-        parsed = Settings(_env_file=None, **{key.lower(): items[key]})
-        assert getattr(parsed, key.lower()) == expected
+    assert diff <= EXAMPLE_OVERRIDES, f"공유 예제에 개발 프로필 값이 섞였습니다: {sorted(diff)}"
 
 
 def test_env_example_keeps_private_connection_values_empty() -> None:
@@ -128,32 +101,34 @@ def test_env_example_keeps_private_connection_values_empty() -> None:
     _assert_private_placeholders(items)
 
 
-def test_env_example_parses_the_explicit_sol_slot_and_call_policies() -> None:
+@pytest.mark.parametrize("slot,model", [(None, "gpt-6-luna"), (3, "gpt-6.1-sol")])
+def test_selected_development_profile_preserves_luna_and_explicit_sol_slot(slot, model) -> None:
     _assert_private_placeholders(dict(_env_example_items()))
     # 실행 연결은 가짜 주소·키를 메모리에만 주입하며 실제 API는 호출하지 않는다.
+    overrides = {"llm_connection_slot": slot} if slot is not None else {}
     settings = Settings(
-        _env_file=ENV_EXAMPLE,
+        _env_file=(ENV_EXAMPLE, DEVELOPMENT_PROFILE),
+        chat_proxy_url="https://slot-one.example.test/v1",
         chat_proxy_url_3="https://slot-three.example.test/v1",
         proxy_token="example-fixture-key",
+        **overrides,
     )
     llm = settings.require_llm()
-    assert settings.llm_connection_slot == 3
-    assert llm.llm_default_model == "gpt-6.1-sol"
-    for name, timeout in {
-        "report": 180,
-        "report_score": 180,
-        "profile_summary": 50,
-        "repo_deep": 120,
-        "answer_analysis": 120,
-        "director": 120,
-    }.items():
-        limits = llm.call_limits(name)
-        assert limits.timeout_seconds == timeout
-        assert limits.max_output_tokens == 128000
-        assert limits.reasoning_effort == "xhigh"
-        assert limits.stream is True
-        assert limits.max_input_bytes == 262144
-        assert limits.max_response_bytes == 67108864
+    assert settings.llm_connection_slot == (slot or 1)
+    assert llm.llm_default_model == model
+    # 프로필의 선택값을 읽되 특정 수치 자체를 전역 기본값으로 강제하지 않는다.
+    for name, timeout in llm.llm_task_timeouts.items():
+        assert llm.call_limits(name).timeout_seconds == timeout
+    assert llm.call_limits().max_output_tokens == settings.llm_max_output_tokens
+    assert llm.call_limits().max_response_bytes == settings.llm_max_response_bytes
+
+
+def test_shared_example_requires_explicit_provider_limits():
+    settings = Settings(_env_file=ENV_EXAMPLE)
+    assert settings.llm_max_output_tokens is None
+    assert settings.tts_provider is None
+    with pytest.raises(ValidationError):
+        settings.require_llm()
 
 
 def test_settings_load_without_env_file() -> None:
