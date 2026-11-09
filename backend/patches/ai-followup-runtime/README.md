@@ -9,11 +9,17 @@
 
 | 패치 | 대상 | 적용 전 SHA256 | 적용 후 SHA256 | patch SHA256 |
 | --- | --- | --- | --- | --- |
-| `0f8cacfd4c9a-client.py.patch` | `backend/app/integrations/llm/client.py` | `d9b58f4f02d569bb0614e1ae08798db55608d445fe99c205ccab2b4a04fc15ec` | `3fab5db14b8ad44570c5a249e33e8817c6b2c01e70022e27b499284a972cf57f` | `2fd620740452b1e5b0e8f36c93ac76399ac3ef61a47d47c07e8fda598ab6f30f` |
-| `361f2d0f55c4-.env.example.patch` | `backend/.env.example` | `0e9148293c840934f22b1756996d06fec30347f07e2e34e1945514ba500fb1d4` | `80644b49900f6d0447213ecf110976fda73a632a0b305cb6abc4d80cc5bd7d8b` | `21148eb4bf5930525ae453d7babd5ff5285f7b5b880a6fb07c9fc693e9d4f4f6` |
-| `c2a439a5efd7-config.py.patch` | `backend/app/core/config.py` | `3138bc9f917597b8e07a5becc5d8455cc1e3ef17af95376a952b930cbb54e6fe` | `15452cec0086abc7381ebccfb6c3cc66a75b6f27e1a62d95f398b89494305d60` | `31dc0c26996cdfa517ccd4ce5cb53add2fdf043bbb68eecfce7de7e50026060c` |
+
+| `361f2d0f55c4-.env.example.patch` | `backend/.env.example` | `e5eaaba200285e7229e10e6b91b29c567aebb9dd1f73547e726a8736aecca175` | `16f91745f8002b76b1a9aa7b9ac8eddac78726d6376b146bc138f13a48e0d52b` | `48be182758028bb6cb051b09d016819c5655743697f73b11d95473ed12f10cbc` |
+| `c2a439a5efd7-config.py.patch` | `backend/app/core/config.py` | `abd2e34010522b68a43c0775ae7400e7d00df01a7b2c5353527748a9c2fe6971` | `15452cec0086abc7381ebccfb6c3cc66a75b6f27e1a62d95f398b89494305d60` | `55d5b0bc44132a0d042da8f93297bacfb08de1d68c28b6b318ed7d8526809509` |
 
 선행의 실제 병합 커밋으로 재기준한 뒤 적용한다. 적용 커밋·지문·통합 회귀를 spec/ai/implementation.md에 기록한 뒤에만 대기 패치를 제거한다.
+
+이번 수정에서 log_json 필드와 request_size 도우미는 기존 활성 파일에 직접 구현했습니다. 두 기능의 활성 호출·회귀는 더 이상 후속 패치를 기다리지 않습니다. 구조 수집의 큰 설정은 #213 설정 적용 이후 남은 config 패치로 반영합니다. 기존 helper 패치는 중복을 막기 위해 제거했습니다.
+
+큰 준비 예산 패치의 적용 조건은 #213 설정 기반, #225의 ADR 0039 근거, #224의 repository_sources 소비 코드가 함께 준비되는 것입니다. 설정만 추가한 상태를 준비 수집 동작의 완료로 표현하지 않습니다. 준비 수집과 진행 중 근거 조회가 분리된 적용 후 예제에서는 기존 원문 byte 상한을 진행 중 근거 조회 전용으로 설명합니다. 이 조건은 대기 중인 준비 예산 패치에 적용하며, 활성 JSON 로그·요청 크기 도우미가 #229를 기다린다는 의미가 아닙니다.
+
+
 
 <details>
 <summary>이전 안내·과거 기준 지문(현재 적용 지문으로 사용 금지)</summary>
