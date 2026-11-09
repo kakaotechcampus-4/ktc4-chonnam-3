@@ -238,3 +238,56 @@ diff --git a/frontend/src/features/interview/InterviewScreen.tsx b/frontend/src/
 +        <p role="alert" className="text-[12px] text-error">
 +          {displayedRetryMessage}
 +        </p>
+       )}
+       {restart.isError && (
+         <div className="flex items-center gap-3">
+@@ -752,9 +885,8 @@
+           <span className="flex-1" />
+           {fatal ? (
+             /*
+-              recoverable: false의 복구 경로는 reason마다 다르다
+-              (spec/frontend/features/interview.md:201-202). 홈으로만 보내면 같은 오류를
+-              다시 만난다. 레포 재선택은 새 세션을 만들고 이 세션은 abandoned가 된다(:64).
++              닫힌 소켓의 복구 경로는 reason마다 다르다. 공통 0011의 저장 답변 이어가기는
++              같은 면접을 보존한다. 레포 재선택·새 면접은 기존 세션을 abandon한 뒤 만든다.
+             */
+             error?.reason === 'github_token_invalid' ? (
+               <a
+@@ -776,10 +908,26 @@
+                 레포 다시 선택하기
+               </button>
+             ) : error?.reason === 'question_failed' ? (
+-              <div className="flex gap-2">
++              <div className="flex flex-wrap gap-2">
++                {(canContinueQuestion || questionRetryBusy) && (
++                  <button
++                    type="button"
++                    disabled={leaving || restart.isPending || questionRetryBusy}
++                    onClick={continueQuestion}
++                    className="flex h-10 items-center gap-2 rounded-lg bg-accent px-5 text-[13px] font-bold text-surface disabled:opacity-50"
++                  >
++                    {questionRetryBusy && (
++                      <span
++                        aria-hidden
++                        className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
++                      />
++                    )}
++                    {questionRetryBusy ? '다음 질문을 준비하는 중…' : '저장된 답변으로 계속하기'}
++                  </button>
++                )}
+                 <button
+                   type="button"
+-                  disabled={leaving || restart.isPending}
++                  disabled={leaving || restart.isPending || questionRetryBusy}
+                   onClick={() => void handleLeave()}
+                   className="h-10 rounded-lg border border-line px-4 text-[13px] font-bold text-muted disabled:opacity-50"
+                 >
+@@ -787,7 +935,7 @@
+                 </button>
+                 <button
+                   type="button"
+-                  disabled={leaving || restart.isPending}
++                  disabled={leaving || restart.isPending || questionRetryBusy}
+                   onClick={() => restart.mutate()}
+                   className="h-10 rounded-lg bg-accent px-5 text-[13px] font-bold text-surface disabled:opacity-50"
+                 >
