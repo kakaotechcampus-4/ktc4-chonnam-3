@@ -252,3 +252,83 @@ async def test_invalid_optional_vision_configuration_preserves_native_content(
         assert document.source_snapshot["text"] == "Project title"
     assert "private-key" not in response.text
     assert "invalid-private-url" not in response.text
+
+
+async def test_visual_only_document_is_partial_without_text_claims_and_can_start_run(
+    client, db, app, monkeypatch
+):
+    owner = User(name="Visual-only owner")
+    db.add(owner)
+    await db.flush()
+    db.add(
+        GithubAccount(
+            user_id=owner.id,
+            github_user_id=713,
+            login="visual-owner",
+            access_token_encrypted=b"unused-encrypted-test-token",
+            token_status="valid",
+        )
+    )
+    await db.commit()
+    client.cookies.set("devon_session", await app.state.sessions.create(owner.id))
+
+    def provider(request):
+        if request.method == "POST":
+            return httpx.Response(200, json={"job_id": "visual-only", "status": "queued"})
+        return httpx.Response(
+            200,
+            json={
+                "status": "succeeded",
+                "result": {
+                    "pages": [
+                        {
+                            "elements": [
+                                {
+                                    "label": "figure",
+                                    "description": "Model interpretation of a deployment diagram",
+                                    "coordinate": [1, 2, 3, 4],
+                                }
+                            ],
+                        }
+                    ]
+                },
+            },
+        )
+
+    app.state.vision_client = EliceVisionClient(
+        EliceVisionSettings(
+            base_url="https://example.mlapi.run",
+            api_key=SecretStr("test"),
+            poll_interval_seconds=0.001,
+        ),
+        transport=httpx.MockTransport(provider),
+    )
+    enqueue = AsyncMock()
+    monkeypatch.setattr(app.state.redis, "enqueue_job", enqueue)
+    response = await client.post(
+        "/api/documents/preview",
+        files={
+            "file": ("diagram.png", b"image", "image/png"),
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["extractStatus"] == "partial"
+    document = await db.get(UserDocument, UUID(response.json()["documentId"]))
+    assert document.extracted_text is None
+    assert document.source_snapshot["text"] == ""
+    assert document.claims_status == "not_available"
+    assert document.source_snapshot["metadata"]["visual_interpretations"][0]["coordinate"] == [
+        1,
+        2,
+        3,
+        4,
+    ]
+    started = await client.post(
+        "/api/analysis-runs",
+        json={
+            "postingUrl": "https://www.wanted.co.kr/wd/123",
+            "documentId": str(document.id),
+        },
+    )
+    assert started.status_code == 202
+    enqueue.assert_awaited_once()
