@@ -426,3 +426,90 @@ async def prepare_selected_claim_comparisons(
         await asyncio.shield(store())
         raise asyncio.CancelledError
     await store()
+
+
+async def load_claim_comparison_sources(
+    db: AsyncSession,
+    interview: InterviewSession,
+    *,
+    include_historical: bool = False,
+) -> tuple[c.SupplementalSource, ...]:
+    """문서 주장과 대조 해석은 서로 다른 ID·버전으로 보존한다."""
+    documents = {str(item.id): item for item in await selected_documents(db, interview)}
+    if not documents or "document_claim_comparison_active_ids" not in (
+        interview.context_state or {}
+    ):
+        return ()
+    raw_ids = (interview.context_state or {}).get("document_claim_comparison_active_ids", [])
+    if type(raw_ids) is not list or any(type(value) is not str for value in raw_ids):
+        raise c.ContractError("schema", "comparison active ids")
+    active_ids = set(cast(list[str], raw_ids))
+    if not active_ids and not include_historical:
+        return ()
+    evidence_rows = await db.scalars(
+        select(Evidence).where(Evidence.interview_session_id == interview.id)
+    )
+    sources = {str(item.id): item for item in evidence_rows}
+    rows = await db.execute(
+        select(DocumentClaimComparison, DocumentClaim)
+        .join(DocumentClaim, DocumentClaim.id == DocumentClaimComparison.claim_id)
+        .where(
+            DocumentClaimComparison.interview_session_id == interview.id,
+            DocumentClaim.document_id.in_([UUID(item) for item in documents]),
+        )
+        .order_by(DocumentClaimComparison.created_at, DocumentClaimComparison.id)
+    )
+    result = []
+    for comparison, claim in rows:
+        document = documents[str(claim.document_id)]
+        current = (
+            str(comparison.id) in active_ids
+            and comparison.document_version == (document.source_snapshot or {}).get("text_hash")
+            and str(claim.id) in (document.claims_active_ids or ())
+        )
+        if not include_historical and not current:
+            continue
+        limitations = tuple(comparison.result.get("limitations", []))
+        invalid = False
+        for reference in comparison.code_sources:
+            source = sources.get(reference["evidence_id"])
+            if (
+                source is None
+                or source.interview_session_id != interview.id
+                or {
+                    "git_ref": source.git_ref,
+                    "path": source.path,
+                    "content_hash": hashlib.sha256(source.snippet.encode()).hexdigest(),
+                    "start_line": source.start_line,
+                    "end_line": source.end_line,
+                }
+                != {
+                    key: reference[key]
+                    for key in ("git_ref", "path", "content_hash", "start_line", "end_line")
+                }
+            ):
+                invalid = True
+        content = {
+            "claim_id": str(claim.id),
+            "document_version": comparison.document_version,
+            "execution_status": comparison.execution_status,
+            "comparison": comparison.result
+            if not invalid
+            else {"status": "unverified", "reason": "comparison_code_source_unavailable"},
+            "code_sources": comparison.code_sources,
+        }
+        result.append(
+            c.SupplementalSource(
+                source_id=str(comparison.id),
+                kind="document_claim_comparison",
+                content=json.dumps(content, ensure_ascii=False, sort_keys=True),
+                location=f"document:{claim.document_id}:comparison:{comparison.id}",
+                version=_hash({"input": comparison.input_fingerprint, "result": content}),
+                limitations=limitations
+                + ("model_interpretation_not_document_original",)
+                + (("comparison_code_source_unavailable",) if invalid else ())
+                + (("historical_document_claim_comparison",) if not current else ()),
+                title=document.filename,
+            )
+        )
+    return tuple(result)
