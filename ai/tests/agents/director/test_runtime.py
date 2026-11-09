@@ -1128,3 +1128,244 @@ def test_v5_plan_schema_is_not_retroactively_narrowed_to_v6_ids():
     assert request.output_schema["properties"]["question"]["properties"]["evidence_refs"][
         "items"
     ] == {"type": "string"}
+
+
+@pytest.mark.parametrize(
+    "version",
+    [
+        "director_v3",
+        "director_v4",
+        "director_v5",
+        "director_v5@deployment",
+        "director_v6",
+        "director_v6@deployment",
+        "director_v7",
+        "director_v7@recovery",
+        "director_v8",
+        "director_v8@recovery",
+    ],
+)
+def test_controller_evaluation_targets_survive_prompt_version_changes(version):
+    candidate = replace(
+        question(),
+        question_contract=replace(
+            question().question_contract,
+            evaluation_keys=("contribution_clarity", "communication"),
+        ),
+    )
+    ctx = context(
+        evaluation_targets=(
+            c.EvaluationTarget("hr_manager", ("contribution_clarity", "communication")),
+        )
+    )
+    provider = Provider(plan(candidate), review())
+    result = run_version(provider, ctx, version=version)
+    assert result.succeeded
+    assert result.data.question.data.question_contract.evaluation_keys == (
+        "contribution_clarity",
+        "communication",
+    )
+    assert provider.requests[0].schema_version == (
+        "director-plan.v3"
+        if version.partition("@")[0] in {"director_v6", "director_v7", "director_v8"}
+        else "director-plan.v2"
+    )
+    properties = provider.requests[0].output_schema["properties"]["question"]["properties"]
+    assert "evaluation_keys" in properties["question_contract"]["required"]
+    assert "parent_turn_id" in properties
+    assert len(provider.requests) == 2
+    assert [request.max_attempts for request in provider.requests] == [1, 1]
+
+
+def test_v8_restores_readable_feedback_policy_without_rewriting_historical_prompts():
+    prompts = Path(__file__).resolve().parents[3] / "prompts"
+    v6 = (prompts / "director-runtime-v6.md").read_bytes()
+    v8 = (prompts / "director-runtime-v8.md").read_bytes()
+    assert v8.startswith(v6)
+    suffix = v8[len(v6) :].decode("utf-8")
+    assert "?" not in suffix and "\ufffd" not in suffix
+    assert suffix.count("\n- ") == 5
+    for policy in (
+        "유한 질문 복구 참고자료 — director_v8",
+        "비권위적 참고자료",
+        "operation=review에는 피드백을 전달하지 않는다",
+        "현재 제공된 실제 ID enum",
+        "Plan 1회와 독립 Review 1회",
+    ):
+        assert policy in suffix
+    recipe = json.loads((prompts / "runtime-prompts.json").read_text(encoding="utf-8"))
+    assert recipe["director"] == {"version": "director_v8", "template": "director-runtime-v8.md"}
+
+
+@pytest.mark.parametrize("keys", [(), ("technical_reasoning", "communication")])
+def test_new_prompt_cannot_omit_or_replace_assigned_evaluation_keys(keys):
+    ctx = context(
+        evaluation_targets=(
+            c.EvaluationTarget("hr_manager", ("contribution_clarity", "communication")),
+        )
+    )
+    candidate = replace(
+        question(), question_contract=replace(question().question_contract, evaluation_keys=keys)
+    )
+    provider = Provider(plan(candidate), review())
+    result = run_version(provider, ctx)
+    assert result.failure is not None and result.failure.stage == "semantic"
+    assert result.data is None and len(provider.requests) == 1
+
+
+def test_new_prompt_keeps_legacy_session_schema_without_inventing_evaluation_keys():
+    provider = Provider(plan(), review())
+    result = run_version(provider, context())
+    assert result.succeeded
+    assert not result.data.question.data.question_contract.evaluation_keys
+    assert provider.requests[0].schema_version == "director-plan.v1"
+    assert all(request.payload["current_answer"] is None for request in provider.requests)
+
+
+@pytest.mark.parametrize("version", ["director_v1", "director_v2", "director_v2@deployment"])
+def test_explicit_legacy_prompts_keep_their_schema_when_new_controller_supplies_targets(version):
+    ctx = context(
+        evaluation_targets=(
+            c.EvaluationTarget("hr_manager", ("contribution_clarity", "communication")),
+        )
+    )
+    provider = Provider(plan(), review())
+    result = run_version(provider, ctx, version=version)
+    assert result.succeeded
+    assert provider.requests[0].schema_version == "director-plan.v1"
+    assert not result.data.question.data.question_contract.evaluation_keys
+
+
+def test_current_answer_is_verbatim_scoped_input_for_plan_and_review():
+    provider = Provider(plan(), review())
+    ctx = later_context()
+    result = run_version(provider, ctx, answer_analysis=checked_analysis(needs=False))
+    assert result.succeeded
+    for request in provider.requests:
+        assert request.payload["current_answer"] == {
+            "turn_id": "turn-1",
+            "question": question().text,
+            "answer": "팀원이 캐시를 구현했습니다.",
+            "question_contract": asdict(ctx.current_question_contract),
+        }
+        assert request.payload["answer_analysis"]["contribution_scope"]["scope"] == "teammate"
+
+
+def test_current_answer_cannot_silently_use_another_history_turn():
+    ctx = replace(later_context(), current_turn_id="missing-turn")
+    provider = Provider(plan(), review())
+    result = run_version(provider, ctx)
+    assert result.failure.error_code == "director_input_invalid"
+    assert result.data is None and provider.requests == []
+
+
+@pytest.mark.parametrize(
+    ("text", "assessment", "recovery"),
+    [
+        (
+            "앱 객체를 생성할 때 DB와 HTTP 자원이 실행되는 순서를 설명해 주세요.",
+            review(
+                wording_valid=False, reason_summary="구성 시점과 lifespan 실행 시점을 혼동한다."
+            ),
+            "rewrite",
+        ),
+        (
+            "앞서 언급하신 AsyncExitStack의 설계 이유를 설명해 주세요.",
+            review(
+                plan_valid=False, context_valid=False, reason_summary="직전 답변에 없는 발언이다."
+            ),
+            "replan",
+        ),
+    ],
+)
+def test_observed_lifecycle_and_false_attribution_rejections_do_not_trigger_a_third_call(
+    text, assessment, recovery
+):
+    ctx = replace(
+        later_context(),
+        allowed_personas=("tech_lead",),
+        history=(
+            c.HistoryTurn(
+                "turn-1",
+                "tech_lead",
+                "자원 관리 흐름을 설명해 주세요.",
+                "제공된 원문에서 종료 콜백을 확인하지 못했습니다.",
+                "analysis-1",
+            ),
+        ),
+    )
+    candidate = replace(
+        question(),
+        persona="tech_lead",
+        text=text,
+        question_type="follow_up",
+        parent_turn_id="turn-1",
+    )
+    provider = Provider(plan(candidate), assessment)
+    result = run_version(provider, ctx)
+    assert result.data is None and result.failure.stage == "semantic"
+    assert candidate_recovery(result.failure).recovery == recovery
+    assert len(provider.requests) == 2
+    assert [request.max_attempts for request in provider.requests] == [1, 1]
+    assert provider.requests[1].payload["current_answer"]["answer"] == (
+        "제공된 원문에서 종료 콜백을 확인하지 못했습니다."
+    )
+    assert "reason_summary" not in provider.requests[1].payload
+
+
+def test_neutral_source_grounded_main_question_does_not_attribute_an_unsaid_answer():
+    evidence = c.Evidence(
+        "ev-lifecycle",
+        "repo-1",
+        REF,
+        "code",
+        "service/entry.py",
+        None,
+        "async def lifespan(app):\n    async with AsyncExitStack() as stack:\n"
+        "        stack.push_async_callback(engine.dispose)\n",
+        "read_file",
+    )
+    ctx = replace(
+        later_context(),
+        allowed_personas=("tech_lead",),
+        evidence=(evidence,),
+        evaluation_targets=(
+            c.EvaluationTarget("tech_lead", ("technical_reasoning", "communication")),
+        ),
+        history=(
+            c.HistoryTurn(
+                "turn-1",
+                "tech_lead",
+                "정리 흐름을 설명해 주세요.",
+                "종료 콜백을 확인하지 못했습니다.",
+                "analysis-1",
+            ),
+        ),
+    )
+    candidate = c.Question(
+        "tech_lead",
+        "제공된 원문의 종료 콜백을 기준으로, 등록과 실제 실행 시점을 구분하고 "
+        "이 방식의 이유를 설명해 주세요.",
+        "resource_lifecycle",
+        c.QuestionContract(
+            "원문을 바탕으로 자원 정리 설계의 이유와 실행 조건을 설명한다.",
+            (c.RequiredPoint("lifecycle_reason", "콜백 등록·실행 조건과 설계 이유"),),
+            (),
+            (c.BasisRef("evidence", "ev-lifecycle"),),
+            "코드 이해와 설명만 관찰하며 개인 기여·실행 성공은 전제하지 않는다.",
+            ("technical_reasoning", "communication"),
+        ),
+        ("ev-lifecycle",),
+        (),
+        "main",
+        None,
+    )
+    provider = Provider(plan(candidate), review())
+    result = run_version(provider, ctx)
+    assert result.succeeded and result.data.question.data == candidate
+    assert len(provider.requests) == 2
+    assert provider.requests[1].payload["current_answer"]["answer"] == (
+        "종료 콜백을 확인하지 못했습니다."
+    )
+    assert provider.requests[1].payload["reference_texts"] == []
+    assert provider.requests[1].payload["context"]["evidence"][0] == asdict(evidence)
