@@ -12,6 +12,8 @@
 
 | `361f2d0f55c4-.env.example.patch` | `backend/.env.example` | `e5eaaba200285e7229e10e6b91b29c567aebb9dd1f73547e726a8736aecca175` | `16f91745f8002b76b1a9aa7b9ac8eddac78726d6376b146bc138f13a48e0d52b` | `48be182758028bb6cb051b09d016819c5655743697f73b11d95473ed12f10cbc` |
 | `c2a439a5efd7-config.py.patch` | `backend/app/core/config.py` | `abd2e34010522b68a43c0775ae7400e7d00df01a7b2c5353527748a9c2fe6971` | `15452cec0086abc7381ebccfb6c3cc66a75b6f27e1a62d95f398b89494305d60` | `55d5b0bc44132a0d042da8f93297bacfb08de1d68c28b6b318ed7d8526809509` |
+| `request-size-stream-test.py.patch` | `backend/tests/integrations/test_llm_request_size_stream.py` | `없음` | `6a6b5baa99b0d2325eddca4b6298e3aebab94d52fae7239fbc8c457e63c8cbe7` | `e04924d142b1ecdb2d2a7a3ae62f04a4840dc789f6e1c9c2bb0a891ab656dce6` |
+| `latest-develop-log-output-test.py.patch` | `backend/tests/features/analysis/test_run_failure_logging.py` | `b6724778c723319852861cc9186f95fe9835c87cf569b92f492883a09288d827` | `dde91b663561f933c53af4bf24b51d1ec71b25fe2bbdbc7e0e74d525fbc42389` | `aa35d832d39acb816bd8938421e0673d599cf4cb26daa578bc8303f85e00bf2d` |
 
 선행의 실제 병합 커밋으로 재기준한 뒤 적용한다. 적용 커밋·지문·통합 회귀를 spec/ai/implementation.md에 기록한 뒤에만 대기 패치를 제거한다.
 
@@ -19,7 +21,7 @@
 
 큰 준비 예산 패치의 적용 조건은 #213 설정 기반, #225의 ADR 0039 근거, #224의 repository_sources 소비 코드가 함께 준비되는 것입니다. 설정만 추가한 상태를 준비 수집 동작의 완료로 표현하지 않습니다. 준비 수집과 진행 중 근거 조회가 분리된 적용 후 예제에서는 기존 원문 byte 상한을 진행 중 근거 조회 전용으로 설명합니다. 이 조건은 대기 중인 준비 예산 패치에 적용하며, 활성 JSON 로그·요청 크기 도우미가 #229를 기다린다는 의미가 아닙니다.
 
-
+활성 request_size 회귀는 현재 기본 계약의 Unicode·enum·비스트리밍 전송과 실제 byte 경계를 확인합니다. 기존 stream·reasoning 회귀의 전체 원문은 별도 신규 파일 패치로 보존하며 #213의 확장 CallLimits와 스트리밍 gateway가 준비되면 함께 적용합니다. 최신 develop 6caa681a의 분석 실패 로그 테스트는 이 PR의 과거 head에 없으므로 별도 최소 패치로 보존합니다. 이 패치는 caplog의 가공 전 messages 대신 handler가 실제 렌더링한 records를 검사하고 JSON·SQL·예외 타입·위치 검증은 유지합니다. 해당 최신 파일이 존재하는 기준에서 적용해야 하며, 비활성 패치만으로 현재 CI의 그 테스트가 변경됐다고 표시하지 않습니다.
 
 <details>
 <summary>이전 안내·과거 기준 지문(현재 적용 지문으로 사용 금지)</summary>
