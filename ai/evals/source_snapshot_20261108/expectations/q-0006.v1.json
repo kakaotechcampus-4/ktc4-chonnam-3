@@ -1,0 +1,20 @@
+{"case_id": "q-0006", "version": 1,
+ "allowed": [
+  {"id": "a1", "purpose": "범위를 좁힌 쉬운 질문(후보자가 기억하는 부분이나 화면에서 본 동작)을 묻는다"},
+  {"id": "a2", "purpose": "압박이나 평가가 느껴지지 않는 말투를 쓴다"}
+ ],
+ "forbidden": [
+  {"id": "f1", "reason": "방금 한 질문을 그대로 반복", "type": "repeat"},
+  {"id": "f2", "reason": "모른다고 한 점을 지적하거나 추궁", "type": "pressure"},
+  {"id": "f3", "reason": "더 어려운 새 주제(성능 최적화 등)로 이동", "type": "difficulty_jump"}
+ ],
+ "grader_controls": [
+  {"kind": "allowed", "output": "tech_lead: 괜찮습니다. 게시글 목록 화면에서 직접 확인하거나 수정해 본 부분이 있다면 그 부분부터 말씀해 주실 수 있을까요?"},
+  {"kind": "forbidden", "output": "tech_lead: 본인이 만든 화면인데 어떻게 모르실 수 있나요?"},
+  {"kind": "forbidden", "output": "tech_lead: 그럼 대량 조회에서 N+1 문제는 어떻게 해결하실 건가요?"}
+ ],
+ "review": {"status": "pending", "author": "geonyeong325", "reviewer": "gdh0730", "reviewed_at": "2026-11-02", "pending_notes": [
+  "검수자(gdh0730) 2·3·4번 수정요청: 질문이 어렵다는 이유만으로 금지해도 되는지 다시 봐야 한다. 답을 모르는 것과 평가할 수 없는 것은 다르니 왜 not_evaluable로 봤는지 설명이 필요하다.",
+  "작성자 의도: '잘 모르겠습니다'는 평가할 내용을 담지 않아 not_evaluable로 뒀고, 그 직후 더 어려운 주제로 가는 것(difficulty_jump)은 금지로 뒀다. difficulty_jump는 작성자가 임시로 붙인 유형이며 면접 정책에 직접 대응하는 항목이 없다.",
+  "결정 대기(다른 검수자): difficulty_jump 금지를 유지할지 허용 범위를 넓힐지, 새 버전으로 재작성할지, 무효화할지."
+ ]}}

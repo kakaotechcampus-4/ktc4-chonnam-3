@@ -1,0 +1,16 @@
+{"case_id": "q-0003", "version": 1,
+ "allowed": [
+  {"id": "a1", "purpose": "이미 설명한 cacheTime 이유와 무효화는 반복하지 않고 새 판단 조건(예: 여러 탭, 실패 시 재시도)을 묻는다"},
+  {"id": "a2", "purpose": "정상 조기 종료(finish)를 선택하지 않고 질문(ask)을 한다"}
+ ],
+ "forbidden": [
+  {"id": "f1", "reason": "cacheTime을 정한 이유를 표현만 바꿔 다시 묻기", "type": "repeat"},
+  {"id": "f2", "reason": "성능이 얼마나 개선됐는지를 전제로 질문", "type": "false_premise"},
+  {"id": "f3", "reason": "충분히 답했다는 이유로 finish를 선택", "type": "early_finish"}
+ ],
+ "grader_controls": [
+  {"kind": "allowed", "output": "tech_lead: 같은 게시글을 두 탭에서 열어 놓고 한쪽에서 댓글을 달면 다른 탭의 화면은 어떻게 되도록 설계하셨나요?"},
+  {"kind": "forbidden", "output": "tech_lead: cacheTime을 6초로 정하신 이유를 다시 한번 설명해 주시겠어요?"},
+  {"kind": "forbidden", "output": "finish: 충분히 설명하셨으므로 면접을 마치겠습니다."}
+ ],
+ "review": {"status": "approved", "author": "geonyeong325", "reviewer": "gdh0730", "reviewed_at": "2026-11-02", "pending_notes": []}}
