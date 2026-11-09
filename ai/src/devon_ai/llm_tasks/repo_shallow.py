@@ -6,6 +6,9 @@ from dataclasses import asdict
 from devon_ai import contracts as c
 from devon_ai.source_readers import describe_source
 
+SUPPORTED_PROMPT_VERSIONS = frozenset({"repo_shallow_v2", "repo_shallow_v3", "repo_shallow_v1"})
+
+
 type CacheIdentity = tuple[str, str, str, str]
 type ShallowChecked = c.ContractChecked[c.ShallowBatchResult]
 

@@ -3,6 +3,7 @@
 import base64
 import binascii
 import hashlib
+import json
 import re
 from collections import deque
 from collections.abc import Awaitable, Callable
@@ -12,6 +13,7 @@ from urllib.parse import quote
 from app.integrations.github.base import GithubApiError, RepoSupportingFile
 
 type SnapshotRequest = Callable[[str, dict[str, str] | None], Awaitable[dict[str, object]]]
+SNAPSHOT_RESPONSE_MAX_BYTES = 65536
 
 
 def _valid_sha(value: object) -> bool:
@@ -61,7 +63,7 @@ async def collect_snapshot_context(
     max_file_chars: int = 4000,
 ) -> tuple[tuple[str, ...], tuple[RepoSupportingFile, ...], tuple[str, ...]]:
     structure: list[str] = []
-    candidates: list[tuple[str, str]] = []
+    candidates: list[tuple[str, str, int | None]] = []
     files: list[RepoSupportingFile] = []
     limitations: list[str] = []
     used = 0
@@ -121,15 +123,38 @@ async def collect_snapshot_context(
             elif item.get("type") == "blob" and item.get("mode") in {"100644", "100755"}:
                 structure.append(path)
                 if not name.lower().startswith("readme"):
-                    candidates.append((path, str(item["sha"])))
+                    size = item.get("size")
+                    candidates.append(
+                        (path, str(item["sha"]), size if type(size) is int and size >= 0 else None)
+                    )
             else:
                 limitations.append(f"L1에서 일반 파일이 아닌 항목은 읽지 않았습니다: {path}")
     if queue and not limitations:
         limitations.append("L1 구조 상한으로 일부 디렉터리는 확인하지 못했습니다.")
 
-    for path, blob in sorted(candidates, key=lambda item: _priority(item[0])):
+    for path, blob, size in sorted(candidates, key=lambda item: _priority(item[0])):
         if len(files) >= max_files or used >= max_requests:
             break
+        if size is not None:
+            # 필수 JSON 필드와 base64만으로도 상한을 넘으면 실제 요청을 소비하지 않는다.
+            # 추가 메타데이터·줄 감싸기 때문에 이 검사 통과가 수신 성공을 보장하지는 않는다.
+            minimum = len(
+                json.dumps(
+                    {
+                        "type": "file",
+                        "path": path,
+                        "sha": blob,
+                        "encoding": "base64",
+                        "size": size,
+                        "content": "",
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ).encode()
+            ) + 4 * ((size + 2) // 3)
+            if minimum > SNAPSHOT_RESPONSE_MAX_BYTES:
+                limitations.append(f"L1 응답 크기 상한으로 보조 원문을 읽지 않았습니다: {path}")
+                continue
         try:
             value = await get(f"/contents/{quote(path, safe='/')}", {"ref": sha})
             if (

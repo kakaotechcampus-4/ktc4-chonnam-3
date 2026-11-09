@@ -5,6 +5,18 @@ from dataclasses import MISSING, asdict, fields
 from devon_ai import contracts as c
 from devon_ai.llm_tasks import answer_analysis_wire as wire
 
+SUPPORTED_PROMPT_VERSIONS = frozenset(
+    {
+        "answer_analysis_v1",
+        "answer_analysis_v5",
+        "answer_analysis_v2",
+        "answer_analysis_v4",
+        "answer_analysis_v3",
+        "answer_analysis_v6",
+    }
+)
+
+
 type AnalysisChecked = c.ContractChecked[c.AnswerAnalysis]
 type Location = tuple[str, str, str]
 
@@ -287,6 +299,9 @@ async def analyze_answer(
         )
 
     def validate_checked(candidate: c.AnswerAnalysis) -> AnalysisChecked:
+        # 새 모델 출력만 실행 정책으로 확인한다. 과거 저장 분석의 decode는 바꾸지 않는다.
+        for query in candidate.external_queries:
+            query.validate_for_execution()
         return c.validate_analysis(
             candidate,
             question=question,

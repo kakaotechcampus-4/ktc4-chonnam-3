@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 import httpx
 from anyio import CancelScope
 from devon_ai import contracts as c
+from devon_ai.query_policy import SENSITIVE_QUERY
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -31,14 +32,7 @@ OFFICIAL_DOMAINS = {
     "mobility": ("gtfs.org",),
     "etc": ("elice.io", "developer.mozilla.org", "docs.python.org"),
 }
-_PRIVATE = re.compile(
-    r"https?://|\bBearer\b|\b(?:api[_ -]?key|password|secret[_ -]?key)\s*[:=]|"
-    r"\b(?:sk-|tvly-)[A-Za-z0-9_-]{8,}|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}|```|"
-    # 명확한 국내 전화·주민/외국인등록번호 형태를 차단한다. 모든 개인정보 탐지를 뜻하지 않는다.
-    r"(?<!\d)(?:\+82[- ]?0?|0)(?:1[016789]|2|[3-6][1-5])[- .]?\d{3,4}[- .]?\d{4}(?!\d)|"
-    r"(?<!\d)\d{6}[- ]?[1-8]\d{6}(?!\d)",
-    re.IGNORECASE,
-)
+_PRIVATE = SENSITIVE_QUERY
 
 
 @dataclass(frozen=True)
@@ -184,13 +178,14 @@ async def retrieve_external_knowledge(
 
         if settings is None:
             return unavailable("external_tool_not_configured")
-        if any(_PRIVATE.search(query.query) or "\n" in query.query for query in queries):
-            # 비밀값·이메일·코드·URL 원문을 검색 질의로 외부에 전송하지 않는다.
-            return unavailable("unsafe_external_query")
         try:
-            provider = client or TavilyClient(settings.require_tavily())
-        except ValueError:
-            return unavailable("external_tool_not_configured")
+            # 하나라도 위험하면 batch 전체를 거절한다. 캐시·provider·신규 저장도 같은 질의다.
+            queries = tuple(
+                c.ExternalQueryRequest(query.validate_for_execution(), query.purpose)
+                for query in queries
+            )
+        except c.ContractError:
+            return unavailable("unsafe_external_query")
         now = datetime.now(UTC)
         cutoff = now - timedelta(seconds=settings.external_sources_cache_seconds)
         try:

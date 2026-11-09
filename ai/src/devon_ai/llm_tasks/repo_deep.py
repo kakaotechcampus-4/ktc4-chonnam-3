@@ -5,6 +5,9 @@ from dataclasses import asdict
 from devon_ai import contracts as c
 from devon_ai.source_readers import describe_source
 
+SUPPORTED_PROMPT_VERSIONS = frozenset({"repo_deep_v1", "repo_deep_v2"})
+
+
 type CacheIdentity = tuple[str, str, str, str]
 type DeepChecked = c.ContractChecked[c.DeepAnalysisResult]
 

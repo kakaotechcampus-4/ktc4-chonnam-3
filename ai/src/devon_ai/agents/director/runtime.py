@@ -7,6 +7,8 @@ from typing import Protocol, cast, get_args
 from devon_ai import contracts as c
 from devon_ai.agents.director.agent import _RECOVERY_CODES, _object_schema, _references
 
+SUPPORTED_PROMPT_VERSIONS = frozenset({"director_v1", "director_v2", "director_v3", "director_v4"})
+
 type Location = tuple[str, str, str]
 
 

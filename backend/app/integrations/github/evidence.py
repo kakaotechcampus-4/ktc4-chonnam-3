@@ -278,9 +278,6 @@ class EvidenceReader:
                 async for part in response.aiter_bytes(chunk_size=limit):
                     self.bytes_left -= len(part)
                     body.extend(part[: limit - len(body)])
-                    if len(body) == limit and expected_size > limit:
-                        complete = False
-                        break
                     if len(body) >= limit:
                         complete = False
                         break

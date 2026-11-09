@@ -1,0 +1,44 @@
+diff --git a/backend/app/features/interview/prepare.py b/backend/app/features/interview/prepare.py
+--- a/backend/app/features/interview/prepare.py
++++ b/backend/app/features/interview/prepare.py
+@@ -31,10 +31,13 @@
+     User,
+ )
+ from app.features.analysis.analysis_results import resolve_bound_analysis
++from app.features.documents.claim_comparison import prepare_selected_claim_comparisons
++from app.features.documents.claims import prepare_selected_document_claims
+ from app.features.interview import prepare_checkpoint, prepare_lease
+ from app.features.interview.agent_context import AgentStateError
+ from app.features.interview.answer_context import load_answer_context
+ from app.features.interview.director_service import log_recovery, start_director
++from app.features.interview.repository_candidates import STATE_KEY
+ from app.features.interview.repository_sources import (
+     SourceCollection,
+     SourcePreparationError,
+@@ -479,8 +482,6 @@
+             await _store_analysis(db, repo, row_values)
+         for repo, analysis, sources in collected:
+             # 후보 경로는 원문 Evidence와 분리하고 선택한 고정 SHA에만 묶어 둔다.
+-            from app.features.interview.repository_candidates import STATE_KEY
+-
+             state = dict(row.context_state or {})
+             previous = state.get(STATE_KEY, {})
+             candidates = dict(previous) if isinstance(previous, dict) else {}
+@@ -616,8 +617,6 @@
+             )
+             return False
+         heartbeat = prepare_lease.heartbeat(sessions, interview_id, job_id)
+-        from app.features.documents.claims import prepare_selected_document_claims
+-
+         # 문서 Claim은 별도 호출 예산을 사용하며 레포별 경로 선정·분석 예산과 섞지 않는다.
+         await prepare_selected_document_claims(
+             sessions, interview_id, settings, http_client, job_id=job_id
+@@ -759,8 +758,6 @@
+             records_saved = True
+             if not collected:
+                 raise SourcePreparationError(failures[0] if failures else "l2_unavailable")
+-        from app.features.documents.claim_comparison import prepare_selected_claim_comparisons
+-
+         await prepare_selected_claim_comparisons(
+             sessions, interview_id, settings, http_client, job_id=job_id
+         )

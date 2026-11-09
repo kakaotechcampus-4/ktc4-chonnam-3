@@ -36,7 +36,7 @@ from app.integrations.github.base import (
     repo_summary_from_api,
 )
 from app.integrations.github.pagination import parse_link_header, total_from_per_page_one
-from app.integrations.github.snapshot import collect_snapshot_context
+from app.integrations.github.snapshot import SNAPSHOT_RESPONSE_MAX_BYTES, collect_snapshot_context
 
 API_BASE = "https://api.github.com"
 DEFAULT_TIMEOUT_SECONDS = 15.0
@@ -438,7 +438,11 @@ class GithubClient:
         )
 
     async def _snapshot_json(
-        self, path: str, params: dict[str, str] | None, *, max_bytes: int = 65536
+        self,
+        path: str,
+        params: dict[str, str] | None,
+        *,
+        max_bytes: int = SNAPSHOT_RESPONSE_MAX_BYTES,
     ) -> dict[str, object]:
         """L1 보조 조회는 응답을 스트리밍해 고정 바이트 상한에서 중단한다."""
         url = self._api_base + path

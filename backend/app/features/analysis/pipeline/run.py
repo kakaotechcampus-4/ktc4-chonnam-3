@@ -78,22 +78,33 @@ async def run_analysis(ctx: dict[str, Any], run_id: UUID) -> None:
             raise RunFailure("run_expired")
         await account_for_run(ctx, run.user_id)
         names: list[str] = []
-        if run.document_id:
+        if run.document_id or run.cover_letter_document_id:
             async with step(ctx, run_id, "doc_extract"):
                 async with ctx["session_factory"]() as db:
-                    document = await db.scalar(
-                        select(UserDocument).where(
-                            UserDocument.id == run.document_id,
-                            UserDocument.user_id == run.user_id,
-                            UserDocument.doc_type == "portfolio",
+                    for document_id, doc_type in (
+                        (run.document_id, "portfolio"),
+                        (run.cover_letter_document_id, "cover_letter"),
+                    ):
+                        if document_id is None:
+                            continue
+                        document = await db.scalar(
+                            select(UserDocument).where(
+                                UserDocument.id == document_id,
+                                UserDocument.user_id == run.user_id,
+                                UserDocument.doc_type == doc_type,
+                            )
                         )
-                    )
-                    if document is None or document.extract_status == "failed":
-                        raise RunFailure("doc_extract_failed")
-                    # preview에서 검증·저장한 URL을 사용한다. 원본 파일을 다시 추출하지 않는다.
-                    names = [
-                        urlsplit(url).path.strip("/") for url in document.extracted_github_urls
-                    ]
+                        if document is None or document.extract_status not in {
+                            "succeeded",
+                            "partial",
+                        }:
+                            raise RunFailure("doc_extract_failed")
+                        # 자소서는 검증하되 레포 선정 힌트는 명시한 포트폴리오에서만 얻는다.
+                        if doc_type == "portfolio":
+                            names = [
+                                urlsplit(url).path.strip("/")
+                                for url in document.extracted_github_urls
+                            ]
         async with step(ctx, run_id, "repo_select"):
             empty_reason = "no_public_repo"
             async with ctx["session_factory"].begin() as db:
