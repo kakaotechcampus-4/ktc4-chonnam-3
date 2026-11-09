@@ -10,6 +10,7 @@ docs/db-schema.md / task-02
 """
 
 import uuid
+from typing import Any
 
 from sqlalchemy import (
     CheckConstraint,
@@ -19,8 +20,9 @@ from sqlalchemy import (
     SmallInteger,
     String,
     Text,
+    UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, CreatedAtMixin, UUIDPrimaryKeyMixin, check_in
@@ -122,3 +124,41 @@ class EvidenceConflict(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
     evidence_text: Mapped[str] = mapped_column(Text, nullable=False)
     verdict: Mapped[str] = mapped_column(String(20), nullable=False, server_default="unresolved")
     resolution: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class DocumentClaimComparison(Base, UUIDPrimaryKeyMixin, CreatedAtMixin):
+    """문서와 코드의 기술적 대조. 첫 질문 전에도 결과·미확인 사유를 보존한다."""
+
+    __tablename__ = "document_claim_comparisons"
+    __table_args__ = (
+        CheckConstraint(
+            check_in("status", ("consistent", "conflicting", "unverified")), name="status"
+        ),
+        CheckConstraint(
+            check_in(
+                "execution_status", ("succeeded", "failed", "not_available", "budget_exhausted")
+            ),
+            name="execution_status",
+        ),
+        UniqueConstraint("run_id", "claim_id", name="uq_claim_comparison_run_claim"),
+        Index("ix_claim_comparisons_interview", "interview_session_id"),
+    )
+
+    interview_session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("interview_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    claim_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("document_claims.id", ondelete="CASCADE"), nullable=False
+    )
+    # 같은 입력의 실패 후 명시 재준비도 새 실행으로 남겨 과거 인용을 바꾸지 않는다.
+    run_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    input_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    document_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    claim_source: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    # 원문은 evidences에 보존한다. 위치·버전·해시를 함께 저장해 인용을 재검증한다.
+    code_sources: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    execution_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    result: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    prompt_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(100), nullable=True)
