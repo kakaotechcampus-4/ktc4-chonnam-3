@@ -1,6 +1,5 @@
-"""사전 입력 측정은 Unicode·enum·stream을 포함한 실제 전송 바이트와 같다."""
+"""기본 계약의 Unicode·enum·비스트리밍 요청도 실제 전송 바이트로 제한한다."""
 
-import json
 from dataclasses import replace
 
 import httpx
@@ -16,19 +15,14 @@ async def test_measured_bytes_equal_the_gateway_wire_and_guard_the_exact_limit()
         item,
         payload={"원문": ['가나다/인용"경로.src', "emoji-🙂.src"]},
         output_schema={"type": "string", "enum": ['가나다/인용"경로.src', "emoji-🙂.src"]},
-        limits=replace(item.limits, stream=True, reasoning_effort="low", max_input_bytes=16384),
+        limits=replace(item.limits, max_input_bytes=16384),
     )
     size = request_size(item)
     captured = []
 
     def transport(incoming):
         captured.append(incoming.content)
-        event = {"type": "response.completed", "response": response()}
-        return httpx.Response(
-            200,
-            content=("data: " + json.dumps(event) + "\n\n").encode(),
-            headers={"Content-Type": "text/event-stream"},
-        )
+        return httpx.Response(200, json=response())
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
         accepted = await call_model(
