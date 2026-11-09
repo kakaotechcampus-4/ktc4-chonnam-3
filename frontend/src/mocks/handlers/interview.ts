@@ -5,6 +5,8 @@ import type {
   CreateInterviewResponse,
   FeedbackDisagreementRequest,
   InterviewDetailResponse,
+  RetryQuestionRequest,
+  RetryQuestionResponse,
   ReportGeneratingResponse,
   ReportResponse,
 } from '@/types/api';
@@ -54,6 +56,70 @@ const selectableRepositoryIds = new Set(
 );
 
 export const interviewHandlers = [
+  http.post<IdParams, RetryQuestionRequest, Res<RetryQuestionResponse>>(
+    path('/interviews/:id/question/retry'),
+    async ({ params, request }) => {
+      const record = getInterview(String(params.id));
+      if (!record) return errorResponse(404, 'not_found', '면접을 찾을 수 없어요.');
+      const { requestId } = await request.json();
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId ?? '')
+      ) {
+        return errorResponse(400, 'invalid_request', '요청 ID를 확인해주세요.');
+      }
+      const saved = record.questionRetryState;
+      if (saved?.requestId === requestId) {
+        if (saved.status === 'running')
+          return errorResponse(409, 'question_retry_in_progress', '질문을 준비하고 있어요.');
+        if (saved.status === 'failed')
+          return errorResponse(409, 'question_retry_failed', '질문을 만들지 못했어요.');
+        const current = record.liveTurns?.at(-1);
+        if (current?.turn !== saved.turnNo || current.answer !== null)
+          return errorResponse(409, 'question_retry_unavailable', '현재 질문에 사용할 수 없어요.');
+        return HttpResponse.json({
+          interviewId: record.interviewId,
+          sessionId: record.sessionId,
+          turnNo: saved.turnNo,
+        });
+      }
+      if ((record.questionRetryCount ?? 0) >= 1)
+        return errorResponse(409, 'question_retry_limit', '이어가기 횟수를 사용했어요.');
+      const previous = record.liveTurns?.at(-1);
+      if (
+        interviewStatus(record) !== 'in_progress' ||
+        record.questionRetryEligible === false ||
+        !previous?.answer ||
+        previous.turn >= TOTAL_TURNS
+      ) {
+        return errorResponse(409, 'question_retry_unavailable', '현재 상태에서 이어갈 수 없어요.');
+      }
+      const turnNo = previous.turn + 1;
+      record.questionRetryCount = 1;
+      record.questionRetryState = {
+        requestId,
+        turnNo,
+        status: 'running',
+        expiresAt: new Date(Date.now() + 255_000).toISOString(),
+      };
+      if (record.questionRetryMode === 'running')
+        return errorResponse(409, 'question_retry_in_progress', '질문을 준비하고 있어요.');
+      await delay(700);
+      if (record.questionRetryMode === 'failed') {
+        record.questionRetryState.status = 'failed';
+        return errorResponse(409, 'question_retry_failed', '질문을 만들지 못했어요.');
+      }
+      record.liveTurns!.push({ ...structuredClone(completedTurns[turnNo - 1]), answer: null });
+      record.sessionId = `sess_retry_${crypto.randomUUID()}`;
+      record.questionRetryState.status = 'succeeded';
+      return HttpResponse.json({
+        interviewId: record.interviewId,
+        sessionId: record.sessionId,
+        turnNo,
+      });
+    },
+  ),
+
+
   http.post<PathParams, CreateInterviewRequest, Res<CreateInterviewResponse>>(
     path('/interviews'),
     async ({ request }) => {
@@ -124,6 +190,19 @@ export const interviewHandlers = [
         remainingSeconds: interviewRemainingSeconds(record),
         turns: interviewTurns(record),
         lastError: interviewLastError(record),
+        ...(record.questionRetrySupported === false
+          ? {}
+          : {
+              canRetryQuestion:
+                record.questionRetryEligible !== false &&
+                interviewStatus(record) === 'in_progress' &&
+                (record.questionRetryCount ?? 0) < 1 &&
+                !!record.liveTurns?.length &&
+                record.liveTurns.at(-1)?.answer != null,
+              questionRetryCount: record.questionRetryCount ?? 0,
+              questionRetryState: record.questionRetryState ?? null,
+            }),
+
       });
     },
   ),

@@ -314,6 +314,12 @@ export type InterviewDetailResponse = {
   /** 구버전 응답에서는 생략된다. 저장 T3 이후 질문 생성만 복구할 때 서버가 허용한다. */
   canRetryQuestion?: boolean;
   questionRetryCount?: number;
+  questionRetryState?: {
+    requestId: string;
+    turnNo: number;
+    status: 'running' | 'succeeded' | 'failed';
+    expiresAt: string;
+  } | null;
 };
 
 export type QuestionRetryFailureReason =

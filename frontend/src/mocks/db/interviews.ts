@@ -1,4 +1,4 @@
-import type { InterviewLastError, InterviewStatus, InterviewTurn } from '@/types/api';
+import type { InterviewLastError, InterviewStatus, InterviewTurn, InterviewDetailResponse } from '@/types/api';
 import { candidatePages } from '../fixtures/analysis';
 import { TOTAL_TURNS, completedTurns, firstTurn } from '../fixtures/interview';
 import { jdCompanyName, jdPosition } from '../fixtures/jd';
@@ -42,6 +42,11 @@ export type InterviewRecord = {
    * 연결 클로저에 들고 있으면 새로고침 후 조회 응답과 어긋난다.
    */
   liveTurns?: InterviewTurn[];
+  questionRetryCount?: number;
+  questionRetryEligible?: boolean;
+  questionRetrySupported?: boolean;
+  questionRetryMode?: 'success' | 'failed' | 'running';
+  questionRetryState?: InterviewDetailResponse['questionRetryState'];
 };
 
 const interviews = new Map<string, InterviewRecord>();
