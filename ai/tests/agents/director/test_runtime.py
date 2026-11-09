@@ -2,6 +2,7 @@ import asyncio
 import importlib
 import json
 from dataclasses import asdict, replace
+from pathlib import Path
 
 import pytest
 
@@ -15,6 +16,15 @@ LIMITS = c.CallLimits(1, 512, 65536, 65536)
 
 def runtime():
     return importlib.import_module("devon_ai.agents.director.runtime")
+
+
+@pytest.mark.parametrize("version", ["unregistered_runtime", "director_v999@deployment"])
+def test_expanded_consumer_keeps_unknown_versions_out_of_the_model(version):
+    provider = Provider(plan(), review())
+    result = run_version(provider, context(), version=version)
+    assert result.failure is not None
+    assert result.failure.error_code == "director_input_invalid"
+    assert result.attempts == () and provider.requests == []
 
 
 def context(**changes):
@@ -143,6 +153,255 @@ def test_runtime_generates_a_plan_reviews_it_and_returns_a_checked_ask_decision(
     ]
     assert [r.payload["operation"] for r in provider.requests] == ["plan", "review"]
     assert provider.requests[1].payload["question"] == asdict(question())
+
+
+def test_recovery_feedback_is_strictly_restored_from_original_rejected_attempts():
+    provider = Provider(
+        plan(), review(contract_matches=False, reason_summary="문장이 필수 확인내용을 묻지 않았다.")
+    )
+    result = run(provider)
+    attempts = json.loads(json.dumps([asdict(item) for item in result.attempts]))
+    feedback = runtime().recovery_feedback_from_attempts(
+        attempts, failure_code=result.failure.error_code
+    )
+    assert feedback.previous_candidate == question()
+    assert feedback.recovery == c.CandidateRecovery(
+        "rewrite", "문장이 필수 확인내용을 묻지 않았다."
+    )
+    assert "묻지 않았다" not in repr(feedback)
+    assert attempts == json.loads(json.dumps([asdict(item) for item in result.attempts]))
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    [
+        "raw",
+        "extra",
+        "approved",
+        "unsafe",
+        "replan",
+        "model",
+        "schema",
+        "incomplete",
+        "stage",
+        "duplicate",
+        "metadata_extra",
+        "plan_extra",
+        "prompt",
+        "attempt",
+    ],
+)
+def test_unclear_or_mismatched_feedback_cannot_authorize_a_rewrite(corruption):
+    result = run(Provider(plan(), review(contract_matches=False)))
+    attempts = json.loads(json.dumps([asdict(item) for item in result.attempts]))
+    if corruption == "raw":
+        attempts[1]["raw_output"] = "not-json"
+    elif corruption == "extra":
+        raw = json.loads(attempts[1]["raw_output"])
+        raw["approve_anything"] = True
+        attempts[1]["raw_output"] = json.dumps(raw)
+    elif corruption in {"approved", "unsafe", "replan"}:
+        raw = json.loads(attempts[1]["raw_output"])
+        raw[
+            "contract_matches"
+            if corruption == "approved"
+            else "safe_alternative"
+            if corruption == "unsafe"
+            else "context_valid"
+        ] = corruption == "approved"
+        attempts[1]["raw_output"] = json.dumps(raw)
+    elif corruption == "model":
+        attempts[1]["model"] = "other-model"
+    elif corruption == "schema":
+        attempts[1]["schema_version"] = "another-schema"
+    elif corruption == "incomplete":
+        attempts.pop()
+    elif corruption == "duplicate":
+        attempts[1]["raw_output"] = attempts[1]["raw_output"].replace(
+            '"plan_valid": true', '"plan_valid": false, "plan_valid": true'
+        )
+    elif corruption == "metadata_extra":
+        attempts[1]["approved"] = True
+    elif corruption == "plan_extra":
+        raw = json.loads(attempts[0]["raw_output"])
+        raw["question"]["approved"] = True
+        attempts[0]["raw_output"] = json.dumps(raw)
+    elif corruption == "prompt":
+        attempts[1]["prompt_version"] = "other-version"
+    elif corruption == "attempt":
+        attempts[1]["attempt"] = 1
+    else:
+        attempts[1]["error_stage"] = "parse"
+    assert (
+        runtime().recovery_feedback_from_attempts(
+            attempts, failure_code="director_candidate_rewrite"
+        )
+        is None
+    )
+
+
+def test_recovery_feedback_goes_only_to_the_new_plan_and_review_stays_independent():
+    previous = run(Provider(plan(), review(contract_matches=False)))
+    feedback = runtime().recovery_feedback_from_attempts(
+        previous.attempts, failure_code=previous.failure.error_code
+    )
+    provider = Provider(plan(), review(contract_matches=False))
+    result = run_version(provider, context(), version="director_v8", recovery_feedback=feedback)
+    assert result.failure.error_code == "director_candidate_rewrite"
+    assert len(provider.requests) == 2
+    assert all(request.max_attempts == 1 for request in provider.requests)
+    assert provider.requests[0].payload["recovery_feedback"] == {
+        "version": "director-recovery.v1",
+        "previous_candidate": asdict(question()),
+        "recovery": "rewrite",
+        "review_reason_summary": feedback.recovery.reason_summary,
+    }
+    assert "recovery_feedback" not in provider.requests[1].payload
+    assert provider.requests[0].payload["reference_texts"] == []
+
+
+def test_default_recovery_option_preserves_the_existing_normal_requests():
+    old, explicit = Provider(plan(), review()), Provider(plan(), review())
+    assert run(old).succeeded
+    assert run(explicit, recovery_feedback=None).succeeded
+    assert [request.payload for request in old.requests] == [
+        request.payload for request in explicit.requests
+    ]
+
+
+def test_v8_keeps_v7_normal_payload_and_isolates_feedback_from_the_new_review():
+    previous = run(Provider(plan(), review(contract_matches=False)))
+    feedback = runtime().recovery_feedback_from_attempts(
+        previous.attempts, failure_code=previous.failure.error_code
+    )
+    legacy, current = Provider(plan(), review()), Provider(plan(), review())
+    assert run_version(legacy, context(), version="director_v7@stored").succeeded
+    assert run_version(current, context(), version="director_v8@publication").succeeded
+    assert [request.payload for request in legacy.requests] == [
+        request.payload for request in current.requests
+    ]
+    recovered = Provider(plan(), review(contract_matches=False))
+    result = asyncio.run(
+        runtime().run_director(
+            context(),
+            prompt=replace(PROMPT, version="director_v8@publication"),
+            limits=LIMITS,
+            model_call=recovered,
+            recovery_feedback=feedback,
+        )
+    )
+    assert result.failure.error_code == "director_candidate_rewrite"
+    assert len(recovered.requests) == 2
+    assert all(request.max_attempts == 1 for request in recovered.requests)
+    assert recovered.requests[0].payload["recovery_feedback"]["previous_candidate"] == asdict(
+        question()
+    )
+    assert "recovery_feedback" not in recovered.requests[1].payload
+    assert all(request.payload["reference_texts"] == [] for request in recovered.requests)
+
+
+def test_invalid_feedback_is_rejected_before_either_model_attempt():
+    provider = Provider(plan(), review())
+    result = run_version(
+        provider,
+        context(),
+        version="director_v8",
+        recovery_feedback={"previous_candidate": plan(), "recovery": "rewrite"},
+    )
+    assert result.failure.error_code == "director_input_invalid"
+    assert not result.attempts and not provider.requests
+
+
+@pytest.mark.parametrize("version", ["director_v2", "director_v6", "director_v6@stored"])
+def test_versions_without_recovery_policy_do_not_receive_rejected_candidates(version):
+    previous = run(Provider(plan(), review(contract_matches=False)))
+    feedback = runtime().recovery_feedback_from_attempts(
+        previous.attempts, failure_code=previous.failure.error_code
+    )
+    provider = Provider(plan(), review())
+    result = run_version(provider, context(), version=version, recovery_feedback=feedback)
+    assert result.succeeded
+    assert len(provider.requests) == 2
+    assert all("recovery_feedback" not in request.payload for request in provider.requests)
+
+
+@pytest.mark.parametrize("version", ["future-fixture-version", "director_v999@deployment"])
+def test_unknown_prompt_version_is_rejected_before_model_attempts(version):
+    provider = Provider(plan(), review())
+    result = run_version(provider, context(), version=version)
+    assert result.failure is not None
+    assert result.failure.error_code == "director_input_invalid"
+    assert result.attempts == () and provider.requests == []
+
+
+@pytest.mark.parametrize("version", ["director_v7@recovery", "director_v8@recovery"])
+def test_recovery_prompt_preserves_turn_state_and_actual_reference_enum_guards(version):
+    provider = Provider(plan(), review())
+    result = asyncio.run(
+        runtime().run_director(
+            context(),
+            prompt=replace(PROMPT, version=version),
+            limits=LIMITS,
+            model_call=provider,
+        )
+    )
+    assert result.succeeded
+    assert provider.requests[0].payload["turn_state"]["next_question_no"] == 1
+    assert provider.requests[1].payload["turn_state"]["answered_turn_count"] == 0
+    assert provider.requests[0].schema_version == "director-plan.v3"
+    props = provider.requests[0].output_schema["properties"]["question"]["properties"]
+    assert props["persona"]["enum"] == ["hr_manager"]
+    assert props["evidence_refs"]["maxItems"] == 0
+
+
+def run_coverage(provider, candidate):
+    ctx = context(
+        evaluation_targets=(
+            c.EvaluationTarget("hr_manager", ("contribution_clarity", "communication")),
+        )
+    )
+    return asyncio.run(
+        runtime().run_director(
+            ctx,
+            prompt=replace(PROMPT, version="director_v3"),
+            limits=LIMITS,
+            model_call=provider,
+        )
+    )
+
+
+def test_coverage_policy_rejects_a_question_that_omits_the_assigned_evaluation_keys():
+    provider = Provider(plan(), review())
+    result = run_coverage(provider, question())
+    assert not result.succeeded
+    assert result.failure.stage == "semantic"
+    assert len(provider.requests) == 1
+
+
+def test_coverage_policy_keeps_generation_and_independent_review_within_two_attempts():
+    candidate = replace(
+        question(),
+        question_contract=replace(
+            question().question_contract,
+            evaluation_keys=("contribution_clarity", "communication"),
+        ),
+    )
+    provider = Provider(plan(candidate), review())
+    result = run_coverage(provider, candidate)
+    assert result.succeeded
+    assert result.data.question.data.question_contract.evaluation_keys == (
+        "contribution_clarity",
+        "communication",
+    )
+    assert len(provider.requests) == 2
+    assert provider.requests[1].payload["context"]["evaluation_targets"]
+
+
+def test_follow_up_parent_must_be_an_actual_history_turn():
+    candidate = replace(question(), question_type="follow_up", parent_turn_id="invented-turn")
+    result = run(Provider(plan(candidate), review()))
+    assert not result.succeeded
+    assert result.failure.stage == "semantic"
 
 
 @pytest.mark.parametrize("remaining", [0, 1])
@@ -334,8 +593,8 @@ def test_both_model_calls_receive_original_sources_and_current_contribution_corr
         assert request.payload["answer_analysis"]["contribution_scope"]["scope"] == "teammate"
         assert request.payload["context"]["history"][0]["answer"] == "팀원이 캐시를 구현했습니다."
         sources = request.payload["reference_texts"]
-        assert {"kind": "evidence", "id": "ev-1", "text": "def cached(): return None"} in sources
-        assert {"kind": "job_posting", "id": "job-1", "text": "실제 채용 공고"} in sources
+        assert request.payload["context"]["evidence"][0] == asdict(evidence)
+        assert sources == [{"kind": "job_posting", "id": "job-1", "text": "실제 채용 공고"}]
 
 
 def test_runtime_preserves_both_attempts_when_review_provider_fails():
