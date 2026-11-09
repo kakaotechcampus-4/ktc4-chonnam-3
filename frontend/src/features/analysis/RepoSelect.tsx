@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
@@ -6,7 +6,7 @@ import { api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
 import Footer from '@/shared/components/Footer';
-import { isApiError } from '@/types/api';
+import { isApiError, type RepositoryItem } from '@/types/api';
 import RunLoadError from '@/features/analysis/RunLoadError';
 import { postingUrlFrom, type AnalysisInputState } from '@/features/analysis/steps';
 import {
@@ -41,6 +41,13 @@ const CREATE_ERROR: Record<string, string> = {
   session_limit_exceeded:
     '이미 진행 중인 면접이 있어요. 그 면접을 끝내거나 나간 뒤 다시 시도해주세요.',
   run_expired: '분석 결과가 만료됐어요. 공고 입력부터 다시 시작해주세요.',
+};
+
+// GET /analysis-runs/{runId}/candidates 실패 안내. 목록에 없는 reason은 다시 시도 안내로 처리한다.
+const MORE_ERROR: Record<string, string> = {
+  candidate_page_failed: '이 묶음의 레포를 분석하지 못했어요. 더 보기로 다음 레포를 볼 수 있어요.',
+  run_expired: CREATE_ERROR.run_expired,
+  not_ready: '지금은 레포를 더 불러올 수 없어요.',
 };
 
 export default function RepoSelect() {
@@ -85,10 +92,55 @@ export default function RepoSelect() {
 
   const [selectedIds, setSelectedIds] = useState<string[] | null>(null);
 
+  // 더 보기(page 2부터). 받은 카드는 첫 배치 뒤에 붙이고 선택은 건드리지 않는다(analysis.md).
+  const [moreRepos, setMoreRepos] = useState<RepositoryItem[]>([]);
+  const [nextPage, setNextPage] = useState(2);
+  const [moreEnded, setMoreEnded] = useState(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  const loadMore = useMutation({
+    // 첫 요청에 그 page 분석이 시작되어 202 analyzing이 온다. retryAfter 뒤 같은 page를 다시 부르고,
+    // 화면을 떠나면 폴링을 멈춘다.
+    mutationFn: async (page: number) => {
+      for (;;) {
+        const response = await api.getAnalysisRunCandidates(runId, page);
+        if (!('status' in response)) return response.repositories;
+        await new Promise((resolve) => setTimeout(resolve, (response.retryAfter || 3) * 1000));
+        if (!mountedRef.current) return null;
+      }
+    },
+    onSuccess: (repositories) => {
+      if (repositories === null) return;
+      // 빈 배열은 더 배정할 후보가 없다는 뜻이다(BE get_candidates).
+      if (repositories.length === 0) setMoreEnded(true);
+      else {
+        setMoreRepos((prev) => [...prev, ...repositories]);
+        setNextPage((page) => page + 1);
+      }
+    },
+    onError: (error) => {
+      const reason = isApiError(error) ? error.error.reason : null;
+      // BE는 실패한 page를 다시 분석하지 않는다. 다음 더 보기는 다음 page를 부른다.
+      if (reason === 'candidate_page_failed') setNextPage((page) => page + 1);
+      else if (reason === 'run_expired' || reason === 'not_ready') setMoreEnded(true);
+    },
+  });
+  const moreErrorReason = isApiError(loadMore.error) ? loadMore.error.error.reason : null;
+  const moreError = loadMore.isError
+    ? ((moreErrorReason && MORE_ERROR[moreErrorReason]) ??
+      '레포를 더 불러오지 못했어요. 잠시 후 다시 시도해주세요.')
+    : null;
+
   const result = resultQuery.data;
+  const repositories = result ? [...result.repositories, ...moreRepos] : [];
   // 서버 선택 조건은 L1 succeeded뿐이다(analysis-run.md 선택 가능 조건). partial·failed 카드는 막는다.
   // 하나도 고를 수 없으면 버튼만 꺼진 채 출구가 없어진다.
-  const noSelectable = !!result && result.repositories.every((r) => r.status !== 'succeeded');
+  const noSelectable = !!result && repositories.every((r) => r.status !== 'succeeded');
   const defaultSelected =
     result?.repositories
       .filter((r) => r.recommended && r.status === 'succeeded')
@@ -169,7 +221,7 @@ export default function RepoSelect() {
                 </p>
               )}
               {/* 부분 실패 run은 실패 화면 대신 여기로 온다(analysis.md 부분 실패). 고를 수 없는 카드의 이유를 먼저 알린다. */}
-              {!noSelectable && result.repositories.some((r) => r.status !== 'succeeded') && (
+              {!noSelectable && repositories.some((r) => r.status !== 'succeeded') && (
                 <p className="mt-4 text-xs text-muted">
                   일부 레포는 분석하지 못했어요. 흐리게 표시된 레포는 선택할 수 없어요.
                 </p>
@@ -179,7 +231,7 @@ export default function RepoSelect() {
                 <div className="flex-1 rounded-[10px] border border-line-soft p-4">
                   <p className="text-[11.5px] font-bold tracking-wide text-muted">내 GitHub 레포</p>
                   <ul className="mt-3 flex flex-col gap-2">
-                    {result.repositories.map((repo) => {
+                    {repositories.map((repo) => {
                       const checked = selected.includes(repo.id);
                       const unselectable = repo.status !== 'succeeded';
                       return (
@@ -248,17 +300,22 @@ export default function RepoSelect() {
                       );
                     })}
                   </ul>
-                  <div className="mt-3 flex items-center justify-between">
-                    <p className="text-[11.5px] text-muted">{selected.length}개 레포 선택됨</p>
-                    {/* ponytail: Private 레포 추가는 미구현이라 비활성. 기능이 생기면 연결한다. */}
+                  {!moreEnded && (
                     <button
                       type="button"
-                      disabled
-                      className="rounded-md border border-dashed border-line px-2.5 py-1.5 text-[11.5px] text-muted disabled:opacity-50"
+                      disabled={loadMore.isPending}
+                      onClick={() => loadMore.mutate(nextPage)}
+                      className="mt-2 w-full rounded-lg border border-line-soft py-2 text-[12px] text-muted disabled:opacity-60"
                     >
-                      + Private 레포 직접 추가
+                      {loadMore.isPending ? '레포를 분석하고 있어요...' : '내 레포 더 보기'}
                     </button>
-                  </div>
+                  )}
+                  {moreError && (
+                    <p role="alert" className="mt-2 text-[11.5px] text-error">
+                      {moreError}
+                    </p>
+                  )}
+                  <p className="mt-3 text-[11.5px] text-muted">{selected.length}개 레포 선택됨</p>
                 </div>
 
                 <div className="w-[260px] shrink-0 rounded-[10px] border border-line-soft p-3.5">

@@ -268,7 +268,7 @@ test('선택할 수 있는 레포가 없으면 안내와 공고 입력 이동을
   await page.addInitScript(() => localStorage.setItem('msw.result', 'all-failed'));
   await page.goto(`/interview/repos/${DONE_RUN}`);
   await expect(page.getByRole('alert')).toContainText('면접에 사용할 수 있는 레포가 없어요.');
-  await expect(page.getByRole('button', { name: '+ Private 레포 직접 추가' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: /Private 레포/ })).toHaveCount(0);
   await page.getByRole('button', { name: '공고 다시 입력' }).click();
   await expect(page).toHaveURL(/\/interview\/new$/);
 });

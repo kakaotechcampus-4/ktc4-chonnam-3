@@ -55,3 +55,43 @@ test('syncing 폴링 중 오류가 나면 폴링을 멈춘다', async ({ page })
   );
   expect(count).toBe(2);
 });
+
+test('syncing 폴링 중 5xx가 나면 폴링을 멈추고 다시 시도로 복구한다', async ({ page }) => {
+  await page.addInitScript(() => {
+    const calls = { count: 0 };
+    (window as unknown as { __homeCalls: typeof calls }).__homeCalls = calls;
+    const originalFetch = window.fetch;
+    window.fetch = async (input, options) => {
+      if (!String(input).endsWith('/api/me/home')) return originalFetch(input, options);
+      calls.count += 1;
+      // 첫 조회 성공(syncing) 뒤 폴링 1회와 자동 재시도 1회가 실패한다. 다시 시도부터는 성공한다.
+      const failed = calls.count === 2 || calls.count === 3;
+      const body = failed
+        ? { error: { reason: 'internal_error', message: '서버 오류' } }
+        : {
+            name: '김개발',
+            githubLinked: true,
+            repositoryCount: 3,
+            analysisStatus: calls.count === 1 ? 'syncing' : 'no_interview',
+            analysis: null,
+            recentInterviews: [],
+          };
+      return new Response(JSON.stringify(body), {
+        status: failed ? 500 : 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+  });
+  await page.goto('/home');
+  await expect(page.getByRole('alert')).toHaveText('정보를 불러오지 못했어요.', {
+    timeout: 10_000,
+  });
+  // 오류 뒤에도 3초 폴링이 이어지면 7초 동안 호출이 늘어난다.
+  await page.waitForTimeout(7_000);
+  const count = await page.evaluate(
+    () => (window as unknown as { __homeCalls: { count: number } }).__homeCalls.count,
+  );
+  expect(count).toBe(3);
+  await page.getByRole('button', { name: '다시 시도' }).click();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
