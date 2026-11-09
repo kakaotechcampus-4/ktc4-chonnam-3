@@ -32,6 +32,16 @@ class CreateInterviewResponse(CamelResponse):
     interview_id: uuid.UUID
 
 
+class QuestionRetryRequest(CamelModel):
+    request_id: uuid.UUID
+
+
+class QuestionRetryResponse(CamelResponse):
+    interview_id: uuid.UUID
+    session_id: str
+    turn_no: int
+
+
 class InterviewTurn(CamelResponse):
     """openapi InterviewTurn."""
 
@@ -70,3 +80,5 @@ class InterviewDetailResponse(CamelResponse):
     remaining_seconds: int
     turns: list[InterviewTurn]
     last_error: InterviewLastError | None
+    can_retry_question: bool = False
+    question_retry_count: int = 0

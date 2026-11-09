@@ -1,0 +1,43 @@
+diff --git a/backend/app/features/interview/router.py b/backend/app/features/interview/router.py
+--- a/backend/app/features/interview/router.py
++++ b/backend/app/features/interview/router.py
+@@ -23,6 +23,8 @@
+     CreateInterviewRequest,
+     CreateInterviewResponse,
+     InterviewDetailResponse,
++    QuestionRetryRequest,
++    QuestionRetryResponse,
+ )
+ from app.features.interview.tts_budget import RedisCharacterBudget
+ from app.integrations.tts.google import BudgetedSpeechSynthesizer, GoogleTTSClient, TtsError
+@@ -132,6 +134,30 @@
+     )
+ 
+ 
++@router.post("/{interview_id}/question/retry", response_model=QuestionRetryResponse)
++async def retry_question(
++    interview_id: str,
++    body: QuestionRetryRequest,
++    request: Request,
++    db: Database,
++    user: CurrentUser,
++) -> QuestionRetryResponse:
++    from app.features.interview.question_retry import retry_question as execute_retry
++
++    user_id = user.id
++    # 인증 조회의 트랜잭션을 닫고 전용 실행 세션으로 유한 재생성을 진행한다.
++    await db.rollback()
++    return await execute_retry(
++        request.app.state.session_factory,
++        request.app.state.redis,
++        user_id=user_id,
++        interview_id=_parse_id(interview_id, Reason.NOT_FOUND),
++        request_id=body.request_id,
++        settings=request.app.state.settings.require_llm(),
++        http_client=request.app.state.http_client,
++    )
++
++
+ @router.post("/{interview_id}/abandon", status_code=status.HTTP_204_NO_CONTENT)
+ async def abandon_interview(
+     interview_id: str, request: Request, db: Database, user: CurrentUser
