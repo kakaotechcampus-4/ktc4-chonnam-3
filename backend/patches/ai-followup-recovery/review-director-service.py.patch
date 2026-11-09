@@ -1,0 +1,96 @@
+diff --git a/backend/app/features/interview/director_service.py b/backend/app/features/interview/director_service.py
+--- a/backend/app/features/interview/director_service.py
++++ b/backend/app/features/interview/director_service.py
+@@ -13,6 +13,7 @@
+ 
+ import httpx
+ from devon_ai import contracts as c
++from devon_ai.agents.director.runtime import RecoveryFeedback
+ from sqlalchemy import select, update
+ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+ 
+@@ -174,6 +175,7 @@
+     lookup_summary: str = "",
+     tool_results: tuple[c.ToolResult, ...] = (),
+     preparation_guard: Callable[[AsyncSession, InterviewSession], Awaitable[bool]] | None = None,
++    recovery_feedback: RecoveryFeedback | None = None,
+ ) -> QuestionExecution:
+     """DB에서 확정한 입력으로 질문을 만들고 저장한다. 공개 전송·준비 완료는 호출자 책임이다.
+ 
+@@ -218,13 +220,18 @@
+             tool_results=tool_results,
+             http_client=http_client,
+             attempt_sink=attempts,
++            recovery_feedback=recovery_feedback,
+         )
+         async with sessions.begin() as db:
++            # 복구 기한 처리와 같은 세션→호출 순서를 지켜 결과 확정의 교착을 막는다.
++            await _owned(db, user_id, interview_id)
+             record = await db.get(LLMCallRecord, call_id, with_for_update=True)
+             if record is None:
+                 raise AgentStateError("call_unavailable")
+             record.attempts = [asdict(attempt) for attempt in result.attempts]
+             record.failure = asdict(result.failure) if result.failure else None
++            if record.discard_reason is not None:
++                return _outcome(record)
+             if result.failure is not None:
+                 return _outcome(record)
+             try:
+@@ -343,6 +350,17 @@
+     )
+     outcome = _outcome(record) if record is not None else None
+     director_record = await db.get(LLMCallRecord, uuid5(call_id, "director"))
++    if following is not None:
++        # 명시 복구로 확정된 다음 질문이 있으면 과거 반려를 현재 실패로 다시 전송하지 않는다.
++        return AnswerExecution(
++            call_id,
++            current.id if current else None,
++            following,
++            interview.status == "completed",
++            None,
++            None,
++            accepted,
++        )
+     if director_record is not None:
+         if (
+             director_record.interview_session_id != interview.id
+@@ -680,6 +698,19 @@
+                 settings=external_settings,
+                 http_client=http_client,
+             )
++        # 재생성은 최초 질문과 같은 보완 조회 결과를 사용한다. 조회나 T3를 다시 실행하지 않는다.
++        async with sessions.begin() as db:
++            interview = await _owned(db, user_id, interview_id)
++            state = dict(interview.context_state or {})
++            previous_inputs = state.get("director_retry_inputs", {})
++            if not isinstance(previous_inputs, dict):
++                raise AgentStateError("question_retry_inputs_invalid")
++            saved_inputs = dict(previous_inputs)
++            saved_inputs[str(turn_no + 1)] = {
++                "lookup_summary": summary,
++                "tool_results": [] if tool_result is None else [asdict(tool_result)],
++            }
++            interview.context_state = {**state, "director_retry_inputs": saved_inputs}
+         question = await start_director(
+             sessions,
+             user_id=user_id,
+@@ -692,6 +723,19 @@
+             lookup_summary=summary,
+             tool_results=() if tool_result is None else (tool_result,),
+         )
++        if question.failure is not None:
++            from app.features.interview.question_retry import auto_retry_question
++
++            recovered = await auto_retry_question(
++                sessions,
++                user_id=user_id,
++                interview_id=interview_id,
++                failed=question,
++                settings=settings,
++                http_client=http_client,
++            )
++            if recovered is not None:
++                question = recovered
+         return AnswerExecution(
+             call_id,
+             UUID(loaded.turn_id),

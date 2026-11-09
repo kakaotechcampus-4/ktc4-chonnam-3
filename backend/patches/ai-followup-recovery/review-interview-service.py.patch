@@ -1,0 +1,23 @@
+diff --git a/backend/app/features/interview/service.py b/backend/app/features/interview/service.py
+--- a/backend/app/features/interview/service.py
++++ b/backend/app/features/interview/service.py
+@@ -143,6 +143,9 @@
+     except RedisError:
+         raise AppError(Reason.INTERNAL_ERROR) from None
+     turns = await queries.list_turns(db, interview_id=interview.id)
++    from app.features.interview.question_retry import availability, progress
++
++    can_retry, retry_count = await availability(db, interview)
+     return InterviewDetailResponse(
+         id=interview.id,
+         session_id=session_id,
+@@ -158,6 +161,9 @@
+         turns=[_detail_turn(t, [(item.turn_no, item.depth) for item in turns]) for t in turns],
+         # openapi: preparing_failed 일 때만 내려준다.
+         last_error=_last_error(interview) if interview.status == "preparing_failed" else None,
++        can_retry_question=can_retry,
++        question_retry_count=retry_count,
++        question_retry_state=progress(interview),
+     )
+ 
+ 
