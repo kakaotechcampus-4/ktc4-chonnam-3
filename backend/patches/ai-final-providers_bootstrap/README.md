@@ -7,12 +7,14 @@
 
 | 패치 | 대상 | 적용 전 SHA256 | 적용 후 SHA256 | patch SHA256 |
 | --- | --- | --- | --- | --- |
-| `361f2d0f55c4-.env.example.patch` | `backend/.env.example` | `8c6546d3472f846b53323d391ccf14b3d1b54af9569091aecd3b9f68b098a6ca` | `0e9148293c840934f22b1756996d06fec30347f07e2e34e1945514ba500fb1d4` | `7b3874f9f10bbdb08371e9d5d8319e912fa2b634c4805aa676fbbc78e39df05f` |
+| `361f2d0f55c4-.env.example.patch` | `backend/.env.example` | `8c6546d3472f846b53323d391ccf14b3d1b54af9569091aecd3b9f68b098a6ca` | `5d80e97ba4018fb41a684eafc865adf6622e3f14cd5b5607dcbaa8bebaac5341` | `f52f5e6d7f78b7d4503787ea913dfcc618157220ac38e5565bb787d9c6435bdc` |
 | `79e828b8ae08-events.py.patch` | `backend/app/shared/events.py` | `0a001d691af8a01299b1b94ed3cc45a252b9c8af33c06ec7f8a10863d5bbb89b` | `ae6a3444c191ac8276da61e2f98bdcc71bfc2b591ef393a10c616d01aadba9c7` | `687d0785e2c66adc9b92ae0f1ea73f7d36c51138aaa4be37a027aac0c8206aec` |
 | `9b43f3c23789-client.py.patch` | `backend/app/integrations/stt/client.py` | `30e6e9a21b340fdec875faacd5b750b7a20a32bf47b0ca1e5bde514efde1326e` | `e67642f113712780ee6c4b5b641dd9e9095e3a3f1d7bd728e4f471a65544596e` | `ef92fab9062021c3a454be5a72938ec5ffad2305c0f4a8251ffae7b4c4538977` |
 | `c2a439a5efd7-config.py.patch` | `backend/app/core/config.py` | `de80b7e8e8717d41fc73fab4bacf19a32c5c513807c42003066011a794934e41` | `3138bc9f917597b8e07a5becc5d8455cc1e3ef17af95376a952b930cbb54e6fe` | `3943f1688e86ce96da50be4ecde257e7468bf9ee1f716990c5dffc8e23447192` |
 
 선행의 실제 병합 커밋으로 재기준한 뒤 적용한다. 적용 커밋·지문·통합 회귀를 spec/ai/implementation.md에 기록한 뒤에만 대기 패치를 제거한다.
+
+공유 모델 예제는 ADR 0011을 유지하며 개인 모델을 선택하지 않습니다. Settings 자격증명 정규화와 native PDF 우선 기본값은 이 패치에 포함된 후속 설정입니다. #185 등 선행 반영 뒤 실제 Settings에 적용하고 검증해야 합니다.
 
 <details>
 <summary>이전 안내·과거 기준 지문(현재 적용 지문으로 사용 금지)</summary>

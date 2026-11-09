@@ -7,9 +7,18 @@
 
 | 패치 | 대상 | 적용 전 SHA256 | 적용 후 SHA256 | patch SHA256 |
 | --- | --- | --- | --- | --- |
-| `runtime-all-consumers-test.py.patch` | `backend/tests/llm_tasks/test_runtime_capabilities.py` | `a031661105359acb6223cc80a6113ebf5b7e605d0bae2ab6ee73c5ee5ddcc89e` | `4cc441f0323f68ff27d17bccc0dd7b756e45c7c45196bbb403625aa89d4acc27` | `70b0d85e838d8725de31902fdbb2c63ad7bb7e6b8aa83f509be9dbf835397033` |
+| `runtime-all-consumers-test.py.patch` | `backend/tests/llm_tasks/test_runtime_capabilities.py` | `f670f01a86cf60972cf1bd4d9a258ecc0f3b56a862b2823311147da74d243805` | `4cc441f0323f68ff27d17bccc0dd7b756e45c7c45196bbb403625aa89d4acc27` | `d6e59de90da2b8d884b1226c88aea0487a9c1e3e660e01e567bc2994be868169` |
+| `optional-provider-settings-test.py.patch` | `backend/tests/core/test_optional_provider_config.py` | `없음` | `6a0b5c0afd963c945c84395979877d1e5e6e940a9296b1b6aed4e85dcf327e45` | `761b2d400be84c2764b5c9a1697bcc22f90e3fec6d019f4ceb7f3b8339787e22` |
+| `provider-example-assertions.py.patch` | `backend/tests/test_config.py` | `a9f2e99b4dccd346c8da371ce53a6274f3c73d0547fcda663f9c62539dbcae4a` | `491f3e3b7915b83e88aa411769e30a73d583d25c55822da47f66d52ad915ee6c` | `3829f4f06243b009a04c8fbba9d3f0242696d237d0356046facde13e8ba69e28` |
+| `final-provider-settings-test.py.patch` | `backend/tests/test_final_provider_settings.py` | `없음` | `ddd16f9447816b429917dd90eceac95d5c60815595eab261df24c7b51a4b2bf4` | `79d6d3a4f695653e64e1c1f915b27bc74eeb4df65677752313479a34230bac76` |
 
 선행의 실제 병합 커밋으로 재기준한 뒤 적용한다. 적용 커밋·지문·통합 회귀를 spec/ai/implementation.md에 기록한 뒤에만 대기 패치를 제거한다.
+
+선택 공급자 설정 회귀는 미병합 Settings 필드를 복사하지 않도록 신규 파일 패치로 보존합니다. #213 설정 패치를 실제 적용한 뒤 이 테스트도 함께 활성화합니다.
+
+Settings 필드·예제·공급자 설정 회귀를 원자적으로 적용합니다. 활성 예제 검사는 현재 Settings가 공개하는 비밀 필드를 확인합니다. 전체 공급자 필드의 엄격한 예제 검사, 기존 final_provider_settings 원문 전체, 신규 빈 credential 회귀는 이 디렉터리에 보존하며 설정·예제 패치와 함께 활성화해야 합니다. 테스트를 삭제하거나 skip하지 않고 적용 전·후 범위를 구분합니다.
+
+
 
 <details>
 <summary>이전 안내·과거 기준 지문(현재 적용 지문으로 사용 금지)</summary>
