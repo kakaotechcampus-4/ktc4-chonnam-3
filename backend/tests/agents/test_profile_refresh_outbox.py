@@ -242,3 +242,64 @@ async def test_recovery_pages_past_one_hundred_equal_timestamps_once(agent_sessi
     ids = {call.kwargs["_job_id"] for call in redis.enqueue_job.call_args_list}
     assert len(ids) == 101
     assert await helper.recover(agent_sessions, redis, now=now + timedelta(seconds=1)) == 0
+
+
+async def test_recovery_total_bound_leaves_remaining_events_durable(agent_sessions, agent_seed):
+    helper = api()
+    report_id = await seed_report(agent_sessions, agent_seed)
+    now = datetime.now(UTC)
+    async with agent_sessions.begin() as db:
+        db.add_all(
+            helper.ProfileRefreshRequest(
+                user_id=agent_seed["owner"],
+                report_id=report_id,
+                report_revision=index + 1,
+                next_attempt_at=now,
+                expires_at=now + timedelta(days=1),
+            )
+            for index in range(5)
+        )
+    redis = AsyncMock()
+    assert (
+        await helper.recover(
+            agent_sessions, redis, now=now + timedelta(seconds=1), page_size=2, max_pages=2
+        )
+        == 4
+    )
+    async with agent_sessions() as db:
+        assert (
+            await db.scalar(
+                select(func.count())
+                .select_from(helper.ProfileRefreshRequest)
+                .where(helper.ProfileRefreshRequest.status == "pending")
+            )
+            == 1
+        )
+
+
+async def test_concurrent_dispatches_have_one_delivery_owner(agent_sessions, agent_seed):
+    helper = api()
+    rid = await request(agent_sessions, agent_seed, await seed_report(agent_sessions, agent_seed))
+    redis = AsyncMock()
+    results = await asyncio.gather(*(helper.dispatch(agent_sessions, redis, rid) for _ in range(4)))
+    assert results.count(True) == 1
+    assert redis.enqueue_job.await_count == 1
+    assert (await read(agent_sessions, rid)).dispatch_attempts == 1
+
+
+async def test_accepted_job_then_lost_enqueue_response_never_reverts_worker_ack(
+    agent_sessions, agent_seed
+):
+    helper = api()
+    rid = await request(agent_sessions, agent_seed, await seed_report(agent_sessions, agent_seed))
+
+    async def accepted_then_disconnected(*args, **kwargs):
+        token = await helper.claim(agent_sessions, rid, agent_seed["owner"], 1)
+        assert token is not None
+        assert await helper.finish(agent_sessions, rid, token, success=True)
+        raise ConnectionError("response lost")
+
+    redis = AsyncMock()
+    redis.enqueue_job.side_effect = accepted_then_disconnected
+    assert await helper.dispatch(agent_sessions, redis, rid) is False
+    assert (await read(agent_sessions, rid)).status == "succeeded"
