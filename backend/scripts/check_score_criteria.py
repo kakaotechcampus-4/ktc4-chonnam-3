@@ -4,7 +4,8 @@ backend 에서 ``python -m scripts.check_score_criteria`` 로 실행한다. DB·
 읽기만 하므로 개발·스테이징·운영 어디서든 실행해 같은 형식의 결과를 이슈에 붙일 수 있다.
 활성 행이 SCORE_KEYS 6개와 정확히 같고 rubric 이 "0"~"4" 키를 가지며 각 단계 값이
 비어 있지 않은 문자열일 때만 exit 0 이다(AI 계약 RubricLevel 이 거절하는 값을 통과시키지 않는다).
-report:fail:* 는 활성화 전에 실패한 면접의 재시도 대상이며 삭제하지 않는다.
+report:fail:* 에는 rubric 활성화 이전 실패뿐 아니라 모델·출력·내부 오류도 들어간다.
+원인 확인이 필요한 실패 이력으로 보고 삭제하지 않는다.
 
 활성화 절차(시점은 평가 담당이 검수 후 정한다). seed_all 은 score_criteria 와
 domain_question_frames 를 같은 트랜잭션에서 갱신하므로 실행 전에 두 테이블의 활성 행을
