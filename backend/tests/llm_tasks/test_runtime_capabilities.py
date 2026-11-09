@@ -8,8 +8,6 @@ from devon_ai import contracts as c
 from scripts import configure_ai_runtime as runtime
 
 
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["missing", "unsupported"])
 async def test_activation_rejects_incomplete_installation_before_opening_database(

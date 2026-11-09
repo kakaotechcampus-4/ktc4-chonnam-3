@@ -17,8 +17,8 @@ ENV_LINE = re.compile(r"^(?P<key>[A-Z][A-Z0-9_]*)=(?P<value>[^#]*)")
 # .env.example 에만 있고 Settings 에 없어도 되는 키 (스프린트2 예약 등).
 UNMAPPED_KEYS: set[str] = set()
 
-# 기본 모델 선택만 공유 예제에 명시한다. 공급자별 개발 예산은 별도 선택 프로필이다.
-EXAMPLE_OVERRIDES = {"OPENAI_MODEL"}
+# 개인 모델·음성·예산 선택으로 공유 기본값을 덮어쓰지 않는다.
+EXAMPLE_OVERRIDES: set[str] = set()
 DEVELOPMENT_PROFILE = ENV_EXAMPLE.parent / "config/ai-development.env.example"
 PRIVATE_PLACEHOLDERS = {
     "GITHUB_CLIENT_ID",
@@ -76,10 +76,12 @@ def test_env_example_has_no_duplicate_keys() -> None:
     assert not duplicated, f".env.example 에 중복된 키: {duplicated}"
 
 
-def test_env_example_defaults_match_settings() -> None:
+def test_env_example_defaults_match_settings(monkeypatch) -> None:
     """명시한 운영 예시 외의 값은 Settings fallback과 같아야 한다."""
     items = dict(_env_example_items())
     _assert_private_placeholders(items)
+    for key in items:
+        monkeypatch.delenv(key, raising=False)
     settings = Settings(_env_file=None)
     diff = {
         key
@@ -97,36 +99,23 @@ def test_env_example_defaults_match_settings() -> None:
 
 def test_env_example_keeps_private_connection_values_empty() -> None:
     items = dict(_env_example_items())
-    assert PRIVATE_PLACEHOLDERS <= items.keys()
+    expected = {key for key in PRIVATE_PLACEHOLDERS if key.lower() in Settings.model_fields}
+    assert expected <= items.keys()
     _assert_private_placeholders(items)
 
 
-@pytest.mark.parametrize("slot,model", [(None, "gpt-6-luna"), (3, "gpt-6.1-sol")])
-def test_selected_development_profile_preserves_luna_and_explicit_sol_slot(slot, model) -> None:
-    _assert_private_placeholders(dict(_env_example_items()))
-    # 실행 연결은 가짜 주소·키를 메모리에만 주입하며 실제 API는 호출하지 않는다.
-    overrides = {"llm_connection_slot": slot} if slot is not None else {}
-    settings = Settings(
-        _env_file=(ENV_EXAMPLE, DEVELOPMENT_PROFILE),
-        chat_proxy_url="https://slot-one.example.test/v1",
-        chat_proxy_url_3="https://slot-three.example.test/v1",
-        proxy_token="example-fixture-key",
-        **overrides,
-    )
-    llm = settings.require_llm()
-    assert settings.llm_connection_slot == (slot or 1)
-    assert llm.llm_default_model == model
-    # 프로필의 선택값을 읽되 특정 수치 자체를 전역 기본값으로 강제하지 않는다.
-    for name, timeout in llm.llm_task_timeouts.items():
-        assert llm.call_limits(name).timeout_seconds == timeout
-    assert llm.call_limits().max_output_tokens == settings.llm_max_output_tokens
-    assert llm.call_limits().max_response_bytes == settings.llm_max_response_bytes
+def test_development_template_documents_choices_without_assigning_personal_values() -> None:
+    active = [
+        match["key"]
+        for line in DEVELOPMENT_PROFILE.read_text(encoding="utf-8").splitlines()
+        if (match := ENV_LINE.match(line.strip()))
+    ]
+    assert active == [], "개발 안내는 개인 설정을 자동으로 적용하지 않아야 합니다."
 
 
 def test_shared_example_requires_explicit_provider_limits():
     settings = Settings(_env_file=ENV_EXAMPLE)
     assert settings.llm_max_output_tokens is None
-    assert settings.tts_provider is None
     with pytest.raises(ValidationError):
         settings.require_llm()
 

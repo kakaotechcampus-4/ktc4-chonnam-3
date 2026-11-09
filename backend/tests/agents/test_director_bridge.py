@@ -108,7 +108,7 @@ async def test_director_adapter_shares_two_attempts_and_forwards_provider_settin
     async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as http:
         result = await execute_director(
             context(),
-            prompt=c.PromptSpec("director", "fixture", "fixture-model", "fixture"),
+            prompt=c.PromptSpec("director", "director_v2", "fixture-model", "fixture"),
             settings=settings(),
             budget=budget,
             http_client=http,
@@ -149,7 +149,9 @@ async def test_answer_adapter_cannot_retry_past_the_requested_single_attempt():
             checked,
             turn_id="turn-1",
             answer_text="제가 구현했습니다.",
-            prompt=c.PromptSpec("answer_analysis", "fixture", "fixture-model", "fixture"),
+            prompt=c.PromptSpec(
+                "answer_analysis", "answer_analysis_v1", "fixture-model", "fixture"
+            ),
             settings=settings(),
             budget=CallBudget(),
             max_attempts=1,
@@ -204,7 +206,7 @@ async def test_director_cancellation_preserves_only_completed_attempts(phase):
         task = asyncio.create_task(
             execute_director(
                 context(),
-                prompt=c.PromptSpec("director", "fixture", "fixture-model", "fixture"),
+                prompt=c.PromptSpec("director", "director_v2", "fixture-model", "fixture"),
                 settings=settings(),
                 budget=CallBudget(),
                 http_client=http,

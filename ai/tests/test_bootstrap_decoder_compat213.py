@@ -107,6 +107,22 @@ def test_legacy_director_omitted_or_empty_common_defaults_keep_plan_review_budge
     assert all(request.max_attempts == 1 for request in provider.requests)
 
 
+@pytest.mark.parametrize("version", ["future-fixture-version", "director_v999@deployment"])
+def test_unregistered_runtime_version_never_reaches_the_provider(version):
+    provider = Provider(legacy_plan(), REVIEW)
+    result = run_director(provider, version)
+    assert result.failure is not None
+    assert result.failure.error_code == "director_input_invalid"
+    assert result.attempts == () and provider.requests == []
+
+
+def test_score_turn_preserves_legacy_sixth_positional_linked_requirements():
+    linked = c.LinkedRequirement("jd-1", "API 개발", "required")
+    turn = c.ScoreTurn("turn-1", "hr_manager", "질문", "답변", contract(), (linked,))
+    assert turn.jd_requirements == (linked,)
+    assert turn.jd_requirement_ids == ()
+
+
 @pytest.mark.parametrize("corrupt", ["extra", "missing", "nested_extra"])
 def test_director_still_rejects_extra_or_missing_required_fields(corrupt):
     raw = legacy_plan(True)

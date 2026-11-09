@@ -47,8 +47,11 @@ def candidate(contract, **changes):
 
 def model_output(question):
     data = asdict(question)
-    del data["question_contract"]
-    return data
+    # 기존 생성기의 출력 계약은 dataclass의 내부 관계 필드와 별개다.
+    return {
+        key: data[key]
+        for key in ("persona", "text", "topic_code", "evidence_refs", "jd_requirement_ids")
+    }
 
 
 def metadata():

@@ -6,7 +6,7 @@ from app.features.interview.prepare_lease import JOB_TIMEOUT_SECONDS
 from app.workers.arq_app import WorkerSettings
 
 
-def test_registered_jobs_keep_names_and_scope_long_timeouts():
+async def test_registered_jobs_keep_names_and_scope_long_timeouts():
     worker = Worker(
         WorkerSettings.functions, job_timeout=WorkerSettings.job_timeout, handle_signals=False
     )
@@ -20,10 +20,25 @@ def test_registered_jobs_keep_names_and_scope_long_timeouts():
 
 
 def test_legacy_two_argument_preparation_budget_remains_compatible():
-    from app.features.interview.prepare_lease import validate_timeout
+    import pytest
 
-    # 구형 호출자는 문서·Claim 작업을 넘기지 않는다. 신규 호출자는 각 예산을 명시한다.
-    validate_timeout(30, 200)
+    from app.features.interview.prepare_lease import PreparationTimeoutError, validate_timeout
+
+    # 구형 호출은 600초와 4T를 유지하고 신규 작업의 1770초 경로와 분리한다.
+    validate_timeout(30, 127.5)
+    with pytest.raises(PreparationTimeoutError):
+        validate_timeout(30, 127.6)
+
+
+def test_legacy_claim_expiry_keeps_the_original_worker_grace():
+    from datetime import UTC, datetime, timedelta
+    from types import SimpleNamespace
+
+    from app.features.interview.prepare_lease import expires
+
+    updated = datetime.now(UTC)
+    row = SimpleNamespace(context_state={}, updated_at=updated)
+    assert expires(row) == updated + timedelta(seconds=600)
 
 
 def test_explicit_document_and_claim_budgets_are_included():
