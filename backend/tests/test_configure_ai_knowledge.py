@@ -261,3 +261,17 @@ async def test_database_failure_rolls_back_both_knowledge_tables(knowledge_datab
     async with sessions() as db:
         assert await db.scalar(select(func.count()).select_from(ScoreCriterion)) == 0
         assert await db.scalar(select(func.count()).select_from(DomainQuestionFrame)) == 0
+
+
+async def test_incomplete_draft_bundle_is_rejected_without_activation(
+    knowledge_database, monkeypatch
+):
+    sessions, config, selected = knowledge_database
+    command = module()
+    monkeypatch.setattr(command, "SCORE_CRITERIA", SCORE_CRITERIA[:-1])
+    with pytest.raises(command.KnowledgeConfigurationError):
+        await command.configure_knowledge(
+            sessions, config, selected, allow_unreviewed=True, actor="functional-test", apply=True
+        )
+    async with sessions() as db:
+        assert await db.scalar(select(func.count()).select_from(ScoreCriterion)) == 0
