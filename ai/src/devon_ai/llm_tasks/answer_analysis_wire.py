@@ -233,3 +233,127 @@ def _items(value: object, name: str) -> list[object]:
     if any(item in value[:index] for index, item in enumerate(value)):
         raise c.ContractError("semantic", "duplicate " + name)
     return value
+
+
+def canonical_output(raw: object, *, answer: str, keys: tuple[str, ...]) -> dict[str, object]:
+    """판정값을 바꾸지 않고 원문 ID·필드 배치·중복된 파생 flag만 표현 변환한다."""
+    data = _fields(
+        raw,
+        (
+            "coverage_assessment",
+            "technical_assessment",
+            "contribution_scope",
+            "claim_checks",
+            "verification_requests",
+            "external_queries",
+        ),
+        "answer analysis wire",
+    )
+    source = {unit.id: unit.text for unit in answer_units(answer)}
+
+    def quote(identifier: object) -> str:
+        name = _text(identifier, "answer quote ID")
+        if name not in source:
+            raise c.ContractError("semantic", "answer quote ID")
+        return source[name]
+
+    def quotes(ids: object) -> list[str]:
+        return [quote(identifier) for identifier in _strings(ids, "answer quote IDs")]
+
+    coverage = _fields(
+        data["coverage_assessment"],
+        ("evaluation_status", "sufficiency", "covered_points", "missing_points", "limitations"),
+        "coverage assessment",
+    )
+    covered = _fields(coverage["covered_points"], keys, "covered point keys")
+    limits = _strings(coverage["limitations"], "coverage limitations")
+    technical = _fields(
+        data["technical_assessment"],
+        ("explanation", "quote_ids", "evidence_refs", "limitations"),
+        "technical assessment",
+    )
+    contribution = _fields(
+        data["contribution_scope"], ("scope", "quote_ids", "unknown_reason"), "contribution scope"
+    )
+    if contribution["scope"] == "unknown":
+        reason = _text(contribution["unknown_reason"], "unknown contribution reason")
+        if reason not in limits:
+            limits.append(reason)
+    elif contribution["unknown_reason"] is not None:
+        raise c.ContractError("schema", "known contribution reason")
+    claims = []
+    claim_ids: set[str] = set()
+    for item in _items(data["claim_checks"], "claim checks"):
+        claim = _fields(item, ("quote_id", "status", "evidence_refs", "limitations"), "claim check")
+        identifier = _text(claim["quote_id"], "claim quote ID")
+        if identifier in claim_ids:
+            # 한 원문 unit의 혼합 주장은 한 partially_supported 판정과 한계로 표현한다.
+            raise c.ContractError("semantic", "duplicate claim quote ID")
+        claim_ids.add(identifier)
+        claims.append(
+            {
+                "claim_text": quote(identifier),
+                "status": claim["status"],
+                "evidence_refs": _strings(claim["evidence_refs"], "claim evidence"),
+                "limitations": _strings(claim["limitations"], "claim limitations"),
+            }
+        )
+    requests = []
+    for item in _items(data["verification_requests"], "verification requests"):
+        request = _fields(
+            item,
+            ("claim_quote_id", "purpose", "repository_id", "git_ref", "allowed_paths"),
+            "verification request",
+        )
+        requests.append(
+            {
+                "claim_text": quote(request["claim_quote_id"]),
+                "purpose": _text(request["purpose"], "verification purpose"),
+                "repository_id": request["repository_id"],
+                "git_ref": request["git_ref"],
+                "allowed_paths": _strings(request["allowed_paths"], "verification paths"),
+            }
+        )
+    external = []
+    for item in _items(data["external_queries"], "external queries"):
+        query = _fields(item, ("query", "purpose"), "external query")
+        external.append({key: _text(value, "external query") for key, value in query.items()})
+    if len(external) > 2:
+        raise c.ContractError("semantic", "external query count")
+    return {
+        "evaluation_status": coverage["evaluation_status"],
+        "sufficiency": coverage["sufficiency"],
+        "covered_points": [
+            {"key": key, "answer_quotes": quotes(ids)}
+            for key, ids in covered.items()
+            if ids is not None
+        ],
+        "missing_points": _strings(coverage["missing_points"], "missing points"),
+        "technical_assessment": {
+            "explanation": _text(technical["explanation"], "technical explanation"),
+            "answer_quotes": quotes(technical["quote_ids"]),
+            "evidence_refs": _strings(technical["evidence_refs"], "technical evidence"),
+            "limitations": _strings(technical["limitations"], "technical limitations"),
+        },
+        "contribution_scope": {
+            "scope": contribution["scope"],
+            "answer_quotes": quotes(contribution["quote_ids"]),
+        },
+        "claim_checks": claims,
+        "verification_requests": requests,
+        "external_queries": external,
+        # 요청 유무를 중복 출력시키지 않는다. 실제 요청 배열의 존재 여부만 나타낸다.
+        "needs_verification": bool(requests or external),
+        "limitations": limits,
+    }
+
+
+def validate_wire_constraints(raw: object) -> None:
+    """공용 의미 검증 뒤 v6에서 추가한 명시적 한계·nullable 조건을 확인한다."""
+    assert isinstance(raw, dict)
+    coverage = raw["coverage_assessment"]
+    assert isinstance(coverage, dict)
+    if (
+        coverage["sufficiency"] != "sufficient" or coverage["evaluation_status"] != "evaluated"
+    ) and not coverage["limitations"]:
+        raise c.ContractError("semantic", "coverage limitations")
