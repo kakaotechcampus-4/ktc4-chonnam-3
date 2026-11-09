@@ -42,6 +42,8 @@ from app.features.interview.answer_audio import (
 )
 from app.features.interview.director_service import AnswerExecution, log_recovery, process_answer
 from app.features.interview.queries import list_turns
+from app.features.interview.question_audio import question_audio_url
+from app.features.interview.question_replay import ExplicitReplayCommands, should_replay
 from app.features.interview.schemas import InterviewLastError
 from app.features.interview.service import (
     REALTIME_SESSION_TTL_SECONDS,
@@ -92,6 +94,7 @@ class _State:
     snapshot: dict[str, object]
     last_error: dict[str, object] | None
     prepare_steps: tuple[tuple[str, str], ...]
+    answer_mode: str = "voice"
 
 
 def _preparation_steps(raw: object) -> tuple[tuple[str, str], ...]:
@@ -218,8 +221,13 @@ async def _read_state(socket: WebSocket, user_id: UUID, interview_id: UUID) -> _
                 "turn": current.turn_no,
                 "mainIndex": main_index,
                 "followUpDepth": follow_up_depth,
-                # 질문 음성(TTS)은 이번 범위 밖이다. FE가 질문 텍스트를 보여 준다(0007).
-                "audioUrl": None,
+                # 텍스트를 즉시 전달하고 음성은 인증된 별도 요청에서 합성·캐시한다.
+                "audioUrl": question_audio_url(
+                    socket.app.state.settings.api_prefix, interview_id, current.turn_no
+                )
+                if interview.answer_mode == "voice"
+                and getattr(socket.app.state.settings, "tts_provider", None)
+                else None,
             }
         snapshot = {
             "status": interview.status,
@@ -242,6 +250,7 @@ async def _read_state(socket: WebSocket, user_id: UUID, interview_id: UUID) -> _
             snapshot,
             interview.last_error,
             _preparation_steps(interview.prepare_steps),
+            interview.answer_mode,
         )
 
 
@@ -427,6 +436,10 @@ class _Connection:
         if not self.connected:
             return False
         state = await _read_state(self.socket, user_id, self.interview_id)
+        if state.status == "abandoned":
+            # 중단 알림이 유실돼도 DB의 확정 상태에서 과거 질문을 다시 전달하지 않는다.
+            await self.close()
+            return False
         preparing = state.status == "preparing"
         if preparing:
             state = await self.preparation(state, user_id)
@@ -525,6 +538,9 @@ async def _answer_start(
 ) -> None:
     """지금 답변할 수 있는 턴일 때만 새 오디오를 받기 시작한다. 거절해도 받던 오디오는 둔다."""
     state = await _read_state(connection.socket, user_id, connection.interview_id)
+    if state.status != "in_progress" or state.answer_mode != "voice":
+        await connection.send(_error("answer_rejected"))
+        return
     current_turn = cast(int, state.snapshot["currentTurn"])
     answerable = cast(int, state.question["turn"]) if state.question is not None else None
     reason = turn_rejection(start.turn, current_turn, answerable)
@@ -575,6 +591,16 @@ async def _answer_end(
     except AnswerAudioTooLong:
         await _audio_too_long(connection, end.turn)
         return True
+    current = await _read_state(connection.socket, user_id, connection.interview_id)
+    if (
+        current.status != "in_progress"
+        or current.answer_mode != "voice"
+        or current.question is None
+        or current.question["turn"] != end.turn
+    ):
+        # 녹음 도중 중단·턴 확정·입력 모드 변경이 일어나면 유료 전사를 시작하지 않는다.
+        await connection.send(_error("answer_rejected"))
+        return True
     try:
         text = await _stt_client(connection.socket).transcribe(audio.data, audio.mime_type)
     except SttError as exc:
@@ -608,11 +634,30 @@ async def _answer_end(
 
 
 async def _run_answer(
-    connection: _Connection, user_id: UUID, turn: int, text: str, invalid_turn_reason: str
+    connection: _Connection,
+    user_id: UUID,
+    turn: int,
+    text: str,
+    invalid_turn_reason: str,
+    *,
+    answer_mode: str = "voice",
 ) -> bool:
     """저장·분석·다음 질문 복구까지 수행한다. 연결을 더 쓸 수 없으면 False."""
+    classifier = getattr(connection.socket.app.state, "replay_intent_classifier", None)
+    if answer_mode == "voice" and (
+        ExplicitReplayCommands().is_explicit(text) or classifier is not None
+    ):
+        current = await _read_state(connection.socket, user_id, connection.interview_id)
+        question = current.question
+        if current.answer_mode == "voice" and question is not None and question["turn"] == turn:
+            if await should_replay(text, str(question["text"]), classifier):
+                # 분류 대기 중 다른 턴이 확정됐으면 오래된 질문을 다시 전달하지 않는다.
+                latest = await _read_state(connection.socket, user_id, connection.interview_id)
+                if latest.question is not None and latest.question == question:
+                    await connection.send(latest.question)
+                    return True
     try:
-        result = await _execute(connection, user_id, turn, text)
+        result = await _execute(connection, user_id, turn, text, answer_mode=answer_mode)
     except AgentStateError as exc:
         if exc.reason == "answer_turn_invalid":
             # 저장되지 않았으므로 answerReceived는 가지 않았다. 텍스트는 stale, 음성은 rejected.
@@ -631,11 +676,18 @@ async def _run_answer(
     return await connection.restore(user_id)
 
 
-async def _execute(connection: _Connection, user_id: UUID, turn: int, text: str) -> AnswerExecution:
+async def _execute(
+    connection: _Connection, user_id: UUID, turn: int, text: str, *, answer_mode: str
+) -> AnswerExecution:
     state = connection.socket.app.state
     config = state.settings
     current = await _read_state(connection.socket, user_id, connection.interview_id)
-    if current.question is None or current.question["turn"] != turn:
+    if (
+        current.status != "in_progress"
+        or current.answer_mode != answer_mode
+        or current.question is None
+        or current.question["turn"] != turn
+    ):
         raise AgentStateError("answer_turn_invalid")
     try:
         llm = config.require_llm()
@@ -660,7 +712,13 @@ async def _execute(connection: _Connection, user_id: UUID, turn: int, text: str)
     with CancelScope(shield=True):
         # 연결 인계용 유한 표식이다. 호출·재시도 대기·근거 조회 예산과 정리 여유를 포함한다.
         lifetime = ceil(
-            6 * llm.llm_timeout_seconds + config.director_evidence_timeout_seconds + 120
+            6
+            * max(
+                llm.call_limits("answer_analysis").timeout_seconds,
+                llm.call_limits("director").timeout_seconds,
+            )
+            + config.director_evidence_timeout_seconds
+            + 120
         )
         claimed = await _script(
             connection.redis,
@@ -686,6 +744,7 @@ async def _execute(connection: _Connection, user_id: UUID, turn: int, text: str)
                 text=text,
                 call_id=uuid4(),
                 settings=llm,
+                external_settings=config,
                 http_client=state.http_client,
                 evidence_limits=EvidenceLimits(
                     config.director_evidence_max_requests,
@@ -701,6 +760,42 @@ async def _execute(connection: _Connection, user_id: UUID, turn: int, text: str)
             with suppress(RedisError):
                 await _script(connection.redis, _RELEASE, 1, connection.work, connection.nonce)
     return result
+
+
+async def _handle_input(
+    connection: _Connection,
+    user_id: UUID,
+    audio: AnswerAudioBuffer,
+    raw_answer: object,
+    answer_mode: str,
+) -> bool:
+    """세션의 고정 입력 모드를 전사·평가·저장 전에 검사한다."""
+    if isinstance(raw_answer, bytes):
+        if answer_mode != "voice":
+            await connection.send(_error("answer_rejected"))
+            return True
+        await _answer_chunk(connection, audio, raw_answer)
+        return True
+    voice = parse_voice_message(raw_answer)
+    if isinstance(voice, (AnswerStart, AnswerEnd)):
+        if answer_mode != "voice":
+            await connection.send(_error("answer_rejected"))
+            return True
+        if isinstance(voice, AnswerStart):
+            await _answer_start(connection, user_id, audio, voice)
+            return True
+        return await _answer_end(connection, user_id, audio, voice)
+    if answer_mode != "text":
+        await connection.send(_error("answer_rejected"))
+        return True
+    parsed = _answer(raw_answer)
+    if isinstance(parsed, str):
+        await connection.send(_error(parsed))
+        return True
+    turn, text = parsed
+    return await _run_answer(
+        connection, user_id, turn, text, "answer_stale_turn", answer_mode=answer_mode
+    )
 
 
 @router.websocket("/{session_id}")
@@ -769,24 +864,7 @@ async def interview_socket(socket: WebSocket, session_id: str) -> None:
             if not await connection.refresh():
                 await connection.close(1008)
                 return
-            if isinstance(raw_answer, bytes):
-                await _answer_chunk(connection, audio, raw_answer)
-                continue
-            voice = parse_voice_message(raw_answer)
-            if isinstance(voice, AnswerStart):
-                await _answer_start(connection, user_id, audio, voice)
-                continue
-            if isinstance(voice, AnswerEnd):
-                if not await _answer_end(connection, user_id, audio, voice):
-                    return
-                continue
-            # 텍스트 answer는 5단계(answer_mode → voice)에서 0007에 맞춰 제거한다. 그 전까지 유지.
-            parsed = _answer(raw_answer)
-            if isinstance(parsed, str):
-                await connection.send(_error(parsed))
-                continue
-            turn, text = parsed
-            if not await _run_answer(connection, user_id, turn, text, "answer_stale_turn"):
+            if not await _handle_input(connection, user_id, audio, raw_answer, initial.answer_mode):
                 return
     except WebSocketDisconnect:
         connection.connected = False
