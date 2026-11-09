@@ -260,3 +260,247 @@ async def test_invalid_claim_locations_finish_failed_without_partial_rows(
         records = list(await db.scalars(select(LLMCallRecord)))
         assert len(records) == 2
         assert all(row.failure["error_code"] == "document_source_invalid" for row in records)
+
+
+async def test_deployment_identity_survives_database_loader_and_model_bridge(app, selected):
+    interview_id, job_id, ids = selected
+    version = "doc_claims_v1@luna-local"
+    async with app.state.session_factory.begin() as db:
+        (await db.scalar(select(PromptVersion))).is_active = False
+        await db.flush()
+        db.add(
+            PromptVersion(
+                task_name="doc_claims",
+                version=version,
+                model="test",
+                template="claims",
+                is_active=True,
+            )
+        )
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        body = json.loads(request.content)
+        assert body["model"] == "test"
+        return httpx.Response(
+            200,
+            json={
+                "id": "fixture",
+                "model": "test",
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": json.dumps(
+                                    {
+                                        "claims": [
+                                            {
+                                                "claim_text": "Role stated",
+                                                "claim_type": "role",
+                                                "tech_tags": [],
+                                                "line_id": "L0",
+                                            }
+                                        ]
+                                    }
+                                ),
+                            }
+                        ],
+                    }
+                ],
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+        for _ in range(2):
+            await claims.prepare_selected_document_claims(
+                app.state.session_factory, interview_id, settings(), http, job_id=job_id
+            )
+    assert len(calls) == 2
+    async with app.state.session_factory() as db:
+        for item in ids[:2]:
+            assert (await db.get(UserDocument, item)).claims_prompt_version == version
+        records = list(await db.scalars(select(LLMCallRecord)))
+        assert len(records) == 2
+        assert all(row.attempts[0]["prompt_version"] == version for row in records)
+
+
+async def test_other_interview_waits_for_shared_claims_and_synchronizes_status(
+    app, selected, monkeypatch
+):
+    from app.db.models import AnalysisJob, User
+
+    interview_id, job_id, _ = selected
+    async with app.state.session_factory.begin() as db:
+        original = await db.get(InterviewSession, interview_id)
+        previous_run = await db.get(AnalysisJob, original.analysis_job_id)
+        user = await db.get(User, original.user_id)
+        run = await make_run(db, user)
+        run.document_id = previous_run.document_id
+        run.cover_letter_document_id = previous_run.cover_letter_document_id
+        repo = await make_repo(db, run)
+        second = await make_interview(db, run, [repo], status="preparing")
+        second_job = uuid4()
+        claim(second, second_job)
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls = []
+
+    async def blocked(text, **kwargs):
+        calls.append(text)
+        if "portfolio" in text:
+            entered.set()
+            await release.wait()
+        return await extract(text)
+
+    monkeypatch.setattr(claims, "analyze_document_claims", blocked)
+    first = asyncio.create_task(
+        claims.prepare_selected_document_claims(
+            app.state.session_factory, interview_id, settings(), job_id=job_id
+        )
+    )
+    await asyncio.wait_for(entered.wait(), 5)
+    other = asyncio.create_task(
+        claims.prepare_selected_document_claims(
+            app.state.session_factory, second.id, settings(), job_id=second_job
+        )
+    )
+    await asyncio.sleep(0.05)
+    release.set()
+    await asyncio.wait_for(asyncio.gather(first, other), 10)
+    assert len(calls) == 2
+    async with app.state.session_factory() as db:
+        row = await db.get(InterviewSession, second.id)
+        assert row.context_state["document_claims_status"] == "succeeded"
+        assert all(
+            item["status"] == "succeeded"
+            for item in row.context_state["document_claims_results"].values()
+        )
+
+
+async def test_other_running_document_finishes_with_explicit_unavailability(
+    app, selected, monkeypatch
+):
+    interview_id, job_id, ids = selected
+    other_run = uuid4()
+    fixed_now = datetime(2026, 11, 10, tzinfo=UTC)
+
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now
+
+    monkeypatch.setattr(claims, "datetime", FixedDateTime)
+    async with app.state.session_factory.begin() as db:
+        first = await db.get(UserDocument, ids[0])
+        first.claims_status, first.claims_run_id = "running", other_run
+        first.updated_at = fixed_now - timedelta(days=1)
+        first.claims_lease_expires_at = fixed_now + timedelta(hours=1)
+        second = await db.get(UserDocument, ids[1])
+        second.claims_status = "succeeded"
+        second.claims_source_version = second.source_snapshot["text_hash"]
+        second.claims_prompt_version = "doc_claims_v1"
+
+    async def unexpected(*args, **kwargs):
+        raise AssertionError("A shared live reservation must not start another model call")
+
+    monkeypatch.setattr(claims, "analyze_document_claims", unexpected)
+    bounded = settings().model_copy(update={"llm_timeout_seconds": 0.05})
+    await asyncio.wait_for(
+        claims.prepare_selected_document_claims(
+            app.state.session_factory, interview_id, bounded, job_id=job_id
+        ),
+        5,
+    )
+    async with app.state.session_factory() as db:
+        document = await db.get(UserDocument, ids[0])
+        row = await db.get(InterviewSession, interview_id)
+        assert document.claims_status == "running" and document.claims_run_id == other_run
+        assert row.context_state["document_claims_status"] == "not_available"
+        assert row.context_state["document_claims_error_code"] == "document_claims_wait_timeout"
+        assert await db.scalar(select(LLMCallRecord)) is None
+
+
+@pytest.mark.parametrize("explicit_lease", [True, False])
+async def test_short_waiter_cannot_steal_an_active_or_legacy_unknown_writer_lease(
+    app, selected, monkeypatch, explicit_lease
+):
+    interview_id, job_id, ids = selected
+    writer = uuid4()
+    async with app.state.session_factory.begin() as db:
+        row = await db.get(UserDocument, ids[0])
+        row.claims_status, row.claims_run_id = "running", writer
+        row.updated_at = datetime.now(UTC) - timedelta(hours=1)
+        row.claims_lease_expires_at = (
+            datetime.now(UTC) + timedelta(hours=1) if explicit_lease else None
+        )
+
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("A short waiter must not replace another writer")
+
+    monkeypatch.setattr(claims, "analyze_document_claims", forbidden)
+    bounded = settings().model_copy(update={"llm_timeout_seconds": 0.05})
+    assert (
+        await claims._prepare_document_once(
+            app.state.session_factory, interview_id, ids[0], job_id, bounded, None
+        )
+        is True
+    )
+    async with app.state.session_factory() as db:
+        row = await db.get(UserDocument, ids[0])
+        assert row.claims_status == "running" and row.claims_run_id == writer
+
+
+async def test_same_job_stale_document_result_cannot_replace_new_reservation(
+    app, selected, monkeypatch
+):
+    interview_id, job_id, ids = selected
+    entered, release = asyncio.Event(), asyncio.Event()
+    requests = []
+
+    async def delayed(text, **kwargs):
+        requests.append(text)
+        if len(requests) == 1:
+            entered.set()
+            await release.wait()
+            label = "old"
+        else:
+            label = "new"
+        return ClaimExtraction((AIClaim(label, "role", (), 0, text),), None, ())
+
+    monkeypatch.setattr(claims, "analyze_document_claims", delayed)
+    first = asyncio.create_task(
+        claims.prepare_selected_document_claims(
+            app.state.session_factory, interview_id, settings(), job_id=job_id
+        )
+    )
+    await asyncio.wait_for(entered.wait(), 5)
+    async with app.state.session_factory.begin() as db:
+        document = await db.get(UserDocument, ids[0])
+        old_run = document.claims_run_id
+        document.claims_lease_expires_at = datetime.now(UTC) - timedelta(hours=1)
+    try:
+        await claims.prepare_selected_document_claims(
+            app.state.session_factory, interview_id, settings(), job_id=job_id
+        )
+    finally:
+        release.set()
+        await asyncio.wait_for(first, 5)
+    async with app.state.session_factory() as db:
+        document = await db.get(UserDocument, ids[0])
+        rows = list(
+            await db.scalars(select(DocumentClaim).where(DocumentClaim.document_id == ids[0]))
+        )
+        assert len(rows) == 1 and rows[0].claim_text == "new"
+        assert document.claims_active_ids == [str(rows[0].id)]
+        assert (
+            await db.get(LLMCallRecord, old_run)
+        ).discard_reason == "selected_document_or_preparation_changed"
+        assert (await db.get(InterviewSession, interview_id)).context_state[
+            "document_claims_status"
+        ] == "succeeded"
