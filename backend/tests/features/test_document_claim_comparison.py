@@ -268,3 +268,125 @@ async def test_changed_document_during_model_call_discards_old_result(app):
             select(LLMCallRecord).where(LLMCallRecord.task_name == "claim_code")
         )
         assert record.discard_reason == "comparison_input_or_preparation_changed"
+
+
+async def test_changed_code_is_not_presented_as_valid_comparison(app):
+    interview_id, job_id, claim_id, _, evidence_id = await seed(app)
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(provider(claim_id, evidence_id, []))
+    ) as http:
+        await prepare_selected_claim_comparisons(
+            app.state.session_factory, interview_id, settings(), http, job_id=job_id
+        )
+    async with app.state.session_factory.begin() as db:
+        evidence = await db.get(Evidence, evidence_id)
+        evidence.snippet = "Different code"
+    async with app.state.session_factory() as db:
+        sources = await load_claim_comparison_sources(
+            db, await db.get(InterviewSession, interview_id)
+        )
+        assert "comparison_code_source_unavailable" in sources[0].limitations
+        assert json.loads(sources[0].content)["comparison"]["status"] == "unverified"
+
+
+async def test_explicit_new_preparation_keeps_failed_comparison_immutable(app):
+    interview_id, job_id, claim_id, _, evidence_id = await seed(app)
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(400))
+    ) as http:
+        await prepare_selected_claim_comparisons(
+            app.state.session_factory, interview_id, settings(), http, job_id=job_id
+        )
+    async with app.state.session_factory.begin() as db:
+        old = await db.scalar(select(DocumentClaimComparison))
+        old_id, old_result = old.id, dict(old.result)
+        assert old.execution_status == "failed"
+        new_job = uuid4()
+        acquire(await db.get(InterviewSession, interview_id), new_job)
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(provider(claim_id, evidence_id, []))
+    ) as http:
+        await prepare_selected_claim_comparisons(
+            app.state.session_factory, interview_id, settings(), http, job_id=new_job
+        )
+    async with app.state.session_factory() as db:
+        old = await db.get(DocumentClaimComparison, old_id)
+        assert old.result == old_result and old.execution_status == "failed"
+        interview = await db.get(InterviewSession, interview_id)
+        current = await load_claim_comparison_sources(db, interview)
+        archive = await load_claim_comparison_sources(db, interview, include_historical=True)
+        assert len(current) == 1 and current[0].source_id != str(old_id)
+        assert len(archive) == 2
+
+
+async def test_concurrent_same_preparation_reserves_only_one_model_batch(app):
+    interview_id, job_id, claim_id, _, evidence_id = await seed(app)
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls = []
+    respond = provider(claim_id, evidence_id, calls)
+
+    async def paused(request):
+        entered.set()
+        await release.wait()
+        return respond(request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(paused)) as http:
+        first = asyncio.create_task(
+            prepare_selected_claim_comparisons(
+                app.state.session_factory, interview_id, settings(), http, job_id=job_id
+            )
+        )
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            await prepare_selected_claim_comparisons(
+                app.state.session_factory, interview_id, settings(), http, job_id=job_id
+            )
+        finally:
+            release.set()
+        await first
+    assert len(calls) == 1
+
+
+async def test_expired_batch_late_result_cannot_replace_reclaimed_batch(app):
+    interview_id, job_id, claim_id, _, evidence_id = await seed(app)
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls = []
+    respond = provider(claim_id, evidence_id, calls)
+
+    async def paused(request):
+        entered.set()
+        await release.wait()
+        return respond(request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(paused)) as old_http:
+        first = asyncio.create_task(
+            prepare_selected_claim_comparisons(
+                app.state.session_factory, interview_id, settings(), old_http, job_id=job_id
+            )
+        )
+        await asyncio.wait_for(entered.wait(), 5)
+        async with app.state.session_factory.begin() as db:
+            row = await db.get(InterviewSession, interview_id)
+            old_run = row.context_state["document_claim_comparison_run_id"]
+            row.context_state = {
+                **row.context_state,
+                "document_claim_comparison_expires_at": (
+                    datetime.now(UTC) - timedelta(seconds=1)
+                ).isoformat(),
+            }
+        try:
+            async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as http:
+                await prepare_selected_claim_comparisons(
+                    app.state.session_factory, interview_id, settings(), http, job_id=job_id
+                )
+        finally:
+            release.set()
+            await asyncio.wait_for(first, 5)
+    assert len(calls) == 2
+    async with app.state.session_factory() as db:
+        row = await db.get(InterviewSession, interview_id)
+        old = await db.get(LLMCallRecord, UUID(old_run))
+        assert old.discard_reason == "preparation_changed"
+        assert row.context_state["document_claim_comparison_status"] == "succeeded"
+        assert row.context_state["document_claim_comparison_run_id"] != old_run
+        assert len(list(await db.scalars(select(DocumentClaimComparison)))) == 1
