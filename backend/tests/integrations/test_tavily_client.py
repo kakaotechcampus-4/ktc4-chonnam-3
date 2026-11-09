@@ -16,6 +16,42 @@ def settings(**overrides):
     return TavilySettings(api_key=SecretStr("test-secret"), **overrides)
 
 
+@pytest.mark.parametrize(
+    "query",
+    [
+        "https://private.example",
+        "me@example.invalid",
+        "Redis\nprivate",
+        "Bearer private-token",
+        "phone 010-1234-5678",
+    ],
+)
+async def test_unsafe_direct_query_never_spends_budget_or_calls_provider(query):
+    def forbidden(request):
+        pytest.fail("unsafe query reached provider")
+
+    budget = SearchBudget(max_calls=2, max_credits=2)
+    with pytest.raises(SearchError, match="unsafe_external_query"):
+        await TavilyClient(settings(), httpx.MockTransport(forbidden)).search(
+            query, domains=("docs.python.org",), budget=budget
+        )
+    assert budget.calls_used == budget.credits_used == 0
+
+
+async def test_query_is_canonical_before_provider_request_and_restrict_is_kept():
+    def respond(request):
+        body = json.loads(request.content)
+        assert body["query"] == "Python TaskGroup"
+        assert body["include_domains_mode"] == "restrict"
+        return httpx.Response(200, json={"results": [], "usage": {"credits": 0}})
+
+    await TavilyClient(settings(), httpx.MockTransport(respond)).search(
+        "  Python TaskGroup  ",
+        domains=("docs.python.org",),
+        budget=SearchBudget(max_calls=2, max_credits=2),
+    )
+
+
 @pytest.mark.asyncio
 async def test_search_restricts_sources_and_preserves_snippet_provenance():
     def respond(request):

@@ -77,6 +77,62 @@ async def test_oauth_token_uses_authorization_header():
     await make_client(config, httpx.MockTransport(respond)).synthesize("질문", "tech_lead")
 
 
+@pytest.mark.parametrize("empty", ["", "   "])
+async def test_empty_oauth_token_uses_nonempty_api_key(empty):
+    def respond(request):
+        assert "authorization" not in request.headers
+        assert request.headers["x-goog-api-key"] == "tts-secret"
+        return httpx.Response(200, json={"audioContent": "SUQzYXVkaW8="})
+
+    await make_client(
+        settings(access_token=SecretStr(empty)), httpx.MockTransport(respond)
+    ).synthesize("질문", "tech_lead")
+
+
+async def test_successful_audio_survives_settlement_failure_without_another_reservation():
+    class Broken(Budget):
+        async def settle(self, receipt, outcome):
+            self.outcomes.append(outcome)
+            raise TtsError("budget_unavailable")
+
+    budget = Broken()
+    calls = []
+
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(200, json={"audioContent": "SUQzYXVkaW8="})
+
+    audio = await make_client(settings(), httpx.MockTransport(respond), budget).synthesize(
+        "질문", "tech_lead"
+    )
+    assert audio.data == b"ID3audio"
+    assert len(calls) == 1 and budget.reserved == 2 and budget.outcomes == ["success"]
+
+
+async def test_success_settlement_has_a_finite_timeout_and_keeps_the_paid_result(monkeypatch):
+    import app.integrations.tts.google as module
+
+    monkeypatch.setattr(module, "FINALIZATION_TIMEOUT_SECONDS", 0.02, raising=False)
+
+    class Slow(Budget):
+        async def settle(self, receipt, outcome):
+            import asyncio
+
+            await asyncio.sleep(100)
+
+    import asyncio
+
+    budget = Slow()
+    client = make_client(
+        settings(),
+        httpx.MockTransport(lambda r: httpx.Response(200, json={"audioContent": "SUQzYXVkaW8="})),
+        budget,
+    )
+    async with asyncio.timeout(0.5):
+        assert (await client.synthesize("질문", "tech_lead")).data == b"ID3audio"
+    assert budget.reserved == 2
+
+
 @pytest.mark.parametrize(
     "body", [{}, {"audioContent": "??invalid"}, {"audioContent": ""}, {"audioContent": 42}]
 )
