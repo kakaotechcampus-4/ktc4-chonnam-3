@@ -756,23 +756,25 @@ export default function InterviewScreen() {
               : '다음 질문 준비 중'}
           </span>
           <span className="flex-1" />
-          <label className="flex items-center gap-2">
-            <span className="text-[11px] text-muted">질문 텍스트</span>
-            <input
-              type="checkbox"
-              role="switch"
-              checked={showQuestionText}
-              onChange={(event) => {
-                setShowQuestionText(event.target.checked);
-                try {
-                  localStorage.setItem(QUESTION_TEXT_KEY, String(event.target.checked));
-                } catch {
-                  /* 시크릿 창 등에서 저장이 막히면 이번 세션에만 적용한다. */
-                }
-              }}
-              className="h-6 w-11 shrink-0 appearance-none rounded-full bg-line-soft transition-colors before:ml-0.5 before:block before:h-5 before:w-5 before:translate-y-0.5 before:rounded-full before:bg-surface before:transition-transform checked:bg-accent checked:before:translate-x-5"
-            />
-          </label>
+          {!isTextMode && (
+            <label className="flex items-center gap-2">
+              <span className="text-[11px] text-muted">질문 텍스트</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={showQuestionText}
+                onChange={(event) => {
+                  setShowQuestionText(event.target.checked);
+                  try {
+                    localStorage.setItem(QUESTION_TEXT_KEY, String(event.target.checked));
+                  } catch {
+                    /* 시크릿 창 등에서 저장이 막히면 이번 세션에만 적용한다. */
+                  }
+                }}
+                className="h-6 w-11 shrink-0 appearance-none rounded-full bg-line-soft transition-colors before:ml-0.5 before:block before:h-5 before:w-5 before:translate-y-0.5 before:rounded-full before:bg-surface before:transition-transform checked:bg-accent checked:before:translate-x-5"
+              />
+            </label>
+          )}
         </div>
 
         {showText ? (
@@ -781,7 +783,7 @@ export default function InterviewScreen() {
               {question?.text ?? '다음 질문을 준비하고 있어요'}
             </p>
             {/* 텍스트를 꺼 뒀는데 보이는 이유를 알린다. 토글이 고장 난 것처럼 보이지 않게 한다. */}
-            {!showQuestionText && question && (
+            {!isTextMode && !showQuestionText && question && (
               <p className="mt-2 text-[11px] text-muted">
                 질문 음성을 재생하지 못해 텍스트로 보여드려요
               </p>
@@ -801,7 +803,7 @@ export default function InterviewScreen() {
       <aside className="rounded-card bg-accent-soft px-4 py-3 text-[12px] leading-relaxed text-accent xl:fixed xl:left-[calc(50%+408px)] xl:top-1/3 xl:w-52">
         <b>Tip</b>
         <ul className="mt-1 list-disc space-y-0.5 pl-4">
-          {TIPS.map((tip) => (
+          {(isTextMode ? TEXT_TIPS : TIPS).map((tip) => (
             <li key={tip}>{tip}</li>
           ))}
         </ul>
@@ -810,11 +812,19 @@ export default function InterviewScreen() {
       {error && (
         <div role="alert" className="rounded-card border border-error/30 bg-error-soft px-3 py-2.5">
           <p className="text-[12px] font-bold text-error">
-            {(fatal && FATAL_ERROR_MESSAGE[error.reason]) ??
+            {(canContinueQuestion
+              ? '답변은 저장됐어요. 다음 질문을 다시 준비할 수 있어요.'
+              : null) ??
+              (fatal && FATAL_ERROR_MESSAGE[error.reason]) ??
               ERROR_MESSAGE[error.reason] ??
               '면접 중 문제가 생겼어요.'}
           </p>
         </div>
+      )}
+      {displayedRetryMessage && (
+        <p role="alert" className="text-[12px] text-error">
+          {displayedRetryMessage}
+        </p>
       )}
       {restart.isError && (
         <div className="flex items-center gap-3">
@@ -841,10 +851,25 @@ export default function InterviewScreen() {
             current.phase === 'recording' ? 'border-error' : 'border-line-soft'
           }`}
         >
-          {current.final !== null ? (
+          {isTextMode && current.phase === 'listening' ? (
+            <textarea
+              aria-label="답변"
+              value={draft}
+              maxLength={2000}
+              rows={5}
+              disabled={!canStart}
+              onChange={(event) =>
+                question && setTextDraft({ turn: question.turn, text: event.target.value })
+              }
+              className="w-full resize-y bg-transparent outline-none disabled:opacity-60"
+              placeholder="답변을 작성해주세요"
+            />
+          ) : current.final !== null ? (
             <>
               <span data-testid="transcript-final">{current.final}</span>
-              <span className="mt-2 block text-[11px] text-muted">최종 전사로 평가해요</span>
+              <span className="mt-2 block text-[11px] text-muted">
+                {isTextMode ? '제출한 답변이에요' : '최종 전사로 평가해요'}
+              </span>
             </>
           ) : current.partial ? (
             <span
@@ -867,7 +892,9 @@ export default function InterviewScreen() {
         </div>
 
         {current.phase === 'transcribing' && (
-          <p className="text-[11px] text-muted">답변을 정리하고 있어요…</p>
+          <p className="text-[11px] text-muted">
+            {isTextMode ? '답변 저장을 확인하고 있어요…' : '답변을 정리하고 있어요…'}
+          </p>
         )}
 
         {current.phase === 'failed' && current.failure && (
