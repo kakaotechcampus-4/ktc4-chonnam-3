@@ -2505,6 +2505,246 @@ DB는 기존 실제 9턴의 격리 PostgreSQL을 명시했으며 평상시 DB �
 | --- | --- |
 | 페르소나 합성 | 저장된 HR 1턴·기술 2턴·도메인 6턴의 질문 음성 GET이 모두 200. Aoede·Charon·Kore 배정을 실제 전송에서 확인했다. |
 | 원문·형식 | 저장 질문을 그대로 전송하고 질문 원문은 변경되지 않았다. 세 MP3 모두 디코딩 성공, 응답은 `audio/mpeg`·`private, no-store`다. |
+| 캐시·동시 요청 | 같은 질문의 반복 GET과 HR 질문의 동시 GET이 같은 음성을 반환했다. 질문마다 Google 합성 1회이며 반복 조회의 문자 소비는 0이다. |
+| 인증 | 무인증 401을 확인했다. 검증 DB에 다른 활성 사용자가 없어 이번 실호출의 타인 소유권 검사는 미실행이며 앞선 자동 회귀와 구분한다. |
+| 문자 예산 | 신규 사용량은 126+156+184=466자. `used=466`, `pending=0`, `uncertain=0`, 초기 상한 999,826을 확인했다. |
+| 누적·잔여 | 앞선 174자를 포함한 기록상 누적 사용량 640자, 남은 앱 예산 999,360자다. 공급자 사용량 직접 조회값은 아니다. |
+
+원본은 Git 제외 `tts-service-20261108/history-budget-initialization.json`, `live-route.json`과
+`live-*-turn-*.mp3`다. 이번 검증은 실제 공급자를 사용하는 인증된 ASGI API 경로이며,
+사람의 브라우저·마이크로 9턴 전체를 진행하거나 운영 환경에 배포한 결과는 아니다.
+평상시 `.env`의 PostgreSQL과 API/worker의 기동, 배포 설정은 별도다.
+
+## 2026-11-08 — 최종 AI 서비스 후속 구현과 통합 검증
+
+앞선 원본 worktree와 실행 기록을 보존하고 `feature/ai-final-service-followups-20261108`에서 진행했다.
+기준은 `develop`의 `18f4105b2e7e9885df118d283badbf59692ec5b4`이며, 필요한 기존 미병합 구현을 로컬에서 결합했다.
+이 절은 새 후속 변경과 검증 기록이다. 커밋·push·PR 게시·병합·운영 배포를 수행한 기록은 아니다.
+결정과 이유는 [0038](decisions/0038-final-service-followups.md)을 참조하고, 초기 설계·task·testing 문서는 유지한다.
+
+### 범위와 협업 근거
+
+- [#206 댓글](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/206#issuecomment-6711527539): 새 환경의 rubric 초기화와 사람 승인 분리.
+- [#207](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/207): 문서 계약과 저장된 text/voice 모드의 일치.
+- [#208](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/208): 보고서 성공 이후 프로필 전달·실행·복구.
+- [#209](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/209): 서비스 실행과 자동 평가 연결, Judge 교정·누출 방지.
+- [#210](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/210): 고정 원문 보완 조회와 전체 실행 검증.
+- [#211](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/211): 배포 prompt 감사 버전의 저장 용량과 보존.
+
+### 구현한 연결
+
+문서 요청에는 종류·선택 자소서 ID·형식별 지원과 상한을 명시했다.
+새 voice 면접의 text WS 입력은 STT·모델·저장 전에 거절하고, 기존 text 면접은 텍스트 화면으로 이어간다.
+text 준비에서는 마이크를 요구하지 않으며 초안·원문 줄바꿈·재접속·질문 텍스트를 보존한다.
+계약과 화면은 [OpenAPI](../shared/contracts/openapi.yaml), [FE API 계약](../../frontend/docs/api-spec.md),
+[WS](../../backend/app/features/interview/ws.py), [진행 화면](../../frontend/src/features/interview/InterviewScreen.tsx)에 연결했다.
+
+보고서와 revision별 프로필 갱신 요청을 같은 transaction에 저장한다.
+큐 전달·worker 인수·완료의 회차와 소유 토큰을 검사하고 총 5회·24시간 안에서 복구한다.
+정지·탈퇴 사용자는 대기 작업 인수 때 영구 종료하고, 직접 호출·기존 job도 모델 실행 전에 차단한다.
+캐시 재사용도 짧은 User 행 잠금으로 활성 상태를 재검사하며 이전 성공 요약은 보존한다.
+근거는 [outbox](../../backend/app/features/profile/refresh_outbox.py),
+[프로필 서비스](../../backend/app/features/profile/service.py), [worker](../../backend/app/workers/tasks/profile_summary.py)다.
+
+준비 복구 두 경로는 한 번에 최대 10페이지×100건을 조회하고 다음 cron에서 이어간다.
+동일 timestamp도 UUID로 순서를 정하며, ARQ의 job별 ctx 복사 사이에서 cursor·cutoff를 공유한다.
+겹친 cron·취소·새 owner·lease 갱신을 재검사하고 DB 잠금을 잡은 채 큐 응답을 기다리지 않는다.
+연결은 [공통 순회](../../backend/app/workers/preparation_candidates.py)와 기존 준비 reaper 두 개를 재사용했다.
+준비 전체 상한 1770초, worker 1800초, lease 90초·heartbeat 20초와 프로필 등록을 유지했다.
+
+고정 commit의 root tree와 실제 파일 경로를 열거하고 선정 경로·주변 후보를 별도로 보존한다.
+재귀 목록도 요청·응답/누적 바이트·항목·깊이 상한 안에서 처리하며, 완전한 부모 목록만 캐시한다.
+경로별 fallback이 항목 상한에서 잘린 부모 목록을 전체 캐시로 쓰던 문제도 보완했다.
+원문을 읽지 않은 후보는 Evidence가 아니며, 저장 전에 사용자·선택 public 레포·SHA·경로를 다시 검사한다.
+근거는 [구조 수집](../../backend/app/features/interview/repository_sources.py),
+[재귀 목록](../../backend/app/features/interview/repository_structure.py),
+[후보](../../backend/app/features/interview/repository_candidates.py), [조회·저장](../../backend/app/features/interview/agent_queries.py)다.
+
+### 새 개발 환경 초기화의 실제 실행
+
+격리 개발 DB에서 다음 8단계를 실제 실행했고 모두 exit 0이었다.
+
+| 단계 | 확인 |
+| --- | --- |
+| 1 | 새 검증 DB 생성 |
+| 2 | Alembic head까지 적용 |
+| 3 | sol 배포 버전으로 runtime prompt 등록 |
+| 4 | 지식 초기화 dry-run |
+| 5 | 미검수 개발 초안 사용을 명시해 적용 |
+| 6 | 같은 지식 초기화 재실행 |
+| 7 | 같은 runtime 등록 재실행 |
+| 8 | Alembic 모델 정합성 확인 |
+
+평가 key 6개와 질문 프레임 21개로 변경 예정 27건·적용 27건·재실행 변경 0건을 확인했다.
+활성 runtime prompt는 11개이며 긴 배포 버전도 100자 저장 용량 안에서 보존했다.
+반복 실행 전후 기준·prompt 본문과 지문이 같았고 rubric 승인 상태는 `unreviewed`다.
+사용 도구는 [지식 초기화](../../backend/scripts/configure_ai_knowledge.py)와
+[runtime 등록](../../backend/scripts/configure_ai_runtime.py)이며 운영 rubric 승인 도구로 해석하지 않는다.
+산출물: `followup-live-20261108/bootstrap-operator/result.json`과 단계별 감사 JSON.
+
+### 실제 레포·면접·보완 조회
+
+공개 `golang/example`과 `spring-guides/gs-rest-service`를 고정 SHA에서 실제 GitHub·sol로 분석했다.
+모델 전송 시도는 세 실행 합계 10회이며 원문 지문·줄 위치·고정 SHA와 분석 입력을 대조했다.
+초기 Go 결과는 구현·설정·테스트를 포함했으나 초기 Java/Kotlin 결과는 설정·문서에 치우쳤다.
+재귀 목록 개선 후 같은 Java SHA를 다시 실행해 Java/Kotlin 구현·설정·테스트 8개 원문을 확인했다.
+Go는 기존 방식의 성공 결과이며 개선한 재귀 방식으로 실제 재실행하지 않았다.
+전체 레포 독해, 모든 언어·빌드 도구, 거대 monorepo·큰 파일 조합, 실제 build/test 실행은 검증하지 않았다.
+개인 저작·기여·성과와 해석의 정확성에 대한 사람 검수도 이 결과에 포함하지 않는다.
+산출물: `followup-live-20261108/repository-diversity/combined-summary.json`과 각 원문·요청 기록.
+
+격리 PG·Redis와 실제 sol로 준비·답변 9개·질문 저장·최종 종료를 실행했다.
+면접은 `completed/current_turn=9`이며 `turn_asked=9`, `turn_answered=9`,
+`interview_started=1`, `interview_completed=1`을 실제 저장에서 확인했다.
+첫 실행의 후보 L1 binding 누락은 검증 fixture 문제로 남기고 제품 가드를 완화하지 않았다.
+산출물: `followup-live-20261108/interview/result.json`, `storage-metadata.json`, 준비 재시도 기록.
+
+별도의 가상 질문·답변 사례에서는 실제 T3가 레포 verification 1건과 외부 조회 1건을 요청했다.
+Tool 요청을 모델 출력에 강제 주입하지 않았으며 실제 GitHub 원문 조회는 `found`였다.
+외부 조회에서 공식 원문 3개를 저장하고 다음 T4 질문의 Director 계획·검수 입력에 반영했다.
+레포 원문을 읽은 뒤 T3를 재분석하지만 외부 자료는 당해 T3 재분석에 소급해 넣지 않는다.
+실제 sol 호출은 총 4회였고 같은 답변 재전송은 같은 턴·다음 질문을 유지하며 추가 HTTP 0회였다.
+이는 기존 9턴에서 보완 요청이 없었던 결과와 구분하는 별도 사례다.
+산출물: `followup-live-20261108/actual-tools-02/result.json`, `postexecution-checks.json`, 모델 입력 4개.
+
+### 실제 리포트·프로필과 이미지 JD
+
+실제 worker와 sol로 최초 리포트·프로필을 만들고 이의 제기·운영자 검토 경로로 revision 2를 생성했다.
+revision 1·2, 점수 6개, 이전 revision 1의 같은 해시, 바뀐 프로필 입력 지문을 확인했다.
+총 공급자 호출 6회이며 반복 조회·프로필 재사용의 추가 호출은 0회였다.
+검증용 운영자가 재평가 절차를 행사했으며 `human_quality_or_score_approval=false`다.
+따라서 실제 서비스 검토 기능의 실행 검증이며 사람의 점수·내용 품질 승인은 아니다.
+산출물: `followup-live-20261108/report-profile-revision-02/combined-verification.json`과 revision 저장 기록.
+
+이미지 JD는 합성 Wanted 응답·이미지 전달과 실제 Vision·sol·PG를 연결한 혼합 검증을 수행했다.
+Vision 원문 블록 13개에서 sol 1회로 요구사항 6개를 저장하고 출처·인용·이미지/텍스트 해시를 확인했다.
+같은 공고 캐시 재사용의 공급자 추가 호출은 0회였다.
+상류 Wanted 응답과 CDN 전달을 합성했으므로 실제 공개 Wanted 이미지 공고를 종단 검증한 결과는 아니다.
+첫 시도와 최종 `wanted-image-functional-20261108-02/result.json`을 각각 보존했다.
+
+### 컨테이너·브라우저 연결
+
+새 [서비스 이미지](../../backend/Dockerfile)와 [평가 이미지](../../backend/Dockerfile.evaluation)를 빌드했다.
+평가 이미지는 사례·holdout·비밀값을 내장하지 않으며 읽기 전용 입력과 네트워크 차단으로 실행했다.
+합성 서비스 사례 32개의 dry-run 입력 계약이 통과했고 실제 모델 실행·품질 합격은 그 검사 범위가 아니다.
+실제 이미지 worker의 기능 6개·cron 4개 등록과 `role_kept` 재사용, 기존 프로필 보존을 확인했다.
+산출물: `followups-final-validation/images/`, `followup-live-20261108/runtime/worker-result-02.json`.
+
+실제 컨테이너 API·시험 인증 세션·브라우저에서 text 경로 6개 확인이 통과했다.
+무인증 401, 인증 조회, 기존 text 면접, 실제 WS 질문·입력, MSW/TTS 미사용, 홈 API·화면을 확인했다.
+`runtime/browser-result.json`의 결과이며 GitHub OAuth 교환을 실행한 것은 아니다.
+
+`runtime/voice-browser-result-03.json`에서는 실제 Google 질문 음성을 브라우저로 재생했다.
+가상 마이크를 통해 MediaRecorder로 녹음하고 실제 STT→sol 분석·Director→질문 2까지 진행했다.
+MSW를 사용하지 않았고 실제 음성 API·바이너리 전송·전사·답변 저장을 확인했다.
+이는 사람의 육성·실제 장치 사용성이나 음성으로 9턴 전체 진행을 검증한 결과와 구분한다.
+같은 Redis의 기존 TTS 예산을 사용했으며 이번 후속 검증에서 예산을 추가 초기화한 횟수는 0회다.
+최신 사용량·잔여 예산은 별도 후속 기록에서 확인한다.
+
+### 전체 자동 회귀와 판정 범위
+
+다음은 JudgeContext 보완 전 동결본의 각 전체 실행 결과이며 이전 부분 검사와 합산하지 않는다.
+
+| 검사 | 결과와 범위 |
+| --- | --- |
+| AI | 758개 통과, Ruff·format 111파일·mypy 26소스 통과. 실제 공급자 품질 검사는 아니다. |
+| FE | Playwright 147개 통과, 실패·skip·flaky 0. MSW 회귀이며 위 실제 브라우저 실행과 구분한다. |
+| FE 정적·기반 | 강제 TypeScript 검사·build·ESLint와 proxy 4개 통과. |
+| BE | Linux `final02` 한 번의 전체 실행에서 2405개 통과, 실패·오류·skip 0. |
+| BE 정적 | 전체 Ruff 통과, format 530파일·mypy app 212소스 통과. |
+| 공통 계약 | 스키마 2개·fixture 7개 통과. 부분 OpenAPI 검사이며 전체 런타임·TS 호환성 승인은 아니다. |
+
+BE `final01`의 2403통과·깊이 제한 fixture 불일치 1건과 수정 후 `final02`는 별도 보존했다.
+두 번째 snapshot은 승인된 fixture 파일 1개만 달랐고 제품·테스트 guard·timeout은 변경하지 않았다.
+`final02`의 snapshot 705파일은 실행 전후 같았다. 결과는 `followups-final-validation/backend/`에 있다.
+나머지 전체 결과와 소스 지문은 `followups-final-validation/summary.json` 및 검사별 폴더에 있다.
+앞선 준비 fixture 누락·도우미 인자/종료 오류·실패 시도도 각 artifact에 남기며 성공 횟수에 합산하지 않는다.
+
+### 진행 중인 평가와 남은 승인
+
+위 통과 결과는 자동 검증 완료이며 사람의 기준·출력 품질 검수는 별도 보류 상태다.
+실제 서비스 사례 32개 실행과 근거를 포함하는 JudgeContext 보완·재교정은 이 절 작성 시 진행 중이다.
+기존 서비스 출력·control·라벨·Judge 버전은 보존하며 기존 결과를 새 판정으로 덮어쓰지 않는다.
+해당 실행 결과·변경 후 영향 회귀와 새 Judge 교정 수치는 후속 절에서 별도로 추가한다.
+운영 환경 배포, 사람의 음성 사용성·내용 품질 검수, 운영 SLO·동시성 검증은 별도 완료 조건이다.
+
+### 실제 화면·예산 및 32개 서비스 실행의 확정 결과
+
+실제 API의 revision 2 리포트는 점수 6개·면접관 피드백 3개·턴 9개를 반환했다.
+반복 GET의 응답이 같았고 브라우저의 리포트·마이페이지가 오류 없이 표시됐다.
+홈 응답의 프로필 역할 요약도 확인했다. `runtime/report-browser-result.json`에 기록했다.
+voice 세션에 text 답변을 보낸 별도 실제 WS 검사는 `answer_rejected`를 반환했고
+현재 턴·영구 답변은 그대로였다. 제품 가드를 실제 녹음 성공 경로와 따로 확인한 결과다.
+
+실제 음성 경로에서 답변 1개·분석·다음 질문을 저장했고 LLM 기록 2개에 sol 시도 3개가 남았다.
+공식 원문 재검색은 같은 출처 3개를 재사용하며 추가 HTTP 0회였다.
+보완 코드 원문은 고정 SHA `99635268fe86b3ef3762a6a2b5dcd9ba67b6b9ce`의
+`backend/tests/test_config.py:1~158`과 내용 해시를 저장했다.
+
+TTS 신규 소비는 138자이며 기존 Redis는 `limit=999826`, `used=604`, `pending=0`, `uncertain=0`이다.
+초기화 이전 174자를 포함한 기록상 누적은 778자, 남은 앱 예산은 999,222자다.
+Cloud 잔여량 직접 조회값이 아니며 기존 예산을 다시 초기화하지 않았다.
+원본은 `runtime/final-live-storage.json`이다.
+
+원문 전달 보완 전 실제 서비스 32개 실행은 입력 계약 32개 통과·서비스 성공 31개·후보 거절 1개였다.
+리포트 형식 13개가 통과했고 진단 Judge는 성공 출력 31개를 판정했다.
+원래 판정은 accept 12·ambiguous 4·reject 15이며 사람 검수·품질 승인 결과가 아니다.
+서비스 모델은 128시도 예산 중 57회, Judge는 별도 64시도 중 31회를 사용했다.
+
+`q-0006.v2`는 계획·독립 검토 2회 후 `director_candidate_replan`으로 안전하게 거절됐다.
+같은 입력을 별도 단 한 번 진단 실행했을 때는 계획·검토 2회로 성공했다.
+32개 원실행을 32통과로 고치거나 두 실행을 합쳐 한 번의 전체 성공으로 계산하지 않는다.
+원본은 `eval-service32-live.json`과 `q0006-rejection-diagnostic/`에 각각 보존했다.
+
+### 평가 이미지 실행 방법의 명시
+
+평가 compose는 같은 checkout에서 빌드한 runtime 이미지를 `EVAL_RUNTIME_IMAGE`로 받는다.
+deploy compose가 생성하지 않는 `devon-backend:local`을 기본으로 추측하지 않는다.
+저장소 루트 PowerShell에서 다음과 같이 입력 검증만 실행할 수 있다.
+
+```powershell
+docker build -f backend/Dockerfile -t devon-backend:local .
+$env:EVAL_RUNTIME_IMAGE = 'devon-backend:local'
+$env:EVAL_CASES_DIR = (Resolve-Path 'ai/evals/service_regression').Path
+New-Item -ItemType Directory -Force '.claude/scratch/eval-input-check' | Out-Null
+$env:EVAL_OUTPUT_DIR = (Resolve-Path '.claude/scratch/eval-input-check').Path
+docker compose -f compose.evaluation.yaml --profile evaluation build
+docker compose -f compose.evaluation.yaml --profile evaluation run --rm evaluation
+```
+
+이 기본 실행은 검증 전용 manifest와 네트워크 차단을 사용하며 모델을 호출하지 않는다.
+실제 평가에는 설정에서 만든 모델 manifest와 명시적 시도 예산을 따로 사용한다.
+미검수 자료의 실행 성공은 `자동 검증 완료`, 사람의 기준·해석 검수는 `사람 검수 대기`로 구분한다.
+
+### Judge 원문 전달·저장 출력 재판정의 최종 확인
+
+실제 사례의 원문·위치·질문 계약·면접관 역할·Tool 상태를 64KiB 이내의
+`judge-context.v1`로 전달한다. 없는 원문은 채우지 않고 이전 분석·거절 후보는 원문과 구분한다.
+정답·다른 control·검수자 메타데이터는 전달하지 않는다.
+[context 투영](../../ai/evals/judge_context.py), [Judge](../../backend/scripts/ai_model_judge.py),
+[실행기](../../ai/evals/eval_runner.py)와 [CLI](../../backend/scripts/run_ai_evaluation.py)에 연결했다.
+
+기존 성공 출력 31개는 input·expectation·binding·output 해시를 확인한 뒤 v2 Judge로 재판정했다.
+서비스 모델 호출은 0회, Judge는 64시도 상한 중 31회였고 실행 실패는 없었다.
+판정은 accept 18·reject 12·ambiguous 1이며 원래 실패한 q-0006은 그대로 남았다.
+원본 결과와 새 `eval-service32-grounded-rejudge.json`은 별도 파일이다.
+재판정 완료를 서비스 재실행이나 생성 내용 전체의 품질 합격으로 세지 않는다.
+
+기존 승인 사례 11개의 제어 출력 34개를 v2 Judge로 다시 교정했다.
+실행 34개 성공·재시도 0개·기존 라벨 일치 33/34였다.
+허용 11개와 거절 대상 22개는 일치했고, 기대값 ambiguous인 `e-0002.v1/control2`를 reject했다.
+앞선 v1의 31/34와 새 v2의 33/34는 각각 보존했다.
+고정 순서의 각 1회 측정이며 일반 정확도, 순열·반복 안정성, 사람 품질 승인을 뜻하지 않는다.
+산출물은 `approved-controls-grounded-20261108-01/`에 있다.
+
+판정 12개 거절의 원인을 대조하자 기준과 관찰 범위의 문제가 함께 확인됐다.
+q2·q5는 기존 검토 이견이 남아 있고, q3는 허용하는 주제 전환 범위를 재검수해야 한다.
+q7의 기존 평가는 T4 질문 생성만 실행해 선행 조회 판단을 관찰하지 않았다.
+r1~r8의 v2 입력에는 원래 전역 자료 m1/m2가 빠져 있었고,
+리포트 평탄화 후에는 원래 검증된 내부 참조도 Judge에 보이지 않았다.
+이 결과만으로 운영이 조회를 생략하거나 보고서 내부 참조가 없다고 결론내리지 않는다.
+
+### 보고서 자료 연결과 내부 관찰의 추가 보완
 <a id="jd-heading-fix-20261109"></a>
 
 ## 2026-11-09 JD 소제목 추출 오류와 기존 캐시 보완
