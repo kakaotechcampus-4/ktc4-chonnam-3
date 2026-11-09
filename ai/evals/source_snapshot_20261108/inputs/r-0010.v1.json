@@ -1,0 +1,209 @@
+{
+ "case_id": "r-0010",
+ "version": 1,
+ "control": {
+  "kind": "report",
+  "split": "dev",
+  "source_group_id": "sg-r1",
+  "synthetic": true
+ },
+ "payload": {
+  "history": [
+   {
+    "turn": 1,
+    "persona": "hr_manager",
+    "question": "간단히 자기소개와 이 프로젝트에서 맡은 역할을 말씀해 주세요.",
+    "answer": "백엔드를 맡았고 로그인과 토큰 재발급을 담당했습니다.",
+    "question_contract": {
+     "purpose": "지원자가 맡은 역할과 담당 범위 확인",
+     "required_points": [
+      {
+       "key": "role",
+       "description": "맡은 역할"
+      },
+      {
+       "key": "own_work",
+       "description": "직접 한 일의 범위"
+      }
+     ],
+     "evaluation_scope": "본인 역할과 기여 범위의 설명을 평가한다. 기술 선택 이유나 공고 요구사항 연결은 평가하지 않는다."
+    }
+   },
+   {
+    "turn": 2,
+    "persona": "tech_lead",
+    "question": "refresh token 저장소로 Redis를 선택하신 이유가 있나요?",
+    "answer": "토큰은 만료가 있는 단순 key-value라 TTL이 자연스러운 Redis를 골랐습니다. RDB에 두는 방법도 있었지만 만료된 토큰을 주기적으로 지우는 배치가 따로 필요해서 Redis가 더 단순하다고 판단했습니다.",
+    "question_contract": {
+     "purpose": "refresh token 저장소 선택의 근거 확인",
+     "required_points": [
+      {
+       "key": "choice_reason",
+       "description": "선택 이유"
+      },
+      {
+       "key": "alternative",
+       "description": "고려한 대안"
+      }
+     ],
+     "evaluation_scope": "기술 선택 이유와 대안 비교를 평가한다. 구현 세부와 성능 수치는 평가하지 않는다."
+    }
+   },
+   {
+    "turn": 3,
+    "persona": "tech_lead",
+    "question": "재발급 시 기존 토큰은 어떻게 처리하셨나요?",
+    "answer": "재발급 구조와 폐기 방식은 제가 설계했습니다.",
+    "question_contract": {
+     "purpose": "재발급 시 토큰 처리 흐름 이해 확인",
+     "required_points": [
+      {
+       "key": "revoke_flow",
+       "description": "기존 토큰 폐기 방식"
+      },
+      {
+       "key": "reject_flow",
+       "description": "폐기 토큰 요청 처리"
+      }
+     ],
+     "evaluation_scope": "처리 흐름의 이해와 설명을 평가한다. 선택 이유는 평가하지 않는다."
+    }
+   },
+   {
+    "turn": 4,
+    "persona": "domain_lead",
+    "question": "공고에 '개인정보 보호를 고려한 인증 설계 경험'이 요구사항으로 있습니다. 본인 경험과 어떻게 연결되나요?",
+    "answer": "토큰에는 사용자 번호만 담고 이메일 같은 개인정보는 넣지 않습니다. 요구하시는 인증 설계와 개인정보 최소화라는 점에서 맞닿아 있지만, 보안 감사를 받아 본 경험은 없다는 한계가 있습니다.",
+    "question_contract": {
+     "purpose": "공고의 인증 설계 요구사항과 본인 경험의 연결 확인",
+     "required_points": [
+      {
+       "key": "requirement",
+       "description": "요구사항에 대응하는 경험"
+      },
+      {
+       "key": "limit",
+       "description": "경험의 한계"
+      }
+     ],
+     "evaluation_scope": "공고 요구사항과 본인 경험의 연결을 평가한다. 구현 세부와 기술 선택 이유는 평가하지 않는다."
+    }
+   },
+   {
+    "turn": 5,
+    "persona": "tech_lead",
+    "question": "토큰 폐기 도중 재발급이 롤백되면 어떻게 되나요?",
+    "answer": "폐기는 REQUIRES_NEW로 별도 트랜잭션에 두었습니다. 재발급이 실패해 롤백돼도 폐기는 유지되어야 탈취된 토큰이 다시 살아나지 않기 때문입니다. 대신 재발급이 실패하면 사용자가 다시 로그인해야 하는 불편은 감수했습니다.",
+    "evidence_refs": [
+     "m2"
+    ],
+    "question_contract": {
+     "purpose": "폐기와 재발급의 트랜잭션 분리 이유와 실패 영향 확인",
+     "required_points": [
+      {
+       "key": "tx_reason",
+       "description": "트랜잭션 분리 이유"
+      },
+      {
+       "key": "failure_effect",
+       "description": "롤백 시 영향"
+      }
+     ],
+     "evaluation_scope": "설계 근거와 실패 상황의 대응을 평가한다. 코드 작성자 확인은 평가하지 않는다."
+    }
+   },
+   {
+    "turn": 6,
+    "persona": "tech_lead",
+    "question": "앞서 토큰 폐기 구조를 직접 설계하셨다고 했는데, 구체적으로 어디까지 하셨나요?",
+    "answer": "사실 팀원이 설계한 구조에서 폐기를 호출하는 부분만 제가 수정했습니다. 설계 전체를 제가 한 것은 아닙니다.",
+    "follows": 3,
+    "question_contract": {
+     "purpose": "앞서 말한 설계 기여의 범위 확인",
+     "required_points": [
+      {
+       "key": "scope",
+       "description": "설계에 참여한 범위"
+      },
+      {
+       "key": "own_work",
+       "description": "직접 수정한 부분"
+      }
+     ],
+     "evaluation_scope": "기여 범위의 설명을 평가한다. 기술 선택 이유는 평가하지 않는다."
+    }
+   },
+   {
+    "turn": 7,
+    "persona": "domain_lead",
+    "question": "공고에 '위치 정보 등 민감 데이터 취급 경험'이 우대사항으로 있습니다. 이 프로젝트에서 관련 경험이 있나요?",
+    "answer": "위치 정보는 로그에 남기지 않고 필요하면 마스킹하도록 했습니다. 우대사항의 민감 데이터 취급과 맞닿아 있지만, 실제 위치 데이터를 대량으로 다뤄 본 경험은 없다는 한계가 있습니다.",
+    "question_contract": {
+     "purpose": "공고의 민감 데이터 취급 우대사항과 본인 경험의 연결 확인",
+     "required_points": [
+      {
+       "key": "requirement",
+       "description": "우대사항에 대응하는 경험"
+      },
+      {
+       "key": "limit",
+       "description": "경험의 한계"
+      }
+     ],
+     "evaluation_scope": "공고 우대사항과 본인 경험의 연결을 평가한다. 구현 세부와 기술 선택 이유는 평가하지 않는다."
+    }
+   },
+   {
+    "turn": 8,
+    "persona": "tech_lead",
+    "question": "토큰 만료 시간은 어떤 기준으로 정하셨나요?",
+    "answer": "access는 30분, refresh는 14일로 했습니다. access를 길게 하면 탈취됐을 때 위험이 커지고 너무 짧으면 재발급 호출이 늘어서 그 사이로 정했습니다. 실제 사용 패턴으로 측정해 보지는 못해서 이후 조정이 필요합니다.",
+    "question_contract": {
+     "purpose": "토큰 만료 시간 설정 기준 확인",
+     "required_points": [
+      {
+       "key": "expiry_basis",
+       "description": "만료 시간 기준"
+      },
+      {
+       "key": "tradeoff",
+       "description": "기준의 한계"
+      }
+     ],
+     "evaluation_scope": "설계 기준과 트레이드오프의 설명을 평가한다. 측정 결과는 평가하지 않는다."
+    }
+   },
+   {
+    "turn": 9,
+    "persona": "tech_lead",
+    "question": "마지막으로 이 구조에서 개선하고 싶은 점이 있나요?",
+    "answer": "테스트 코드를 더 보강하고 싶습니다.",
+    "question_contract": {
+     "purpose": "지원자가 인식한 개선점 확인",
+     "required_points": [
+      {
+       "key": "improvement",
+       "description": "개선하고 싶은 점"
+      }
+     ],
+     "evaluation_scope": "개선점의 인식과 설명을 평가한다. 기술 선택 이유나 문제 해결 경험은 평가하지 않는다."
+    }
+   }
+  ],
+  "evidence": [
+   {
+    "ref": "m1",
+    "path": "build.gradle",
+    "lines": "38-43",
+    "text": "dependencies {\n    implementation 'org.springframework.boot:spring-boot-starter-web'\n    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'\n    implementation 'org.springframework.boot:spring-boot-starter-data-redis'\n    runtimeOnly 'com.mysql:mysql-connector-j'\n}"
+   },
+   {
+    "ref": "m2",
+    "path": "src/main/java/app/auth/AuthService.java",
+    "lines": "128-131",
+    "text": "    // revokeAllByUserId() runs in REQUIRES_NEW, so the revocation is committed\n    // even if this transaction rolls back.\n    @Transactional\n    public TokenPair reissue(String refreshToken) {\n"
+   }
+  ],
+  "task": "종합 피드백과 Persona별 피드백, 6개 key 점수를 쓰세요."
+ }
+}
