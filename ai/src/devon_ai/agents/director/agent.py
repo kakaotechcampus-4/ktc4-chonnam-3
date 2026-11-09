@@ -90,6 +90,18 @@ def _references(
     return sources
 
 
+def _model_reference_texts(sources: Mapping[c.BasisRef, str]) -> list[dict[str, str]]:
+    """검증된 참조 중 Context 밖의 공고만 보강한다. Context 원문을 다시 직렬화하지 않는다.
+
+    _references는 그 밖의 extra를 거절한다. 서버의 전체 원문 map은 인용·ID 검증에 그대로 쓴다.
+    """
+    return [
+        {"kind": ref.kind, "id": ref.id, "text": text}
+        for ref, text in sources.items()
+        if ref.kind == "job_posting"
+    ]
+
+
 async def generate_question(
     context: c.Context,
     question_contract: c.QuestionContract,
@@ -197,9 +209,7 @@ async def generate_question(
         payload={
             "context": asdict(context),
             "question_contract": asdict(question_contract),
-            "reference_texts": [
-                {"kind": ref.kind, "id": ref.id, "text": text} for ref, text in sources.items()
-            ],
+            "reference_texts": _model_reference_texts(sources),
             "answer_analysis": analysis_data,
         },
         schema_name="DirectorQuestion",
