@@ -17,6 +17,33 @@ ENV_LINE = re.compile(r"^(?P<key>[A-Z][A-Z0-9_]*)=(?P<value>[^#]*)")
 # .env.example 에만 있고 Settings 에 없어도 되는 키 (스프린트2 예약 등).
 UNMAPPED_KEYS: set[str] = set()
 
+# 개인 모델·음성·예산 선택으로 공유 기본값을 덮어쓰지 않는다.
+EXAMPLE_OVERRIDES: set[str] = set()
+DEVELOPMENT_PROFILE = ENV_EXAMPLE.parent / "config/ai-development.env.example"
+PRIVATE_PLACEHOLDERS = {
+    "GITHUB_CLIENT_ID",
+    "GITHUB_CLIENT_SECRET",
+    "TOKEN_ENCRYPTION_KEY",
+    "OPENAI_API_KEY",
+    "PROXY_TOKEN",
+    "CHAT_PROXY_URL",
+    "CHAT_PROXY_URL_2",
+    "CHAT_PROXY_URL_3",
+    "TTS_API_KEY",
+    "TTS_ACCESS_TOKEN",
+    "TAVILY_API_KEY",
+    "VISION_BASE_URL",
+    "VISION_API_KEY",
+    "STT_BASE_URL",
+    "STT_API_KEY",
+}
+
+
+def _assert_private_placeholders(items: dict[str, str]) -> None:
+    # 잘못 들어온 비공개 값이 테스트 실패 메시지에 다시 노출되지 않게 키만 보고한다.
+    unsafe = {key for key in PRIVATE_PLACEHOLDERS if items.get(key)}
+    assert not unsafe, f"예제의 비공개 입력은 빈 값이어야 합니다: {sorted(unsafe)}"
+
 
 def _env_example_items() -> list[tuple[str, str]]:
     """.env.example 에서 주석 처리되지 않은 (키, 값) 을 순서대로 모은다. 값의 인라인 주석은 뗀다."""
@@ -49,11 +76,15 @@ def test_env_example_has_no_duplicate_keys() -> None:
     assert not duplicated, f".env.example 에 중복된 키: {duplicated}"
 
 
-def test_env_example_defaults_match_settings() -> None:
-    """값이 있는 키는 Settings 기본값과 같아야 한다. 빈 값(비밀 키)은 건너뛴다."""
+def test_env_example_defaults_match_settings(monkeypatch) -> None:
+    """명시한 운영 예시 외의 값은 Settings fallback과 같아야 한다."""
+    items = dict(_env_example_items())
+    _assert_private_placeholders(items)
+    for key in items:
+        monkeypatch.delenv(key, raising=False)
     settings = Settings(_env_file=None)
     diff = {
-        key: (value, getattr(settings, key.lower()))
+        key
         for key, value in _env_example_items()
         if value
         and key not in UNMAPPED_KEYS
@@ -63,7 +94,30 @@ def test_env_example_defaults_match_settings() -> None:
         != getattr(settings, key.lower())
     }
 
-    assert not diff, f"(.env.example, Settings) 기본값 불일치: {diff}"
+    assert diff <= EXAMPLE_OVERRIDES, f"공유 예제에 개발 프로필 값이 섞였습니다: {sorted(diff)}"
+
+
+def test_env_example_keeps_private_connection_values_empty() -> None:
+    items = dict(_env_example_items())
+    expected = {key for key in PRIVATE_PLACEHOLDERS if key.lower() in Settings.model_fields}
+    assert expected <= items.keys()
+    _assert_private_placeholders(items)
+
+
+def test_development_template_documents_choices_without_assigning_personal_values() -> None:
+    active = [
+        match["key"]
+        for line in DEVELOPMENT_PROFILE.read_text(encoding="utf-8").splitlines()
+        if (match := ENV_LINE.match(line.strip()))
+    ]
+    assert active == [], "개발 안내는 개인 설정을 자동으로 적용하지 않아야 합니다."
+
+
+def test_shared_example_requires_explicit_provider_limits():
+    settings = Settings(_env_file=ENV_EXAMPLE)
+    assert settings.llm_max_output_tokens is None
+    with pytest.raises(ValidationError):
+        settings.require_llm()
 
 
 def test_settings_load_without_env_file() -> None:

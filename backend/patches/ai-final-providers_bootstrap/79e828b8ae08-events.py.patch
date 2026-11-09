@@ -1,0 +1,16 @@
+diff --git a/backend/app/shared/events.py b/backend/app/shared/events.py
+--- a/backend/app/shared/events.py
++++ b/backend/app/shared/events.py
+@@ -49,11 +49,7 @@
+ 
+ 
+ async def commit_events(db: AsyncSession) -> None:
+-    """이벤트만 남은 트랜잭션을 commit 한다. commit 실패는 로그만 남기고 rollback 한다.
+-
+-    record_event 의 SAVEPOINT 는 INSERT 오류만 막는다. 이벤트 전용 commit 이 실패해도
+-    이미 끝난 업무 결과의 응답을 막지 않도록, 업무 commit 뒤에만 호출한다.
+-    """
++    """업무 commit 이후의 선택 이벤트 commit 실패를 응답과 격리한다."""
+     try:
+         await db.commit()
+     except SQLAlchemyError:

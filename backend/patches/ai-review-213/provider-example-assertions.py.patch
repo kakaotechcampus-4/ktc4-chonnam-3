@@ -1,0 +1,21 @@
+diff --git a/backend/tests/test_config.py b/backend/tests/test_config.py
+--- a/backend/tests/test_config.py
++++ b/backend/tests/test_config.py
+@@ -99,8 +99,7 @@
+ 
+ def test_env_example_keeps_private_connection_values_empty() -> None:
+     items = dict(_env_example_items())
+-    expected = {key for key in PRIVATE_PLACEHOLDERS if key.lower() in Settings.model_fields}
+-    assert expected <= items.keys()
++    assert PRIVATE_PLACEHOLDERS <= items.keys()
+     _assert_private_placeholders(items)
+ 
+ 
+@@ -116,6 +115,7 @@
+ def test_shared_example_requires_explicit_provider_limits():
+     settings = Settings(_env_file=ENV_EXAMPLE)
+     assert settings.llm_max_output_tokens is None
++    assert settings.tts_provider is None
+     with pytest.raises(ValidationError):
+         settings.require_llm()
+ 

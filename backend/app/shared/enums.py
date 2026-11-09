@@ -64,6 +64,9 @@ class Reason(StrEnum):
     # 면접 조회
     NOT_FOUND = "not_found"
 
+    # 명시적 면접 중단
+    ALREADY_COMPLETED = "already_completed"
+
     # 재시도
     ORIGINAL_NOT_COMPLETED = "original_not_completed"
     REPOSITORY_UNAVAILABLE = "repository_unavailable"

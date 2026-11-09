@@ -93,8 +93,9 @@ async def test_actual_deployment_worker_keeps_all_jobs_and_reaper():
     from app.workers.analysis_app import WorkerSettings
     from app.workers.tasks.interview_prep import interview_prep
 
-    assert WorkerSettings.functions.count(interview_prep) == 1
-    assert {f.__name__ for f in WorkerSettings.functions} >= {
+    functions = [getattr(item, "coroutine", item) for item in WorkerSettings.functions]
+    assert functions.count(interview_prep) == 1
+    assert {f.__name__ for f in functions} >= {
         "initial_sync",
         "analysis_run",
         "candidate_page_analyze",

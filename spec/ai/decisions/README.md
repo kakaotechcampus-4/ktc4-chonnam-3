@@ -14,6 +14,9 @@
 
 ## 현재 결정
 
+최종 서비스 통합의 추가 경계는 [0031 원문·실행·외부 공급자 경계](0031-final-service-runtime-boundaries.md)에서 검토한다.
+상태는 Proposed이며, 공유 계약·운영 조건의 합의를 대신하지 않는다.
+
 문서 작성과 현황 확인에는 [0020 AI 구현·검증 기록의 단일화](0020-implementation-record-policy.md)를 적용한다. 현재 구현·실행 결과의 원본은 [구현 기록](../implementation.md)이다.
 
 Director 후속 게시의 코어 경계는 [0023](0023-director-runtime.md), 별도 연결 기반 PR의
@@ -71,3 +74,17 @@ Director 후속 게시의 코어 경계는 [0023](0023-director-runtime.md), 별
 
 - [0024 WS 인증·연결 교체의 기존 계약 준수](0024-director-ws-contract-alignment.md): Proposed. handshake 인증과 소켓 교체·분석 인계 경계를 정의한다.
 - [0026 면접 실행 연결의 신규 게시](0026-interview-execution-publication.md): Proposed. 기존 코어와 선행 구현을 복사하지 않는 실행·검증 게시 범위를 정의한다.
+
+## 최종 서비스의 로컬 후속 검토
+
+- [0031 최종 AI 서비스의 원문·실행·외부 공급자 경계](0031-final-service-runtime-boundaries.md): Proposed. 원문·주장·시각 해석, 보완 자료, 실행·공유 계약의 경계를 정의한다.
+- [0032 실제 공급자 호환과 원문 수집 예산 경계](0032-provider-compatibility-and-source-budgets.md): Proposed. GitHub·Vision 형식 호환과 구조·원문 사이의 예산 배분, 실제 검증 결과의 판정 경계를 정의한다.
+- [0033 STT 프록시 설정의 기존 이름 호환](0033-stt-proxy-configuration-compatibility.md): Proposed. 전용 STT 설정의 우선순위와 기존 Whisper 프록시 주소·공통 토큰의 제한된 재사용을 정의한다.
+- [0034 로컬 LLM의 xhigh와 모델 출력 한도 설정](0034-local-llm-xhigh-output-limit.md): Proposed. 사용자 지정 강도·문서상 출력 한도와 유한한 실행 가드를 함께 적용하는 로컬 설정을 정의한다.
+- [0035 최종 실행 예산·근거 참조·리포트 재평가 경계](0035-final-runtime-budgets-and-report-revisions.md): Proposed. sol 연결 선택, 작업별 시간·전체 준비 예산, 코드 근거 ID와 문서 해석의 구분, 면접 복구·리포트 revision·명시적 재평가·Judge 교정과 TTS 후속 검증을 정의한다.
+- [0036 Chirp 3 HD의 서비스 음성 설정](0036-chirp3-service-configuration.md): Accepted, 2026-11-08. 청취한 세 음성의 페르소나 배정과 실제 Cloud 잔여량에 근거한 서비스 활성화 경계를 정의한다.
+- [0037 확인된 전체 사용 이력에 근거한 최초 TTS 예산](0037-tts-complete-history-budget.md): Accepted, 2026-11-08. 같은 결제계정의 이번 달 전체 사용 이력을 확인한 경우의 최초 예산 산정과 공급자 조회의 차이를 정의한다.
+- [0038 최종 서비스의 기준 초기화·작업 전달·검증 경계](0038-final-service-followups.md): Accepted for local development, 2026-11-08. 개발 초안 활성화와 사람 검수 구분, 프로필 outbox, 고정 SHA 보완 조회와 유한 복구·자동 검증의 경계를 정의한다.
+- [0041 게시 PR의 공통 기반과 통합 검사 순서](0041-published-pr-dependency-order.md): Accepted, 2026-11-08. 기존 PR 번호·원본 보존, 공통 기반 선행 배치와 통합 검사 이동, 미병합 선행 및 19개 후속 패치의 실행 제약을 정의한다.
+
+- [0045 리뷰 후 실행 활성화와 원문 복구 경계](0045-review-runtime-activation-and-source-recovery.md): Accepted for development, 2026-11-09. 계약 소비자 사전 검사, 원문 좌표·유한 복구, 검색·음성 정산과 공개 활성화 단위를 정의한다.

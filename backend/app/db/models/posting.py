@@ -86,3 +86,7 @@ class JdRequirement(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     display_order: Mapped[int] = mapped_column(Integer, nullable=False)
     tech_tags: Mapped[list[str]] = mapped_column(ARRAY(Text), nullable=False, server_default="{}")
+    # 원문 전사 블록 참조이며 VLM이 생성한 설명을 요구사항 근거로 대신 넣지 않는다.
+    source_refs: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False, server_default="[]", default=list
+    )

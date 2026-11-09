@@ -3,7 +3,7 @@
 from typing import Any
 
 import httpx
-from arq import cron
+from arq import cron, func
 from arq.connections import RedisSettings
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -34,7 +34,12 @@ async def shutdown(ctx: dict[str, Any]) -> None:
 
 
 class WorkerSettings:
-    functions = [initial_sync, interview_prep, report_generate, profile_summary]
+    functions = [
+        initial_sync,
+        func(interview_prep, timeout=JOB_TIMEOUT_SECONDS),
+        func(report_generate, timeout=1800),
+        profile_summary,
+    ]
     cron_jobs = [
         cron(interview_preparation_reaper, second={0, 30}, run_at_startup=True),
         cron(interview_prep_reaper, second={0, 30}, run_at_startup=True),
@@ -43,4 +48,4 @@ class WorkerSettings:
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     max_tries = 1
-    job_timeout = JOB_TIMEOUT_SECONDS
+    job_timeout = 600

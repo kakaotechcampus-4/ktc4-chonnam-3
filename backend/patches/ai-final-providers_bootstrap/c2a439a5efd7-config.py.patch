@@ -1,0 +1,350 @@
+diff --git a/backend/app/core/config.py b/backend/app/core/config.py
+--- a/backend/app/core/config.py
++++ b/backend/app/core/config.py
+@@ -5,14 +5,21 @@
+ 
+ import base64
+ import binascii
++import json
++import math
+ from collections.abc import Mapping
+ from functools import lru_cache
+-from typing import Annotated, Literal
++from typing import TYPE_CHECKING, Annotated, Literal
+ from urllib.parse import urlsplit
+ 
+ from devon_ai.contracts import CallLimits
+ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, SecretStr, field_validator
+ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
++
++if TYPE_CHECKING:
++    from app.integrations.search.tavily import TavilySettings
++    from app.integrations.tts.google import TTSSettings
++    from app.integrations.vision.elice import EliceVisionSettings
+ 
+ AppEnv = Literal["local", "dev", "prod"]
+ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
+@@ -37,6 +44,40 @@
+ # 설정을 읽을 때 잘못된 숫자 타입이 먼저 변환되면 호출 시 검증에서 구분할 수 없다.
+ LLMTimeout = Annotated[float, BeforeValidator(_reject_boolean_timeout)]
+ LLMInteger = Annotated[int, BeforeValidator(_reject_non_integer_limit)]
++
++
++def _task_timeout_values(value: object) -> dict[str, float]:
++    if isinstance(value, str):
++        value = json.loads(value)
++    allowed = {
++        "repo_shallow",
++        "repo_deep",
++        "domain_category",
++        "doc_claims",
++        "director",
++        "answer_analysis",
++        "report",
++        "report_score",
++        "profile_summary",
++        "claim_code",
++        "jd_extract_image",
++    }
++    if not isinstance(value, dict) or any(key not in allowed for key in value):
++        raise ValueError("Unknown LLM task timeout")
++    result: dict[str, float] = {}
++    for key, number in value.items():
++        if (
++            isinstance(number, bool)
++            or not isinstance(number, (int, float))
++            or not math.isfinite(number)
++            or number <= 0
++        ):
++            raise ValueError("Task timeouts must be positive finite numbers")
++        result[str(key)] = float(number)
++    return result
++
++
++TaskTimeouts = Annotated[dict[str, float], BeforeValidator(_task_timeout_values)]
+ 
+ 
+ class LLMSettings(BaseModel):
+@@ -54,6 +95,8 @@
+     llm_max_output_tokens: LLMInteger = Field(gt=0)
+     llm_max_input_bytes: LLMInteger = Field(gt=0)
+     llm_max_response_bytes: LLMInteger = Field(gt=0)
++    llm_reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh"] | None = None
++    llm_stream: bool = False
+ 
+     @field_validator("openai_api_key")
+     @classmethod
+@@ -94,13 +137,17 @@
+         # 프록시 namespace와 API 버전 경로를 유지하며 끝의 구분자만 제거한다.
+         return parsed.geturl().rstrip("/")
+ 
+-    def call_limits(self) -> CallLimits:
++    llm_task_timeouts: TaskTimeouts = Field(default_factory=dict)
++
++    def call_limits(self, task_name: str | None = None) -> CallLimits:
+         """AI에는 환경변수나 비밀키 대신 공급자와 무관한 제한값만 전달한다."""
+         return CallLimits(
+-            timeout_seconds=self.llm_timeout_seconds,
++            timeout_seconds=self.llm_task_timeouts.get(task_name or "", self.llm_timeout_seconds),
+             max_output_tokens=self.llm_max_output_tokens,
+             max_input_bytes=self.llm_max_input_bytes,
+             max_response_bytes=self.llm_max_response_bytes,
++            reasoning_effort=self.llm_reasoning_effort,
++            stream=self.llm_stream,
+         )
+ 
+ 
+@@ -118,6 +165,7 @@
+     stt_model: str = Field(min_length=1)
+     stt_language: str = Field(min_length=1)
+     stt_timeout_seconds: LLMTimeout = Field(gt=0, allow_inf_nan=False)
++    stt_max_response_bytes: LLMInteger = Field(default=1048576, gt=0)
+     stt_max_audio_bytes: LLMInteger = Field(gt=0)
+     stt_min_audio_bytes: LLMInteger = Field(ge=0)
+     stt_hallucination_phrases: tuple[str, ...]
+@@ -157,7 +205,8 @@
+             _ = parsed.port
+         except ValueError:
+             raise ValueError(invalid) from None
+-        return parsed.geturl().rstrip("/")
++        # 전사 클라이언트가 /v1/audio/transcriptions를 붙이므로 끝의 버전만 한 번 제거한다.
++        return parsed.geturl().rstrip("/").removesuffix("/v1")
+ 
+ 
+ class Settings(BaseSettings):
+@@ -209,14 +258,65 @@
+     proxy_token: SecretStr | None = None
+     chat_proxy_url: str | None = Field(default=None, repr=False)
+     openai_model: str | None = None
++    # 기존 연결을 보존하면서 주소와 모델을 같은 슬롯에서 함께 선택한다.
++    chat_proxy_url_2: str | None = Field(default=None, repr=False)
++    openai_model_2: str | None = None
++    chat_proxy_url_3: str | None = Field(default=None, repr=False)
++    openai_model_3: str | None = None
++    llm_connection_slot: LLMInteger = Field(default=1, ge=1, le=3)
++    llm_task_timeouts: Annotated[TaskTimeouts, NoDecode] = Field(default_factory=dict)
+     llm_default_model: str | None = "gpt-5.6-luna"
+     # 비어 있는 LLM 설정이 health 등 일반 앱 기동을 막지 않도록 호출 시점에 필수 검증한다.
+     llm_timeout_seconds: LLMTimeout | None = None
+     llm_max_output_tokens: LLMInteger | None = None
+     llm_max_input_bytes: LLMInteger | None = None
+     llm_max_response_bytes: LLMInteger | None = None
++    llm_reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh"] | None = None
++    llm_stream: bool = False
+     # ADR 0010의 자동 재시도 1회(총 시도 2회)를 표시하며 변경 가능한 호출 예산이 아니다.
+     llm_max_retries: LLMInteger = Field(default=1, ge=1, le=1)
++    jd_max_images: LLMInteger = Field(default=4, ge=1, le=8)
++    jd_max_total_image_bytes: LLMInteger = Field(default=8388608, gt=0)
++    jd_image_timeout_seconds: LLMTimeout = Field(default=30.0, gt=0, allow_inf_nan=False)
++
++    # 선택 공급자의 키가 없어도 앱은 기동한다. 기능을 호출하는 경계에서만 검증한다.
++    tavily_api_key: SecretStr | None = None
++    tavily_timeout_seconds: LLMTimeout = Field(default=20.0, gt=0)
++    tavily_max_response_bytes: LLMInteger = Field(default=1048576, gt=0)
++    tavily_max_content_chars: LLMInteger = Field(default=24000, gt=0)
++    tavily_max_results: LLMInteger = Field(default=5, ge=1, le=20)
++    tavily_max_calls: LLMInteger = Field(default=4, ge=1)
++    tavily_max_credits: LLMInteger = Field(default=4, ge=1)
++    external_sources_cache_seconds: LLMInteger = Field(default=3600, gt=0)
++    external_max_calls_per_interview: LLMInteger = Field(default=8, gt=0)
++    external_max_credits_per_interview: LLMInteger = Field(default=8, gt=0)
++
++    vision_base_url: str | None = Field(default=None, repr=False)
++    vision_api_key: SecretStr | None = None
++    # 기존 MLAPI 콘솔 변수명도 Settings에서 읽고, 전용 Vision 설정이 없을 때만 사용한다.
++    helpy_vision_document_proxy_url: str | None = Field(default=None, repr=False)
++    vision_model: str = "eliceai/helpy-document-vision"
++    vision_timeout_seconds: LLMTimeout = Field(default=60.0, gt=0)
++    vision_max_file_bytes: LLMInteger = Field(default=20971520, gt=0)
++    vision_max_response_bytes: LLMInteger = Field(default=8388608, gt=0)
++    vision_max_polls: LLMInteger = Field(default=12, gt=0)
++    vision_poll_interval_seconds: LLMTimeout = Field(default=1.0, gt=0)
++    vision_job_path_template: str = "/v1/jobs/{job_id}"
++    vision_pdf_layout: bool = False
++    documents_max_source_chars: LLMInteger = Field(default=262144, gt=0)
++
++    tts_provider: str | None = None
++    tts_api_key: SecretStr | None = None
++    tts_access_token: SecretStr | None = None
++    tts_voice_map: Annotated[dict[str, str], NoDecode] = Field(default_factory=dict)
++    tts_language_code: str = "ko-KR"
++    tts_timeout_seconds: LLMTimeout = Field(default=20.0, gt=0)
++    tts_max_text_bytes: LLMInteger = Field(default=4500, gt=0)
++    tts_max_audio_bytes: LLMInteger = Field(default=2097152, gt=0)
++    tts_cache_ttl_seconds: LLMInteger = Field(default=3600, gt=0)
++    # 무료 잔여량을 확인해 명시적으로 초기화하기 전에는 합성을 시작하지 않는다.
++    tts_monthly_character_limit: LLMInteger | None = Field(default=None, gt=0, le=1000000)
++    tts_budget_project: str | None = None
+ 
+     # ── STT (MLAPI Whisper) ──
+     # 비어 있어도 앱은 기동하고, 답변 전사 호출 전에 require_stt()가 검증한다.
+@@ -224,10 +324,13 @@
+     stt_provider: str | None = None
+     stt_base_url: str | None = Field(default=None, repr=False)
+     stt_api_key: SecretStr | None = None
++    # 기존 MLAPI 콘솔 변수는 전용 STT 주소가 없을 때만 사용한다.
++    whisper_large_v3_proxy_url: str | None = Field(default=None, repr=False)
+     stt_model: str | None = "whisper-large-v3"
+     # MLAPI는 언어 코드(ko)가 아니라 이름(korean)을 받는다.
+     stt_language: str | None = "korean"
+     stt_timeout_seconds: LLMTimeout = Field(default=30.0, gt=0, allow_inf_nan=False)
++    stt_max_response_bytes: LLMInteger = Field(default=1048576, gt=0)
+     stt_max_audio_bytes: LLMInteger = Field(default=10485760, gt=0)
+     # 이보다 짧은 오디오는 STT를 호출하지 않고 빈 전사로 본다. webm/opus는 초당 약 4KB(0007)라
+     # 기본값은 1초 안팎이며 실측 후 조정한다. 0이면 빈 오디오만 거른다.
+@@ -285,11 +388,16 @@
+         "proxy_token",
+         "chat_proxy_url",
+         "openai_model",
++        "chat_proxy_url_2",
++        "openai_model_2",
++        "chat_proxy_url_3",
++        "openai_model_3",
+         "llm_default_model",
+         "llm_timeout_seconds",
+         "llm_max_output_tokens",
+         "llm_max_input_bytes",
+         "llm_max_response_bytes",
++        "llm_reasoning_effort",
+         mode="before",
+     )
+     @classmethod
+@@ -298,6 +406,17 @@
+ 
+     def require_llm(self) -> LLMSettings:
+         """캐시된 설정만 검증하며 비밀키와 네 실행 상한이 준비되지 않으면 실패한다."""
++        if self.llm_connection_slot != 1:
++            suffix = str(self.llm_connection_slot)
++            base_url = getattr(self, "chat_proxy_url_" + suffix)
++            model = getattr(self, "openai_model_" + suffix)
++            if base_url is None or model is None or self.proxy_token is None:
++                raise ValueError("Selected LLM slot requires its URL, model, and PROXY_TOKEN")
++            values = self.model_dump(include=set(LLMSettings.model_fields))
++            values.update(
++                openai_api_key=self.proxy_token, llm_base_url=base_url, llm_default_model=model
++            )
++            return LLMSettings.model_validate(values)
+         if (self.proxy_token is None) != (self.chat_proxy_url is None):
+             raise ValueError("PROXY_TOKEN and CHAT_PROXY_URL must be configured together")
+         values = self.model_dump(include=set(LLMSettings.model_fields))
+@@ -310,7 +429,13 @@
+         return LLMSettings.model_validate(values)
+ 
+     @field_validator(
+-        "stt_provider", "stt_base_url", "stt_api_key", "stt_model", "stt_language", mode="before"
++        "stt_provider",
++        "stt_base_url",
++        "stt_api_key",
++        "whisper_large_v3_proxy_url",
++        "stt_model",
++        "stt_language",
++        mode="before",
+     )
+     @classmethod
+     def _empty_stt_value_is_unset(cls, value: object) -> object:
+@@ -325,11 +450,101 @@
+ 
+     def require_stt(self) -> STTSettings:
+         """캐시된 설정만 검증하며 주소·키·모델이 준비되지 않으면 실패한다."""
+-        return STTSettings.model_validate(self.model_dump(include=set(STTSettings.model_fields)))
+-
+-    def call_limits(self) -> CallLimits:
++        values = self.model_dump(include=set(STTSettings.model_fields))
++        if self.stt_base_url is None and self.whisper_large_v3_proxy_url is not None:
++            values["stt_base_url"] = self.whisper_large_v3_proxy_url
++            if self.stt_api_key is None:
++                # 공통 키는 MLAPI 호환 주소에만 적용하고 명시한 별도 주소에는 전달하지 않는다.
++                values["stt_api_key"] = self.proxy_token
++        return STTSettings.model_validate(values)
++
++    @field_validator(
++        "tts_provider",
++        "tts_api_key",
++        "tts_access_token",
++        "tts_budget_project",
++        "tts_monthly_character_limit",
++        "vision_base_url",
++        "vision_api_key",
++        "helpy_vision_document_proxy_url",
++        "tavily_api_key",
++        mode="before",
++    )
++    @classmethod
++    def _empty_optional_provider_value_is_unset(cls, value: object) -> object:
++        # 명시 전용 주소의 우선순위는 유지하고 빈 선택값만 미설정으로 취급한다.
++        raw = value.get_secret_value() if isinstance(value, SecretStr) else value
++        return None if isinstance(raw, str) and not raw.strip() else value
++
++    @field_validator("tts_voice_map", mode="before")
++    @classmethod
++    def _parse_voice_map(cls, value: object) -> object:
++        if isinstance(value, str):
++            if not value.strip():
++                return {}
++            try:
++                return json.loads(value)
++            except ValueError:
++                raise ValueError("TTS voice map must be a JSON object") from None
++        return value
++
++    def require_tavily(self) -> "TavilySettings":
++        from app.integrations.search.tavily import TavilySettings
++
++        if self.tavily_api_key is None or not self.tavily_api_key.get_secret_value().strip():
++            raise ValueError("Tavily credentials are not configured")
++        return TavilySettings(
++            api_key=self.tavily_api_key,
++            timeout_seconds=self.tavily_timeout_seconds,
++            max_response_bytes=self.tavily_max_response_bytes,
++            max_content_chars=self.tavily_max_content_chars,
++            max_results=self.tavily_max_results,
++        )
++
++    def require_vision(self) -> "EliceVisionSettings":
++        from app.integrations.vision.elice import EliceVisionSettings
++
++        base_url = self.vision_base_url or self.helpy_vision_document_proxy_url
++        api_key = self.vision_api_key
++        if api_key is None and not self.vision_base_url and self.helpy_vision_document_proxy_url:
++            # 공통 토큰을 임의의 명시 엔드포인트로 보내지 않고 MLAPI 호환 경로에만 적용한다.
++            api_key = self.proxy_token
++        if not base_url or api_key is None:
++            raise ValueError("Vision endpoint and credentials are not configured")
++        return EliceVisionSettings(
++            base_url=base_url,
++            api_key=api_key,
++            model=self.vision_model,
++            timeout_seconds=self.vision_timeout_seconds,
++            max_file_bytes=self.vision_max_file_bytes,
++            max_response_bytes=self.vision_max_response_bytes,
++            max_polls=self.vision_max_polls,
++            poll_interval_seconds=self.vision_poll_interval_seconds,
++            job_path_template=self.vision_job_path_template,
++        )
++
++    def require_tts(self) -> "TTSSettings":
++        from app.integrations.tts.google import TTSSettings
++
++        if not self.tts_provider:
++            raise ValueError("TTS provider is not configured")
++        return TTSSettings(
++            provider=self.tts_provider,
++            voice_map=self.tts_voice_map,
++            api_key=self.tts_api_key,
++            access_token=self.tts_access_token,
++            language_code=self.tts_language_code,
++            timeout_seconds=self.tts_timeout_seconds,
++            max_text_bytes=self.tts_max_text_bytes,
++            max_audio_bytes=self.tts_max_audio_bytes,
++            cache_ttl_seconds=self.tts_cache_ttl_seconds,
++            monthly_character_limit=self.tts_monthly_character_limit,
++            budget_project=self.tts_budget_project,
++        )
++
++    def call_limits(self, task_name: str | None = None) -> CallLimits:
+         """LLM 설정을 먼저 검증한 뒤 AI 호출에 전달할 상한을 만든다."""
+-        return self.require_llm().call_limits()
++        return self.require_llm().call_limits(task_name)
+ 
+     @field_validator("persona_turn_quota", mode="before")
+     @classmethod

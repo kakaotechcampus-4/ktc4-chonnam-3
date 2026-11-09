@@ -39,5 +39,11 @@ def to_turn_jsonb[T](
         raise ContractError("semantic", "turn storage column")
     data = to_data(checked)
     if column == "question_contract":
-        return cast(dict[str, object], data["question_contract"])
+        contract = cast(dict[str, object], data["question_contract"])
+        # 기존 생성 경로의 빈 선택 확장은 이전 다섯 필드 저장 형식을 유지한다.
+        if not contract.get("evaluation_keys"):
+            contract.pop("evaluation_keys", None)
+        return contract
+    if column == "analysis" and not data.get("external_queries"):
+        data.pop("external_queries", None)
     return data

@@ -66,6 +66,26 @@ def _prompts():
     ]
 
 
+@pytest.mark.parametrize("version", ["director_v4@" + "d" * 48, "한" * 100])
+async def test_postgres_long_deployment_version_preserves_previous_identity(
+    prompt_sessions, version
+):
+    old = PromptSpec("director", "director_v4", "configured-old-model", "이전 본문 보존")
+    new = replace(old, version=version, model="configured-new-model", template="새 배포 본문")
+    async with prompt_sessions.begin() as db:
+        await register_prompt_versions(db, [old])
+    before = (await _rows(prompt_sessions))[0]
+    async with prompt_sessions.begin() as db:
+        await register_prompt_versions(db, [new])
+        assert await load_active_prompt(db, "director") == new
+    rows = await _rows(prompt_sessions)
+    preserved = next(row for row in rows if row["version"] == old.version)
+    assert preserved["id"] == before["id"]
+    assert preserved["model"] == old.model and preserved["template"] == old.template
+    assert not preserved["is_active"]
+    assert next(row for row in rows if row["is_active"])["version"] == version
+
+
 async def _insert(session, prompt, *, active):
     await session.execute(
         text(
