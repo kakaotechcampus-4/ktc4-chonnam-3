@@ -33,6 +33,30 @@ def evidence(usage):
     }  # fmt: skip
 
 
+def test_score_input_preserves_the_evidence_scope_of_each_turn():
+    turns, _, narrative = report._build_inputs(payload())
+    assert getattr(turns[1], "evidence_refs", None) == ("e1",)
+    assert getattr(turns[0], "evidence_refs", None) == ()
+    assert turns[1].evidence_refs == narrative.turns[1].evidence_refs
+
+
+def test_current_score_prompt_receives_only_each_turns_referenced_sources(run):
+    from dataclasses import replace
+
+    prompts = {
+        "report": replace(PROMPTS["report"], version="report_v3"),
+        "report_score": replace(PROMPTS["report_score"], version="report_score_v3"),
+    }
+    _, (score, narrative) = run(prompts=prompts)
+    sent = score.requests[0].payload
+    assert "evidence" not in sent and "tool_results" not in sent
+    assert sent["turns"][0]["evidence_refs"] == []
+    assert sent["turns"][0]["evidence"] == []
+    assert sent["turns"][1]["evidence_refs"] == ["e1"]
+    assert sent["turns"][1]["evidence"][0]["content"] == "implementation redis"
+    assert len(narrative.requests[0].payload["evidence"]) == 1
+
+
 def payload(**changes):
     turns = [
         {
@@ -132,12 +156,178 @@ def test_returns_the_draft_shape_the_backend_validates(run):
     assert len(score.requests) == len(narrative.requests) == 1
 
 
+def test_image_jd_notes_and_limits_reach_score_and_narrative_without_becoming_evidence(run):
+    import hashlib
+    import json
+
+    note = {
+        "requirement_id": "jd-image",
+        "block_id": "I0-P1-E0",
+        "source_field": "job_posting.source_blocks",
+        "content": "Python 개발 경험",
+        "location": '{"page":1,"element":0}',
+        "text_hash": hashlib.sha256("Python 개발 경험".encode()).hexdigest(),
+        "image_hash": "a" * 64,
+        "limitations": ["jd_image:image_count_limit"],
+        "read_scope": "entire_block",
+    }
+    source = payload(
+        requirements=[
+            {
+                "id": "jd-image",
+                "text": "Python 개발 경험",
+                "category": "required",
+                "source_field": "job_posting.source_blocks",
+            }
+        ],
+        source_notes=[note],
+        limitations=["jd_image:image_count_limit"],
+    )
+    source["turns"][1]["jd_requirement_ids"] = ["jd-image"]
+    _, providers = run(source)
+    for provider in providers:
+        request = provider.requests[0].payload
+        assert json.loads(json.dumps(request["source_notes"])) == [note]
+        assert "jd_image:image_count_limit" in request["limitations"]
+        assert {item["evidence_id"] for item in request["evidence"]} == {"e1"}
+    score = providers[0].requests[0].payload
+    assert score["turns"][1]["jd_requirements"] == [
+        {"id": "jd-image", "category": "required", "text": "Python 개발 경험"}
+    ]
+    assert score["source_notes"][0]["source_field"] == "job_posting.source_blocks"
+
+
+@pytest.mark.parametrize("failure", ["unasked", "hash", "excerpt_without_limit"])
+def test_invalid_jd_source_note_is_rejected_before_generating_a_report(run, failure):
+    import hashlib
+
+    note = {
+        "requirement_id": "jd-image",
+        "block_id": "I0-P1-E0",
+        "source_field": "job_posting.source_blocks",
+        "content": "Python",
+        "location": "page=1",
+        "text_hash": hashlib.sha256(b"Python").hexdigest(),
+        "image_hash": "a" * 64,
+        "limitations": [],
+        "read_scope": "entire_block",
+    }
+    source = payload(
+        requirements=[{"id": "jd-image", "text": "Python", "category": "required"}],
+        source_notes=[note],
+    )
+    if failure != "unasked":
+        source["turns"][1]["jd_requirement_ids"] = ["jd-image"]
+    if failure == "hash":
+        note["text_hash"] = "b" * 64
+    if failure == "excerpt_without_limit":
+        note["read_scope"] = "prefix_excerpt"
+    with pytest.raises(c.ContractError, match="JD source|JD source excerpt|JD source content"):
+        run(source)
+
+
 def test_a_follow_up_and_a_doubly_used_evidence_are_carried_into_the_narrative_input(run):
     _, (_, narrative) = run()
     request = narrative.requests[0].payload
     assert request["turns"][3]["follows"] == "2"
     assert request["turns"][1]["evidence_refs"] == ["e1"]
     assert len(request["evidence"]) == 1
+
+
+def test_real_partial_tool_status_and_historical_limitations_reach_the_narrative(run):
+    from dataclasses import asdict
+
+    source = c.Evidence(
+        "e1",
+        "repo-1",
+        "a" * 40,
+        "file",
+        "build.gradle",
+        None,
+        "implementation redis",
+        None,
+        None,
+        1,
+        2,
+    )
+    data = payload()
+    data["tool_results"] = [
+        {
+            "turn_id": "2",
+            "result": asdict(
+                c.ToolResult(
+                    "insufficient_analysis",
+                    (source,),
+                    ("build.gradle:1-2",),
+                    ("tail unread",),
+                    None,
+                )
+            ),
+        }
+    ]
+    data["limitations"] = ["historical_tool_status_unavailable:3"]
+    import json
+
+    _, (score, narrative) = run(json.loads(json.dumps(data)))
+    assert (
+        narrative.requests[0].payload["tool_results"][0]["result"]["status"]
+        == "insufficient_analysis"
+    )
+    assert narrative.requests[0].payload["limitations"] == ["historical_tool_status_unavailable:3"]
+    assert (
+        score.requests[0].payload["tool_results"][0]["result"]["status"] == "insufficient_analysis"
+    )
+
+
+@pytest.mark.parametrize(
+    "kind,notes",
+    [
+        ("document_claim", ("document_claim_unverified", "historical_document_claim")),
+        (
+            "document_visual",
+            (
+                "generated_visual_interpretation_not_transcription",
+                "not_personal_contribution_evidence",
+            ),
+        ),
+        ("external_source", ("external_reference_not_personal_contribution_evidence",)),
+    ],
+)
+def test_both_report_tasks_receive_the_actual_referenced_supplemental_text_without_code_conversion(
+    run,
+    kind,
+    notes,
+):
+    from dataclasses import asdict
+
+    data = payload()
+    data["turns"][1]["question_contract"] = {
+        **data["turns"][1]["question_contract"],
+        "basis_refs": [{"kind": kind, "id": "source-1"}],
+    }
+    data["supplemental_sources"] = [
+        asdict(
+            c.SupplementalSource(
+                "source-1",
+                kind,
+                "Stored source passage",
+                "https://example.org/guide",
+                "b" * 64,
+                notes,
+            )
+        )
+    ]
+    import json
+
+    _, providers = run(json.loads(json.dumps(data)))
+    for provider in providers:
+        sources = provider.requests[0].payload["supplemental_sources"]
+        assert sources[0]["content"] == "Stored source passage"
+        assert sources[0]["kind"] == kind and sources[0]["version"] == "b" * 64
+        assert sources[0]["limitations"] == notes
+    assert all(
+        item["evidence_id"] != "source-1" for item in providers[1].requests[0].payload["evidence"]
+    )
 
 
 def test_only_limitations_still_gives_a_non_empty_summary(run):
@@ -346,10 +536,58 @@ def payload_with_requirements(linked):
     return payload(turns=turns, requirements=requirements)
 
 
+def test_missing_requirement_list_requires_an_explicit_legacy_replay():
+    raw = payload()
+    raw.pop("requirements")
+    with pytest.raises(c.ContractError, match="requirements"):
+        report._build_inputs(raw)
+    turns, _, _ = report._build_inputs(raw, allow_legacy_requirements=True)
+    assert all(turn.jd_requirements == () for turn in turns)
+
+
+@pytest.mark.parametrize("value", [None, {}, ""])
+def test_legacy_replay_does_not_accept_an_explicit_invalid_requirement_list(value):
+    with pytest.raises(c.ContractError, match="requirements"):
+        report._build_inputs(payload(requirements=value), allow_legacy_requirements=True)
+
+
+def test_legacy_missing_requirements_never_invents_a_linked_requirement():
+    raw = payload_with_requirements(["jd-1"])
+    raw.pop("requirements")
+    with pytest.raises(c.ContractError, match="jd_requirement_ids"):
+        report._build_inputs(raw, allow_legacy_requirements=True)
+
+
+def test_score_turn_contains_only_linked_requirements_in_the_merged_contract():
+    source = payload_with_requirements(["jd-1"])
+    source["requirements"].append(
+        {"id": "jd-unasked", "category": "preferred", "text": "미질문 영역"}
+    )
+    turns, _, _ = report._build_inputs(source)
+    assert turns[0].jd_requirements == ()
+    assert turns[3].jd_requirements == (c.LinkedRequirement("jd-1", "required", "Redis 운영 경험"),)
+
+
+def test_linked_requirement_contract_does_not_require_a_second_duplicate_id_list():
+    turn = c.ScoreTurn(
+        "1",
+        "domain_lead",
+        "질문",
+        "답변",
+        c.decode(c.QuestionContract, {**CONTRACT, "evaluation_keys": ["company_job_fit"]}),
+        jd_requirements=(c.LinkedRequirement("jd-1", "required", "Redis 운영 경험"),),
+    )
+    assert c.score_candidate_keys(turn) == ("company_job_fit",)
+
+
 def test_linked_requirement_ids_are_resolved_to_text_for_the_score_request(run):
     _, (score, _) = run(payload_with_requirements(["jd-1"]))
     assert score.requests[0].payload["turns"][3]["jd_requirements"] == [
-        {"id": "jd-1", "category": "required", "text": "Redis 운영 경험"}
+        {
+            "id": "jd-1",
+            "category": "required",
+            "text": "Redis 운영 경험",
+        }
     ]
 
 
