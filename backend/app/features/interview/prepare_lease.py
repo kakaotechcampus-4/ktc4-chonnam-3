@@ -16,6 +16,7 @@ LEASE_SECONDS = 90
 HEARTBEAT_SECONDS = 20
 JOB_TIMEOUT_SECONDS = 1800
 PREPARATION_DEADLINE_SECONDS = JOB_TIMEOUT_SECONDS - 30
+LEGACY_JOB_TIMEOUT_SECONDS = 600
 CLAIM_KEYS = {"prepare_job_id", "prepare_lease_expires_at", "prepare_director_call_id"}
 logger = get_logger(__name__)
 
@@ -34,7 +35,7 @@ def expires(row: InterviewSession) -> datetime:
     return (
         parsed
         if parsed is not None and parsed.tzinfo
-        else row.updated_at + timedelta(seconds=JOB_TIMEOUT_SECONDS)
+        else row.updated_at + timedelta(seconds=LEGACY_JOB_TIMEOUT_SECONDS)
     )
 
 
@@ -146,10 +147,10 @@ def validate_timeout(
     # 두 문서의 추출·재시도 대기 6T, 두 레포 선택·분석·재시도 대기 6T,
     # Claim 대조·대기 3T와 Director 생성·독립 검토 2T를 포함한다.
     # 전체 deadline이 별도로 DB 대기·취소 정리까지 포함해 worker보다 먼저 중단한다.
-    # 구형 두 인자 호출은 당시의 L2·Director 6T 계약을 유지한다.
+    # 구형 두 인자 호출은 당시 600초 안의 L2·Director 4T 계약을 유지한다.
     # 문서·Claim을 실행하는 신규 호출자는 아래 세 task 예산을 명시해야 한다.
     if deep_seconds is None and claim_seconds is None and document_seconds is None:
-        if 2 * source_seconds + 6 * llm_seconds + 30 > PREPARATION_DEADLINE_SECONDS:
+        if 2 * source_seconds + 4 * llm_seconds + 30 > LEGACY_JOB_TIMEOUT_SECONDS:
             raise PreparationTimeoutError("Preparation timeouts exceed the worker time budget")
         return
     planned = (

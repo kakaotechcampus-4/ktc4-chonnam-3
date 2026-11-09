@@ -37,9 +37,7 @@ class WorkerSettings:
         func(interview_prep, timeout=JOB_TIMEOUT_SECONDS),
         func(report_generate, timeout=1800),
     ]
-    cron_jobs = [
-        cron(interview_preparation_reaper, second={0, 30}, run_at_startup=True)
-    ]
+    cron_jobs = [cron(interview_preparation_reaper, second={0, 30}, run_at_startup=True)]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)

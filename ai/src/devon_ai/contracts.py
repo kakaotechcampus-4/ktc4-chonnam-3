@@ -1452,8 +1452,9 @@ class ScoreTurn(_Contract):
     question: str
     answer: str | None
     question_contract: QuestionContract
-    jd_requirement_ids: tuple[str, ...] = ()
     jd_requirements: tuple[LinkedRequirement, ...] = ()
+    # 기존 여섯 번째 위치 인자의 JD 본문 의미를 유지하고 신규 ID는 뒤에 추가한다.
+    jd_requirement_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         super().__post_init__()

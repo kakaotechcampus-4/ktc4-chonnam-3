@@ -1,17 +1,18 @@
 diff --git a/backend/tests/llm_tasks/test_runtime_capabilities.py b/backend/tests/llm_tasks/test_runtime_capabilities.py
 --- a/backend/tests/llm_tasks/test_runtime_capabilities.py
 +++ b/backend/tests/llm_tasks/test_runtime_capabilities.py
-@@ -1,5 +1,6 @@
+@@ -1,11 +1,24 @@
  """미설치 소비자를 DB 활성화 전에 거절한다."""
  
 +import json
  from types import SimpleNamespace
  
  import pytest
-@@ -8,6 +9,16 @@
+ from devon_ai import contracts as c
+ 
  from scripts import configure_ai_runtime as runtime
- 
- 
++
++
 +def test_all_recipe_entries_have_installed_consumers():
 +    from app.llm_tasks.runtime_capabilities import validate_runtime_prompts
 +

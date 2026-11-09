@@ -178,7 +178,7 @@ async def _budgeted(
     try:
         result = await operation()
     except BaseException as exc:
-        # 전송 시도 후에는 요금 여부를 알 수 없어 예약을 환불하지 않는다.
+        # 명시적 인증 거절만 rejected로 정산한다. 전송 결과가 불명확하면 예약을 유지한다.
         outcome: Literal["uncertain", "rejected"] = (
             "rejected"
             if isinstance(exc, TtsError) and exc.reason == "unauthorized"
