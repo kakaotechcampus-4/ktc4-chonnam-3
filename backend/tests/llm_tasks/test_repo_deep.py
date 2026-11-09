@@ -110,6 +110,8 @@ async def _run(replies: list[object], *, settings: LLMSettings = SETTINGS, snaps
 async def test_verified_area_is_stored_as_l2_success() -> None:
     raw = _output(_area(), _area("missing.py"))
     row, sent = await _run([raw])
+    assert row["result"]["_source_snapshot"]["head_sha"] == SHA
+    assert row["result"]["_source_snapshot"]["sources"][0]["content"] == "class Cache: pass"
 
     assert len(sent) == 1
     body = json.loads(sent[0].content)
