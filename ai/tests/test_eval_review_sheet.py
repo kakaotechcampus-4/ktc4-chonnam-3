@@ -71,7 +71,7 @@ def test_fact_record_missing_id_is_an_error():
 
 def test_sheet_shows_every_part_a_reviewer_needs(tmp_path):
     _write_case(tmp_path, source_fact="F-R1-001")
-    (case,) = load_cases(tmp_path)
+    (case,) = load_cases(tmp_path, allow_legacy_report_contracts=True)
     sheet = render_sheet(case, fact_record(FACTS, "F-R1-001"))
     for text in (
         "Redis를 쓰나요?",
@@ -89,7 +89,7 @@ def test_sheet_shows_every_part_a_reviewer_needs(tmp_path):
 
 def test_sheet_without_source_fact_says_so(tmp_path):
     _write_case(tmp_path)
-    (case,) = load_cases(tmp_path)
+    (case,) = load_cases(tmp_path, allow_legacy_report_contracts=True)
     assert "원본 사실이 연결돼 있지 않습니다" in render_sheet(case, None)
 
 
@@ -106,7 +106,7 @@ def test_main_writes_one_file_per_case_and_fails_on_unknown_fact(tmp_path):
 def test_loader_rejects_bad_source_fact(tmp_path, bad):
     _write_case(tmp_path, source_fact=bad)
     with pytest.raises(CaseError):
-        load_cases(tmp_path)
+        load_cases(tmp_path, allow_legacy_report_contracts=True)
 
 
 def test_interview_sheet_uses_policy_and_readable_history(tmp_path):
@@ -118,7 +118,7 @@ def test_interview_sheet_uses_policy_and_readable_history(tmp_path):
         "history": [{"turn": 2, "persona": "tech_lead", "question": "Q텍스트", "answer": "A텍스트"}]
     }
     inp_path.write_text(json.dumps(inp), encoding="utf-8")
-    (case,) = load_cases(tmp_path)
+    (case,) = load_cases(tmp_path, allow_legacy_report_contracts=True)
     sheet = render_sheet(case, None)
     assert "기준이 되는 면접 정책" in sheet and "원본 사실" not in sheet
     assert "질문: Q텍스트" in sheet and "답변: A텍스트" in sheet
@@ -197,7 +197,7 @@ def test_report_without_a_pair_is_not_treated_as_evidence(tmp_path):
     (tmp_path / "inputs").mkdir()
     (tmp_path / "expectations").mkdir()
     _report(tmp_path, "r-1", 1, None, "답")
-    (case,) = load_cases(tmp_path)
+    (case,) = load_cases(tmp_path, allow_legacy_report_contracts=True)
     sheet = render_sheet(case, None)
     assert "비교 정보" not in sheet
     assert "리포트 서술인가" in sheet and "확인 범위" not in sheet
