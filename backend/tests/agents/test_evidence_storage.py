@@ -129,6 +129,49 @@ async def test_scope_does_not_invent_readme_when_no_paths_are_known(agent_sessio
         assert (await scope(db, agent_seed)).allowed_paths == frozenset()
 
 
+async def test_scope_adds_only_current_fixed_structure_candidates(agent_sessions, agent_seed):
+    async with agent_sessions.begin() as db:
+        await db.execute(
+            update(InterviewSession).values(
+                context_state={
+                    "repository_lookup_candidates": {
+                        str(agent_seed["repo_id"]): {
+                            "head_sha": agent_seed["sha"],
+                            "paths": ["src/helper.ex"],
+                            "limitations": [],
+                        }
+                    }
+                }
+            )
+        )
+    async with agent_sessions.begin() as db:
+        assert (await scope(db, agent_seed)).allowed_paths == frozenset(
+            {"src/main.py", "src/helper.ex"}
+        )
+        saved = await store(db, agent_seed, (item(agent_seed, path="src/helper.ex"),))
+        assert saved[0].path == "src/helper.ex"
+
+
+@pytest.mark.parametrize(
+    "candidate",
+    [
+        {"head_sha": "b" * 40, "paths": ["src/helper.ex"], "limitations": []},
+        {"head_sha": "a" * 40, "paths": ["../helper.ex"], "limitations": []},
+    ],
+)
+async def test_old_or_invalid_candidates_never_expand_scope(agent_sessions, agent_seed, candidate):
+    async with agent_sessions.begin() as db:
+        await db.execute(
+            update(InterviewSession).values(
+                context_state={
+                    "repository_lookup_candidates": {str(agent_seed["repo_id"]): candidate}
+                }
+            )
+        )
+    async with agent_sessions() as db:
+        assert (await scope(db, agent_seed)).allowed_paths == frozenset({"src/main.py"})
+
+
 async def test_source_roundtrip_and_replay_preserve_one_durable_id(agent_sessions, agent_seed):
     original = item(agent_seed)
     async with agent_sessions.begin() as db:
