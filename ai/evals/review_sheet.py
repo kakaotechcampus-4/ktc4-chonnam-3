@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from eval_cases import Case, CaseError, load_cases
+from eval_cases import Case, CaseError, _history, load_cases
 from grader_check import EXPECTED
 
 _VERDICT = {"accept": "통과", "reject": "거부", "ambiguous": "판정 보류"}
@@ -123,10 +123,17 @@ def _comparison(case: Case, partner: Case) -> list[str]:
         "질문·Persona·근거는 두 사례가 같고, 아래 답변만 다르다.",
         "",
     ]
-    mine = {t["turn"]: t for t in case.payload["history"]}
+    mine = {t["turn"]: t for t in _history(case, allow_legacy_report_contracts=True)}
     rows: list[tuple[str, ...]] = [
-        (str(n), mine[n]["persona"], mine[n]["answer"], other["answer"])
-        for n, other in ((t["turn"], t) for t in partner.payload["history"])
+        (
+            str(n),
+            mine[n]["persona"],
+            mine[n]["answer"] if mine[n]["answer"] is not None else "(미응답)",
+            other["answer"] if other["answer"] is not None else "(미응답)",
+        )
+        for n, other in (
+            (t["turn"], t) for t in _history(partner, allow_legacy_report_contracts=True)
+        )
         if mine[n]["answer"] != other["answer"]
     ]
     return lines + _table(("turn", "Persona", "이 사례의 답변", "상대 사례의 답변"), rows) + [""]
@@ -197,7 +204,7 @@ def main(root: Path, out_dir: Path, only: list[str]) -> list[Path]:
     fact_text = (root / "expectations" / "fact-table.md").read_text(encoding="utf-8")
     out_dir.mkdir(parents=True, exist_ok=True)
     written = []
-    cases = load_cases(root)
+    cases = load_cases(root, allow_legacy_report_contracts=True)
     by_pair: dict[str, list[Case]] = {}
     for case in cases:
         if "pair" in case.expectation:
