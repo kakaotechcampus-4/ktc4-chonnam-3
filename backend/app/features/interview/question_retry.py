@@ -173,3 +173,254 @@ async def availability(db: AsyncSession, row: InterviewSession) -> tuple[bool, i
         return True, count
     except (AppError, AgentStateError, c.ContractError):
         return False, 0
+
+
+async def _reserve(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    user_id: UUID,
+    interview_id: UUID,
+    request_id: UUID,
+    kind: Literal["auto", "manual"],
+    settings: LLMSettings,
+    expected_failed_call_id: UUID | None = None,
+) -> tuple[dict[str, object], _Scope | None]:
+    error: Reason | None = None
+    async with sessions.begin() as db:
+        try:
+            row = await _owned(db, user_id, interview_id)
+        except AgentStateError:
+            raise AppError(Reason.NOT_FOUND) from None
+        ledger = _ledger(row)
+        entry = ledger.get(str(request_id))
+        if entry is not None:
+            if entry.get("kind") != kind:
+                raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE)
+            # 응답 취소·프로세스 종료가 수동 실패→자동 성공 사이에 생겨도 정확한 자식만 복원한다.
+            child_id = str(uuid5(UUID(str(entry["call_id"])), "automatic-rewrite"))
+            child = ledger.get(child_id) if kind == "manual" else None
+            if child is not None and (
+                child.get("kind") == "auto"
+                and child.get("failed_call_id") == entry.get("call_id")
+                and child.get("target") == entry.get("target")
+                and child.get("previous_turn_id") == entry.get("previous_turn_id")
+                and child.get("binding") == entry.get("binding")
+            ):
+                child_call = await db.get(LLMCallRecord, UUID(str(child["call_id"])))
+                child_turn = (
+                    await db.get(InterviewTurn, child_call.turn_id)
+                    if child_call is not None and child_call.turn_id
+                    else None
+                )
+                if (
+                    child_call is not None
+                    and child_turn is not None
+                    and (
+                        child_call.interview_session_id == interview_id
+                        and child_call.task_name == "director"
+                        and child_call.failure is None
+                        and child_call.discard_reason is None
+                        and child_turn.interview_session_id == interview_id
+                        and child_turn.turn_no == entry.get("target")
+                    )
+                ):
+                    child.update(status="succeeded", turn_id=str(child_turn.id))
+                    child.setdefault("session_id", secrets.token_urlsafe(32))
+                    entry.update(
+                        status="succeeded",
+                        turn_id=str(child_turn.id),
+                        session_id=entry.get("session_id") or child["session_id"],
+                        completion="automatic_after_manual",
+                    )
+                    _store(row, ledger)
+                elif child.get("status") == "running" and not _expired(child):
+                    raise AppError(Reason.QUESTION_RETRY_IN_PROGRESS)
+            # 질문 확정 직후 프로세스가 종료돼도 이미 저장한 성공을 다시 호출하지 않는다.
+            call = await db.get(LLMCallRecord, UUID(str(entry["call_id"])))
+            if (
+                call is not None
+                and call.turn_id is not None
+                and call.failure is None
+                and call.discard_reason is None
+            ):
+                turn = await db.get(InterviewTurn, call.turn_id)
+                if (
+                    turn is not None
+                    and turn.interview_session_id == row.id
+                    and turn.turn_no == entry.get("target")
+                ):
+                    entry.update(status="succeeded", turn_id=str(turn.id))
+                    entry.setdefault("session_id", secrets.token_urlsafe(32))
+                    _store(row, ledger)
+            if entry.get("status") == "succeeded":
+                return entry, None
+            if entry.get("status") == "running" and not _expired(entry):
+                raise AppError(Reason.QUESTION_RETRY_IN_PROGRESS)
+            if entry.get("status") == "running":
+                await _expire(db, entry)
+                ledger[str(request_id)] = entry
+                _store(row, ledger)
+            error = Reason.QUESTION_RETRY_FAILED
+        else:
+            for saved in ledger.values():
+                if saved.get("status") == "running":
+                    if not _expired(saved):
+                        raise AppError(Reason.QUESTION_RETRY_IN_PROGRESS)
+                    await _expire(db, saved)
+            try:
+                scope = await _scope(db, row)
+            except (AgentStateError, c.ContractError):
+                raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE) from None
+            if kind == "auto":
+                from devon_ai.agents.director.runtime import recovery_feedback_from_attempts
+
+                failure = scope.failure.failure
+                if (
+                    scope.failure.id != expected_failed_call_id
+                    or failure is None
+                    or failure.get("error_code") != "director_candidate_rewrite"
+                ):
+                    raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE)
+                feedback = recovery_feedback_from_attempts(
+                    scope.failure.attempts, failure_code="director_candidate_rewrite"
+                )
+                if feedback is None or feedback.recovery.recovery != "rewrite":
+                    raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE)
+            if any(
+                saved.get("target") == scope.target and saved.get("kind") == kind
+                for saved in ledger.values()
+            ):
+                raise AppError(Reason.QUESTION_RETRY_LIMIT)
+            from app.features.interview.director_service import _pending
+
+            try:
+                await _pending(db, interview_id, scope.target, "director")
+            except AgentStateError:
+                raise AppError(Reason.QUESTION_RETRY_IN_PROGRESS) from None
+            deadline = datetime.now(UTC) + timedelta(
+                seconds=2 * settings.call_limits("director").timeout_seconds + 30
+            )
+            entry = {
+                "request_id": str(request_id),
+                "kind": kind,
+                "target": scope.target,
+                "previous_turn_id": str(scope.previous),
+                "failed_call_id": str(scope.failure.id),
+                "call_id": str(uuid5(interview_id, "director-question-retry:" + str(request_id))),
+                "owner": str(uuid4()),
+                "binding": scope.digest,
+                "deadline": deadline.isoformat(),
+                "status": "running",
+            }
+            ledger[str(request_id)] = entry
+            _store(row, ledger)
+            return entry, scope
+    assert error is not None
+    raise AppError(error)
+
+
+async def _expire(db: AsyncSession, entry: dict[str, object]) -> None:
+    entry["status"] = "failed"
+    entry["error"] = "execution_expired"
+    record = await db.get(LLMCallRecord, UUID(str(entry["call_id"])), with_for_update=True)
+    if (
+        record is not None
+        and record.turn_id is None
+        and record.failure is None
+        and record.discard_reason is None
+    ):
+        record.discard_reason = "question_retry_expired"
+
+
+async def _execute(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    user_id: UUID,
+    interview_id: UUID,
+    entry: dict[str, object],
+    scope: _Scope,
+    settings: LLMSettings,
+    http_client: httpx.AsyncClient | None,
+) -> QuestionExecution:
+    from devon_ai.agents.director.runtime import recovery_feedback_from_attempts
+
+    from app.features.interview.director_service import start_director
+
+    async def guard(db: AsyncSession, row: InterviewSession) -> bool:
+        saved = _ledger(row).get(str(entry["request_id"]))
+        if saved != entry or saved.get("status") != "running" or _expired(saved):
+            return False
+        try:
+            return (await _scope(db, row)).digest == scope.digest
+        except (AppError, AgentStateError, c.ContractError):
+            return False
+
+    failure = scope.failure.failure
+    assert failure is not None
+    code = failure.get("error_code")
+    feedback = recovery_feedback_from_attempts(
+        scope.failure.attempts, failure_code=code if isinstance(code, str) else ""
+    )
+    try:
+        async with asyncio.timeout(2 * settings.call_limits("director").timeout_seconds + 15):
+            outcome = await start_director(
+                sessions,
+                user_id=user_id,
+                interview_id=interview_id,
+                call_id=UUID(str(entry["call_id"])),
+                settings=settings,
+                http_client=http_client,
+                answer_analysis=scope.analysis,
+                preparation_guard=guard,
+                recovery_feedback=feedback,
+            )
+    except BaseException:
+        async with sessions.begin() as db:
+            row = await _owned(db, user_id, interview_id)
+            ledger = _ledger(row)
+            saved = ledger.get(str(entry["request_id"]))
+            if (
+                saved is not None
+                and saved.get("owner") == entry["owner"]
+                and saved.get("status") == "running"
+            ):
+                await _expire(db, saved)
+                _store(row, ledger)
+        raise
+    async with sessions.begin() as db:
+        row = await _owned(db, user_id, interview_id)
+        ledger = _ledger(row)
+        saved = ledger[str(entry["request_id"])]
+        # 동시 재전송이 질문 확정을 먼저 복원했다면 같은 실행의 성공을 만료로 뒤집지 않는다.
+        if (
+            saved.get("owner") == entry["owner"]
+            and saved.get("status") == "succeeded"
+            and outcome.turn_id is not None
+            and saved.get("turn_id") == str(outcome.turn_id)
+        ):
+            call = await db.get(LLMCallRecord, outcome.call_id)
+            turn = await db.get(InterviewTurn, outcome.turn_id)
+            if (
+                call is not None
+                and call.interview_session_id == interview_id
+                and call.task_name == "director"
+                and call.turn_id == outcome.turn_id
+                and call.failure is None
+                and call.discard_reason is None
+                and turn is not None
+                and turn.interview_session_id == interview_id
+                and turn.turn_no == saved.get("target")
+            ):
+                return outcome
+        if saved.get("owner") != entry["owner"] or saved.get("status") != "running":
+            return QuestionExecution(outcome.call_id, None, None, "question_retry_expired")
+        saved["status"] = "succeeded" if outcome.turn_id is not None else "failed"
+        if outcome.turn_id is not None:
+            saved["turn_id"] = str(outcome.turn_id)
+            saved["session_id"] = secrets.token_urlsafe(32)
+        else:
+            saved["error"] = (
+                outcome.failure.error_code if outcome.failure else outcome.discard_reason
+            )
+        _store(row, ledger)
+    return outcome
