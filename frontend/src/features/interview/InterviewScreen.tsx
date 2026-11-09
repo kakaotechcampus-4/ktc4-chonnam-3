@@ -155,9 +155,14 @@ export default function InterviewScreen() {
     queryKey: queryKeys.interview(id),
     queryFn: () => api.getInterview(id),
     enabled: !!id,
+    refetchInterval: (query) =>
+      query.state.data?.questionRetryState?.status === 'running' ? 2000 : false,
   });
 
   const [liveQuestion, setLiveQuestion] = useState<LiveQuestion | null>(null);
+  const [questionReadySession, setQuestionReadySession] = useState<string | null>(null);
+  // 재연결 때 같은 턴의 미제출 초안을 보존한다. 다음 턴에는 이전 초안을 보내지 않는다.
+  const [textDraft, setTextDraft] = useState<{ turn: number; text: string } | null>(null);
   /** question을 받을 때마다 올린다. 같은 턴이 다시 오면(다시 듣기) 음성을 처음부터 재생한다. */
   const [playKey, setPlayKey] = useState(0);
   /** 전사 대기 확인 조회가 실패했을 때 올려 같은 확인을 한 주기 더 돌린다. */
@@ -174,6 +179,13 @@ export default function InterviewScreen() {
   const [thinking, setThinking] = useState(false);
   const [evidence, setEvidence] = useState<{ repository: string; file: string } | null>(null);
   const [error, setError] = useState<InterviewLastError | null>(null);
+  const [questionRetryMessage, setQuestionRetryMessage] = useState<string | null>(null);
+  const [questionRetryUnknown, setQuestionRetryUnknown] = useState(false);
+  const [questionRetryBlocked, setQuestionRetryBlocked] = useState(false);
+  const [awaitingRetriedQuestion, setAwaitingRetriedQuestion] = useState(false);
+  // 응답을 못 받았을 때도 같은 UUID를 유지해 모델 재실행 없이 결과를 확인한다.
+  const questionRetryIdRef = useRef<string | null>(null);
+  const questionRetrySendingRef = useRef(false);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   // abandon 응답을 기다리는 동안 모달을 열어 두고 버튼으로 진행 중임을 보여준다.
   const [leaving, setLeaving] = useState(false);
@@ -183,6 +195,7 @@ export default function InterviewScreen() {
   const [now, setNow] = useState(() => Date.now());
 
   const status = interview?.status;
+  const isTextMode = interview?.answerMode === 'text';
 
   /**
    * 준비 화면에서 막 넘어온 직후에는 캐시의 status가 아직 preparing이다.
@@ -223,12 +236,14 @@ export default function InterviewScreen() {
     send,
     sendBinary,
     close: closeSocket,
+    reconnect: reconnectSocket,
   } = useInterviewSocket({
     interviewId: id,
     sessionId: interview?.sessionId,
     enabled: status === 'in_progress',
     // 녹음·전사 중 끊기면 서버가 받던 오디오를 버린다. 같은 턴에 다시 답해야 한다(0007).
     onDrop: () => {
+      setQuestionReadySession(null);
       recorderRef.current?.cancel();
       markRecording(id, null);
       setAnswer((prev) =>
@@ -243,6 +258,12 @@ export default function InterviewScreen() {
       if (message.type !== 'thinking') setThinking(false);
 
       if (message.type === 'question') {
+        setQuestionReadySession(interview?.sessionId ?? null);
+        setAwaitingRetriedQuestion(false);
+        setQuestionRetryUnknown(false);
+        setQuestionRetryBlocked(false);
+        setQuestionRetryMessage(null);
+        questionRetryIdRef.current = null;
         // 녹음 중에 다른 턴 질문이 오면 그 녹음은 쓸 곳이 없다. 마이크를 닫는다.
         if (recordingTurnRef.current !== null && recordingTurnRef.current !== message.turn) {
           recorderRef.current?.cancel();
