@@ -9,7 +9,7 @@ diff --git a/ai/tests/agents/director/test_runtime.py b/ai/tests/agents/director
  
  import pytest
  
-@@ -143,6 +144,178 @@
+@@ -152,6 +153,205 @@
      ]
      assert [r.payload["operation"] for r in provider.requests] == ["plan", "review"]
      assert provider.requests[1].payload["question"] == asdict(question())
@@ -106,7 +106,7 @@ diff --git a/ai/tests/agents/director/test_runtime.py b/ai/tests/agents/director
 +        previous.attempts, failure_code=previous.failure.error_code
 +    )
 +    provider = Provider(plan(), review(contract_matches=False))
-+    result = run(provider, recovery_feedback=feedback)
++    result = run_version(provider, context(), version="director_v8", recovery_feedback=feedback)
 +    assert result.failure.error_code == "director_candidate_rewrite"
 +    assert len(provider.requests) == 2
 +    assert all(request.max_attempts == 1 for request in provider.requests)
@@ -162,9 +162,36 @@ diff --git a/ai/tests/agents/director/test_runtime.py b/ai/tests/agents/director
 +
 +def test_invalid_feedback_is_rejected_before_either_model_attempt():
 +    provider = Provider(plan(), review())
-+    result = run(provider, recovery_feedback={"previous_candidate": plan(), "recovery": "rewrite"})
++    result = run_version(
++        provider,
++        context(),
++        version="director_v8",
++        recovery_feedback={"previous_candidate": plan(), "recovery": "rewrite"},
++    )
 +    assert result.failure.error_code == "director_input_invalid"
 +    assert not result.attempts and not provider.requests
++
++
++@pytest.mark.parametrize("version", ["director_v2", "director_v6", "director_v6@stored"])
++def test_versions_without_recovery_policy_do_not_receive_rejected_candidates(version):
++    previous = run(Provider(plan(), review(contract_matches=False)))
++    feedback = runtime().recovery_feedback_from_attempts(
++        previous.attempts, failure_code=previous.failure.error_code
++    )
++    provider = Provider(plan(), review())
++    result = run_version(provider, context(), version=version, recovery_feedback=feedback)
++    assert result.succeeded
++    assert len(provider.requests) == 2
++    assert all("recovery_feedback" not in request.payload for request in provider.requests)
++
++
++@pytest.mark.parametrize("version", ["future-fixture-version", "director_v999@deployment"])
++def test_unknown_prompt_version_is_rejected_before_model_attempts(version):
++    provider = Provider(plan(), review())
++    result = run_version(provider, context(), version=version)
++    assert result.failure is not None
++    assert result.failure.error_code == "director_input_invalid"
++    assert result.attempts == () and provider.requests == []
 +
 +
 +@pytest.mark.parametrize("version", ["director_v7@recovery", "director_v8@recovery"])
@@ -188,7 +215,7 @@ diff --git a/ai/tests/agents/director/test_runtime.py b/ai/tests/agents/director
  
  
  def run_coverage(provider, candidate):
-@@ -384,8 +557,8 @@
+@@ -393,8 +593,8 @@
          assert request.payload["answer_analysis"]["contribution_scope"]["scope"] == "teammate"
          assert request.payload["context"]["history"][0]["answer"] == "팀원이 캐시를 구현했습니다."
          sources = request.payload["reference_texts"]
@@ -199,7 +226,7 @@ diff --git a/ai/tests/agents/director/test_runtime.py b/ai/tests/agents/director
  
  
  def test_runtime_preserves_both_attempts_when_review_provider_fails():
-@@ -677,7 +850,266 @@
+@@ -686,7 +886,265 @@
      )
  
  
@@ -461,13 +488,12 @@ diff --git a/ai/tests/agents/director/test_runtime.py b/ai/tests/agents/director
 +        "director_v7@recovery",
 +        "director_v8",
 +        "director_v8@recovery",
-+        "future-fixture-version",
 +    ],
 +)
  def test_controller_evaluation_targets_survive_prompt_version_changes(version):
      candidate = replace(
          question(),
-@@ -698,12 +1130,36 @@
+@@ -707,12 +1165,36 @@
          "contribution_clarity",
          "communication",
      )
@@ -505,7 +531,7 @@ diff --git a/ai/tests/agents/director/test_runtime.py b/ai/tests/agents/director
  
  
  @pytest.mark.parametrize("keys", [(), ("technical_reasoning", "communication")])
-@@ -876,4 +1332,5 @@
+@@ -885,4 +1367,5 @@
      assert provider.requests[1].payload["current_answer"]["answer"] == (
          "종료 콜백을 확인하지 못했습니다."
      )
