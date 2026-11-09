@@ -1,0 +1,117 @@
+diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.yaml
+--- a/spec/shared/contracts/openapi.yaml
++++ b/spec/shared/contracts/openapi.yaml
+@@ -363,6 +363,51 @@
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/ApiError'
++  /interviews/{id}/question/retry:
++    post:
++      operationId: retryInterviewQuestion
++      summary: Resume the same interview without resubmitting saved answers
++      description: >-
++        Explicitly regenerates the missing next question after saved answer analysis
++        succeeded and Director generation failed. The server preserves prior turns,
++        analyses, evidence, selected code versions and failed call records. One manual
++        round is allowed per target question; each round has one Plan and one independent
++        Review. A safe rewrite rejection also permits one automatic round. Including
++        initial generation, the target question has at most six provider attempts.
++        Reusing requestId replays its result without another model call. A successful
++        response issues a new realtime sessionId; reconnect to receive the saved next
++        question. STT, answer analysis and repository analysis are not rerun.
++      parameters:
++        - $ref: '#/components/parameters/InterviewId'
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema:
++              $ref: '#/components/schemas/QuestionRetryRequest'
++      responses:
++        '200':
++          description: The reviewed next question is saved in the same interview.
++          content:
++            application/json:
++              schema:
++                $ref: '#/components/schemas/QuestionRetryResponse'
++        '400':
++          $ref: '#/components/responses/Error'
++        '401':
++          $ref: '#/components/responses/Error'
++        '404':
++          $ref: '#/components/responses/Error'
++        '409':
++          description: >-
++            question_retry_in_progress while the claimed round is running;
++            question_retry_unavailable outside a recoverable next-question state;
++            question_retry_failed after a completed round is rejected;
++            question_retry_limit after the manual allowance is consumed.
++          content:
++            application/json:
++              schema:
++                $ref: '#/components/schemas/ApiError'
+   /interviews/{id}/prepare/retry:
+     post:
+       operationId: retryInterviewPrepare
+@@ -446,6 +491,12 @@
+                 $ref: '#/components/schemas/GeneratingResponse'
+         '401':
+           $ref: '#/components/responses/Error'
++        '404':
++          description: not_found when the interview does not exist or belongs to another user.
++          content:
++            application/json:
++              schema:
++                $ref: '#/components/schemas/ApiError'
+         '409':
+           $ref: '#/components/responses/Error'
+   /interviews/{id}/retry:
+@@ -1099,6 +1150,31 @@
+         interviewId:
+           type: string
+ 
++    QuestionRetryRequest:
++      type: object
++      additionalProperties: false
++      required: [requestId]
++      properties:
++        requestId:
++          type: string
++          format: uuid
++          description: Reuse this value when the preceding HTTP result is unknown.
++
++    QuestionRetryResponse:
++      type: object
++      required: [interviewId, sessionId, turnNo]
++      properties:
++        interviewId:
++          type: string
++          format: uuid
++        sessionId:
++          type: string
++          description: Newly issued realtime session for the preserved interview.
++        turnNo:
++          type: integer
++          minimum: 2
++          maximum: 9
++
+     InterviewTurn:
+       type: object
+       required: [turn, persona, question, answer, mainIndex, followUpDepth]
+@@ -1195,6 +1271,16 @@
+           nullable: true
+           allOf:
+             - $ref: '#/components/schemas/InterviewLastError'
++        canRetryQuestion:
++          type: boolean
++          default: false
++          description: Saved answer analysis succeeded but a missing next question can be explicitly regenerated.
++        questionRetryCount:
++          type: integer
++          minimum: 0
++          maximum: 1
++          default: 0
++          description: Manual recovery rounds claimed for the current missing target question.
+ 
+     ScoreItem:
+       type: object
