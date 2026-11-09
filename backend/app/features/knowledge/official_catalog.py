@@ -256,3 +256,75 @@ def _heading(value: str) -> str:
     # 실제 추출의 [제목](#anchor)은 표시 문자열로만 대조하고 저장 원문은 바꾸지 않는다.
     value = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", value)
     return re.sub(r"\s+", " ", re.sub(r"[¶​]", "", value)).strip().casefold()
+
+
+def _headings(lines: list[str]) -> Iterator[tuple[int, re.Match[str]]]:
+    fence: str | None = None
+    for index, line in enumerate(lines):
+        marker = _FENCE.match(line)
+        if marker:
+            if fence is None:
+                fence = marker[1]
+            elif marker[1][0] == fence[0] and len(marker[1]) >= len(fence):
+                fence = None
+            continue
+        if fence is None and (heading := _HEAD.match(line)):
+            yield index, heading
+
+
+def prepare_snapshot(entry: CatalogEntry, source: WebSource) -> SnapshotDraft:
+    if source.content_scope != "extracted_page" or entry.availability != "public_verified":
+        raise OfficialSourceError("source_not_extractable")
+    if len(source.content) > 24000:
+        raise OfficialSourceError("source_content_budget")
+    if hashlib.sha256(source.content.encode()).hexdigest() != source.content_hash:
+        raise OfficialSourceError("source_hash_mismatch")
+    if _source_language(source) and _source_language(source) != entry.language:
+        raise OfficialSourceError("source_language_mismatch")
+    if entry.technology == "python" and f"/{entry.version}/" not in source.url:
+        raise OfficialSourceError("source_version_mismatch")
+    allowed = tuple(
+        dict.fromkeys(
+            domain for category in entry.domain_categories for domain in scope_domains(category)
+        )
+    )
+    url = checked_source_url(entry.url, allowed)
+    if checked_source_url(source.url, allowed) != url:
+        raise OfficialSourceError("source_url_mismatch")
+    lines = source.content.splitlines()
+    headings = list(_headings(lines))
+    starts = [
+        (i, match) for i, match in headings if _heading(match[2]) == _heading(entry.section_heading)
+    ]
+    if len(starts) != 1:
+        raise OfficialSourceError("requested_section_missing")
+    start, heading = starts[0]
+    end = next(
+        (i for i, match in headings if i > start and len(match[1]) <= len(heading[1])),
+        len(lines),
+    )
+    if end == len(lines) and "content_truncated" in source.limitations:
+        raise OfficialSourceError("requested_section_incomplete")
+    if not any(
+        line.strip() and not _HEAD.match(line) and not _FENCE.match(line)
+        for line in lines[start + 1 : end]
+    ):
+        raise OfficialSourceError("requested_section_empty")
+    content = "\n".join(lines[start:end]).rstrip()
+    return SnapshotDraft(
+        entry,
+        url,
+        source.title,
+        content,
+        hashlib.sha256(content.encode()).hexdigest(),
+        source.content,
+        source.content_hash,
+        start + 1,
+        start + len(content.splitlines()),
+        source.retrieved_at,
+        tuple(
+            dict.fromkeys(
+                (*entry.limitations, *source.limitations, "line_coordinates_extracted_markdown")
+            )
+        ),
+    )
