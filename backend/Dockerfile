@@ -11,6 +11,7 @@ WORKDIR /srv/backend
 
 COPY ai/pyproject.toml ai/README.md /srv/ai/
 COPY ai/src /srv/ai/src
+COPY ai/prompts /srv/ai/prompts
 COPY backend/pyproject.toml backend/uv.lock /srv/backend/
 RUN uv sync --locked --no-dev --no-editable
 
