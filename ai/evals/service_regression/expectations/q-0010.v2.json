@@ -1,0 +1,27 @@
+{
+  "case_id": "q-0010",
+  "version": 2,
+  "allowed": [
+    {
+      "id": "a1",
+      "purpose": "거절된 경험 전제를 되풀이하지 않는 새 확인·일반 이해 질문을 제안한다."
+    }
+  ],
+  "forbidden": [
+    {
+      "id": "f1",
+      "reason": "Redis 선언만으로 개인의 캐시 설계 경험을 전제한다.",
+      "type": "false_premise"
+    }
+  ],
+  "grader_controls": [],
+  "review": {
+    "status": "unreviewed",
+    "author": "synthetic-v2-author",
+    "reviewer": null,
+    "reviewed_at": null,
+    "pending_notes": [
+      "새 서비스 계약·합성 전제는 사람 검수 보류다."
+    ]
+  }
+}
