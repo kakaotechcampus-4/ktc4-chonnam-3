@@ -218,3 +218,175 @@ def _has_alias(text: str, alias: str) -> bool:
     # Java와 JavaScript, 단어 안에 우연히 들어 있는 기술 이름을 구분한다.
     suffix = r"(?![a-z0-9_])" if alias[-1:].isdigit() else r"(?![a-z_])"
     return re.search(r"(?<![a-z0-9_])" + re.escape(alias) + suffix, text) is not None
+
+
+def source_matches_query(
+    query: str,
+    source: WebSource,
+    *,
+    technology: str | None = None,
+    version: str | None = None,
+    language: str | None = None,
+) -> tuple[bool, tuple[str, ...]]:
+    body = source.content.casefold()
+    requested = _query_version(query)
+    observed = version
+    if observed is None and urlsplit(source.url).hostname == "docs.python.org":
+        found = re.search(r"/(\d+\.\d+)(?:/|$)", urlsplit(source.url).path)
+        observed = found[1] if found else None
+    if requested and (
+        observed is None or not (requested == observed or observed.startswith(requested + "."))
+    ):
+        return False, ("source_version_mismatch",)
+    wanted_language, observed_language = _language(query), language or _source_language(source)
+    if wanted_language and observed_language and wanted_language != observed_language:
+        return False, ("source_language_mismatch",)
+    technologies = [
+        key
+        for key, aliases in _TECHNOLOGIES.items()
+        if any(_has_alias(query.casefold(), alias) for alias in aliases)
+    ]
+    if technology and technology not in technologies:
+        return False, ("query_technology_mismatch",)
+    identity = f"{source.url} {source.title or ''} {body}".casefold()
+    if any(
+        not any(_has_alias(identity, alias) for alias in _TECHNOLOGIES[key]) for key in technologies
+    ):
+        return False, ("query_technology_mismatch",)
+    # 명시 API 식별자를 빼먹은 같은 도메인 문서를 관련 자료로 채택하지 않는다.
+    identifiers = re.findall(r"\b[A-Z][a-z]+(?:[A-Z][A-Za-z]*)+\b", query)
+    if any(identifier.casefold() not in body for identifier in identifiers):
+        return False, ("query_identifiers_missing",)
+    aliases = {alias for key in technologies for alias in _TECHNOLOGIES[key]} - {
+        "429",
+        "retry-after",
+    }
+    terms = [
+        term
+        for term in re.findall(r"[a-z][a-z0-9_.-]{2,}|[가-힣]{2,}|\b[1-5]\d{2}\b", query.casefold())
+        if term not in _STOP and term not in aliases and term not in _KO_STOP
+    ]
+
+    expanded: list[str] = []
+    for term in terms:
+        concepts = [
+            concept
+            for concept, spellings in _CONCEPTS.items()
+            if re.search(r"[가-힣]", term) and term in spellings
+        ]
+        # 알려진 한영 개념만 대응시킨다. 알 수 없는 질의어는 계속 원문에서 확인한다.
+        expanded.extend(concepts or (term,))
+    terms = list(dict.fromkeys(expanded))
+
+    def present(term: str) -> bool:
+        return (
+            term in body
+            or any(alias in body for alias in _CONCEPTS.get(term, ()))
+            or term in {"cancelled", "cancels"}
+            and "cancel" in body
+        )
+
+    if not terms or not all(present(term) for term in terms):
+        return False, ("query_terms_missing",)
+    return True, (
+        ("deterministic_query_match_not_semantic_approval",)
+        + (() if observed_language else ("source_language_unverified",))
+    )
+
+
+def matching_entries(query: str, category: str | None) -> tuple[CatalogEntry, ...]:
+    return tuple(
+        item
+        for item in load_catalog()
+        if item.availability == "public_verified"
+        and (category in item.domain_categories or "general" in item.domain_categories)
+        and any(_has_alias(query.casefold(), alias) for alias in _TECHNOLOGIES[item.technology])
+        and any(term.casefold() in query.casefold() for term in item.query_terms)
+        and (
+            _query_version(query) is None
+            or item.version == _query_version(query)
+            or item.version.startswith((_query_version(query) or "") + ".")
+        )
+        and (_language(query) is None or item.language == _language(query))
+    )
+
+
+def _heading(value: str) -> str:
+    value = re.sub(r"\[¶\]\([^)]*\)", "", value)
+    # 실제 추출의 [제목](#anchor)은 표시 문자열로만 대조하고 저장 원문은 바꾸지 않는다.
+    value = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", value)
+    return re.sub(r"\s+", " ", re.sub(r"[¶​]", "", value)).strip().casefold()
+
+
+def _headings(lines: list[str]) -> Iterator[tuple[int, re.Match[str]]]:
+    fence: str | None = None
+    for index, line in enumerate(lines):
+        marker = _FENCE.match(line)
+        if marker:
+            if fence is None:
+                fence = marker[1]
+            elif marker[1][0] == fence[0] and len(marker[1]) >= len(fence):
+                fence = None
+            continue
+        if fence is None and (heading := _HEAD.match(line)):
+            yield index, heading
+
+
+def prepare_snapshot(entry: CatalogEntry, source: WebSource) -> SnapshotDraft:
+    if source.content_scope != "extracted_page" or entry.availability != "public_verified":
+        raise OfficialSourceError("source_not_extractable")
+    if len(source.content) > MAX_PAGE_CONTENT_CHARS:
+        raise OfficialSourceError("source_content_budget")
+    if hashlib.sha256(source.content.encode()).hexdigest() != source.content_hash:
+        raise OfficialSourceError("source_hash_mismatch")
+    if _source_language(source) and _source_language(source) != entry.language:
+        raise OfficialSourceError("source_language_mismatch")
+    if entry.technology == "python" and f"/{entry.version}/" not in source.url:
+        raise OfficialSourceError("source_version_mismatch")
+    allowed = tuple(
+        dict.fromkeys(
+            domain for category in entry.domain_categories for domain in scope_domains(category)
+        )
+    )
+    url = checked_source_url(entry.url, allowed)
+    if checked_source_url(source.url, allowed) != url:
+        raise OfficialSourceError("source_url_mismatch")
+    lines = source.content.splitlines()
+    headings = list(_headings(lines))
+    starts = [
+        (i, match) for i, match in headings if _heading(match[2]) == _heading(entry.section_heading)
+    ]
+    if len(starts) != 1:
+        raise OfficialSourceError("requested_section_missing")
+    start, heading = starts[0]
+    end = next(
+        (i for i, match in headings if i > start and len(match[1]) <= len(heading[1])),
+        len(lines),
+    )
+    if end == len(lines) and "content_truncated" in source.limitations:
+        raise OfficialSourceError("requested_section_incomplete")
+    if not any(
+        line.strip() and not _HEAD.match(line) and not _FENCE.match(line)
+        for line in lines[start + 1 : end]
+    ):
+        raise OfficialSourceError("requested_section_empty")
+    content = "\n".join(lines[start:end]).rstrip()
+    if len(content) > MAX_SECTION_CONTENT_CHARS:
+        raise OfficialSourceError("section_content_budget")
+    return SnapshotDraft(
+        entry,
+        url,
+        source.title,
+        content,
+        hashlib.sha256(content.encode()).hexdigest(),
+        source.content,
+        source.content_hash,
+        start + 1,
+        start + len(content.splitlines()),
+        source.retrieved_at,
+        tuple(
+            dict.fromkeys(
+                (*entry.limitations, *source.limitations, "line_coordinates_extracted_markdown")
+            )
+        ),
+    )
