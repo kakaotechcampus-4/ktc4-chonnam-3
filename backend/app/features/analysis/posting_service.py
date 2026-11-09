@@ -20,7 +20,12 @@ from app.integrations.jd.base import (
     UnsupportedSiteError,
 )
 from app.integrations.jd.wanted import WantedAdapter, extract_job_id
-from app.llm_tasks.jd_extract import JdExtractionError, JdRequirementDraft, build_requirement_drafts
+from app.llm_tasks.jd_extract import (
+    JdExtractionError,
+    JdRequirementDraft,
+    build_requirement_drafts,
+    is_requirement_heading,
+)
 
 
 def normalize_posting_url(posting_url: str) -> str:
@@ -37,6 +42,17 @@ def _fresh(posting: JobPosting | None, now: datetime, ttl: timedelta) -> bool:
     return (
         posting is not None and posting.fetched_at is not None and posting.fetched_at >= now - ttl
     )
+
+
+async def _reusable_success(
+    db: AsyncSession, posting: JobPosting | None, now: datetime, ttl: timedelta
+) -> bool:
+    if posting is None or not _fresh(posting, now, ttl):
+        return False
+    # 이전 추출기가 제목을 요구사항으로 저장한 자료는 원문을 다시 확인해 새 ID로 보존한다.
+    # 판별 규칙은 신규 추출과 공유하며 기존 요구행·면접의 참조 ID는 수정하지 않는다.
+    requirements = await get_posting_requirements(db, posting.id)
+    return not any(is_requirement_heading(row.text) for row in requirements)
 
 
 def _content(snapshot: dict[str, object]) -> dict[str, object]:
@@ -150,7 +166,7 @@ async def fetch_posting(
     ttl = timedelta(days=reuse_ttl_days)
     async with session_factory() as db:
         current = await get_current_successful_posting(db, normalized_url)
-        if current is not None and _fresh(current, checked_at, ttl):
+        if current is not None and await _reusable_success(db, current, checked_at, ttl):
             db.expunge(current)
             return PreparedPosting(
                 posting_url, normalized_url, checked_at, reuse_ttl_days, cached=current
@@ -194,7 +210,7 @@ async def complete_posting(
     async with session_factory.begin() as db:
         await lock_posting_url(db, normalized_url)
         current = await get_current_successful_posting(db, normalized_url)
-        if current is not None and _fresh(current, checked_at, ttl):
+        if current is not None and await _reusable_success(db, current, checked_at, ttl):
             # 수집 도중 다른 요청이 확정한 자료를 사용해 중복 INSERT와 늦은 덮어쓰기를 막는다.
             result = current
         elif (

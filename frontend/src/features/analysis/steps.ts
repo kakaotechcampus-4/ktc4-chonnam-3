@@ -5,18 +5,26 @@ import type { StepKey, StepStatus } from '@/types/api';
 // 그룹 경계는 임의 판단이라 디자인·기획 쪽 확인 필요
 // (ponytail: 그룹 매핑은 가정, 명세에 그룹 개념이 생기면 그걸 따를 것)
 export const STEP_GROUPS: { label: string; keys: StepKey[] }[] = [
-  { label: '공고 문서 확인', keys: ['doc_extract'] },
+  // doc_extract는 첨부한 포트폴리오만 다룬다. 공고 링크 확인은 '공고 요구사항 분석'이라
+  // Figma의 '공고 문서 확인' 대신 '첨부 문서 확인'으로 쓴다.
+  { label: '첨부 문서 확인', keys: ['doc_extract'] },
   { label: 'Repository 구조 확인', keys: ['repo_select', 'repo_detail'] },
   { label: '공고 요구사항 분석', keys: ['jd_fetch', 'jd_extract'] },
   { label: '기술 스택 매칭', keys: ['repo_analyze', 'match_score'] },
 ];
 
+/**
+ * skipped는 실행하지 않은 단계다(문서 미첨부, 실패 뒤 남은 단계). 완료로 세지 않고,
+ * 그룹이 전부 skipped면 'skipped'를 돌려 체크리스트에서 숨기게 한다(api-spec.md #13·#14).
+ * completed와 skipped가 섞이면(단계 사이에서 멈춘 run) 완료가 아니라 pending으로 둔다.
+ */
 export function groupStatus(
   keys: StepKey[],
   steps: Partial<Record<StepKey, StepStatus>>,
 ): StepStatus {
   if (keys.some((key) => steps[key] === 'failed')) return 'failed';
-  if (keys.every((key) => steps[key] === 'completed' || steps[key] === 'skipped')) return 'completed';
+  if (keys.every((key) => steps[key] === 'skipped')) return 'skipped';
+  if (keys.every((key) => steps[key] === 'completed')) return 'completed';
   if (keys.some((key) => steps[key] === 'running')) return 'running';
   return 'pending';
 }

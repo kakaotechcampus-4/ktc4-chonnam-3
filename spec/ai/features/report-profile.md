@@ -21,7 +21,7 @@ ARQ worker가 확정 문답·평가·근거·종료 상태를 읽어 `report_v1`
 - 유효한 question_basis/evaluation_basis와 출처·한계.
 - `answer_vs_code`의 unresolved 차이 및 후속 답변의 설명.
 - 면접 종료 상태, 관찰한 영역과 관찰하지 못한 영역.
-- prompt/model/version과 검수된 평가 기준. 아직 작성·검수되지 않은 세부 채점 기준 seed는 입력으로 가정하지 않는다.
+- prompt/model/version과 검수된 평가 기준. 세부 채점 기준 seed에 초안이 있어도 채택·검수 전에는 입력으로 가정하지 않는다. 실제 작성·검수·연결 범위는 [구현 기록](../implementation.md)에서 확인한다.
 
 사용자에게 묻지 않은 질문의 모범답안, 다른 사용자 문답, 평가 데이터셋의 정답을 넣지 않는다.
 

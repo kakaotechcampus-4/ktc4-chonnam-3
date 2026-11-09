@@ -2,7 +2,7 @@
 
 상태: 초안 — frontend/md/features/analysis.md에서 이관.
 
-아래는 구현·검수 기준이다. 업로드 형식·자소서 처리, 개별 `partial` 저장소 선택, 부분 실패 후 성공 결과 이동은 [task-09](../../../frontend/docs/task-09-analysis.md)에 기록한 수정 보류를 유지한다. 문서와 실제 화면이 모두 일치한다는 뜻은 아니다.
+아래는 구현·검수 기준이다. 업로드 형식·자소서 처리는 [task-09](../../../frontend/docs/task-09-analysis.md)에 기록한 수정 보류를 유지한다. 문서와 실제 화면이 모두 일치한다는 뜻은 아니다.
 
 ## 목표 + 화면 구성
 
@@ -74,7 +74,7 @@ Sprint 1에서 preview는 포트폴리오 전용이다. 자소서는 `/documents
 
 - 선택 가능한 `succeeded` 레포 중 `recommended: true`인 레포는 기본 체크 상태. 최대 5개
 - `status === 'failed'`면 카드 회색 + `errorCode` 문구, `matchScore`·`recommendReason`은 `null`
-- `status === 'partial'`은 카드를 표시하지만 기존 서버 선택 기준상 선택 대상은 아니다. 로컬 화면의 수동·기본 선택 보완은 task-09의 보류 항목이다.
+- `status === 'partial'`은 카드를 표시하지만 서버 선택 기준(L1 `succeeded`)상 선택 대상이 아니다. 실패 카드처럼 회색과 `errorCode` 문구로 보여 주고 수동·기본 선택에서 제외한다.
 - 선택 상한 5개
 
 [0017 결정](../../ai/decisions/0017-recommendation-score-deferral.md)에 따라 Sprint 1에는 추천 숫자 점수를 표시하지 않는다. API의 필수 `matchScore` 필드는 null을 반환하며 null만으로 실패나 추천 제외를 판단하지 않는다. 기존 카드 순서·추천 배지·이유·기본 선택을 유지하고 점수 정렬을 추가하지 않는다. 기존 mock의 숫자 예시는 실제 연결 시 이 정책에 맞춘다. 이 문서 수정은 화면·fixture 구현 완료를 뜻하지 않는다.
@@ -201,7 +201,7 @@ GitHub 토큰 무효는 HTTP reason과 같은 `github_token_invalid`다([`api-sp
 
 재시도는 공고 입력 화면에 이전 공고 URL을 채워 보낸다. 첨부 파일은 다시 올린다.
 
-**분석 실패도 HTTP 200이다.** `status: "failed"` + `failureReason`으로 판단한다. [부분 실패 기준](../../backend/features/analysis-run.md#부분-실패)에 따라 DB run이 `partial`이면 FE에는 `failed`로 매핑하지만 성공한 저장소의 결과는 기존 result API로 조회할 수 있다. 개별 저장소의 `status: 'partial'`과는 다른 범위다. 실패 화면에서 성공 결과로 이동하는 경로는 task-09에 보완안만 기록했으며 버튼 방식이나 코드 수정이 승인·완료된 것은 아니다.
+**분석 실패도 HTTP 200이다.** `status: "failed"` + `failureReason`으로 판단한다. [부분 실패 기준](../../backend/features/analysis-run.md#부분-실패)에 따라 DB run이 `partial`이면 FE에는 `failed`로 매핑하지만 성공한 저장소의 결과는 기존 result API로 조회할 수 있다. 개별 저장소의 `status: 'partial'`과는 다른 범위다. status만으로는 DB partial과 실패를 구분할 수 없어 실패 화면은 result API 응답으로 판단한다. result API 조회가 성공하고 `succeeded` 저장소가 1개 이상이면 면접을 진행할 수 있으므로 실패 안내 없이 저장소 선택 화면으로 바로 이동한다(기록 대체). 저장소 선택 화면은 선택할 수 없는 카드가 있으면 "일부 레포는 분석하지 못했어요. 흐리게 표시된 레포는 선택할 수 없어요."를 보여 준다. 결과가 없는 실패 run은 result API가 `409 not_ready`이므로 실패 화면에 남는다. 실패 안내가 잠깐 보였다가 이동하지 않도록 실패 화면의 제목·안내·체크리스트·버튼은 result API 응답으로 실패가 확정된 뒤 표시한다.
 
 ### 레포별 errorCode (5a-v2 카드)
 

@@ -624,3 +624,36 @@ async def test_committed_valid_first_question_recovers_without_model_call(agent_
         row = await db.get(InterviewSession, ready["interview_id"])
         assert row.status == "in_progress" and row.context_state == dict(preserved="원본")
     assert transport.model_operations == transport.github == []
+
+
+async def test_interview_started_recorded_once_for_duplicate_delivery(agent_sessions, ready):
+    from tests.event_helpers import names
+
+    transport = Transport(ready)
+    assert await run(agent_sessions, ready, transport)
+    assert not await run(agent_sessions, ready, Transport(ready))
+    async with agent_sessions() as db:
+        assert await names(db, "interview_started") == ["interview_started"]
+
+
+async def test_interview_started_recorded_when_committed_question_is_recovered(
+    agent_sessions, ready
+):
+    from tests.event_helpers import names
+
+    async with agent_sessions.begin() as db:
+        row = await db.get(InterviewSession, ready["interview_id"])
+        row.current_turn = 1
+        db.add(
+            InterviewTurn(
+                interview_session_id=row.id,
+                turn_no=1,
+                persona="hr_manager",
+                topic_code="role",
+                question_text="프로젝트에서 맡은 역할을 소개해 주세요.",
+                question_contract=plan()["question"]["question_contract"],
+            )
+        )
+    assert await run(agent_sessions, ready, Transport(ready))
+    async with agent_sessions() as db:
+        assert await names(db, "interview_started") == ["interview_started"]

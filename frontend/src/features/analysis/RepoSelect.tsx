@@ -9,6 +9,11 @@ import Footer from '@/shared/components/Footer';
 import { isApiError } from '@/types/api';
 import RunLoadError from '@/features/analysis/RunLoadError';
 import { postingUrlFrom, type AnalysisInputState } from '@/features/analysis/steps';
+import {
+  abandonInterview,
+  interviewPath,
+  previousInterviewIdFrom,
+} from '@/features/interview/abandon';
 
 const MAX_REPOSITORIES = 5;
 
@@ -81,9 +86,13 @@ export default function RepoSelect() {
   const [selectedIds, setSelectedIds] = useState<string[] | null>(null);
 
   const result = resultQuery.data;
-  // 실패 카드만 선택을 막는다. 하나도 고를 수 없으면 버튼만 꺼진 채 출구가 없어진다.
-  const noSelectable = !!result && result.repositories.every((r) => r.status === 'failed');
-  const defaultSelected = result?.repositories.filter((r) => r.recommended).map((r) => r.id) ?? [];
+  // 서버 선택 조건은 L1 succeeded뿐이다(analysis-run.md 선택 가능 조건). partial·failed 카드는 막는다.
+  // 하나도 고를 수 없으면 버튼만 꺼진 채 출구가 없어진다.
+  const noSelectable = !!result && result.repositories.every((r) => r.status !== 'succeeded');
+  const defaultSelected =
+    result?.repositories
+      .filter((r) => r.recommended && r.status === 'succeeded')
+      .map((r) => r.id) ?? [];
   const selected = selectedIds ?? defaultSelected;
 
   function toggle(id: string) {
@@ -95,11 +104,24 @@ export default function RepoSelect() {
     });
   }
 
+  // [레포 다시 선택하기]로 왔으면 기존 면접을 먼저 abandon한 뒤 새 면접을 만든다(공통 0009).
+  const previousInterviewId = previousInterviewIdFrom(location.state);
   const createInterviewMutation = useMutation({
-    mutationFn: () => api.createInterview({ runId, repositoryIds: selected }),
-    onSuccess: (data) => {
+    mutationFn: async () => {
+      if (previousInterviewId) {
+        const status = await abandonInterview(previousInterviewId);
+        // 이미 완료됐거나 다른 탭에서 다시 준비 중이면 새로 만들지 않고 그 면접으로 간다.
+        if (status !== null && status !== 'abandoned') {
+          return interviewPath(previousInterviewId, status);
+        }
+      }
+      const created = await api.createInterview({ runId, repositoryIds: selected });
+      return `/interview/${created.interviewId}/prepare`;
+    },
+    onSuccess: (path) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.interviewsAll });
-      navigate(`/interview/${data.interviewId}/prepare`);
+      // 뒤로 가기로 같은 run의 레포 선택 화면에 돌아와 기존 면접 id 없이 새 면접을 만들지 않게 한다.
+      navigate(path, { replace: true });
     },
   });
 
@@ -146,6 +168,12 @@ export default function RepoSelect() {
                   찾았어요.
                 </p>
               )}
+              {/* 부분 실패 run은 실패 화면 대신 여기로 온다(analysis.md 부분 실패). 고를 수 없는 카드의 이유를 먼저 알린다. */}
+              {!noSelectable && result.repositories.some((r) => r.status !== 'succeeded') && (
+                <p className="mt-4 text-xs text-muted">
+                  일부 레포는 분석하지 못했어요. 흐리게 표시된 레포는 선택할 수 없어요.
+                </p>
+              )}
 
               <div className="mt-5 flex gap-4">
                 <div className="flex-1 rounded-[10px] border border-line-soft p-4">
@@ -153,22 +181,22 @@ export default function RepoSelect() {
                   <ul className="mt-3 flex flex-col gap-2">
                     {result.repositories.map((repo) => {
                       const checked = selected.includes(repo.id);
-                      const failed = repo.status === 'failed';
+                      const unselectable = repo.status !== 'succeeded';
                       return (
                         <li key={repo.id}>
                           <button
                             type="button"
-                            disabled={failed}
+                            disabled={unselectable}
                             onClick={() => toggle(repo.id)}
                             className={
-                              failed
+                              unselectable
                                 ? 'flex w-full gap-2.5 rounded-lg border border-line-soft bg-paper px-3 py-2.5 text-left opacity-60'
                                 : checked
                                   ? 'flex w-full gap-2.5 rounded-lg border border-accent bg-accent-soft px-3 py-2.5 text-left'
                                   : 'flex w-full gap-2.5 rounded-lg border border-line-soft px-3 py-2.5 text-left'
                             }
                           >
-                            {!failed && (
+                            {!unselectable && (
                               <span
                                 className={
                                   checked
@@ -207,9 +235,11 @@ export default function RepoSelect() {
                                 </span>
                               )}
                               <span className="mt-1 block text-[11.5px] text-muted">
-                                {failed
+                                {unselectable
                                   ? (REPO_ERROR_MESSAGES[repo.errorCode ?? ''] ??
-                                    '분석에 실패했어요')
+                                    (repo.status === 'failed'
+                                      ? '분석에 실패했어요'
+                                      : '면접 대상으로 선택할 수 없어요'))
                                   : repo.recommendReason}
                               </span>
                             </span>

@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from app.db.models import InterviewSession, InterviewTurn, LLMCallRecord
 from app.features.interview.agent_context import AgentStateError
-from tests.agents.director_helpers import analysis, seed_turns, settings
+from tests.agents.director_helpers import analysis, contract, seed_turns, settings
 
 
 @pytest.mark.parametrize("turn_no", [1, 9])
@@ -124,3 +124,45 @@ async def test_missing_verified_scope_is_rejected_before_provider_io(agent_sessi
                 http,
                 None,
             )
+
+
+async def test_skipped_lookup_reason_is_kept_apart_from_not_found_without_io():
+    from app.features.interview.director_service import _retrieve
+
+    candidate = c.Question("hr_manager", "본인의 역할을 설명해 주세요.", "role", contract(), (), ())
+    question = c.validate_question(
+        candidate,
+        review=c.QuestionReview(candidate.text, candidate.question_contract),
+        allowed_personas=("hr_manager",),
+        evidence_refs=frozenset(),
+        basis_refs=frozenset(),
+        jd_requirement_ids=frozenset(),
+    )
+    checked = c.validate_analysis(
+        analysis(),
+        question=question,
+        answer_text="팀원 담당입니다",
+        evidence_refs=frozenset(),
+        allowed_locations=frozenset(),
+    )
+    context = c.Context(
+        "interview-1",
+        "turn-1",
+        1,
+        9,
+        (),
+        ("hr_manager",),
+        (),
+        (),
+        (),
+        contract(),
+        (),
+        (),
+        c.ContextLimits(2, 0, "test"),
+    )
+    # 미조회는 DB·원격 조회 없이 사유만 돌려주며 Tool 결과(not_found)를 만들지 않는다.
+    result, summary = await _retrieve(
+        None, uuid4(), uuid4(), context, checked, frozenset(), [], None, None, None
+    )
+    assert result is None
+    assert summary == "근거 미조회; 이유: 추가 조회 조건을 충족하지 않아 조회하지 않음"

@@ -1,6 +1,9 @@
 # task-06 - 면접 Context 준비 경계
 
-상태: 구현 가이드. AI·BE runtime과 해당 통합 테스트는 아직 구현되지 않았다.
+상태: 구현 가이드. 현재 구현·검증 범위와 남은 연결은 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
+
+[PR #156 후속 기록](../../spec/ai/implementation.md#pr156-review-followup-20261031)은 cron·답변 Context 경계의 당시 검증이다.
+준비 전체의 현재 완료 여부는 이 부분 기록만으로 판단하지 않는다.
 
 ## 목표
 
@@ -24,11 +27,11 @@
 - [전체 AI pipeline](pipeline.md)의 단계와 소유권을 먼저 확인한다.
 - [task-02 내부 계약](task-02-contracts.md)의 fixture 형태를 사용하되 Proposed를 채택된 schema로 보지 않는다.
 - 검증된 posting/JD와 [task-04 L1 분석](task-04-repo-shallow.md), [task-05 L2 분석](task-05-repo-deep.md)의 검증된 출력만 준비 입력으로 사용한다.
-- AI-L06이 풀리기 전에도 유효/무효 path, 잘못된 ref, 부분 L2 fixture 검사는 진행할 수 있다.
+- AI-L06의 준비 성공 기준은 채택됐다. 유효/무효 path, 잘못된 ref, 부분 L2 fixture로 그 기준을 검사하고 실제 준비·저장 연결은 별도로 검증한다.
 
 ## 대상 파일과 책임
 
-- [AI 계약 자리](../src/devon_ai/contracts.py): 채택 후 Context 타입을 둘 위치이며 현재 docstring뿐이다.
+- [AI 계약 원본](../src/devon_ai/contracts.py): 채택된 Context 타입과 순수 검증을 두며 DB 존재·권한·저장 검사는 BE 책임으로 남긴다.
 - [BE 면접 준비](../../backend/app/features/interview/prepare.py): L2 근거 전개와 고정 SHA 사용을 소유한다.
 - [BE 준비 pipeline](../../backend/app/features/analysis/pipeline/interview_prep.py): primary 1~2개 선정, L2, `notable_areas` 검증, context snapshot, 첫 `hr_manager` 질문의 orchestration을 소유한다. 기존 7단계는 [BE pipeline](../../backend/docs/pipeline.md)의 `analysis_run` 책임이다.
 - [BE worker](../../backend/app/workers/tasks/interview_prep.py): 승인된 직렬화 인수로 pipeline을 호출한다.
@@ -60,10 +63,10 @@
 
 ## 검증
 
-- 예정 테스트: `backend/tests/features/interview/test_prepare_context.py` (추가 예정, 현재 없음).
+- 계획 테스트 경로: `backend/tests/features/interview/test_prepare_context.py`. 실제 테스트 구성·실행 결과는 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
 - [ ] 정상 입력과 다른 사용자·미선택 repo·ref 불일치 입력을 대조한다.
 - [ ] L1 누락, primary L2 누락, 사용 가능·제한·무효 notable area를 서로 다른 fixture로 둔다.
-- [ ] AI-L06 결정 전에는 부분 결과의 최종 성공/실패 기대값을 임의로 고정하지 않는다.
+- [ ] 0010의 채택 기준에 따라 primary repo 1~2개 중 검증된 notable area가 1개 이상인 repo가 있으면 준비 성공을 허용하고, 총 0개면 `preparing_failed`인지 검사한다.
 - [ ] Redis hit, miss, expiry, 손상에서 PostgreSQL 기준 결과가 동일한지 검사한다.
 - [ ] 중복 worker, 종료 중 완료, 저장 후 알림 실패에서 첫 질문이 두 번 확정되지 않는지 검사한다.
 - [ ] 준비 실패 시 일반 fallback 질문으로 `in_progress`를 시작하지 않는지 검사한다.
@@ -79,11 +82,15 @@
 - [ ] 준비 성공/실패와 사용자 이탈을 혼동하지 않는다.
 - [ ] 새 Context Builder나 미승인 schema·queue·공개 상태가 추가되지 않는다.
 
-## 결정 대기와 재개 조건
+<a id="결정-대기와-재개-조건"></a>
+
+## 구현·검증 조건과 검토 범위
+
+채택된 준비·job·복구 정책은 [문서 상태 안내](../README.md#ai-document-status)에 따라 구현·검증 조건으로 다룬다. 미채택 반환·공개 변환의 상세만 해당 경계에서 검토한다.
 
 - AI-L02: Question Contract의 기존 다섯 항목·저장 형식과 [0015](../../spec/ai/decisions/0015-existing-contracts-and-tool-results.md)의 Context·Question 필드 구성·기본 표현을 따른다. 미채택 상세 타입·참조·공개 변환은 기존 구조에 맞춰 구체화하며 DB·공개 API 전체가 채택된 것으로 확대하지 않는다.
-- AI-L06: L2 부분 실패와 `preparing_failed` 매핑이 합의되면 readiness 판정을 고정한다.
-- AI-L09: 유효 후보 없음의 실제 반환 계약과 BE/FE 준비 상태·사용자 복구 매핑이 합의되면 첫 질문 실패 연결을 고정한다.
-- AI-L11: worker signature·payload·timeout·retry 책임이 정해지면 실제 enqueue 연결을 재개한다.
-- AI-L12: transaction·중복 방지·저장 후 알림 실패 복구가 정해지면 멱등성 구현을 완료한다.
-- AI-L13·AI-L14: WS 식별·준비 상태·재연결 계약이 정해져야 공개 준비 완료 흐름을 완료로 표시한다.
+- AI-L06: 0010의 L2 부분 성공·`preparing_failed` 기준을 적용하고 무효 repo/path/area 제외와 limitations의 실제 저장·준비 상태 연결을 검증한다.
+- AI-L09: 0018의 기존 오류 안내·기록 보존·명시적 나가기 흐름을 유지한다. 유효 후보 없음의 반환과 BE/FE 준비 상태·사용자 복구 매핑은 기존 계약에 맞춰 구체화하고 첫 질문 실패 연결을 검증한다. 새 공개 의미가 필요하면 그 차이를 검토한다.
+- AI-L11: 기존 `interview_prep(interview_id)` 인수·단일 queue/worker·ARQ `max_tries=1`을 유지한다. worker signature·직렬화·enqueue를 연결하고 timeout은 운영 조건·실측으로 설정·검증한다.
+- AI-L12: 기존 transaction·중복 방지·DB 확정 후 알림 정책을 구현한다. 저장 후 알림 실패 시 저장된 질문 재사용, 중복 worker와 stale 결과 차단을 실제 저장 경계에서 검증한다.
+- AI-L13·AI-L14: 채택된 WS 식별·준비 상태·재연결 의미를 유지하고 실제 송수신·DB 복구를 검증한다. 종료 wire 등 미채택 상세를 임의로 추가하지 않으며 검증 전 공개 준비 완료 흐름을 완료로 표시하지 않는다.

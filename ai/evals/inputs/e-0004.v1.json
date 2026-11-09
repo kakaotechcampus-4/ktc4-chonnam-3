@@ -1,0 +1,6 @@
+{"case_id": "e-0004", "version": 1,
+ "control": {"kind": "evidence", "split": "dev", "source_group_id": "sg-r2", "synthetic": true},
+ "payload": {"question": "NewNoteType에는 어떤 필드가 있나요? 확인한 자료만으로 답하세요.",
+  "materials": [
+   {"ref": "m1", "path": "src/api/note/noteApi.ts", "lines": "4-9", "text": "import { NoteType, NewNoteType, EditNoteType, TotalType } from \"@/types/models\";\n\nexport const createNote = async (note: NewNoteType) => {\n  const { data } = await db.from(\"notes\").insert(note).select();\n  return data;\n};"}
+  ]}}

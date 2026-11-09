@@ -90,6 +90,16 @@ async def test_requires_login(client) -> None:
     assert response.json()["error"]["reason"] == "unauthenticated"
 
 
+async def test_total_score_rounds_half_up_to_integer(client, db, ctx) -> None:
+    interview, _ = ctx
+    await make_report(db, interview, scores=(10, 10, 10, 10, 10, 13))  # 평균 10.5
+    await db.commit()
+
+    body = (await client.get(url(interview.id))).json()
+
+    assert body["totalScore"] == 11  # 짝수 반올림(10)이 아니라 half-up
+
+
 async def test_total_score_is_mean_of_scores_not_stored_value(client, db, ctx) -> None:
     interview, _ = ctx
     await make_report(db, interview, total_score=1)  # 저장값은 평균(75)과 다르다

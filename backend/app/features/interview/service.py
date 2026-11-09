@@ -35,6 +35,7 @@ from app.features.interview.schemas import (
     InterviewTurn,
 )
 from app.shared.enums import Reason
+from app.shared.events import commit_events, record_event
 
 # rt:{sessionId} TTL (docs/pipeline.md 4.4, docs/redis-keys.md).
 REALTIME_SESSION_TTL_SECONDS = 2 * 60 * 60
@@ -112,6 +113,17 @@ async def create_interview(
     # enqueue 실패는 행을 지우지 않는다. preparing 행이 복구 근거이고 reaper 가 재등록한다.
     if not await enqueue_interview_prep(redis, interview_id):
         logger.warning("interview_create_enqueue_deferred", interview_id=str(interview_id))
+    # 선택은 이미 commit 됐으므로 큐 접수 여부와 무관하게 1회 남긴다.
+    # sessionId 발급 실패의 되돌리기 경로는 위에서 raise 하므로 이벤트가 새지 않는다.
+    await record_event(
+        db,
+        "repo_selected",
+        user_id=user_id,
+        analysis_job_id=run_id,
+        interview_session_id=interview_id,
+        payload={"repositoryCount": len(repository_ids)},
+    )
+    await commit_events(db)
     return interview_id, session_id
 
 
