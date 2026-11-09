@@ -171,3 +171,37 @@ async def test_paid_audio_is_cached_on_settle_epoch_failure_and_new_synthesis_st
     assert await redis.hget(budget.key, "pending") == b"2"
     with pytest.raises(TtsError, match="budget_epoch_changed"):
         await budget.reserve("다음 질문")
+
+
+async def test_known_rejection_releases_once_but_uncertain_stays_charged(redis):
+    await initialize_budget(redis, project="reject", remaining_characters=10, monthly_limit=100)
+    budget = RedisCharacterBudget(redis, project="reject", monthly_limit=100)
+    receipt = await budget.reserve("1234")
+    await budget.settle(receipt, "rejected")
+    await budget.settle(receipt, "rejected")
+    assert await redis.hget(budget.key, "used") == b"0"
+    assert await redis.hget(budget.key, "pending") == b"0"
+    assert await redis.hget(budget.key, "uncertain") == b"0"
+    assert await redis.hget(budget.key, "rejected") == b"4"
+    unknown = await budget.reserve("1234")
+    await budget.settle(unknown, "uncertain")
+    assert await redis.hget(budget.key, "used") == b"4"
+
+
+async def test_initialization_records_period_basis_and_formula(redis):
+    import json
+
+    await initialize_budget(
+        redis,
+        project="audit",
+        remaining_characters=20,
+        monthly_limit=100,
+        period="2026-12",
+        basis="user_confirmed_complete_history",
+    )
+    budget = RedisCharacterBudget(redis, project="audit", monthly_limit=100, period="2026-12")
+    metadata = json.loads(await redis.hget(budget.key, "initialization_metadata"))
+    assert metadata["period"] == "2026-12"
+    assert metadata["basis"] == "user_confirmed_complete_history"
+    assert metadata["confirmedRemaining"] == 20
+    assert metadata["initializedAt"] and "pending" in metadata["formula"]

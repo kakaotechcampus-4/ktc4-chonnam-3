@@ -78,6 +78,8 @@ def test_explicit_confirmed_initialization_uses_runtime_settings(monkeypatch, ca
         project="example-project",
         monthly_limit=1000000,
         remaining_characters=25000,
+        period=None,
+        basis="cloud_usage_confirmed",
     )
     redis.aclose.assert_awaited_once()
     output = capsys.readouterr()
@@ -117,3 +119,18 @@ def test_help_does_not_read_configuration(monkeypatch, capsys):
     assert exc.value.code == 0
     config.assert_not_called()
     assert "--cloud-usage-confirmed" in capsys.readouterr().out
+
+
+def test_next_month_can_be_initialized_explicitly(monkeypatch):
+    cli, _, _, _, initialize = setup_cli(monkeypatch)
+    assert cli.main(arguments() + ["--period", "2026-12"]) == 0
+    assert initialize.await_args.kwargs["period"] == "2026-12"
+
+
+def test_invalid_period_does_not_read_configuration(monkeypatch):
+    cli = import_module("scripts.initialize_tts_budget")
+    config = Mock(side_effect=AssertionError("must not read settings"))
+    monkeypatch.setattr(cli, "get_settings", config)
+    with pytest.raises(SystemExit):
+        cli.main(arguments() + ["--period", "2026-13"])
+    config.assert_not_called()

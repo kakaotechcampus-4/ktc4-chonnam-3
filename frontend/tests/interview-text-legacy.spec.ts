@@ -86,3 +86,21 @@ test('기존 text 준비는 마이크 권한 없이 완료하고 text 화면으�
   await expect(page.getByRole('textbox', { name: '답변' })).toBeEnabled();
   expect(await page.evaluate(() => Reflect.get(window, '__legacyMicRequests'))).toBe(0);
 });
+
+
+test('텍스트 stale 오류는 질문 재전송 없이 즉시 초안과 저장 대기를 정리한다', async ({ page }) => {
+  await openLegacy(page);
+  const input = page.getByRole('textbox', { name: '답변' });
+  await expect(input).toBeEnabled();
+  await page.evaluate(() => {
+    (window as unknown as { msw: { fault: (rule: object) => void } }).msw.fault({
+      path: '/ws/interviews/*/reject', reason: 'answer_stale_turn',
+      code: 'ERR_ANSWER_STALE_TURN', times: 1,
+    });
+  });
+  await input.fill('지난 턴에 작성한 초안');
+  await page.getByRole('button', { name: '답변 제출', exact: true }).click();
+  await expect(input).toBeEnabled();
+  await expect(input).toHaveValue('');
+  await expect(page.getByText('답변을 저장하지 못했어요 · 다시 답변해주세요')).toHaveCount(0);
+});
