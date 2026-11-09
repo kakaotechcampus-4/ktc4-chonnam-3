@@ -39,6 +39,16 @@ EXTRACT_ERROR_EMPTY = "empty_document"
 
 
 @dataclass(frozen=True, slots=True)
+class ExtractionBlock:
+    """추출 원문과 원래 문서 위치. 생성된 이미지 설명은 전사 원문으로 넣지 않는다."""
+
+    text: str
+    page: int | None = None
+    coordinate: object | None = None
+    label: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ExtractionResult:
     """추출 결과 한 건.
 
@@ -54,6 +64,11 @@ class ExtractionResult:
     error_code: str | None = None
     # 진단용. 몇 page 중 몇 page 를 읽었는지 같은 값이 들어간다.
     details: dict[str, int] = field(default_factory=dict)
+    blocks: tuple[ExtractionBlock, ...] = ()
+    limitations: tuple[str, ...] = ()
+    source_text: str | None = field(default=None, repr=False)
+    source_is_partial: bool | None = None
+    source_metadata: dict[str, object] = field(default_factory=dict)
 
     @property
     def succeeded(self) -> bool:

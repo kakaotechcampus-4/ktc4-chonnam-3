@@ -16,6 +16,7 @@ class CreateAnalysisRunRequest(CamelModel):
     # 누락·빈 URL은 공통 invalid_request 대신 posting_url_required로 처리한다.
     posting_url: str | None = None
     document_id: uuid.UUID | None = None
+    cover_letter_document_id: uuid.UUID | None = None
 
 
 class CreateAnalysisRunResponse(CamelResponse):

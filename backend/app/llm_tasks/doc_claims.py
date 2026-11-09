@@ -1,8 +1,33 @@
-"""Sprint 2 문서 Claim 추출의 예정 위치. 추출 기능은 미구현이다.
+"""기존 AI Claim 추출을 실제 공급자 호출과 분리된 예산에 연결한다."""
 
-Sprint 1은 document_claims 테이블만 만들고 row 생성·Claim 추출은 하지 않는다.
-Sprint 1 문서 preview의 텍스트·GitHub URL 추출과 구분한다.
-자소서·포트폴리오 Claim의 상세 범위·형식·상한은 Sprint 2 착수 시 검토한다.
+from functools import partial
 
-spec/ai/features/extensions.md
-"""
+import httpx
+from devon_ai import contracts as c
+from devon_ai.llm_tasks.doc_claims import ClaimExtraction, extract_claims
+
+from app.core.config import LLMSettings
+from app.integrations.llm.client import CallBudget, call_model
+
+
+async def analyze_document_claims(
+    text: str,
+    *,
+    prompt: c.PromptSpec,
+    settings: LLMSettings,
+    http_client: httpx.AsyncClient | None = None,
+    attempt_sink: list[c.AttemptMetadata] | None = None,
+) -> ClaimExtraction:
+    return await extract_claims(
+        text,
+        prompt=prompt,
+        limits=settings.call_limits(prompt.task_name),
+        model_call=partial(
+            call_model,
+            api_key=settings.openai_api_key,
+            base_url=settings.llm_base_url,
+            budget=CallBudget(),
+            http_client=http_client,
+            attempt_sink=attempt_sink,
+        ),
+    )

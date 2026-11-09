@@ -81,6 +81,17 @@ def test_payload_numbers_non_empty_lines_and_keeps_text_as_is() -> None:
     assert provider.requests[0].schema_version == "1"
 
 
+@pytest.mark.parametrize("version", ["doc_claims_v1@local-luna", "doc_claims_v2@local-luna"])
+def test_deployment_version_keeps_full_identity_and_checked_original(version) -> None:
+    from dataclasses import replace
+
+    provider = Provider({"claims": [_claim()]})
+    result = _extract(provider, prompt=replace(PROMPT, version=version))
+    assert result.failure is None
+    assert provider.requests[0].prompt.version == version
+    assert result.claims[0].source_line == TEXT.splitlines()[2]
+
+
 def test_claims_are_returned_with_line_number_and_source_line() -> None:
     role = _claim(
         claim_text="4인 팀에서 백엔드를 전담했다.", claim_type="role", tech_tags=[], line_id="L2"
@@ -93,6 +104,20 @@ def test_claims_are_returned_with_line_number_and_source_line() -> None:
     assert first.claim_type == "outcome"
     assert first.tech_tags == ("Redis",)
     assert first.source_line == "  Redis 캐시를 도입해 API 응답 시간을 70% 줄였습니다.  "
+
+
+def test_v2_accepts_only_the_same_source_checked_claim_schema() -> None:
+    from dataclasses import replace
+
+    provider = Provider({"claims": [_claim()]})
+    result = _extract(provider, prompt=replace(PROMPT, version="doc_claims_v2"))
+    assert result.failure is None and result.claims[0].source_line in TEXT
+    assert provider.requests[0].prompt.version == "doc_claims_v2"
+    invalid = _extract(
+        Provider({"claims": [_claim(line_id="L999")]}),
+        prompt=replace(PROMPT, version="doc_claims_v2"),
+    )
+    assert invalid.failure.stage == "semantic"
 
 
 def test_no_claims_is_success() -> None:
@@ -179,7 +204,7 @@ def test_blank_document_does_not_call_model() -> None:
     ("text", "prompt"),
     [
         (TEXT, c.PromptSpec("domain_category", "domain_category_v1", "fixture-model", "t")),
-        (TEXT, c.PromptSpec("doc_claims", "doc_claims_v2", "fixture-model", "t")),
+        (TEXT, c.PromptSpec("doc_claims", "doc_claims_v3", "fixture-model", "t")),
         (None, PROMPT),
     ],
 )

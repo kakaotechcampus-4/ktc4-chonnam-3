@@ -10,6 +10,9 @@ from dataclasses import dataclass
 from typing import Literal, get_args
 
 from devon_ai import contracts as c
+from devon_ai.prompt_versions import require_prompt_version
+
+SUPPORTED_PROMPT_VERSIONS = frozenset({"domain_category_v2"})
 
 DomainCategory = Literal["finance", "game", "travel", "shopping", "medical", "mobility", "etc"]
 CATEGORIES: tuple[DomainCategory, ...] = get_args(DomainCategory)
@@ -90,12 +93,9 @@ async def classify_domain(
 ) -> DomainDecision:
     """공고 1건의 category를 고른다. 호출·근거 검증 실패는 기록을 남기고 `etc`다(0022 결정 4·5)."""
     try:
-        if (
-            type(prompt) is not c.PromptSpec
-            or prompt.task_name != "domain_category"
-            or prompt.version != "domain_category_v2"
-        ):
-            raise c.ContractError("schema", "domain_category prompt")
+        require_prompt_version(
+            prompt, task_name="domain_category", supported_versions=SUPPORTED_PROMPT_VERSIONS
+        )
         if type(limits) is not c.CallLimits:
             raise c.ContractError("schema", "domain_category limits")
         if type(posting) is not c.DomainPostingInput:

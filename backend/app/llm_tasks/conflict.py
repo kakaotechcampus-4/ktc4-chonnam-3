@@ -1,8 +1,35 @@
-"""Sprint 2 문서 Claim과 코드 근거의 대조 경계. 기능은 미구현이다.
+"""문서 Claim 대조를 기존 Model Gateway의 한 배치·최대 두 시도에 연결한다."""
 
-이 모듈의 문서 Claim 대조는 Sprint 1에서 실행하지 않는다. 별개로 Sprint 1 답변과
-코드의 차이는 evidence_conflicts에 source='answer_vs_code', claim_id=NULL,
-verdict='unresolved'로 저장하는 기존 service 책임을 유지한다.
+from functools import partial
 
-spec/ai/features/evidence-retrieval.md · spec/ai/features/extensions.md
-"""
+import httpx
+from devon_ai import contracts as c
+from devon_ai.llm_tasks.claim_code import ClaimComparisonResult, ClaimForComparison, compare_claims
+
+from app.core.config import LLMSettings
+from app.integrations.llm.client import CallBudget, call_model
+
+
+async def compare_document_claims(
+    claims: tuple[ClaimForComparison, ...],
+    evidences: tuple[c.Evidence, ...],
+    *,
+    prompt: c.PromptSpec,
+    settings: LLMSettings,
+    http_client: httpx.AsyncClient | None = None,
+    attempt_sink: list[c.AttemptMetadata] | None = None,
+) -> ClaimComparisonResult:
+    return await compare_claims(
+        claims,
+        evidences,
+        prompt=prompt,
+        limits=settings.call_limits(prompt.task_name),
+        model_call=partial(
+            call_model,
+            api_key=settings.openai_api_key,
+            base_url=settings.llm_base_url,
+            budget=CallBudget(),
+            http_client=http_client,
+            attempt_sink=attempt_sink,
+        ),
+    )
