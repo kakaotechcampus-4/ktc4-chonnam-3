@@ -1,49 +1,184 @@
-"""report_generate 성공 뒤 enqueue 되는 프로필 갱신 태스크. 인자는 userId 뿐이다.
+"""보고서 성공 뒤 사용자별 프로필을 갱신하고 영속 전달의 완료를 기록한다.
 
-profile:gen:{userId} lock(NX, 10분)을 잡은 job 만 집계한다. 이미 있으면 바로 끝낸다.
+사용자별 토큰 임대가 있는 job만 집계한다. 경합한 새 report는 dirty를 남겨 후속 집계한다.
 실패해도 예외를 밖으로 내지 않고 코드만 로그에 남긴다. 이전 성공 요약은 그대로이며
-이미 성공한 report 에는 영향이 없다. 자동 재시도(max_tries=1)·복구는 Sprint 2다.
+이미 성공한 report 에는 영향이 없다. 전달 유실은 outbox의 유한 복구가 처리하며,
+모델 실패를 ARQ 재시도로 우회하지 않는다(max_tries=1). 기존 user-only job도 허용한다.
 
 docs/layer-rules.md 1절 / task-16
 """
 
+import asyncio
+import secrets
 import uuid
 from typing import Any
 
+from anyio import CancelScope
 from redis.exceptions import RedisError
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.features.profile import refresh_outbox as outbox
 from app.features.profile import service
+from app.workers.profile_refresh_queue import ProfileRefreshLease, enqueue_refresh
 
 logger = get_logger(__name__)
 
 
-async def profile_summary(ctx: dict[str, Any], user_id: str) -> None:
+async def profile_summary(
+    ctx: dict[str, Any], user_id: str, request_id: str | None = None, delivery_no: int | None = None
+) -> None:
     uid = uuid.UUID(user_id)
+    identity = uuid.UUID(request_id) if request_id is not None else None
+    token = None
+    if identity is not None:
+        if type(delivery_no) is not int:
+            return
+        token = await outbox.claim(ctx["session_factory"], identity, uid, delivery_no)
+        if token is None:
+            return
     redis = ctx["redis"]
-    key = service.PROFILE_LOCK_KEY.format(user_id=uid)
+    lease = ProfileRefreshLease(redis, str(uid), service.PROFILE_LOCK_TTL_SECONDS)
     try:
-        acquired = await redis.set(key, "1", nx=True, ex=service.PROFILE_LOCK_TTL_SECONDS)
+        acquired = await lease.acquire()
     except RedisError:
         logger.error("profile_summary_lock_failed", user_id=user_id)
+        if identity is not None and token is not None:
+            await outbox.finish(
+                ctx["session_factory"],
+                identity,
+                token,
+                success=False,
+                retry=True,
+                error="profile_lock_unavailable",
+            )
         return
     if not acquired:
+        if identity is not None and token is not None:
+            await outbox.finish(
+                ctx["session_factory"],
+                identity,
+                token,
+                success=False,
+                retry=True,
+                error="profile_refresh_busy",
+            )
         return
-    try:
-        outcome = await service.refresh_profile_summary(
-            ctx["session_factory"],
-            user_id=uid,
-            llm=get_settings().require_llm(),
-            http_client=ctx["http_client"],
+    heartbeat = None
+    lease_lost = asyncio.Event()
+
+    async def current() -> bool:
+        return await lease.current() and (
+            identity is None
+            or token is not None
+            and await outbox.current(ctx["session_factory"], identity, token)
         )
+
+    async def load_generated(fingerprint: str) -> dict[str, object] | None:
+        assert identity is not None and token is not None
+        return await outbox.generated_result(ctx["session_factory"], identity, token, fingerprint)
+
+    async def preserve_generated(result: dict[str, object]) -> bool:
+        assert identity is not None and token is not None
+        return await outbox.preserve_generated_result(
+            ctx["session_factory"], identity, token, result
+        )
+
+    try:
+        operation = asyncio.create_task(
+            service.refresh_profile_summary(
+                ctx["session_factory"],
+                user_id=uid,
+                llm=get_settings().require_llm(),
+                http_client=ctx["http_client"],
+                check_current=current,
+                load_generated=load_generated if identity is not None else None,
+                preserve_generated=preserve_generated if identity is not None else None,
+            )
+        )
+        heartbeat = asyncio.create_task(_heartbeat(lease, operation, lease_lost))
+        outcome = await operation
+        if identity is not None and token is not None:
+            await outbox.finish(
+                ctx["session_factory"],
+                identity,
+                token,
+                success=outcome in {"updated", "role_kept"},
+                retry=outcome == "skipped",
+                error="profile_input_changed" if outcome == "skipped" else None,
+            )
         logger.info("profile_summary_done", user_id=user_id, outcome=outcome)
+    except asyncio.CancelledError:
+        if identity is not None and token is not None:
+            await asyncio.shield(
+                outbox.finish(
+                    ctx["session_factory"],
+                    identity,
+                    token,
+                    success=False,
+                    retry=True,
+                    error="profile_worker_interrupted",
+                )
+            )
+        if not lease_lost.is_set():
+            raise
+        logger.warning("profile_summary_lease_lost", user_id=user_id)
+    except RedisError:
+        if identity is not None and token is not None:
+            await outbox.finish(
+                ctx["session_factory"],
+                identity,
+                token,
+                success=False,
+                retry=True,
+                error="profile_infrastructure_unavailable",
+            )
+        logger.warning("profile_summary_infrastructure_unavailable", user_id=user_id)
     except Exception as error:
+        if identity is not None and token is not None:
+            # 모델 semantic 오류는 새 전달로 우회 재실행하지 않는다.
+            await outbox.finish(
+                ctx["session_factory"],
+                identity,
+                token,
+                success=False,
+                error=service.failure_code(error),
+            )
         logger.warning(
             "profile_summary_failed", user_id=user_id, error_code=service.failure_code(error)
         )
     finally:
+        with CancelScope(shield=True):
+            if heartbeat is not None:
+                heartbeat.cancel()
+                await asyncio.gather(heartbeat, return_exceptions=True)
+            try:
+                dirty = await lease.release()
+            except RedisError:
+                logger.error("profile_summary_lock_release_failed", user_id=user_id)
+                dirty = False
+            if dirty:
+                try:
+                    await outbox.wake_user(ctx["session_factory"], uid)
+                    if identity is None:
+                        await enqueue_refresh(
+                            redis, str(uid), event_id=f"refresh:{secrets.token_hex(16)}"
+                        )
+                except Exception:
+                    # 보고서·기존 요약은 보존한다. LLM 실패만으로는 이 경로에 들어오지 않는다.
+                    logger.error("profile_summary_followup_enqueue_failed", user_id=user_id)
+
+
+async def _heartbeat(
+    lease: ProfileRefreshLease, operation: asyncio.Task[service.RefreshOutcome], lost: asyncio.Event
+) -> None:
+    while True:
+        await asyncio.sleep(max(0.05, lease.ttl_seconds / 3))
         try:
-            await redis.delete(key)
+            owned = await lease.renew()
         except RedisError:
-            logger.error("profile_summary_lock_release_failed", user_id=user_id)
+            owned = False
+        if not owned:
+            lost.set()
+            operation.cancel()
+            return
