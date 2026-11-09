@@ -14,12 +14,26 @@ ROOT = Path(__file__).parents[1] / "evals"
 
 def test_current_cases_keep_latest_review_status_without_reusing_historical_approval():
     cases = load_cases(ROOT, allow_legacy_report_contracts=True)
-    assert len(cases) == 19
-    assert Counter(case.expectation["review"]["status"] for case in cases) == {
+    original_ids = {
+        *(f"e-{n:04}" for n in range(1, 7)),
+        *(f"q-{n:04}" for n in range(1, 11)),
+        "f-0001",
+        "r-0001",
+        "r-0002",
+    }
+    original = [case for case in cases if case.case_id in original_ids]
+    # 새 사례가 추가되어도 기존 검수 상태와 과거 snapshot의 분리는 유지한다.
+    assert {case.case_id for case in original} == original_ids
+    assert Counter(case.expectation["review"]["status"] for case in original) == {
         "approved": 6,
         "pending": 4,
         "unreviewed": 9,
     }
+    assert all(
+        case.expectation["review"]["status"] == "unreviewed"
+        for case in cases
+        if case.case_id not in original_ids
+    )
     with pytest.raises(CaseError, match="Historical"):
         load_cases(ROOT / SNAPSHOT_DIRECTORY, allow_legacy_report_contracts=True)
 
@@ -93,4 +107,25 @@ def test_bound_fingerprint_mismatch_is_not_accepted_as_a_new_source(tmp_path):
     manifest["original_files"]["ai/evals/inputs/old.v1.json"] = "0" * 64
     (cohort / "binding-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     with pytest.raises(ValueError, match="fingerprint"):
+        validate_bound_sources(cohort)
+
+
+@pytest.mark.parametrize("damage", ["missing", "json", "array", "files", "digest"])
+def test_invalid_archive_metadata_has_one_public_error(tmp_path, damage):
+    cohort, _, _ = _snapshot(tmp_path)
+    marker = cohort.parent / SNAPSHOT_DIRECTORY / "provenance.json"
+    if damage == "missing":
+        marker.unlink()
+    elif damage == "json":
+        marker.write_text("{", encoding="utf-8")
+    elif damage == "array":
+        marker.write_text("[]", encoding="utf-8")
+    else:
+        metadata = json.loads(marker.read_text(encoding="utf-8"))
+        if damage == "files":
+            metadata.pop("files")
+        else:
+            metadata["files"] = {"inputs/old.v1.json": 1}
+        marker.write_text(json.dumps(metadata), encoding="utf-8")
+    with pytest.raises(ValueError, match="^Invalid historical source snapshot$"):
         validate_bound_sources(cohort)
