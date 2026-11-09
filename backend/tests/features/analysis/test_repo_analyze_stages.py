@@ -22,7 +22,12 @@ from tests.features.analysis.test_repo_analyze import (
 async def collect(sessions, run_id, *, batch_no=1, revoke=False):
     def handler(request):
         assert request.url.host == "api.github.com"
-        return _github_reply(request, unauthorized=revoke and "author" in request.url.params)
+        return _github_reply(
+            request,
+            unauthorized=(
+                revoke and "/repo1/" in request.url.path and "author" in request.url.params
+            ),
+        )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
         return await repo_analyze.collect_candidate_batch(
@@ -39,15 +44,17 @@ async def collect(sessions, run_id, *, batch_no=1, revoke=False):
 async def test_collection_commits_without_a_prompt_and_later_failure_keeps_details(
     session_factory, revoke
 ):
-    run_id, _ = await _seed(session_factory)
+    # 토큰 폐기 뒤의 설정 실패도 확인하려면 앞 레포의 정상 L1 입력을 남긴다.
+    run_id, _ = await _seed(session_factory, count=2 if revoke else 1)
     async with session_factory.begin() as session:
         await session.execute(update(PromptVersion).values(is_active=False))
 
     collected = await collect(session_factory, run_id, revoke=revoke)
     candidates, analyses, repositories = await _read(session_factory, run_id)
-    assert repositories[0].head_sha == SHA
-    assert repositories[0].readme_text == "Python service README"
-    assert "analysis" not in candidates[0].ranking_signals and analyses == []
+    assert all(repository.head_sha == SHA for repository in repositories)
+    assert all(repository.readme_text == "Python service README" for repository in repositories)
+    assert all("analysis" not in candidate.ranking_signals for candidate in candidates)
+    assert analyses == []
     async with session_factory() as session:
         account = (await session.scalars(select(GithubAccount))).one()
         assert account.token_status == ("revoked" if revoke else "valid")
@@ -61,7 +68,7 @@ async def test_collection_commits_without_a_prompt_and_later_failure_keeps_detai
                 session_factory, collected, settings=SETTINGS, http_client=http
             )
     _, analyses, repositories = await _read(session_factory, run_id)
-    assert analyses == [] and repositories[0].head_sha == SHA
+    assert analyses == [] and all(repository.head_sha == SHA for repository in repositories)
     async with session_factory() as session:
         account = (await session.scalars(select(GithubAccount))).one()
         assert account.token_status == ("revoked" if revoke else "valid")

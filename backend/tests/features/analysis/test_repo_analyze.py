@@ -190,6 +190,10 @@ def _github_reply(
     if inaccessible:
         return httpx.Response(404, json={"message": "Not Found"})
     path = request.url.path
+    if "/git/commits/" in path:
+        return httpx.Response(200, json={"sha": sha, "tree": {"sha": "c" * 40}})
+    if "/git/trees/" in path:
+        return httpx.Response(200, json={"sha": "c" * 40, "tree": [], "truncated": False})
     if path.endswith("/languages"):
         return httpx.Response(200, json={"Python": 100})
     if path.endswith("/readme"):
@@ -447,6 +451,40 @@ async def test_token_failure_revokes_account_and_blocks_subsequent_collection(se
     )
 
 
+@pytest.mark.parametrize("status,error_code", [(429, "rate_limited"), (401, "token_invalid")])
+@pytest.mark.parametrize("stop_at", ["languages", "context", "context_without_readme"])
+async def test_collection_stop_after_sha_preserves_reason_without_starting_l1(
+    session_factory, status, error_code, stop_at
+):
+    run_id, _ = await _seed(session_factory, count=2)
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        assert request.url.host == "api.github.com", "중단된 수집분은 L1을 실행하지 않는다."
+        path = request.url.path
+        blocked = path.endswith("/languages") if stop_at == "languages" else "/git/commits/" in path
+        if blocked:
+            return httpx.Response(
+                status,
+                headers={"Retry-After": "90"} if status == 429 else {},
+                json={"message": "fixture collection stop"},
+            )
+        return _github_reply(request, missing_readme=stop_at == "context_without_readme")
+
+    await _run(session_factory, run_id, handler)
+    candidates, analyses, repos = await _read(session_factory, run_id)
+    assert analyses == []
+    assert all(
+        candidate.ranking_signals["analysis"]["error_code"] == error_code
+        for candidate in candidates
+    )
+    assert candidates[0].ranking_signals["analysis"]["head_sha"] == SHA
+    assert candidates[1].ranking_signals["analysis"]["head_sha"] is None
+    assert repos[0].head_sha == SHA
+    assert not any("/repo1/" in request.url.path for request in requests)
+
+
 async def test_late_failure_cannot_overwrite_concurrent_success_or_its_binding(session_factory):
     run_id, repo_ids = await _seed(session_factory)
     waiting = asyncio.Event()
@@ -592,21 +630,25 @@ async def test_rejects_invalid_run_or_batch_before_external_io(session_factory, 
 async def test_later_configuration_failure_does_not_rollback_token_revocation(session_factory):
     from app.llm_tasks.prompt_loader import PromptNotFoundError
 
-    run_id, _ = await _seed(session_factory)
+    # 첫 레포의 정상 입력이 남아 있어야 수집 중단 뒤에도 프롬프트 설정을 확인한다.
+    run_id, _ = await _seed(session_factory, count=2)
     async with session_factory.begin() as session:
         await session.execute(update(PromptVersion).values(is_active=False))
 
     def handler(request):
         assert request.url.host == "api.github.com"
-        return _github_reply(request, unauthorized="author" in request.url.params)
+        return _github_reply(
+            request,
+            unauthorized="/repo1/" in request.url.path and "author" in request.url.params,
+        )
 
     with pytest.raises(PromptNotFoundError):
         await _run(session_factory, run_id, handler)
     async with session_factory() as session:
         account = (await session.scalars(select(GithubAccount))).one()
-        repo = (await session.scalars(select(Repository))).one()
+        repos = list((await session.scalars(select(Repository))).all())
     assert account.token_status == "revoked"
-    assert repo.head_sha == SHA
+    assert all(repo.head_sha == SHA for repo in repos)
 
 
 async def test_accessibility_change_invalidates_matches_even_with_identical_failure_snapshot(
