@@ -224,17 +224,6 @@ def _build_inputs(
     requirements = _requirements(payload.get("requirements"))
     score_turns: list[c.ScoreTurn] = []
     report_turns: list[c.ReportTurn] = []
-    requirements = tuple(
-        c.decode(
-            c.LinkedRequirement,
-            {
-                "id": _mapping(raw, "requirement").get("id"),
-                "category": _mapping(raw, "requirement").get("category"),
-                "text": _mapping(raw, "requirement").get("text"),
-            },
-        )
-        for raw in _items(payload.get("requirements", []), "requirements")
-    )
     evidence: dict[str, c.Evidence] = {}
     for raw_turn in _items(payload.get("turns"), "turns"):
         turn = _mapping(raw_turn, "turn")

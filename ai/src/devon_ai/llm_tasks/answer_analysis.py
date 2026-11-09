@@ -17,8 +17,6 @@ SUPPORTED_PROMPT_VERSIONS = frozenset(
 )
 
 
-SUPPORTED_PROMPT_VERSIONS = frozenset({"answer_analysis_v1"})
-
 type AnalysisChecked = c.ContractChecked[c.AnswerAnalysis]
 type Location = tuple[str, str, str]
 
