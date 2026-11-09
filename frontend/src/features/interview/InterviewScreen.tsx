@@ -316,8 +316,18 @@ export default function InterviewScreen() {
       } else if (message.type === 'interviewEnd') {
         navigate(`/interview/${id}/report`, { replace: true });
       } else if (message.type === 'error') {
+        setAwaitingRetriedQuestion(false);
         // WS 오류는 전역 오류 처리를 거치지 않는다.
         refreshMeIfTokenInvalid(message.reason);
+        if (isTextMode && message.reason === 'answer_stale_turn') {
+          setTextDraft(null);
+          setAnswer(null);
+          setThinking(false);
+          markRecording(id, null);
+          setError(null);
+          void refetchInterview();
+          return;
+        }
         // recoverable: false(stt_unavailable)는 다시 답해도 같으므로 아래 치명 오류로 넘긴다.
         if (message.reason === 'stt_failed' && message.recoverable) {
           fail(message.details?.cause === 'empty_transcript' ? 'empty' : 'stt');
@@ -349,6 +359,10 @@ export default function InterviewScreen() {
           recoverable: message.recoverable,
           occurredAt: message.occurredAt,
         });
+        if (message.reason === 'question_failed' && !message.recoverable) {
+          // 오류 전 상세 캐시에는 복구 가능 여부가 없으므로 서버의 최신 판정을 읽는다.
+          void refetchInterview();
+        }
       }
     },
   });
@@ -416,7 +430,7 @@ export default function InterviewScreen() {
       ? snapshotQuestion
       : liveQuestion;
 
-  const questionAudio = useQuestionAudio(question?.audioUrl ?? null, playKey);
+  const questionAudio = useQuestionAudio(isTextMode ? null : (question?.audioUrl ?? null), playKey);
 
   /** 지금 턴의 답변 상태. 턴이 바뀌면 듣기부터 시작한다. */
   const liveAnswer: AnswerState =
