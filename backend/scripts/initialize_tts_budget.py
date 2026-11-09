@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import re
 import sys
 
 from redis.asyncio import Redis
@@ -10,7 +11,9 @@ from app.core.config import get_settings
 from app.features.interview.tts_budget import BudgetSnapshot, initialize_budget
 
 
-async def initialize(project: str, monthly_limit: int, remaining_characters: int) -> BudgetSnapshot:
+async def initialize(
+    project: str, monthly_limit: int, remaining_characters: int, period: str | None = None
+) -> BudgetSnapshot:
     settings = get_settings()
     tts = settings.require_tts()
     # 다른 프로젝트·한도를 초기화해 실행 중인 서비스의 예산과 어긋나지 않게 한다.
@@ -23,6 +26,8 @@ async def initialize(project: str, monthly_limit: int, remaining_characters: int
             project=project,
             monthly_limit=monthly_limit,
             remaining_characters=remaining_characters,
+            period=period,
+            basis="cloud_usage_confirmed",
         )
     finally:
         await redis.aclose()
@@ -31,6 +36,7 @@ async def initialize(project: str, monthly_limit: int, remaining_characters: int
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--project", required=True)
+    parser.add_argument("--period", help="미리 초기화할 UTC 연월 (YYYY-MM)")
     parser.add_argument("--monthly-limit", required=True, type=int)
     parser.add_argument("--remaining-characters", required=True, type=int)
     parser.add_argument(
@@ -46,6 +52,8 @@ def main(argv: list[str] | None = None) -> int:
         help="진행 중인 합성이 없으며 초기화 동안 새 합성을 막았음",
     )
     args = parser.parse_args(argv)
+    if args.period is not None and not re.fullmatch(r"[0-9]{4}-(?:0[1-9]|1[0-2])", args.period):
+        parser.error("period must be YYYY-MM")
     if not 0 < args.monthly_limit <= 1000000:
         parser.error("monthly-limit must be between 1 and 1000000")
     if not 0 <= args.remaining_characters <= args.monthly_limit:
@@ -54,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("project is invalid")
     try:
         snapshot = asyncio.run(
-            initialize(args.project, args.monthly_limit, args.remaining_characters)
+            initialize(args.project, args.monthly_limit, args.remaining_characters, args.period)
         )
     except Exception:
         # 설정·연결 예외에는 키나 내부 URL이 섞일 수 있으므로 원문을 출력하지 않는다.

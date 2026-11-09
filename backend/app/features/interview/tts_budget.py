@@ -8,6 +8,7 @@ Cloud의 실제 남은 허용량과 진행 중 호출 부재를 확인한 뒤 �
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import secrets
 from collections.abc import Awaitable, Callable
@@ -28,7 +29,7 @@ local prior = tonumber(redis.call('HGET', KEYS[1], 'limit') or ARGV[2])
 local available = math.max(0, tonumber(ARGV[3]) - pending - uncertain)
 local limit = math.min(tonumber(ARGV[2]), prior, used + available)
 redis.call('HSET', KEYS[1], 'run_id', ARGV[1], 'limit', limit,
-  'used', used, 'pending', pending, 'uncertain', uncertain)
+  'used', used, 'pending', pending, 'uncertain', uncertain, 'initialization_metadata', ARGV[4])
 return {limit, used}
 """
 _RESERVE = """
@@ -56,7 +57,10 @@ if current == final then return 1 end
 if current ~= expected then return 0 end
 redis.call('HSET', KEYS[1], field, final)
 redis.call('HINCRBY', KEYS[1], 'pending', -tonumber(ARGV[3]))
-if ARGV[4] ~= 'success' then
+if ARGV[4] == 'rejected' then
+  redis.call('HINCRBY', KEYS[1], 'used', -tonumber(ARGV[3]))
+  redis.call('HINCRBY', KEYS[1], 'rejected', tonumber(ARGV[3]))
+elseif ARGV[4] == 'uncertain' then
   redis.call('HINCRBY', KEYS[1], 'uncertain', tonumber(ARGV[3]))
 end
 return 1
@@ -109,6 +113,7 @@ async def initialize_budget(
     remaining_characters: int,
     monthly_limit: int,
     period: str | None = None,
+    basis: str = "operator_confirmed_remaining",
 ) -> BudgetSnapshot:
     """운영자가 확인한 잔여량으로 초기화한다. 호출·월 전환 경로에서 자동 호출하지 않는다.
 
@@ -118,8 +123,28 @@ async def initialize_budget(
     selected, key = _identity(project, monthly_limit, period)
     if type(remaining_characters) is not int or remaining_characters < 0:
         raise TtsError("invalid_budget_allowance")
+    if basis not in {
+        "operator_confirmed_remaining",
+        "cloud_usage_confirmed",
+        "user_confirmed_complete_history",
+    }:
+        raise TtsError("invalid_budget_basis")
+    metadata = json.dumps(
+        {
+            "basis": basis,
+            "initializedAt": datetime.now(UTC).isoformat(),
+            "period": selected,
+            "monthlyLimit": monthly_limit,
+            "confirmedRemaining": remaining_characters,
+            "formula": (
+                "min(monthlyLimit, priorLimit, used + "
+                "max(0, confirmedRemaining - pending - uncertain))"
+            ),
+        },
+        separators=(",", ":"),
+    )
     result = await _eval(
-        redis, _INITIALIZE, key, await _run_id(redis), monthly_limit, remaining_characters
+        redis, _INITIALIZE, key, await _run_id(redis), monthly_limit, remaining_characters, metadata
     )
     if not isinstance(result, list) or len(result) != 2 or any(type(x) is not int for x in result):
         raise TtsError("budget_unavailable")

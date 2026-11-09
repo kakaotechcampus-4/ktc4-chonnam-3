@@ -53,15 +53,27 @@ diff --git a/backend/app/features/interview/ws.py b/backend/app/features/intervi
          preparing = state.status == "preparing"
          if preparing:
              state = await self.preparation(state, user_id)
-@@ -601,6 +614,17 @@
-     connection: _Connection, user_id: UUID, turn: int, text: str, invalid_turn_reason: str
+@@ -598,9 +611,28 @@
+ 
+ 
+ async def _run_answer(
+-    connection: _Connection, user_id: UUID, turn: int, text: str, invalid_turn_reason: str
++    connection: _Connection,
++    user_id: UUID,
++    turn: int,
++    text: str,
++    invalid_turn_reason: str,
++    *,
++    answer_mode: str = "voice",
  ) -> bool:
      """저장·분석·다음 질문 복구까지 수행한다. 연결을 더 쓸 수 없으면 False."""
 +    classifier = getattr(connection.socket.app.state, "replay_intent_classifier", None)
-+    if ExplicitReplayCommands().is_explicit(text) or classifier is not None:
++    if answer_mode == "voice" and (
++        ExplicitReplayCommands().is_explicit(text) or classifier is not None
++    ):
 +        current = await _read_state(connection.socket, user_id, connection.interview_id)
 +        question = current.question
-+        if question is not None and question["turn"] == turn:
++        if current.answer_mode == "voice" and question is not None and question["turn"] == turn:
 +            if await should_replay(text, str(question["text"]), classifier):
 +                # 분류 대기 중 다른 턴이 확정됐으면 오래된 질문을 다시 전달하지 않는다.
 +                latest = await _read_state(connection.socket, user_id, connection.interview_id)
@@ -71,7 +83,7 @@ diff --git a/backend/app/features/interview/ws.py b/backend/app/features/intervi
      try:
          result = await _execute(connection, user_id, turn, text)
      except AgentStateError as exc:
-@@ -608,7 +632,6 @@
+@@ -608,7 +640,6 @@
              # 저장되지 않았으므로 answerReceived는 가지 않았다. 텍스트는 stale, 음성은 rejected.
              await connection.send(_error(invalid_turn_reason))
              return True
@@ -79,7 +91,7 @@ diff --git a/backend/app/features/interview/ws.py b/backend/app/features/intervi
          recoverable = exc.reason == "connection_replaced_or_busy"
          await connection.send(_error("question_failed", recoverable=recoverable))
          await connection.close()
-@@ -650,7 +673,13 @@
+@@ -650,7 +681,13 @@
      with CancelScope(shield=True):
          # 연결 인계용 유한 표식이다. 호출·재시도 대기·근거 조회 예산과 정리 여유를 포함한다.
          lifetime = ceil(
@@ -94,7 +106,7 @@ diff --git a/backend/app/features/interview/ws.py b/backend/app/features/intervi
          )
          claimed = await _script(
              connection.redis,
-@@ -676,6 +705,7 @@
+@@ -676,6 +713,7 @@
                  text=text,
                  call_id=uuid4(),
                  settings=llm,
@@ -102,7 +114,7 @@ diff --git a/backend/app/features/interview/ws.py b/backend/app/features/intervi
                  http_client=state.http_client,
                  evidence_limits=EvidenceLimits(
                      config.director_evidence_max_requests,
-@@ -691,6 +721,40 @@
+@@ -691,6 +729,42 @@
              with suppress(RedisError):
                  await _script(connection.redis, _RELEASE, 1, connection.work, connection.nonce)
      return result
@@ -139,11 +151,13 @@ diff --git a/backend/app/features/interview/ws.py b/backend/app/features/intervi
 +        await connection.send(_error(parsed))
 +        return True
 +    turn, text = parsed
-+    return await _run_answer(connection, user_id, turn, text, "answer_stale_turn")
++    return await _run_answer(
++        connection, user_id, turn, text, "answer_stale_turn", answer_mode=answer_mode
++    )
  
  
  @router.websocket("/{session_id}")
-@@ -759,24 +823,7 @@
+@@ -759,24 +833,7 @@
              if not await connection.refresh():
                  await connection.close(1008)
                  return

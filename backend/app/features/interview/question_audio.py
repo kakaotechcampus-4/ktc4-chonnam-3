@@ -53,9 +53,16 @@ class AudioQuestion:
 async def load_question(
     db: AsyncSession, *, user_id: UUID, interview_id: UUID, turn_no: int
 ) -> AudioQuestion:
-    interview = await db.get(InterviewSession, interview_id)
+    interview = await db.get(InterviewSession, interview_id, populate_existing=True)
     if interview is None or interview.user_id != user_id:
         raise AppError(Reason.NOT_FOUND)
+    # 현재 음성 면접의 미답변 질문만 유료 합성한다. 과거 면접 재생으로 예산을 소모하지 않는다.
+    if (
+        interview.answer_mode != "voice"
+        or interview.status != "in_progress"
+        or interview.current_turn != turn_no
+    ):
+        raise AppError(Reason.NOT_READY)
     turn = await db.scalar(
         select(InterviewTurn).where(
             InterviewTurn.interview_session_id == interview_id, InterviewTurn.turn_no == turn_no
@@ -63,6 +70,8 @@ async def load_question(
     )
     if turn is None or not turn.question_text.strip():
         raise AppError(Reason.NOT_FOUND)
+    if turn.status != "asked" or turn.answer_text is not None:
+        raise AppError(Reason.NOT_READY)
     return AudioQuestion(interview_id, turn_no, turn.id, turn.question_text, turn.persona)
 
 
@@ -153,6 +162,13 @@ class QuestionAudioService:
                         cached = await self.redis.get(key)
                         if cached is not None:
                             return self._decode(question, cached)
+                        if check_current is not None:
+                            try:
+                                current = await complete_audio_finalization(check_current)
+                            except TimeoutError:
+                                raise TtsError("source_check_unavailable") from None
+                            if not current:
+                                raise TtsError("source_changed")
                         try:
                             audio = await self.synthesizer.synthesize(
                                 question.text, question.persona
@@ -166,16 +182,15 @@ class QuestionAudioService:
                         return audio
                     await asyncio.sleep(0.05)
         except TimeoutError:
+            if acquired:
+                await self._cooldown(key)
             raise TtsError("timeout") from None
         except RedisError:
             raise TtsError("cache_unavailable") from None
         except TtsError:
             if acquired:
                 # 실패 연타가 같은 질문을 반복 합성하지 않도록 짧은 냉각 시간을 둔다.
-                with suppress(RedisError):
-                    await self.redis.set(
-                        key + ":failed", b"1", ex=min(30, self.settings.cache_ttl_seconds)
-                    )
+                await self._cooldown(key)
             raise
         finally:
             if acquired:
@@ -186,6 +201,13 @@ class QuestionAudioService:
                                 Callable[..., Awaitable[object]], self.redis.execute_command
                             )
                             await execute("EVAL", _RELEASE, 1, lock, owner)
+
+    async def _cooldown(self, key: str) -> None:
+        with suppress(RedisError, TimeoutError):
+            async with asyncio.timeout(FINALIZATION_TIMEOUT_SECONDS):
+                await self.redis.set(
+                    key + ":failed", b"1", ex=min(30, self.settings.cache_ttl_seconds)
+                )
 
     def _decode(self, question: AudioQuestion, raw: bytes | str) -> SpeechAudio:
         if not isinstance(raw, bytes):

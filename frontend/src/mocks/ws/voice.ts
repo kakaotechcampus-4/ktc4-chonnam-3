@@ -103,6 +103,11 @@ export function createAnswerHandler(
         send(client, wsError('answer_rejected', 'ERR_ANSWER_REJECTED', { recoverable: true }));
         return;
       }
+      const rejection = takeAnswerFault(socketPath, 'reject');
+      if (rejection) {
+        send(client, wsError(rejection.reason ?? 'answer_rejected', rejection.code ?? 'ERR_ANSWER_REJECTED', { recoverable: true }));
+        return;
+      }
       if (takeAnswerFault(socketPath, 'no-ack')) return;
       if (takeAnswerFault(socketPath, 'drop-before-ack')) {
         recordAnswer(record, message.turn, message.text);

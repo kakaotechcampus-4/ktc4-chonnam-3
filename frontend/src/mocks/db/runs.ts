@@ -24,7 +24,7 @@ export type RunRecord = {
   runId: string;
   postingUrl: string;
   documentId: string | null;
-  coverLetterDocumentId: string | null;
+  coverLetterDocumentId?: string | null;
   createdAt: number;
   /** seed 레코드처럼 시간과 무관하게 고정할 상태. failed run은 이 값으로만 만든다. */
   fixedStatus?: RunStatus;
@@ -66,7 +66,7 @@ export function createRun(
   const target = fingerprint(postingUrl, documentId, coverLetterDocumentId);
   for (const run of runs.values()) {
     if (
-      fingerprint(run.postingUrl, run.documentId, run.coverLetterDocumentId) === target &&
+      fingerprint(run.postingUrl, run.documentId, run.coverLetterDocumentId ?? null) === target &&
       runStatus(run) === 'running'
     ) {
       return { run, reused: true };

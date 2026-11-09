@@ -269,6 +269,15 @@ export default function InterviewScreen() {
       } else if (message.type === 'error') {
         // WS 오류는 전역 오류 처리를 거치지 않는다.
         refreshMeIfTokenInvalid(message.reason);
+        if (isTextMode && message.reason === 'answer_stale_turn') {
+          setTextDraft(null);
+          setAnswer(null);
+          setThinking(false);
+          markRecording(id, null);
+          setError(null);
+          void refetchInterview();
+          return;
+        }
         if (message.reason === 'stt_failed') {
           fail(message.details?.cause === 'empty_transcript' ? 'empty' : 'stt');
           return;
