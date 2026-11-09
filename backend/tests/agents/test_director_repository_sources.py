@@ -458,3 +458,48 @@ def response(data, model="fixture-model"):
             "usage": {"input_tokens": 8, "output_tokens": 6},
         },
     )
+
+
+async def test_large_selected_file_is_split_with_real_line_locations(monkeypatch):
+    import sys
+    from uuid import UUID
+
+    from app.agents.director.tools import EvidenceScope
+    from app.features.interview.repository_sources import collect_repository_sources
+    from app.integrations.llm.client import CallBudget
+
+    original = "".join(f"def item_{n}(): return {n}\n" for n in range(30))
+    digest = hashlib.sha1(
+        f"blob {len(original.encode())}\0".encode() + original.encode()
+    ).hexdigest()
+    monkeypatch.setattr(sys.modules[__name__], "TEXT", original)
+    monkeypatch.setattr(sys.modules[__name__], "BLOB", digest)
+    seed = dict(repo_id=UUID(int=1), sha="a" * 40)
+    transport = Transport(seed, miss=True)
+
+    async def sized(request):
+        result = await transport(request)
+        if request.headers.get("accept") == "application/vnd.github.raw+json":
+            return httpx.Response(200, content=original.encode())
+        if "/git/trees/" in request.url.path:
+            value = result.json()
+            value["tree"][0]["size"] = len(original.encode())
+            return httpx.Response(200, json=value)
+        return result
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(sized)) as http:
+        result = await collect_repository_sources(
+            scope=EvidenceScope(
+                str(seed["repo_id"]), 123, "owner/sample", seed["sha"], frozenset()
+            ),
+            shallow=shallow(seed),
+            prompt=c.PromptSpec("repo_deep", "v2", "fixture", "fixture"),
+            settings=settings().model_copy(update={"director_prepare_max_file_bytes": 128}),
+            http_client=http,
+            budget=CallBudget(),
+        )
+    assert len(result.item.sources) > 1
+    assert len({item.path for item in result.item.sources}) == 1
+    assert all(item.end_line is not None for item in result.item.sources)
+    assert result.item.sources[-1].end_line == 30
+    assert transport.model_operations == ["select"]
