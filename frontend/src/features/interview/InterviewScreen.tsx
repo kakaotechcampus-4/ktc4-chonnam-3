@@ -487,14 +487,22 @@ export default function InterviewScreen() {
 
   /**
    * recoverable: false면 보통 서버가 세션을 닫는다. stt_unavailable은 연결을 유지하지만 다시 답해도
-   * 같은 오류라 똑같이 답변을 막는다.
+   * 같은 오류라 똑같이 답변을 막는다. 저장 답변의 REST 이어가기는 따로 판단한다.
    */
   const fatal = !!error && !error.recoverable;
-  const canStart = !fatal && !!question && wsStatus === 'open' && current.phase === 'listening';
+  // REST 질문이 먼저 보여도 현재 연결이 질문을 재전달하기 전에는 녹음을 시작하지 않는다.
+  // 늦은 최초 question이 진행 중 답변을 다시 듣기 상태로 초기화하는 경합을 막는다.
+  const canStart =
+    !fatal &&
+    !!question &&
+    questionReadySession === interview?.sessionId &&
+    wsStatus === 'open' &&
+    current.phase === 'listening';
   const elapsedSeconds = recorder.startedAt
     ? Math.floor(Math.min(MAX_ANSWER_MS, now - recorder.startedAt) / 1000)
     : 0;
-  const showText = showQuestionText || questionAudio.state === 'failed';
+  const showText = isTextMode || showQuestionText || questionAudio.state === 'failed';
+  const draft = question && textDraft?.turn === question.turn ? textDraft.text : '';
 
   /**
    * 조건부로 나타나는 요소에 aria-live를 달면 삽입 시점을 놓치는 조합이 있다.
@@ -505,7 +513,9 @@ export default function InterviewScreen() {
     : current.phase === 'recording'
       ? '녹음 중이에요'
       : current.phase === 'transcribing'
-        ? '답변을 정리하고 있어요'
+        ? isTextMode
+          ? '답변 저장을 확인하고 있어요'
+          : '답변을 정리하고 있어요'
         : wsStatus === 'reconnecting'
           ? '연결이 끊겼어요. 다시 연결하는 중이에요'
           : thinking
@@ -513,11 +523,24 @@ export default function InterviewScreen() {
             : '';
 
   function handleStartAnswer() {
-    if (!question || !canStart) return;
+    if (isTextMode || !question || !canStart) return;
     questionAudio.stop();
     recordingTurnRef.current = question.turn;
     setAnswer({ turn: question.turn, phase: 'recording', partial: '', final: null, failure: null });
     void recorder.start();
+  }
+
+  function handleSubmitText() {
+    if (!isTextMode || !question || !canStart || !draft.trim() || draft.length > 2000) return;
+    // 공백·줄바꿈을 포함한 작성 원문을 보낸다. 서버 저장 확인은 음성 모드와 같은 경로를 쓴다.
+    const sent = send({ type: 'answer', turn: question.turn, text: draft });
+    setAnswer({
+      turn: question.turn,
+      phase: sent ? 'transcribing' : 'failed',
+      partial: '',
+      final: draft,
+      failure: sent ? null : 'disconnected',
+    });
   }
 
   function handleRetryAnswer() {
@@ -526,8 +549,8 @@ export default function InterviewScreen() {
   }
 
   /**
-   * 이어갈 수 없는 질문 생성 실패에서 같은 레포로 새 면접을 만든다. 실패한 면접은 in_progress로
-   * 남아 있어 먼저 abandon해야 재도전(시작 후 중단된 abandoned만 허용)이 열린다(공통 0009·0010).
+   * 저장 답변 이어가기를 선택하지 않거나 허용되지 않을 때 같은 레포로 새 면접을 만든다.
+   * 기존 면접은 in_progress이므로 먼저 abandon해야 재도전이 열린다(공통 0009·0012).
    */
   const restart = useMutation({
     mutationFn: async () => {
@@ -540,6 +563,91 @@ export default function InterviewScreen() {
     },
   });
   const restartReason = isApiError(restart.error) ? restart.error.error.reason : null;
+
+  const questionRetry = useMutation({
+    mutationFn: () => {
+      questionRetryIdRef.current ??= createRequestId();
+      return api.retryQuestion(id, { requestId: questionRetryIdRef.current });
+    },
+    onSuccess: async () => {
+      setAwaitingRetriedQuestion(true);
+      setQuestionRetryUnknown(false);
+      setQuestionRetryMessage(null);
+      const refreshed = await refetchInterview();
+      if (refreshed.isError) {
+        setAwaitingRetriedQuestion(false);
+        setQuestionRetryUnknown(true);
+        setQuestionRetryMessage(QUESTION_RETRY_UNKNOWN);
+      }
+      if (!refreshed.isError && refreshed.data?.sessionId === interview?.sessionId) {
+        reconnectSocket();
+      }
+      // 새 sessionId로 다시 연결한다. 새 question 전에는 기존 fatal 입력 차단을 유지한다.
+    },
+    onError: async (failure) => {
+      setAwaitingRetriedQuestion(false);
+      const reason = isApiError(failure) ? failure.error.reason : null;
+      const terminal =
+        reason !== null &&
+        [
+          'question_retry_unavailable',
+          'question_retry_failed',
+          'question_retry_limit',
+          'not_found',
+          'unauthenticated',
+          'account_suspended',
+          'account_withdrawn',
+        ].includes(reason);
+      setQuestionRetryBlocked(terminal);
+      setQuestionRetryUnknown(!terminal);
+      setQuestionRetryMessage(
+        questionRetryFailureMessage(reason) ||
+          (terminal ? QUESTION_RETRY_MESSAGE.question_retry_unavailable : QUESTION_RETRY_UNKNOWN),
+      );
+      await refetchInterview();
+    },
+    onSettled: () => {
+      questionRetrySendingRef.current = false;
+    },
+  });
+  useEffect(() => {
+    const saved = interview?.questionRetryState;
+    if (saved?.status !== 'running') return;
+    // 새로고침 뒤에도 서버가 저장한 UUID만 재사용한다. 새 수동 라운드를 만들지 않는다.
+    questionRetryIdRef.current = saved.requestId;
+  }, [interview?.questionRetryState]);
+
+  useEffect(() => {
+    if (!awaitingRetriedQuestion) return;
+    const timer = setTimeout(() => {
+      setAwaitingRetriedQuestion(false);
+      setQuestionRetryUnknown(true);
+      setQuestionRetryMessage(QUESTION_RETRY_UNKNOWN);
+      void refetchInterview();
+    }, SAVE_CONFIRM_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [awaitingRetriedQuestion, id, refetchInterview]);
+
+  const displayedRetryMessage =
+    questionRetryMessage ??
+    (error?.reason === 'question_failed' && interview?.questionRetryState?.status === 'running'
+      ? QUESTION_RETRY_MESSAGE.question_retry_in_progress
+      : null);
+  const questionRetryBusy = questionRetry.isPending || awaitingRetriedQuestion;
+  // 공통 0012의 자동 복구는 서버가 먼저 실행하며, FE의 명시 수동 이어가기는 질문당 1회다.
+  const canContinueQuestion =
+    fatal &&
+    error?.reason === 'question_failed' &&
+    !questionRetryBlocked &&
+    (questionRetryUnknown ||
+      interview?.questionRetryState?.status === 'running' ||
+      (interview?.canRetryQuestion === true && (interview.questionRetryCount ?? 0) < 1));
+
+  function continueQuestion() {
+    if (questionRetryBusy || questionRetrySendingRef.current) return;
+    questionRetrySendingRef.current = true;
+    questionRetry.mutate();
+  }
 
   async function handleLeave() {
     // 명시적 이탈은 REST abandon으로 알린다(공통 0009). 재연결 중에도 보낼 수 있다.
