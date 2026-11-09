@@ -1,4 +1,4 @@
-# 0010 STT 공급자(MLAPI Whisper)와 무음 환각 대응
+# 0011 STT 공급자(MLAPI Whisper)와 무음 환각 대응
 
 - 상태: Proposed
 - 날짜: 2026-11-02

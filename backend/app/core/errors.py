@@ -127,6 +127,17 @@ JOB_POSTING_PARSE_ERROR_CODES = frozenset(
     }
 )
 
+# AI Director가 CallFailure.error_code 로만 전달하는 질문 후보 복구 분류(AI ADR 0008).
+# 알려진 실패 분류일 뿐 재작성·재계획·재호출 실행 권한이 아니다.
+# 공개 reason·WS 이벤트·DB 컬럼이 아니다.
+DIRECTOR_CANDIDATE_RECOVERY_CODES = frozenset(
+    {
+        "director_candidate_rewrite",
+        "director_candidate_replan",
+        "director_no_valid_candidate",
+    }
+)
+
 
 class AppError(Exception):
     """API 에러. router·service 는 HTTPException 대신 이것만 raise 한다.

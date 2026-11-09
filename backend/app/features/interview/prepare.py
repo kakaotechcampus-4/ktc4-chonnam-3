@@ -2,7 +2,7 @@
 
 import asyncio
 from contextlib import suppress
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from functools import partial
 from uuid import UUID, uuid4
@@ -34,7 +34,7 @@ from app.features.analysis.analysis_results import resolve_bound_analysis
 from app.features.interview import prepare_checkpoint, prepare_lease
 from app.features.interview.agent_context import AgentStateError
 from app.features.interview.answer_context import load_answer_context
-from app.features.interview.director_service import start_director
+from app.features.interview.director_service import log_recovery, start_director
 from app.features.interview.repository_sources import (
     SourceCollection,
     SourcePreparationError,
@@ -47,6 +47,7 @@ from app.llm_tasks.prompt_loader import (
     load_active_prompt,
 )
 from app.llm_tasks.repo_deep import analyze_repository, to_repo_analysis_row
+from app.shared.events import record_event
 
 STEPS = ("analyze_repo", "build_persona", "set_criteria", "compose_question")
 logger = get_logger(__name__)
@@ -141,6 +142,9 @@ async def _claim(
             row.status, row.prepare_steps, row.last_error = "in_progress", _steps(4), None
             row.started_at = row.started_at or datetime.now(UTC)
             prepare_lease.clear(row)
+            await record_event(
+                db, "interview_started", user_id=user_id, interview_session_id=interview_id
+            )
             return True
         state = dict(row.context_state or {})
         if state.get("prepare_job_id"):
@@ -601,7 +605,13 @@ async def prepare_interview(
                         continue
                     analysis = result.data.data.analysis
                 else:
-                    analysis = c.validate_deep_analysis(repo.cached, source=sources.item).data
+                    # 다시 읽지 못한 area만 빼고 나머지 관찰은 쓴다(0008 관찰 분리, 0010 준비 기준).
+                    # 못 읽은 경로는 sources.limitations에 남고 Evidence 출발점에서 빠진다.
+                    read = {source.path for source in sources.item.sources}
+                    kept = tuple(a for a in repo.cached.notable_areas if a.path in read)
+                    analysis = c.validate_deep_analysis(
+                        replace(repo.cached, notable_areas=kept), source=sources.item
+                    ).data
                 collected.append((repo, analysis, sources))
             except SourcePreparationError as error:
                 failures.append(error.code)
@@ -682,6 +692,7 @@ async def prepare_interview(
             preparation_guard=partial(_may_publish, job_id=job_id),
         )
         if outcome.turn_id is None:
+            log_recovery(outcome.failure, "prepare")
             async with sessions.begin() as db:
                 row = await _owned(db, user_id, interview_id)
                 if row is not None and prepare_lease.owns_preparation(row, job_id=job_id):
@@ -695,6 +706,9 @@ async def prepare_interview(
             row.status, row.started_at = "in_progress", datetime.now(UTC)
             row.prepare_steps, row.last_error = _steps(4), None
             prepare_lease.clear(row)
+            await record_event(
+                db, "interview_started", user_id=user_id, interview_session_id=interview_id
+            )
         return True
     except (PromptNotFoundError, PromptConfigurationError):
         await _fail(sessions, user_id, interview_id, job_id, "prompt_unavailable", step)

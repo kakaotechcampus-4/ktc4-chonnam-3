@@ -1,0 +1,114 @@
+"""report 어댑터: AI 출력 검증과 모듈 탐색. 실제 LLM은 호출하지 않는다. task-16"""
+
+import copy
+
+import pytest
+
+from app.db.models.interview import PERSONAS
+from app.db.models.report import SCORE_KEYS
+from app.llm_tasks import report as adapter
+from app.llm_tasks.report import ReportDraftInvalidError, validate_draft
+
+VALID = {
+    "headline": "요약 한 줄",
+    "summary": "종합 의견",
+    "scores": {
+        key: {"score": value, "reason": "근거", "evidence_turn_nos": [1]}
+        for key, value in zip(SCORE_KEYS, (80, 70, 60, 90, 50, 100), strict=True)
+    },
+    "feedbacks": [
+        {"persona": persona, "tags": ["a"], "strengths": ["s"], "improvements": ["i"]}
+        for persona in PERSONAS
+    ],
+}
+
+
+def _with(**changes):
+    data = copy.deepcopy(VALID)
+    data.update(changes)
+    return data
+
+
+def test_total_score_is_simple_average():
+    assert validate_draft(VALID).total_score == 75
+
+
+@pytest.mark.parametrize(
+    ("scores", "expected"),
+    [
+        ((10, 10, 10, 10, 10, 11), 10),  # 10.17 -> 내림
+        ((10, 10, 10, 10, 10, 13), 11),  # 10.5 -> 올림(half-up, 짝수 반올림 아님)
+        ((11, 11, 11, 11, 11, 12), 11),  # 11.17 -> 내림
+        ((0, 0, 0, 0, 0, 0), 0),
+        ((100, 100, 100, 100, 100, 100), 100),
+    ],
+)
+def test_total_score_rounds_half_up_to_integer(scores, expected):
+    data = copy.deepcopy(VALID)
+    for key, value in zip(SCORE_KEYS, scores, strict=True):
+        data["scores"][key]["score"] = value
+    assert validate_draft(data).total_score == expected
+    assert adapter.total_score(scores) == expected
+
+
+def test_boundary_scores_are_accepted():
+    data = copy.deepcopy(VALID)
+    data["scores"][SCORE_KEYS[0]]["score"] = 0
+    data["scores"][SCORE_KEYS[1]]["score"] = 100
+    assert validate_draft(data).scores[SCORE_KEYS[0]].score == 0
+
+
+def test_missing_score_key_fails():
+    data = copy.deepcopy(VALID)
+    del data["scores"]["communication"]
+    with pytest.raises(ReportDraftInvalidError, match="scores.keys"):
+        validate_draft(data)
+
+
+def test_extra_score_key_fails():
+    data = copy.deepcopy(VALID)
+    data["scores"]["bonus"] = {"score": 50}
+    with pytest.raises(ReportDraftInvalidError, match="scores.keys"):
+        validate_draft(data)
+
+
+@pytest.mark.parametrize(
+    "bad", [-1, 101, 100.5, 80.0, None, "80", True, float("nan"), float("inf")]
+)
+def test_invalid_score_value_fails(bad):
+    data = copy.deepcopy(VALID)
+    data["scores"]["communication"]["score"] = bad
+    with pytest.raises(ReportDraftInvalidError, match="communication.score"):
+        validate_draft(data)
+
+
+@pytest.mark.parametrize("field", ["headline", "summary"])
+def test_blank_text_fails(field):
+    with pytest.raises(ReportDraftInvalidError, match=field):
+        validate_draft(_with(**{field: "  "}))
+
+
+def test_unknown_or_duplicate_persona_fails():
+    bad = [{"persona": "ceo", "tags": [], "strengths": [], "improvements": []}]
+    with pytest.raises(ReportDraftInvalidError, match="persona"):
+        validate_draft(_with(feedbacks=bad))
+    dup = VALID["feedbacks"] + VALID["feedbacks"][:1]
+    with pytest.raises(ReportDraftInvalidError, match="persona_duplicate"):
+        validate_draft(_with(feedbacks=dup))
+
+
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_fewer_than_three_personas_fails(count):
+    with pytest.raises(ReportDraftInvalidError, match="persona_missing"):
+        validate_draft(_with(feedbacks=VALID["feedbacks"][:count]))
+
+
+def test_non_mapping_output_fails():
+    with pytest.raises(ReportDraftInvalidError):
+        validate_draft("not json object")
+
+
+def test_resolve_generator_without_ai_function_fails(monkeypatch):
+    monkeypatch.delattr("devon_ai.llm_tasks.report.generate_report", raising=False)
+    with pytest.raises(adapter.ReportModuleUnavailableError):
+        adapter.resolve_generator()

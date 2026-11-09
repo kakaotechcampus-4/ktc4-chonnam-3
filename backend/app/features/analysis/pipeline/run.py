@@ -22,6 +22,7 @@ from app.features.analysis.pipeline.run_support import (
     batch_outcome,
     collect,
     failure_code,
+    unexpected_failure_fields,
 )
 from app.features.analysis.pipeline.steps.repo_analyze import (
     analyze_collected_batch,
@@ -171,7 +172,12 @@ async def run_analysis(ctx: dict[str, Any], run_id: UUID) -> None:
         raise
     except Exception as error:
         code = failure_code(error)
-        logger.warning("analysis_run_failed", run_id=str(run_id), error_code=code)
+        logger.warning(
+            "analysis_run_failed",
+            run_id=str(run_id),
+            error_code=code,
+            **unexpected_failure_fields(error),
+        )
         await finish_run(ctx, run_id, "failed", code)
 
 
@@ -216,4 +222,12 @@ async def run_candidate_page(ctx: dict[str, Any], run_id: UUID, page: int) -> No
         await finish_page(ctx, run_id, page, "internal_error")
         raise
     except Exception as error:
-        await finish_page(ctx, run_id, page, failure_code(error))
+        code = failure_code(error)
+        logger.warning(
+            "analysis_page_failed",
+            run_id=str(run_id),
+            page=page,
+            error_code=code,
+            **unexpected_failure_fields(error),
+        )
+        await finish_page(ctx, run_id, page, code)

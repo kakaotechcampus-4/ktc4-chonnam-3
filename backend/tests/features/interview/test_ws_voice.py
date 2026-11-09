@@ -128,7 +128,6 @@ async def test_empty_transcript_sends_stt_failed_with_cause_and_saves_nothing(ex
     [
         SttFailureCause.TIMEOUT,
         SttFailureCause.PROVIDER_ERROR,
-        SttFailureCause.UNAUTHORIZED,
         SttFailureCause.INVALID_AUDIO,
         SttFailureCause.INVALID_RESPONSE,
         SttFailureCause.AUDIO_TOO_LARGE,
@@ -148,7 +147,21 @@ async def test_other_stt_failures_omit_details_and_leak_nothing(executed, cause,
     assert executed.calls == []
 
 
-async def test_missing_stt_configuration_is_stt_failed_without_values(executed, caplog):
+async def test_unauthorized_stt_is_unrecoverable_with_cause(executed, caplog):
+    connection = FakeConnection(FakeStt(SttError(SttFailureCause.UNAUTHORIZED)))
+
+    with caplog.at_level("DEBUG"):
+        assert await _answer(connection, _buffer()) is True
+
+    (event,) = connection.events
+    assert event["reason"] == "stt_failed"
+    assert event["recoverable"] is False
+    assert event["details"] == {"cause": "stt_unavailable"}
+    assert SECRET not in caplog.text
+    assert executed.calls == []
+
+
+async def test_missing_stt_configuration_is_unrecoverable_without_values(executed, caplog):
     settings = SimpleNamespace(
         answer_audio_max_seconds=180.0,
         require_stt=lambda: (_ for _ in ()).throw(ValueError(f"bad {SECRET}")),
@@ -159,7 +172,9 @@ async def test_missing_stt_configuration_is_stt_failed_without_values(executed, 
         await _answer(connection, _buffer())
 
     (event,) = connection.events
-    assert event["reason"] == "stt_failed" and "details" not in event
+    assert event["reason"] == "stt_failed"
+    assert event["recoverable"] is False
+    assert event["details"] == {"cause": "stt_unavailable"}
     assert SECRET not in caplog.text
 
 

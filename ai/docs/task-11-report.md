@@ -1,6 +1,6 @@
 # task-11 - 리포트 서술
 
-상태: 구현 가이드. 현재 runtime은 docstring 스켈레톤이며 리포트 생성 동작은 미구현이다.
+상태: 구현 가이드. 현재 구현·검증 범위와 남은 연결은 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
 
 ## 목표
 
@@ -42,7 +42,7 @@
   주입하고 typed 실패를 service에 돌려준다.
 - [BE report service](../../backend/app/features/report/service.py): 생성 가능 상태, 중복 방지,
   저장과 공개 응답을 소유한다.
-- [BE profile 경계](../../backend/app/llm_tasks/profile_summary.py): 완료 면접의 기존 자료로 통계를 집계하고 개인 역할만 LLM으로 요약한다. 기존 저장·공개 필드·job을 유지하며 실제 연결은 구현 대기다.
+- [BE profile 경계](../../backend/app/llm_tasks/profile_summary.py): 완료 면접의 기존 자료로 통계를 집계하고 개인 역할만 LLM으로 요약한다. 기존 저장·공개 필드·job을 유지한다.
 
 ## 작업
 
@@ -67,7 +67,7 @@
 
 ## 검증
 
-추가 예정, 현재 없음: `ai/tests/llm_tasks/test_report.py`.
+계획 테스트 경로: `ai/tests/llm_tasks/test_report.py`. 실제 테스트 구성·실행 결과는 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
 
 - [ ] 실제 질문·답변·Persona 순서와 생성 결과의 Turn 참조가 일치하는지 검사한다.
 - [ ] 후속 보완과 기여 정정 전후 fixture에서 최종 피드백이 바뀌고 원문은 유지되는지 검사한다.

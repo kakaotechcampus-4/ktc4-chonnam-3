@@ -15,9 +15,25 @@ KINDS = {"evidence", "question", "flow", "report"}
 SPLITS = {"dev", "holdout"}
 CONTROL_KINDS = {"allowed", "forbidden", "ambiguous", "invalid_ref", "tool_failure"}
 REVIEW_STATUSES = {"unreviewed", "approved", "pending", "invalid"}
+# Public report score keys (ADR 0010). Copied here because evals must not import the runtime.
+SCORE_KEYS = {
+    "project_understanding",
+    "technical_reasoning",
+    "problem_solving",
+    "communication",
+    "contribution_clarity",
+    "company_job_fit",
+}
+# Persona quota of one 9-turn interview (ADR 0008): history count + persona_left must equal this.
+PERSONA_QUOTA = {"tech_lead": 6, "domain_lead": 2, "hr_manager": 1}
+PAIR_ROLES = {"stronger", "weaker"}
+_PAIR_KEYS = {"pair_id", "role", "key", "min_gap"}
 
 _INPUT_KEYS = {"case_id", "version", "control", "payload"}
 _EXPECTATION_KEYS = {"case_id", "version", "allowed", "forbidden", "grader_controls", "review"}
+_EXPECTATION_OPTIONAL = frozenset(
+    {"source_fact", "pair"}
+)  # source_fact: fact-table id the case was modeled on; pair: report score order pair
 _CONTROL_KEYS = {"kind", "split", "source_group_id", "synthetic"}
 _REVIEW_KEYS = {"status", "author", "reviewer", "reviewed_at", "pending_notes"}
 
@@ -41,13 +57,17 @@ class Case:
         return copy.deepcopy(self.payload)
 
 
-def _check_keys(name: str, data: dict[str, Any], keys: set[str]) -> None:
-    extra, missing = sorted(set(data) - keys), sorted(keys - set(data))
+def _check_keys(
+    name: str, data: dict[str, Any], keys: set[str], optional: frozenset[str] = frozenset()
+) -> None:
+    extra, missing = sorted(set(data) - keys - optional), sorted(keys - set(data))
     if extra or missing:
         raise CaseError(f"{name}: unexpected keys {extra}, missing keys {missing}")
 
 
-def _load_dir(folder: Path, keys: set[str]) -> dict[str, dict[str, Any]]:
+def _load_dir(
+    folder: Path, keys: set[str], optional: frozenset[str] = frozenset()
+) -> dict[str, dict[str, Any]]:
     by_stem: dict[str, dict[str, Any]] = {}
     seen: dict[tuple[str, int], str] = {}
     for path in sorted(folder.glob("*.json")):
@@ -57,7 +77,7 @@ def _load_dir(folder: Path, keys: set[str]) -> dict[str, dict[str, Any]]:
             raise CaseError(f"{path.name}: {exc}") from exc
         if not isinstance(data, dict):
             raise CaseError(f"{path.name}: top level must be an object")
-        _check_keys(path.name, data, keys)
+        _check_keys(path.name, data, keys, optional)
         case_id, version = data["case_id"], data["version"]
         if not isinstance(case_id, str) or type(version) is not int:
             raise CaseError(f"{path.name}: case_id must be a string and version an integer")
@@ -90,6 +110,19 @@ def _check_control(name: str, control: Any) -> None:
         raise CaseError(f"{name}: only synthetic cases may live here")
 
 
+def _check_pair_field(name: str, pair: Any) -> None:
+    if not isinstance(pair, dict):
+        raise CaseError(f"{name}: pair must be an object")
+    _check_keys(f"{name} pair", pair, _PAIR_KEYS)
+    if not isinstance(pair["pair_id"], str) or not pair["pair_id"]:
+        raise CaseError(f"{name}: pair_id must be a non-empty string")
+    if not _one_of(pair["role"], PAIR_ROLES) or not _one_of(pair["key"], SCORE_KEYS):
+        raise CaseError(f"{name}: pair role or key is not allowed")
+    gap = pair["min_gap"]
+    if type(gap) is not int or not 1 <= gap <= 100:  # bool is an int subclass, so check type
+        raise CaseError(f"{name}: pair min_gap must be an integer from 1 to 100")
+
+
 def _check_expectation(name: str, exp: dict[str, Any]) -> None:
     for key in ("allowed", "forbidden", "grader_controls"):
         if not isinstance(exp[key], list):
@@ -99,6 +132,11 @@ def _check_expectation(name: str, exp: dict[str, Any]) -> None:
             raise CaseError(f"{name}: grader_controls kind is not allowed")
         if not isinstance(item.get("output"), str):
             raise CaseError(f"{name}: grader_controls output must be a string")
+    fact = exp.get("source_fact", "x")
+    if not isinstance(fact, str) or not fact:
+        raise CaseError(f"{name}: source_fact must be a non-empty string")
+    if "pair" in exp:
+        _check_pair_field(name, exp["pair"])
     review = exp["review"]
     if not isinstance(review, dict):
         raise CaseError(f"{name}: review must be an object")
@@ -118,10 +156,149 @@ def _check_expectation(name: str, exp: dict[str, Any]) -> None:
             raise CaseError(f"{name}: approved cannot have open pending_notes")
 
 
+def _text(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _check_contract(case_id: str, contract: Any) -> None:
+    """Question Contract subset a report payload carries (ai/evals/README.md)."""
+    keys = ("purpose", "required_points", "evaluation_scope")
+    points: Any = contract.get("required_points") if isinstance(contract, dict) else None
+    ok = isinstance(contract, dict) and set(contract) == set(keys)
+    ok = ok and _text(contract["purpose"]) and _text(contract["evaluation_scope"])
+    ok = ok and isinstance(points, list) and bool(points)
+    ok = ok and all(
+        isinstance(p, dict) and set(p) == {"key", "description"} and all(map(_text, p.values()))
+        for p in points
+    )
+    if not ok or len({p["key"] for p in points}) != len(points):
+        raise CaseError(f"{case_id}: history turn needs a valid question_contract")
+
+
+TOOL_STATUSES = {"found", "not_found", "insufficient_analysis", "tool_error"}
+
+
+def _check_links(case: Case, history: list[dict[str, Any]]) -> None:
+    """Optional turn evidence_refs and payload tool_results must point at real refs and turns."""
+    name = case.case_id
+    evidence = case.payload.get("evidence", [])
+    refs = {item.get("ref") for item in evidence if isinstance(item, dict)}
+    for turn in history:
+        linked = turn.get("evidence_refs", [])
+        if (
+            not isinstance(linked, list)
+            or len(set(map(str, linked))) != len(linked)
+            or not all(isinstance(ref, str) and ref in refs for ref in linked)
+        ):
+            raise CaseError(f"{name}: evidence_refs must name registered evidence refs once each")
+    numbers = {turn["turn"] for turn in history}
+    results = case.payload.get("tool_results", [])
+    if not isinstance(results, list):
+        raise CaseError(f"{name}: tool_results must be a list")
+    for item in results:
+        keys = {"turn", "status", "limitations", "error_code"}
+        if not isinstance(item, dict) or set(item) != keys:
+            raise CaseError(f"{name}: tool_results item needs {sorted(keys)}")
+        limits, code = item["limitations"], item["error_code"]
+        ok = type(item["turn"]) is int and item["turn"] in numbers
+        ok = ok and _one_of(item["status"], TOOL_STATUSES)
+        ok = ok and isinstance(limits, list) and all(_text(text) for text in limits)
+        ok = ok and (code is None or _text(code))
+        if ok and item["status"] == "tool_error":
+            ok = code is not None and bool(limits)
+        if ok and item["status"] == "insufficient_analysis":
+            ok = code is None and bool(limits)
+        if ok and item["status"] in ("found", "not_found"):
+            ok = code is None
+        if not ok:
+            raise CaseError(f"{name}: tool_results item is not a valid ToolResult for a turn")
+
+
+def _history(case: Case) -> list[dict[str, Any]]:
+    history = case.payload.get("history")
+    turns_ok = isinstance(history, list) and all(isinstance(t, dict) for t in history)
+    if not turns_ok or not history:
+        raise CaseError(f"{case.case_id}: a report case needs a non-empty payload.history list")
+    for turn in history:
+        if type(turn.get("turn")) is not int or not all(
+            isinstance(turn.get(k), str) for k in ("persona", "question", "answer")
+        ):
+            raise CaseError(
+                f"{case.case_id}: history needs int turn and str persona/question/answer"
+            )
+    numbers = [turn["turn"] for turn in history]
+    if len(set(numbers)) != len(
+        numbers
+    ):  # 비교 시트가 turn 번호로 답변을 모으므로 중복은 덮어쓴다.
+        raise CaseError(f"{case.case_id}: history turn numbers must be unique, got {numbers}")
+    for turn in history:
+        _check_contract(case.case_id, turn.get("question_contract"))
+        follows = turn.get("follows")
+        if "follows" in turn and (
+            type(follows) is not int or follows not in numbers or follows >= turn["turn"]
+        ):
+            raise CaseError(f"{case.case_id}: follows must name an earlier turn")
+    _check_links(case, history)
+    return list(history)
+
+
+def _check_pairs(cases: list[Case]) -> None:
+    """A pair is two report cases that differ only in answers, so only answers can move a score."""
+    groups: dict[str, list[Case]] = {}
+    for case in cases:
+        if "pair" in case.expectation:
+            groups.setdefault(case.expectation["pair"]["pair_id"], []).append(case)
+    for pair_id, members in sorted(groups.items()):
+        roles = sorted(c.expectation["pair"]["role"] for c in members)
+        if roles != ["stronger", "weaker"]:
+            raise CaseError(f"pair {pair_id}: needs one stronger and one weaker case, got {roles}")
+        first, second = members
+        if first.kind != "report" or second.kind != "report":
+            raise CaseError(f"pair {pair_id}: only report cases can be paired")
+        if (first.split, first.source_group_id) != (second.split, second.source_group_id):
+            raise CaseError(f"pair {pair_id}: both cases must share split and source_group_id")
+        for field in ("key", "min_gap"):
+            if first.expectation["pair"][field] != second.expectation["pair"][field]:
+                raise CaseError(f"pair {pair_id}: both cases must use the same {field}")
+        frames, answers = [], []
+        for case in (first, second):
+            history = _history(case)
+            frames.append(
+                (
+                    [{k: v for k, v in turn.items() if k != "answer"} for turn in history],
+                    {k: v for k, v in case.payload.items() if k != "history"},
+                )
+            )
+            answers.append([turn.get("answer") for turn in history])
+        if frames[0] != frames[1]:
+            raise CaseError(f"pair {pair_id}: questions, personas and evidence must be identical")
+        if answers[0] == answers[1]:
+            raise CaseError(f"pair {pair_id}: the two cases must differ in at least one answer")
+
+
+def _check_persona_quota(case: Case) -> None:
+    """persona_left is what remains, so past turns plus remaining must add up to the quota."""
+    left, history = case.payload.get("persona_left"), case.payload.get("history")
+    if left is None:
+        return
+    if not isinstance(left, dict) or not isinstance(history, list):
+        raise CaseError(f"{case.case_id}: persona_left needs a dict and a history list")
+    for persona in left:
+        if persona not in PERSONA_QUOTA:
+            raise CaseError(f"{case.case_id}: unknown persona in persona_left: {persona}")
+    for persona, quota in PERSONA_QUOTA.items():
+        done = sum(1 for t in history if isinstance(t, dict) and t.get("persona") == persona)
+        remaining = left.get(persona, 0)
+        if type(remaining) is not int or remaining < 0 or done + remaining != quota:
+            raise CaseError(
+                f"{case.case_id}: {persona} asked {done} + left {remaining} must equal {quota}"
+            )
+
+
 def load_cases(root: Path) -> list[Case]:
     """Load every input/expectation pair under root, or raise CaseError."""
     inputs = _load_dir(root / "inputs", _INPUT_KEYS)
-    expectations = _load_dir(root / "expectations", _EXPECTATION_KEYS)
+    expectations = _load_dir(root / "expectations", _EXPECTATION_KEYS, _EXPECTATION_OPTIONAL)
     orphans = sorted(set(inputs) ^ set(expectations))
     if orphans:
         raise CaseError(f"unpaired or mismatched id/version: {orphans}")
@@ -143,10 +320,16 @@ def load_cases(root: Path) -> list[Case]:
                 expectations[stem],
             )
         )
+    for case in cases:
+        if case.kind == "report":
+            _history(case)
     splits: dict[str, set[str]] = {}
     for case in cases:
         splits.setdefault(case.source_group_id, set()).add(case.split)
     leaked = sorted(group for group, used in splits.items() if len(used) > 1)
     if leaked:
         raise CaseError(f"source_group_id used in both dev and holdout: {leaked}")
+    for case in cases:
+        _check_persona_quota(case)
+    _check_pairs(cases)
     return cases

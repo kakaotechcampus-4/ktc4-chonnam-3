@@ -9,7 +9,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from math import ceil
-from typing import cast
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 from anyio import CancelScope
@@ -40,7 +40,7 @@ from app.features.interview.answer_audio import (
     parse_voice_message,
     turn_rejection,
 )
-from app.features.interview.director_service import AnswerExecution, process_answer
+from app.features.interview.director_service import AnswerExecution, log_recovery, process_answer
 from app.features.interview.queries import list_turns
 from app.features.interview.schemas import InterviewLastError
 from app.features.interview.service import (
@@ -122,12 +122,16 @@ async def _script(redis: Redis, script: str, key_count: int, *values: object) ->
 
 
 def _error(
-    reason: str, *, step: str | None = None, details: dict[str, object] | None = None
+    reason: str,
+    *,
+    step: str | None = None,
+    recoverable: bool = True,
+    details: dict[str, object] | None = None,
 ) -> dict[str, object]:
     event: dict[str, object] = {
         "type": "error",
         "reason": reason,
-        "recoverable": True,
+        "recoverable": recoverable,
         "code": "ERR_" + reason.upper(),
         "step": step,
         "occurredAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -136,6 +140,13 @@ def _error(
     if details is not None:
         event["details"] = details
     return event
+
+
+# 다시 답변해도 복구되지 않는 STT 실패(설정 누락·인증 오류). FE가 반복 안내 대신 서비스 불가로 본다.
+_STT_UNAVAILABLE: dict[str, Any] = {
+    "recoverable": False,
+    "details": {"cause": "stt_unavailable"},
+}
 
 
 async def _deny(socket: WebSocket, reason: str, status: int = 409) -> None:
@@ -443,7 +454,9 @@ class _Connection:
                 await self.send({"type": "prepareCompleted"})
             await self.send(state.question)
             return self.connected
-        event = _error("question_failed")
+        # 진행 중 면접은 재접속해도 실패한 분석·질문 생성을 다시 실행하지 않는다. 복구할 수
+        # 없는 실패이므로 FE가 재연결을 멈추고 abandon 후 새 면접으로 안내하게 한다(공통 0010).
+        event = _error("question_failed", recoverable=state.status != "in_progress")
         if state.status == "preparing_failed" and state.last_error:
             try:
                 last = InterviewLastError.model_validate(state.last_error)
@@ -572,10 +585,13 @@ async def _answer_end(
             turn=end.turn,
             exception_type=type(exc).__name__,
         )
-        empty = exc.cause is SttFailureCause.EMPTY_TRANSCRIPT
-        await connection.send(
-            _error("stt_failed", details={"cause": "empty_transcript"} if empty else None)
-        )
+        if exc.cause is SttFailureCause.EMPTY_TRANSCRIPT:
+            await connection.send(_error("stt_failed", details={"cause": "empty_transcript"}))
+        elif exc.cause is SttFailureCause.UNAUTHORIZED:
+            # 키 문제는 다시 답변해도 풀리지 않는다.
+            await connection.send(_error("stt_failed", **_STT_UNAVAILABLE))
+        else:
+            await connection.send(_error("stt_failed"))
         return True
     except ValueError as exc:
         # 설정 누락·오류. 값(주소·키)은 남기지 않는다.
@@ -585,7 +601,7 @@ async def _answer_end(
             turn=end.turn,
             exception_type=type(exc).__name__,
         )
-        await connection.send(_error("stt_failed"))
+        await connection.send(_error("stt_failed", **_STT_UNAVAILABLE))
         return True
     await connection.send({"type": "transcript", "turn": end.turn, "text": text})
     return await _run_answer(connection, user_id, end.turn, text, "answer_rejected")
@@ -602,11 +618,14 @@ async def _run_answer(
             # 저장되지 않았으므로 answerReceived는 가지 않았다. 텍스트는 stale, 음성은 rejected.
             await connection.send(_error(invalid_turn_reason))
             return True
-        await connection.send(_error("question_failed"))
+        # 다른 연결이 작업 중이거나 이 연결이 교체된 경우만 재접속으로 풀린다.
+        recoverable = exc.reason == "connection_replaced_or_busy"
+        await connection.send(_error("question_failed", recoverable=recoverable))
         await connection.close()
         return False
     if result.failure is not None or result.discard_reason is not None:
-        await connection.send(_error("question_failed"))
+        log_recovery(result.failure, "turn")
+        await connection.send(_error("question_failed", recoverable=False))
         await connection.close()
         return False
     return await connection.restore(user_id)

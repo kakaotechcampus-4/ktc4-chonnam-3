@@ -1,18 +1,19 @@
 # task-10 - Director 질문 결정
 
-상태: 준비된 질문 목적을 받는 기본 생성·독립 검토·검증 경로 구현. 목적 자동 선정·도구 실행·턴 전환·BE 서비스 연결은 후속 범위다.
+상태: 구현 가이드. 현재 구현·검증 범위와 남은 연결은 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
 
 ## 현재 구현
 
-`generate_question`은 기존 Context/QuestionContract와 주입 모델 호출·검토기를 사용해
-`ModelResult[ContractChecked[Question]]` 또는 실패를 반환한다.
-모델의 `DirectorQuestion` schema version 2 출력은 persona·text·topic_code·evidence_refs·
-jd_requirement_ids 다섯 필드만 받는다. 입력 QuestionContract 원본은 코드가 결합해 기존
-여섯 필드 Question을 만들며, 모델이 계약을 다시 출력하거나 바꾸게 하지 않는다.
-[첫 구현 인계](../../spec/ai/designs/2026-09-23-director-question-path.md)에 입력과 책임,
-참조 검사, 요청별 시도 상한, 검토 실패와 [프롬프트 초안](../prompts/director-question-v1.md)을 기록했다.
-검토기는 승인 대신 `CandidateRecovery`를 반환할 수 있으며 `generate_question`은 이를 `director_candidate_rewrite`·`director_candidate_replan`·`director_no_valid_candidate` 실패로 변환한다(실행·재호출 없음).
-실제 의미 검토기와 provider 품질은 아직 검증하지 않았다. 아래 체크리스트는 전체 task 범위다.
+기본 질문 생성의 후보 복구 분류는 [task-10 분류 경계 기록](../../spec/ai/implementation.md#2026-10-06--task-10-director-후보-복구-분류-경계),
+후속 실행·BE 연결의 일부 검증은 [Director 연결 기록](../../spec/ai/implementation.md#director-review-integration-20261030)과
+[PR #156 후속 기록](../../spec/ai/implementation.md#pr156-review-followup-20261031)에서 확인한다.
+각 절은 해당 시점·범위의 기록이며 현재 전체 구현·검증 현황은 [AI 구현·검증 기록](../../spec/ai/implementation.md)에서 확인한다.
+[첫 구현 인계](../../spec/ai/designs/2026-09-23-director-question-path.md)와
+[프롬프트 초안](../prompts/director-question-v1.md)은 당시 설계 기준선이며, 현행 입력·출력과
+실패 경계는 [내부 계약](../../spec/ai/contracts.md)을 따른다. 기본 `generate_question` 경로에서는
+모델이 입력 QuestionContract를 다시 출력하거나 바꾸게 하지 않는다. 이 경로의 `CandidateRecovery`는
+`director_candidate_rewrite`·`director_candidate_replan`·`director_no_valid_candidate` 실패로
+전달하며 재작성·재계획을 실행·재호출하지 않는다. 아래 체크리스트는 전체 task 범위다.
 
 ## 목표
 
@@ -94,9 +95,9 @@ Persona마다 별도 Agent나 class를 만들지 않는다. `hr_manager`, `tech_
 
 ## 검증
 
-현재 존재: `ai/tests/agents/director/test_director.py`,
-`backend/tests/integrations/test_director_boundary.py`.
-기본 생성 경로의 fixture·HTTP adapter 검사이며 아래 전체 턴 정책·서비스 검사의 완료를 뜻하지 않는다.
+기본 생성 경로의 fixture·HTTP adapter 검증 대상은 `ai/tests/agents/director/test_director.py`,
+`backend/tests/integrations/test_director_boundary.py`다. 실제 실행 범위와 결과는
+[AI 구현·검증 기록](../../spec/ai/implementation.md)을 따르며 기본 생성 검사만으로 아래 전체 턴 정책·서비스 검사를 완료 처리하지 않는다.
 
 - [ ] 첫 질문 HR, 9번째 답변 후 종료, 10번째 질문 없음의 대조 사례를 둔다.
 - [ ] Controller가 확정·제시한 횟수와 남은 할당으로 6/2/1 완주가 가능한 후보만 허용하고, 첫 질문 이후 HR과 역할별 할당 초과를 거절하는지 검사한다. 기술·도메인의 서로 다른 순서에서도 정상 완료 배분을 지킨다.
@@ -117,16 +118,20 @@ Mock과 policy fixture 통과는 실제 provider 품질, DB 저장, WS 전달이
 - [ ] 단일 Director의 순수 결정 경계와 BE Controller 소유권이 코드와 테스트에서 분리된다.
 - [ ] 승인된 9턴·Persona·질문 검증·후속 보완 정책의 대조 fixture가 통과한다.
 - [ ] 내부 결정 객체를 공개 WS payload로 직접 직렬화하지 않는다.
-- [ ] 미결정 계약·상한·복구 정책을 임의 값으로 채우지 않고 보류 결과에 남긴다.
+- [ ] 미채택 상세 계약을 임의 값으로 채우지 않고, 운영 상한 설정·측정과 기존 복구 정책의 검증 여부를 구분해 기록한다.
 
-## 결정 대기와 재개 조건
+<a id="결정-대기와-재개-조건"></a>
 
-| 항목 | 지금 가능한 작업 | production 연결 재개 조건 |
+## 구현·검증 조건과 검토 범위
+
+채택된 9턴·Persona·ToolResult·복구 방향을 새 결정 대기로 돌리지 않는다. [문서 상태 안내](../README.md#ai-document-status)에 따라 미채택 상세와 실제 연결·검수 조건만 구분한다.
+
+| 항목 | 지금 가능한 작업 | production 연결·검증 조건 |
 | --- | --- | --- |
-| AI-L02 내부 계약 | 기존 여섯 판단 필드와 ask/retrieve/finish, reason_summary의 실제 조회 요약 검토 | 미채택 상세 객체·행동별 null·ToolResult·공개 변환 확정; 영구 실패 기록 위치는 AI-L18, 복구는 AI-L12와 함께 검토 |
+| AI-L02 내부 계약 | 기존 여섯 판단 필드와 ask/retrieve/finish, reason_summary의 실제 조회 요약 검토 | 채택된 ToolResult 다섯 필드·네 상태·부분 오류 유지, 미채택 상세 객체·행동별 null·Tool 인수·공개 변환 구체화; 영구 실패 기록 위치는 AI-L18, 복구는 AI-L12와 함께 검토 |
 | AI-L04 실행 상한 | ADR 0008 실패 분류·복구 선택 fixture | 공통 LLM 호출 총 2회·semantic 재호출 금지 유지, Tool·재작성·재계획 budget과 소진 처리의 구현·측정 |
 | AI-L09 서비스 연결 | rewrite/replan/failure 선택, 첫 HR을 포함한 정상 9턴의 기술 6회·도메인 2회·HR 1회 검사 | 기존 반환·오류 안내·기록 보존·명시적 종료 연결 검증; Director는 Controller가 남은 할당으로 제한한 기술·도메인 후보 중 답변 맥락에 따라 선택하며 새 수동 이어가기 없음 |
-| AI-L10 domain 운영 | `etc`, 맥락 관련성·목적 비반복 fixture | 운영 문구·검수·version·저장 방식 승인 |
-| AI-L11~L14 BE/WS | 순수 후보와 단일 연결 fixture | worker, 멱등성, WS 식별·복구 계약을 각 담당과 확정 |
+| AI-L10 domain 운영 | `etc`, 맥락 관련성·목적 비반복 fixture | 기존 seed 구조에 맞춘 문구·version·저장 연결과 실제 독립·도메인·한국어 검수 |
+| AI-L11~L14 BE/WS | 순수 후보와 단일 연결 fixture | 기존 job·단일 worker, 멱등성, WS 식별·복구 의미의 실제 연결·검증; 미채택 종료 wire 등 상세는 해당 경계에서 검토 |
 
 채택한 방향은 [AI 결정 기록](../../spec/ai/decisions/README.md), 남은 실제 작업은 [구현·검수 인계](pipeline.md#기존-id별-구현검수-인계)에서 확인한다.

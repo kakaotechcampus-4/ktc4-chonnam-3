@@ -136,6 +136,8 @@ async def test_all_nine_answers_use_analysis_then_independent_director_review(
     sent = []
 
     async def handle(request):
+        # 추가 확인이 필요 없는 턴은 근거를 조회하지 않는다(외부 조회 0회).
+        assert request.url.host != "api.github.com"
         body = json.loads(request.content)
         payload = json.loads(body["input"][0]["content"][0]["text"])
         sent.append(payload)
@@ -182,6 +184,10 @@ async def test_all_nine_answers_use_analysis_then_independent_director_review(
     async with agent_sessions() as db:
         turns = list(await db.scalars(select(InterviewTurn).order_by(InterviewTurn.turn_no)))
         assert len(turns) == 9 and all(turn.analysis is not None for turn in turns)
+        # 미조회 사유는 다음 질문 생성(1~8턴)과 9번째 답변 종료 판단 모두에 남는다.
+        skipped = "근거 미조회; 이유: 추가 조회 조건을 충족하지 않아 조회하지 않음"
+        assert turns[-1].decision["next_step"] == "finish"
+        assert all(skipped in turn.decision["reason_summary"] for turn in turns)
         assert [turn.persona for turn in turns].count("hr_manager") == 1
         assert [turn.persona for turn in turns].count("tech_lead") == 6
         assert [turn.persona for turn in turns].count("domain_lead") == 2

@@ -133,6 +133,12 @@ GitHub가 만료·refresh 필드를 가진 유효한 토큰을 발급하면 `502
 - `jd_extraction_failed`
 - `not_a_job_posting`
 
+`llm_calls.failure.error_code`(Director 질문 후보 복구 분류):
+
+- `director_candidate_rewrite`, `director_candidate_replan`, `director_no_valid_candidate`
+
+AI가 `CallFailure.error_code`로만 전달하는 알려진 실패 분류다(AI ADR 0008). 재작성·재계획·재호출 실행 권한이 아니며 공개 reason·WS 이벤트·DB 컬럼이 아니다. 면접 준비 중이면 `preparing_failed`(`first_question_failed`), 진행 중이면 `question_failed` 후 연결 종료로 기존 실패 경로를 따르고, 시도 기록은 `llm_calls`에 보존한다. 정상 `finish`나 다른 질문으로 대체하지 않는다. 알 수 없는 코드는 이 분류를 쓰지 않는다. 재시도 정책·사용자 문구는 합의 전이다.
+
 ## GitHub 수집 오류의 계층
 
 GitHub 수집 실패는 세 층을 거치며, 각 층의 코드는 서로 다른 축이라 이름이 같아도 같은 값이 아니다.
@@ -180,7 +186,8 @@ DB `analysis_jobs.status='partial'`은 FE `RunStatus`에 `failed`로 매핑한�
 
 | reason | recoverable | details | 뜻 |
 | --- | --- | --- | --- |
-| `stt_failed` | true | 전사가 비었거나 무발화로 판정하면 `{"cause":"empty_transcript"}`. 그 밖의 실패는 생략 | 음성 전사 실패. 같은 턴에 다시 답변한다. |
+| `stt_failed` | true | 전사가 비었거나 무발화로 판정하면 `{"cause":"empty_transcript"}`. 그 밖의 일시 실패는 생략 | 음성 전사 실패. 같은 턴에 다시 답변한다. |
+| `stt_failed` | false | `{"cause":"stt_unavailable"}` | STT 설정 누락·공급자 인증 오류(401·403). 다시 답변해도 복구되지 않으므로 FE는 재시도를 반복하지 않고 서비스 불가로 안내한다. |
 | `answer_too_long` | true | `{"cause":"audio_too_long","limitSeconds":180}` | 답변 오디오가 `answerStart` 이후 서버 수신 시간 180초(+여유) 또는 최대 바이트를 넘음. 미완료 오디오를 버리고 같은 턴 `answerStart`로 다시 시작한다. 텍스트 `answer`의 2000자 초과도 같은 reason이며 텍스트 `answer`가 제거될 때 함께 사라진다. |
 | `answer_rejected` | true | 없음 | 지금 답변할 수 없는 요청. 아직 오지 않은 턴이나 이미 답변이 저장된 현재 턴의 `answerStart`, `answerStart` 없는 `answerEnd`, 형식 위반 메시지, 전사 후 저장 거절. |
 | `answer_stale_turn` | true | 없음 | 이미 지나간 턴(`turn`이 현재 턴보다 작음)에 대한 늦은 답변. |

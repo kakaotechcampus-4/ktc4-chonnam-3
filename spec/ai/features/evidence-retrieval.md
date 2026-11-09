@@ -8,13 +8,13 @@
 
 질문의 구현 전제를 확인하거나, 답변의 구체적 주장을 검증할 때 필요한 원문을 찾는다. 전체 repo를 자유 탐색하는 Agent, 사용자 코드를 실행하는 sandbox, 별도 검색 서비스는 Sprint 1 요구사항이 아니다.
 
-검색 범위는 README, repository metadata, languages, commit metadata, L2 `notable_areas[].path` 주변 파일이다. 전체 tree scan·전역 keyword search·Private repo 조회는 제외한다. [0002 결정](../decisions/0002-sprint1-vector-search.md)에 따라 Sprint 1에는 embedding/vector 검색을 도입하지 않고 pgvector extension도 선설치하지 않는다. 실제 검색 실패 사례를 바탕으로 Sprint 2의 필요성을 재평가하며, 후속 도입 여부·model·dimension·chunking·저장소는 미정이다. BE 문서·migration 반영 확인은 별도 대기다.
+검색 범위는 README, repository metadata, languages, commit metadata, L2 `notable_areas[].path` 주변 파일이다. 전체 tree scan·전역 keyword search·Private repo 조회는 제외한다. [0002 결정](../decisions/0002-sprint1-vector-search.md)에 따라 Sprint 1에는 embedding/vector 검색을 도입하지 않고 pgvector extension도 선설치하지 않는다. 실제 검색 실패 사례를 바탕으로 Sprint 2의 필요성을 재평가하며, 도입 여부·model·dimension·chunking·저장소는 해당 기능 착수 시 검토한다. BE 문서·migration이 이 미도입 범위와 일치하는지는 구현·검수에서 확인한다.
 
 ## 입력과 Tool 경계
 
 요청은 현재 사용자/면접의 검증된 선택 repo, `session_repositories.snapshot_head_sha`, 확인 목적, 주장 또는 질문 전제, 알려진 경로·검색 조건, 남은 budget을 가진다. 모델이 전달한 repo·path를 그대로 외부 API에 넣지 않는다.
 
-기존 도구 후보 이름은 `search_code`, `read_file`, `list_commits`다. 실제 함수는 아직 없다. `search_code`를 구현하더라도 위 허용 자료 안의 제한 검색으로 정의하며 이름을 근거로 GitHub 전체 코드 검색을 켜지 않는다.
+기존 도구 후보 이름은 `search_code`, `read_file`, `list_commits`다. 후보 이름만으로 같은 이름의 callable이 제공된다고 가정하지 않으며, 실제 조회 경로·검증 범위는 [구현 기록](../implementation.md)에서 확인한다. `search_code`를 구현하더라도 위 허용 자료 안의 제한 검색으로 정의하며 이름을 근거로 GitHub 전체 코드 검색을 켜지 않는다.
 
 `read_file`은 허용된 repo/ref/path만, `list_commits`는 선택 ref와 일관된 commit metadata만 읽는다. traversal 경로, 예상하지 않은 외부 URL·redirect, 다른 사용자 repo는 거절한다. 파일을 실행·수정하지 않는다.
 

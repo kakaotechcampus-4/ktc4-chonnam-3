@@ -5,7 +5,7 @@
 ## 2026-11-02 — STT(MLAPI Whisper) 연동 (진행 중, 브랜치 `feature/be-stt-mlapi`)
 
 설계 근거는 [0007](../shared/decisions/0007-voice-interview-contract.md)(Proposed)과
-[0010 초안](../shared/decisions/0010-stt-provider-mlapi-whisper.md)이다. 이 절은 구현·검증 현황만 둔다.
+[0011 초안](../shared/decisions/0011-stt-provider-mlapi-whisper.md)이다. 이 절은 구현·검증 현황만 둔다.
 
 ### 구현한 것
 

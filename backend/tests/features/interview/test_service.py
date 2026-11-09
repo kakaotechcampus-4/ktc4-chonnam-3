@@ -24,8 +24,10 @@ from .factories import make_repo, make_run, make_user
 class FakeRedis:
     """rt:{sessionId} 저장과 enqueue 호출만 기록한다. fail=True 면 RedisError."""
 
-    def __init__(self, fail: bool = False) -> None:
+    def __init__(self, fail: bool = False, enqueue_fail: bool = False) -> None:
         self.fail = fail
+        self.enqueue_fail = enqueue_fail
+        self.job_ids: list[str | None] = []
         self.values: dict[str, tuple[str, int]] = {}
         self.jobs: list[tuple[str, tuple[Any, ...]]] = []
 
@@ -35,8 +37,12 @@ class FakeRedis:
         self.values[key] = (value, ex)
         return True
 
-    async def enqueue_job(self, name: str, *args: Any) -> None:
+    async def enqueue_job(self, name: str, *args: Any, _job_id: str | None = None) -> object:
+        if self.enqueue_fail:
+            raise RedisError("down")
         self.jobs.append((name, args))
+        self.job_ids.append(_job_id)
+        return object()
 
 
 async def _create(db: AsyncSession, run: AnalysisJob, ids: list[uuid.UUID], redis: Any = None):
@@ -66,6 +72,7 @@ async def test_create_ok(db: AsyncSession) -> None:
     assert ttl == service.REALTIME_SESSION_TTL_SECONDS
     assert redis.values[f"rt:interview:{interview_id}"] == (session_id, ttl)
     assert redis.jobs == [("interview_prep", (str(interview_id),))]
+    assert redis.job_ids == [f"interview_prep:{interview_id}"]
 
 
 @pytest.mark.parametrize(
@@ -137,6 +144,19 @@ async def test_create_redis_failure_rolls_back(db: AsyncSession) -> None:
         await _create(db, run, [repo.id], FakeRedis(fail=True))
     assert exc.value.reason == Reason.INTERNAL_ERROR
     assert await queries.has_active_interview(db, run_id=run.id) is False
+
+
+async def test_create_enqueue_failure_keeps_preparing_row(db: AsyncSession) -> None:
+    """enqueue 실패는 행을 지우지 않는다. 복구는 reaper 몫이므로 응답은 정상이다."""
+    run = await make_run(db, await make_user(db))
+    repo = await make_repo(db, run)
+
+    interview_id, session_id = await _create(db, run, [repo.id], FakeRedis(enqueue_fail=True))
+
+    interview = await db.get(InterviewSession, interview_id)
+    assert interview is not None and interview.status == "preparing"
+    assert session_id
+    assert await queries.has_active_interview(db, run_id=run.id) is True
 
 
 async def test_create_rollback_failure_still_internal_error(

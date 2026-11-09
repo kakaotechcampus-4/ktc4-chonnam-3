@@ -19,6 +19,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.agents.director.runtime_adapter import execute_director
 from app.agents.director.tools import EvidenceLimits, EvidenceScope, read_files
 from app.core.config import INTERVIEW_MAX_TURNS, LLMSettings, get_settings
+from app.core.errors import DIRECTOR_CANDIDATE_RECOVERY_CODES
+from app.core.logging import get_logger
 from app.db.models import (
     Evidence,
     EvidenceConflict,
@@ -38,8 +40,27 @@ from app.features.interview.answer_context import (
 from app.integrations.llm.client import CallBudget
 from app.llm_tasks.answer_analysis import analyze_answer
 from app.llm_tasks.prompt_loader import load_active_prompt
+from app.shared.events import record_event
 
 DEFAULT_LIMITS = c.ContextLimits(2, 0, "director-runtime.v1")
+logger = get_logger(__name__)
+
+
+def recovery_code(failure: c.CallFailure | None) -> str | None:
+    """AI가 알린 후보 복구 분류이면 그 error_code를, 아니면 None을 반환한다.
+
+    알려진 실패의 분류일 뿐이며 재호출·대체 질문·정상 종료를 실행하지 않는다.
+    """
+    if failure is not None and failure.error_code in DIRECTOR_CANDIDATE_RECOVERY_CODES:
+        return failure.error_code
+    return None
+
+
+def log_recovery(failure: c.CallFailure | None, phase: Literal["prepare", "turn"]) -> None:
+    """복구 분류 실패를 원문 없이 구조 로그로 남긴다. 분류가 없으면 아무것도 하지 않는다."""
+    code = recovery_code(failure)
+    if code is not None:
+        logger.warning("director_candidate_recovery_blocked", phase=phase, error_code=code)
 
 
 @dataclass(frozen=True)
@@ -225,6 +246,13 @@ async def start_director(
             )
             db.add(turn)
             await db.flush()
+            await record_event(
+                db,
+                "turn_asked",
+                user_id=user_id,
+                interview_session_id=interview_id,
+                payload={"turnNo": context.turn_no, "persona": question.persona},
+            )
             db.add_all(
                 TurnEvidence(turn_id=turn.id, evidence_id=UUID(value), usage="question_basis")
                 for value in question.evidence_refs
@@ -408,6 +436,13 @@ async def process_answer(
         turn.answer_text, turn.status, turn.answered_at = text, "answered", now
         if turn.asked_at is not None:
             turn.answer_duration_sec = max(0, int((now - turn.asked_at).total_seconds()))
+        await record_event(
+            db,
+            "turn_answered",
+            user_id=user_id,
+            interview_session_id=interview_id,
+            payload={"turnNo": turn_no},
+        )
         db.add(
             LLMCallRecord(
                 id=call_id,
@@ -563,14 +598,17 @@ async def process_answer(
                 )
                 turn.decision = c.to_data(decision)
                 interview.status, interview.completed_at = "completed", datetime.now(UTC)
+                await record_event(
+                    db, "interview_completed", user_id=user_id, interview_session_id=interview_id
+                )
                 _save_context_snapshot(interview, current.context, turn, turn, phase="completed")
-            elif summary:
+            elif tool_result is not None:
                 from devon_ai.agents.director.runtime import verification_decision
 
                 lookup = verification_decision(
                     loaded.context, initial.data, allowed_locations=locations
                 )
-                if lookup is not None:
+                if not isinstance(lookup, str):
                     turn.decision = asdict(
                         replace(
                             lookup.data, reason_summary=lookup.data.reason_summary + "\n" + summary
@@ -620,8 +658,9 @@ async def _retrieve(
     from devon_ai.agents.director.runtime import verification_decision
 
     decision = verification_decision(context, analysis, allowed_locations=locations)
-    if decision is None:
-        return None, ""
+    if isinstance(decision, str):
+        # 미조회 사유는 Tool 결과(not_found)를 만들지 않고 기존 판단 요약에만 남긴다(0014).
+        return None, "근거 미조회; 이유: " + decision
     assert context.current_turn_id is not None
     request = decision.data.tool_requests[0]
     requested = f"{request.repository_id}@{request.git_ref}: " + ", ".join(request.allowed_paths)

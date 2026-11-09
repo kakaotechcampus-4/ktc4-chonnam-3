@@ -389,11 +389,15 @@ def verification_decision(
     analysis: c.ContractChecked[c.AnswerAnalysis],
     *,
     allowed_locations: frozenset[Location],
-) -> c.ContractChecked[c.DirectorDecision] | None:
+) -> c.ContractChecked[c.DirectorDecision] | str:
     """현재 T3의 명시적 필요·영향 판단에서 허용된 추가 조회만 제안한다.
 
     기존 근거가 충분하다고 분석한 주장은 제외한다. 원문 의미의 충분성과 현재
     판단에 대한 영향은 검증된 T3의 요청·목적에 의존한다. 조회·감점·종료는 하지 않는다.
+    수집한 경로만 다시 읽는 요청은 새 경로 요청 뒤로, 같은 단계는 좁은 범위 먼저 정렬하며
+    BE는 앞에서부터 실행한다.
+    조회하지 않으면 미조회 사유 문자열을 반환하며 BE는 이를 정상 조회 후 미발견과 구분해
+    기존 reason_summary에 남긴다(0014). 허용 범위 밖 요청은 사유로 바꾸지 않고 거절한다.
     """
     if type(context) is not c.Context:
         raise c.ContractError("schema", "Director context")
@@ -411,7 +415,8 @@ def verification_decision(
             raise c.ContractError("semantic", "allowed location ref")
     value = analysis.data
     if not value.needs_verification:
-        return None
+        # 필요성·영향·허용 범위 중 미충족 조건을 계약에 없는 정보로 단정하지 않는다.
+        return "추가 조회 조건을 충족하지 않아 조회하지 않음"
     registered = frozenset(ref.id for ref in _references(context, {}) if ref.kind == "evidence")
     supported = {
         claim.claim_text
@@ -424,7 +429,30 @@ def verification_decision(
         request for request in value.verification_requests if request.claim_text not in supported
     )
     if not requests:
-        return None
+        return "요청한 주장이 모두 등록 근거로 지지됨"
+    collected = {
+        (item.repository_id, item.git_ref, item.path)
+        for item in context.evidence
+        if item.path is not None
+    }
+    # 수집한 경로만 다시 읽는 요청은 빼지 않고 새 경로 요청 뒤에 둔다. Evidence 계약은 부분 줄
+    # 범위를 허용하고 파일 전체 확보 여부를 표시하지 않아, 경로만으로 재조회가 불필요하다고 볼 수
+    # 없다. 전체 원문 표시가 계약에 생기면 그 근거만 있는 요청은 제외한다(0003 조건 1).
+    # 같은 단계는 확인 범위가 좁은 요청을 먼저 두고, 그 외에는 모델 순서를 유지한다(stable sort).
+    # 인접 후보(AI-L08, BE 미공급)와 주장 종류별 source 적합성(요청에 종류 필드 없음)은
+    # 반영하지 않는다. 두 입력이 계약에 생기면 정렬 키에 단계를 추가한다.
+    requests = tuple(
+        sorted(
+            requests,
+            key=lambda request: (
+                all(
+                    (request.repository_id, request.git_ref, path) in collected
+                    for path in request.allowed_paths
+                ),
+                len(request.allowed_paths),
+            ),
+        )
+    )
     return c.validate_decision(
         c.DirectorDecision(
             "retrieve",

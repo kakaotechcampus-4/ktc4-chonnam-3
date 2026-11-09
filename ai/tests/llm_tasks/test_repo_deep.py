@@ -150,6 +150,18 @@ def test_directory_area_without_limitations_is_rejected() -> None:
     ]
 
 
+def test_exactly_five_areas_are_accepted() -> None:
+    paths = [f"src/module_{i}.py" for i in range(5)]
+    sources = tuple(c.SourceDocument(path, "file", "pass", "entire file") for path in paths)
+
+    result = c.parse_deep_analysis(
+        _output(*(_area(path) for path in paths)), source=_input(sources=sources)
+    )
+
+    assert [area.path for area in result.data.analysis.notable_areas] == paths
+    assert result.data.rejected_areas == ()
+
+
 def test_too_many_areas_is_retryable_schema_failure() -> None:
     """개수 초과는 schema라 공통 호출 계층의 재시도 대상이다. 앞 5개만 잘라 쓰지 않는다."""
     areas = [_area(observation=str(i)) for i in range(6)]

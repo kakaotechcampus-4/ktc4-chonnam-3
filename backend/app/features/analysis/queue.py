@@ -25,29 +25,37 @@ return redis.call('DEL', KEYS[3], KEYS[4], KEYS[5])
 """
 
 
+async def enqueue_once(redis: ArqRedis, function: str, identity: str, *arguments: object) -> bool:
+    """결정적 `_job_id`로 등록한다. 이미 큐·실행 중이면 새로 만들지 않고 True를 돌려준다.
+
+    ARQ 오류는 호출자가 복구 대상으로 처리하도록 그대로 올린다.
+    """
+    job = await redis.enqueue_job(function, *arguments, _job_id=identity)
+    if job is None:
+        state = await Job(identity, redis).status()
+        if state in {JobStatus.not_found, JobStatus.complete}:
+            await redis.eval(  # type: ignore[misc]  # redis-py의 동기·비동기 공용 반환 타입
+                _CLEAR_RESIDUE,
+                5,
+                in_progress_key_prefix + identity,
+                redis.default_queue_name,
+                job_key_prefix + identity,
+                result_key_prefix + identity,
+                retry_key_prefix + identity,
+                identity,
+            )
+            await redis.enqueue_job(function, *arguments, _job_id=identity)
+            state = await Job(identity, redis).status()
+        return state in {JobStatus.queued, JobStatus.deferred, JobStatus.in_progress}
+    return True
+
+
 async def enqueue_analysis(redis: ArqRedis, run_id: UUID, page: int | None = None) -> bool:
     function = "analysis_run" if page is None else "candidate_page_analyze"
     identity = f"{function}:{run_id}" + (f":{page}" if page is not None else "")
     arguments = (str(run_id),) if page is None else (str(run_id), page)
     try:
-        job = await redis.enqueue_job(function, *arguments, _job_id=identity)
-        if job is None:
-            state = await Job(identity, redis).status()
-            if state in {JobStatus.not_found, JobStatus.complete}:
-                await redis.eval(  # type: ignore[misc]  # redis-py의 동기·비동기 공용 반환 타입
-                    _CLEAR_RESIDUE,
-                    5,
-                    in_progress_key_prefix + identity,
-                    redis.default_queue_name,
-                    job_key_prefix + identity,
-                    result_key_prefix + identity,
-                    retry_key_prefix + identity,
-                    identity,
-                )
-                await redis.enqueue_job(function, *arguments, _job_id=identity)
-                state = await Job(identity, redis).status()
-            return state in {JobStatus.queued, JobStatus.deferred, JobStatus.in_progress}
-        return True
+        return await enqueue_once(redis, function, identity, *arguments)
     except Exception:
         # DB 저장은 성공했다. 외부 오류의 본문·토큰 없이 복구 필요 사실만 남긴다.
         logger.warning("analysis_enqueue_pending", run_id=str(run_id), page=page)

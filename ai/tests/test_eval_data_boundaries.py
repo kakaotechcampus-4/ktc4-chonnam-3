@@ -212,9 +212,286 @@ def test_approved_rejects_same_account_and_blank_names(tmp_path, review):
         load_cases(tmp_path)
 
 
+def _contract():
+    return {
+        "purpose": "기술 선택 이유 확인",
+        "required_points": [{"key": "reason", "description": "선택 이유"}],
+        "evaluation_scope": "선택 이유를 평가한다",
+    }
+
+
+def _report_input(case_id, answer, kind="report", source_group="sg-1", question="왜 Redis인가요?"):
+    inp = _input(case_id, kind=kind, source_group_id=source_group)
+    turn = {"turn": 1, "persona": "tech_lead", "question": question, "answer": answer}
+    inp["payload"] = {"history": [{**turn, "question_contract": _contract()}], "evidence": []}
+    return inp
+
+
+def _report_exp(case_id, role="stronger", **pair):
+    exp = _expectation(case_id)
+    exp["pair"] = {
+        "pair_id": "rp-1",
+        "role": role,
+        "key": "technical_reasoning",
+        "min_gap": 10,
+        **pair,
+    }
+    return exp
+
+
+def _write_report_pair(root, strong=None, weak=None, strong_exp=None, weak_exp=None):
+    _pair(
+        root,
+        strong or _report_input("r-1", "대안을 비교했습니다"),
+        strong_exp or _report_exp("r-1"),
+    )
+    _pair(
+        root,
+        weak or _report_input("r-2", "많이 써서요"),
+        weak_exp or _report_exp("r-2", "weaker"),
+    )
+
+
+def test_valid_report_pair_loads_and_pair_stays_out_of_model_input(tmp_path):
+    _write_report_pair(tmp_path)
+    cases = load_cases(tmp_path)
+    assert {c.expectation["pair"]["role"] for c in cases} == {"stronger", "weaker"}
+    assert "rp-1" not in json.dumps([c.model_input() for c in cases])
+
+
+def test_pair_needs_both_roles(tmp_path):
+    _pair(tmp_path, _report_input("r-1", "a"), _report_exp("r-1"))
+    with pytest.raises(CaseError, match="one stronger and one weaker"):
+        load_cases(tmp_path)
+
+
+def test_pair_cases_must_share_questions_and_evidence(tmp_path):
+    _write_report_pair(tmp_path, weak=_report_input("r-2", "많이 써서요", question="다른 질문"))
+    with pytest.raises(CaseError, match="identical"):
+        load_cases(tmp_path)
+
+
+def test_pair_cases_must_differ_in_an_answer(tmp_path):
+    _write_report_pair(tmp_path, weak=_report_input("r-2", "대안을 비교했습니다"))
+    with pytest.raises(CaseError, match="differ in at least one answer"):
+        load_cases(tmp_path)
+
+
+def test_pair_cases_must_share_source_group(tmp_path):
+    _write_report_pair(tmp_path, weak=_report_input("r-2", "많이 써서요", source_group="sg-2"))
+    with pytest.raises(CaseError, match="source_group_id"):
+        load_cases(tmp_path)
+
+
+def test_only_report_cases_can_be_paired(tmp_path):
+    _write_report_pair(tmp_path, weak=_report_input("r-2", "많이 써서요", kind="question"))
+    with pytest.raises(CaseError, match="only report"):
+        load_cases(tmp_path)
+
+
+def test_pair_cases_must_agree_on_key_and_min_gap(tmp_path):
+    _write_report_pair(tmp_path, weak_exp=_report_exp("r-2", "weaker", min_gap=20))
+    with pytest.raises(CaseError, match="same min_gap"):
+        load_cases(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"key": "totalScore"},
+        {"role": "better"},
+        {"min_gap": 0},
+        {"min_gap": True},
+        {"min_gap": 10.5},
+        {"pair_id": ""},
+    ],
+)
+def test_bad_pair_fields_raise_case_error(tmp_path, bad):
+    _write_report_pair(tmp_path, strong_exp=_report_exp("r-1", **bad))
+    with pytest.raises(CaseError):
+        load_cases(tmp_path)
+
+
 @pytest.mark.parametrize("folder", ["inputs", "expectations"])
 def test_invalid_utf8_raises_case_error(tmp_path, folder):
     _pair(tmp_path)
     (tmp_path / folder / "q-1.v1.json").write_bytes(b'{"case_id": "\xff"}')
     with pytest.raises(CaseError, match="q-1.v1.json"):
+        load_cases(tmp_path)
+
+
+def test_pair_without_history_is_rejected(tmp_path):
+    strong = _report_input("r-1", "a")
+    strong["payload"] = {"answer": "no history"}
+    _write_report_pair(tmp_path, strong=strong)
+    with pytest.raises(CaseError, match="history"):
+        load_cases(tmp_path)
+
+
+@pytest.mark.parametrize("missing", ["turn", "persona", "question", "answer"])
+def test_pair_history_turn_needs_all_fields(tmp_path, missing):
+    strong = _report_input("r-1", "대안을 비교했습니다")
+    del strong["payload"]["history"][0][missing]
+    _write_report_pair(tmp_path, strong=strong)
+    with pytest.raises(CaseError, match="history needs"):
+        load_cases(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        None,
+        {},
+        {"purpose": "p", "required_points": [], "evaluation_scope": "s"},
+        {
+            "purpose": " ",
+            "required_points": [{"key": "k", "description": "d"}],
+            "evaluation_scope": "s",
+        },
+        {
+            "purpose": "p",
+            "required_points": [{"key": "k", "description": "d"}],
+            "evaluation_scope": "",
+        },
+        {"purpose": "p", "required_points": [{"key": "k"}], "evaluation_scope": "s"},
+        {
+            "purpose": "p",
+            "required_points": [{"key": "k", "description": "d"}, {"key": "k", "description": "e"}],
+            "evaluation_scope": "s",
+        },
+    ],
+)
+def test_report_turn_needs_a_valid_question_contract(tmp_path, bad):
+    solo = _report_input("r-1", "a")
+    solo["payload"]["history"][0]["question_contract"] = bad
+    _pair(tmp_path, solo, _expectation("r-1"))
+    with pytest.raises(CaseError, match="question_contract"):
+        load_cases(tmp_path)
+
+
+def test_report_case_without_pair_still_needs_history(tmp_path):
+    solo = _report_input("r-1", "a")
+    solo["payload"] = {"answer": "no history"}
+    _pair(tmp_path, solo, _expectation("r-1"))
+    with pytest.raises(CaseError, match="history"):
+        load_cases(tmp_path)
+
+
+@pytest.mark.parametrize("follows", [1, 2, 0, True, "1", None])
+def test_follows_must_name_an_earlier_turn(tmp_path, follows):
+    solo = _report_input("r-1", "a")
+    solo["payload"]["history"].append(
+        {**solo["payload"]["history"][0], "turn": 2, "follows": follows}
+    )
+    _pair(tmp_path, solo, _expectation("r-1"))
+    if type(follows) is int and follows == 1:
+        assert load_cases(tmp_path)
+    else:
+        with pytest.raises(CaseError, match="follows"):
+            load_cases(tmp_path)
+
+
+def _solo(**payload):
+    case = _report_input("r-1", "a")
+    case["payload"].update(payload)
+    return case
+
+
+def _load_solo(tmp_path, case):
+    _pair(tmp_path, case, _expectation("r-1"))
+    return load_cases(tmp_path)
+
+
+def test_turn_evidence_refs_and_tool_results_load_when_valid(tmp_path):
+    case = _solo(
+        evidence=[{"ref": "m1", "path": "p", "lines": "1", "text": "t"}],
+        tool_results=[
+            {"turn": 1, "status": "tool_error", "limitations": ["조회 실패"], "error_code": "x"},
+            {"turn": 1, "status": "not_found", "limitations": [], "error_code": None},
+        ],
+    )
+    case["payload"]["history"][0]["evidence_refs"] = ["m1"]
+    assert _load_solo(tmp_path, case)
+
+
+@pytest.mark.parametrize("linked", [["m9"], ["m1", "m1"], "m1", [1]])
+def test_turn_evidence_refs_must_name_registered_refs_once(tmp_path, linked):
+    case = _solo(evidence=[{"ref": "m1", "path": "p", "lines": "1", "text": "t"}])
+    case["payload"]["history"][0]["evidence_refs"] = linked
+    with pytest.raises(CaseError, match="evidence_refs"):
+        _load_solo(tmp_path, case)
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        {"turn": 2, "status": "not_found", "limitations": [], "error_code": None},
+        {"turn": 1, "status": "unknown", "limitations": [], "error_code": None},
+        {"turn": 1, "status": "tool_error", "limitations": [], "error_code": "x"},
+        {"turn": 1, "status": "tool_error", "limitations": ["a"], "error_code": None},
+        {"turn": 1, "status": "insufficient_analysis", "limitations": [], "error_code": None},
+        {"turn": 1, "status": "not_found", "limitations": [], "error_code": "x"},
+        {"turn": True, "status": "not_found", "limitations": [], "error_code": None},
+        {"turn": 1, "status": "not_found", "limitations": [" "], "error_code": None},
+        {"turn": 1, "status": "not_found", "limitations": [], "error_code": None, "extra": 1},
+        {"turn": 1, "status": "not_found"},
+    ],
+)
+def test_bad_tool_results_are_rejected(tmp_path, item):
+    with pytest.raises(CaseError, match="tool_results"):
+        _load_solo(tmp_path, _solo(tool_results=[item]))
+
+
+def test_tool_results_must_be_a_list(tmp_path):
+    with pytest.raises(CaseError, match="tool_results"):
+        _load_solo(tmp_path, _solo(tool_results={"turn": 1}))
+
+
+def test_pair_history_turn_numbers_must_be_unique(tmp_path):
+    cases = []
+    for case_id, answer in (("r-1", "대안을 비교했습니다"), ("r-2", "많이 써서요")):
+        inp = _report_input(case_id, answer)
+        turn = inp["payload"]["history"][0]
+        inp["payload"]["history"] = [turn, {**turn, "answer": "다른 답"}]  # 둘 다 turn 1
+        cases.append(inp)
+    _write_report_pair(tmp_path, *cases)
+    with pytest.raises(CaseError, match="unique"):
+        load_cases(tmp_path)
+
+
+def test_negative_persona_left_is_rejected_even_when_the_sum_matches(tmp_path):
+    history = ["tech_lead"] * 7 + ["hr_manager"]  # 기술 질문이 정원 6을 넘은 이력
+    left = {"tech_lead": -1, "domain_lead": 2, "hr_manager": 0}
+    _pair(tmp_path, _quota_case(history, left))
+    with pytest.raises(CaseError, match="tech_lead"):
+        load_cases(tmp_path)
+
+
+def _quota_case(history, left):
+    inp = _input()
+    turns = enumerate(history, 1)
+    inp["payload"] = {
+        "history": [{"turn": n, "persona": p, "question": "q", "answer": "a"} for n, p in turns],
+        "persona_left": left,
+    }
+    return inp
+
+
+def test_persona_left_must_complete_the_interview_quota(tmp_path):
+    _pair(tmp_path, _quota_case(["hr_manager", "tech_lead"], {"tech_lead": 5, "domain_lead": 2}))
+    assert load_cases(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "left",
+    [
+        {"tech_lead": 4, "domain_lead": 2},
+        {"tech_lead": 5},
+        {"tech_lead": 5, "domain_lead": 2, "x": 1},
+    ],
+    ids=["tech short", "domain missing", "unknown persona"],
+)
+def test_persona_left_that_breaks_the_quota_is_rejected(tmp_path, left):
+    _pair(tmp_path, _quota_case(["hr_manager", "tech_lead"], left))
+    with pytest.raises(CaseError):
         load_cases(tmp_path)
