@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { BASE, api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
+import { createRequestId } from '@/shared/requestId';
 import { queryClient, refreshMeIfTokenInvalid } from '@/shared/queryClient';
 import Header from '@/shared/components/Header';
 import Footer from '@/shared/components/Footer';
@@ -14,7 +15,13 @@ import { MAX_ANSWER_MS, useAnswerRecorder } from '@/features/interview/useAnswer
 import { QUESTION_TEXT_KEY, readQuestionText } from '@/features/interview/questionText';
 import { abandonInterview, type ReselectState } from '@/features/interview/abandon';
 import { RESTART_REASONS, RETRY_ERROR } from '@/features/interview/retryErrors';
-import { isApiError, type InterviewLastError, type MeResponse, type Persona } from '@/types/api';
+import {
+  isApiError,
+  type InterviewLastError,
+  type MeResponse,
+  type Persona,
+  type QuestionRetryFailureReason,
+} from '@/types/api';
 
 /**
  * 진행 중 오류 문구. 다시 답하면 되는 답변 실패(stt_failed·answer_rejected·answer_too_long)는
@@ -27,14 +34,31 @@ const ERROR_MESSAGE: Record<string, string> = {
 };
 
 /**
- * recoverable: false일 때 문구가 달라지는 reason. question_failed는 연결 교체·서버 오류면 true로
- * 와서 재연결로 이어가고, 진행 중 분석·질문 생성이 실패하면 false로 와서 이어갈 수 없다(공통 0010).
+ * STT 사용 불가일 때는 소켓을 유지하되 답변을 차단한다. 저장 T3 이후의 질문 실패는 공통 0012에 따라
+ * 서버가 허용한 경우에만 REST로 이어갈 수 있다. T3 실패·영구 오류·한도 소진은 기존 안내를 따른다.
  */
 const FATAL_ERROR_MESSAGE: Record<string, string> = {
-  question_failed: '다음 질문을 만들지 못해 면접을 이어갈 수 없어요.',
+  question_failed: '다음 질문을 준비하지 못했어요.',
   // details.cause: stt_unavailable. STT 설정 누락·인증 오류라 다시 답해도 풀리지 않는다.
   stt_failed: '음성 인식을 사용할 수 없어 면접을 이어갈 수 없어요.',
 };
+
+const QUESTION_RETRY_MESSAGE: Record<QuestionRetryFailureReason, string> = {
+  question_retry_in_progress:
+    '질문을 준비하고 있어요. 같은 요청으로 처리 결과를 다시 확인해주세요.',
+  question_retry_failed: '다음 질문을 다시 준비하지 못했어요. 나가거나 새 면접을 시작해주세요.',
+  question_retry_limit:
+    '이 질문의 이어가기 횟수를 모두 사용했어요. 나가거나 새 면접을 시작해주세요.',
+  question_retry_unavailable: '현재 상태에서는 저장된 답변으로 질문을 이어갈 수 없어요.',
+};
+function questionRetryFailureMessage(reason: string | null) {
+  return reason && Object.hasOwn(QUESTION_RETRY_MESSAGE, reason)
+    ? QUESTION_RETRY_MESSAGE[reason as QuestionRetryFailureReason]
+    : undefined;
+}
+
+const QUESTION_RETRY_UNKNOWN =
+  '결과를 확인하지 못했어요. 같은 요청으로 처리 결과를 다시 확인해주세요.';
 
 /** 30초간 다른 메시지가 없으면 근거 확인 배너를 내린다. */
 const EVIDENCE_TIMEOUT_MS = 30_000;
@@ -49,6 +73,10 @@ const TIPS = [
   '답변 시작을 누르면 녹음이 시작돼요.',
   '답변 끝내기를 누르면 답변이 제출돼요.',
   '질문을 다시 들으려면 면접관에게 다시 들려달라고 답변하셔도 좋아요.',
+];
+const TEXT_TIPS = [
+  '답변을 작성한 뒤 제출해주세요.',
+  '한 답변은 최대 2,000자까지 입력할 수 있어요.',
 ];
 
 type LiveQuestion = {
