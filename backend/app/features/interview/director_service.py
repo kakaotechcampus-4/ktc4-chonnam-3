@@ -13,12 +13,13 @@ from uuid import UUID, uuid4, uuid5
 
 import httpx
 from devon_ai import contracts as c
+from devon_ai.agents.director.runtime import RecoveryFeedback
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agents.director.runtime_adapter import execute_director
 from app.agents.director.tools import EvidenceLimits, EvidenceScope, read_files
-from app.core.config import INTERVIEW_MAX_TURNS, LLMSettings, get_settings
+from app.core.config import INTERVIEW_MAX_TURNS, LLMSettings, Settings, get_settings
 from app.core.errors import DIRECTOR_CANDIDATE_RECOVERY_CODES
 from app.core.logging import get_logger
 from app.db.models import (
@@ -37,6 +38,7 @@ from app.features.interview.answer_context import (
     prior_analyses,
     reference_texts,
 )
+from app.features.interview.question_structure import question_position
 from app.integrations.llm.client import CallBudget
 from app.llm_tasks.answer_analysis import analyze_answer
 from app.llm_tasks.prompt_loader import load_active_prompt
@@ -72,6 +74,29 @@ class AnswerExecution:
     failure: c.CallFailure | None
     discard_reason: str | None
     accepted: bool
+
+
+def _record_final_lookup_limitations(
+    interview: InterviewSession, queries: tuple[c.ExternalQueryRequest, ...]
+) -> None:
+    """마지막 답변 뒤 새 탐색을 시작하지 않고 미실행 사실을 종료 기록에 보존한다."""
+    if not queries:
+        return
+    import json
+
+    state = dict(interview.context_state or {})
+    previous = state.get("external_searches", [])
+    if not isinstance(previous, list):
+        raise AgentStateError("external_search_state_invalid")
+    status = c.ExternalSearchStatus(
+        "insufficient_analysis",
+        (),
+        (),
+        ("external_lookup_not_executed:final_turn",),
+        "final_turn_lookup_not_executed",
+    )
+    state["external_searches"] = [*previous, json.loads(json.dumps(asdict(status)))]
+    interview.context_state = state
 
 
 def _save_context_snapshot(
@@ -150,6 +175,7 @@ async def start_director(
     lookup_summary: str = "",
     tool_results: tuple[c.ToolResult, ...] = (),
     preparation_guard: Callable[[AsyncSession, InterviewSession], Awaitable[bool]] | None = None,
+    recovery_feedback: RecoveryFeedback | None = None,
 ) -> QuestionExecution:
     """DB에서 확정한 입력으로 질문을 만들고 저장한다. 공개 전송·준비 완료는 호출자 책임이다.
 
@@ -194,13 +220,18 @@ async def start_director(
             tool_results=tool_results,
             http_client=http_client,
             attempt_sink=attempts,
+            recovery_feedback=recovery_feedback,
         )
         async with sessions.begin() as db:
+            # 복구 기한 처리와 같은 세션→호출 순서를 지켜 결과 확정의 교착을 막는다.
+            await _owned(db, user_id, interview_id)
             record = await db.get(LLMCallRecord, call_id, with_for_update=True)
             if record is None:
                 raise AgentStateError("call_unavailable")
             record.attempts = [asdict(attempt) for attempt in result.attempts]
             record.failure = asdict(result.failure) if result.failure else None
+            if record.discard_reason is not None:
+                return _outcome(record)
             if result.failure is not None:
                 return _outcome(record)
             try:
@@ -231,6 +262,18 @@ async def start_director(
                 record.discard_reason = "question_storage_invalid"
                 return _outcome(record)
             metadata = outcome.generation
+            try:
+                parent = (
+                    await db.get(InterviewTurn, UUID(question.parent_turn_id))
+                    if question.parent_turn_id is not None
+                    else None
+                )
+                depth, parent_turn_no = question_position(
+                    question, parent, interview_id=interview_id, turn_no=context.turn_no
+                )
+            except ValueError:
+                record.discard_reason = "question_storage_invalid"
+                return _outcome(record)
             turn = InterviewTurn(
                 id=uuid4(),
                 interview_session_id=interview_id,
@@ -239,6 +282,8 @@ async def start_director(
                 question_text=question.text,
                 question_contract=asdict(question.question_contract),
                 topic_code=question.topic_code,
+                depth=depth,
+                parent_turn_no=parent_turn_no,
                 jd_requirement_ids=[UUID(value) for value in question.jd_requirement_ids],
                 model=metadata.model,
                 prompt_version=metadata.prompt_version,
@@ -251,7 +296,11 @@ async def start_director(
                 "turn_asked",
                 user_id=user_id,
                 interview_session_id=interview_id,
-                payload={"turnNo": context.turn_no, "persona": question.persona},
+                payload={
+                    "turnNo": context.turn_no,
+                    "depth": turn.depth,
+                    "persona": question.persona,
+                },
             )
             db.add_all(
                 TurnEvidence(turn_id=turn.id, evidence_id=UUID(value), usage="question_basis")
@@ -301,6 +350,17 @@ async def _replay(
     )
     outcome = _outcome(record) if record is not None else None
     director_record = await db.get(LLMCallRecord, uuid5(call_id, "director"))
+    if following is not None:
+        # 명시 복구로 확정된 다음 질문이 있으면 과거 반려를 현재 실패로 다시 전송하지 않는다.
+        return AnswerExecution(
+            call_id,
+            current.id if current else None,
+            following,
+            interview.status == "completed",
+            None,
+            None,
+            accepted,
+        )
     if director_record is not None:
         if (
             director_record.interview_session_id != interview.id
@@ -378,6 +438,7 @@ async def process_answer(
     http_client: httpx.AsyncClient | None = None,
     limits: c.ContextLimits = DEFAULT_LIMITS,
     evidence_limits: EvidenceLimits | None = None,
+    external_settings: Settings | None = None,
     on_answer_saved: Callable[[], Awaitable[None]] | None = None,
     on_evidence_check: Callable[[tuple[c.Evidence, ...]], Awaitable[None]] | None = None,
 ) -> AnswerExecution:
@@ -597,6 +658,11 @@ async def process_answer(
                     allowed_locations=locations,
                 )
                 turn.decision = c.to_data(decision)
+                from devon_ai.agents.director.runtime import external_verification_queries
+
+                final_queries = external_verification_queries(current.context, selected)
+                if final_queries:
+                    _record_final_lookup_limitations(interview, final_queries)
                 interview.status, interview.completed_at = "completed", datetime.now(UTC)
                 await record_event(
                     db, "interview_completed", user_id=user_id, interview_session_id=interview_id
@@ -617,6 +683,55 @@ async def process_answer(
             record.turn_id = turn.id
         if turn_no == INTERVIEW_MAX_TURNS:
             return AnswerExecution(call_id, UUID(loaded.turn_id), None, True, None, None, True)
+        from devon_ai.agents.director.runtime import external_verification_queries
+
+        external_queries = external_verification_queries(loaded.context, selected)
+        if external_queries:
+            from app.features.interview.external_knowledge import retrieve_external_knowledge
+
+            # 검증된 T3의 요청만 단일 Director Tool로 실행하고 다음 Context는 DB에서 다시 읽는다.
+            try:
+                await retrieve_external_knowledge(
+                    sessions,
+                    user_id=user_id,
+                    interview_id=interview_id,
+                    queries=external_queries,
+                    settings=external_settings,
+                    http_client=http_client,
+                )
+            except Exception as error:
+                # 선택 조회의 예외는 검증 완료한 T3를 폐기하지 않는다. 원문·질의·키 대신
+                # 고정 실패 상태만 저장한다. 저장 자체가 실패하거나 실제 취소되면 전파한다.
+                logger.error(
+                    "interview_external_lookup_failed", exception_type=type(error).__name__
+                )
+                async with sessions.begin() as db:
+                    interview = await _owned(db, user_id, interview_id)
+                    if interview.status == "in_progress":
+                        trace = c.ExternalSearchStatus(
+                            "tool_error",
+                            (),
+                            (),
+                            ("external_lookup_unavailable",),
+                            "external_lookup_unavailable",
+                        )
+                        interview.context_state = {
+                            **(interview.context_state or {}),
+                            "external_searches": [asdict(trace)],
+                        }
+        # 재생성은 최초 질문과 같은 보완 조회 결과를 사용한다. 조회나 T3를 다시 실행하지 않는다.
+        async with sessions.begin() as db:
+            interview = await _owned(db, user_id, interview_id)
+            state = dict(interview.context_state or {})
+            previous_inputs = state.get("director_retry_inputs", {})
+            if not isinstance(previous_inputs, dict):
+                raise AgentStateError("question_retry_inputs_invalid")
+            saved_inputs = dict(previous_inputs)
+            saved_inputs[str(turn_no + 1)] = {
+                "lookup_summary": summary,
+                "tool_results": [] if tool_result is None else [asdict(tool_result)],
+            }
+            interview.context_state = {**state, "director_retry_inputs": saved_inputs}
         question = await start_director(
             sessions,
             user_id=user_id,
@@ -629,6 +744,19 @@ async def process_answer(
             lookup_summary=summary,
             tool_results=() if tool_result is None else (tool_result,),
         )
+        if question.failure is not None:
+            from app.features.interview.question_retry import auto_retry_question
+
+            recovered = await auto_retry_question(
+                sessions,
+                user_id=user_id,
+                interview_id=interview_id,
+                failed=question,
+                settings=settings,
+                http_client=http_client,
+            )
+            if recovered is not None:
+                question = recovered
         return AnswerExecution(
             call_id,
             UUID(loaded.turn_id),
@@ -673,12 +801,21 @@ async def _retrieve(
     )
     unexecuted_summary = "; 한계: " + "; ".join(unexecuted) if unexecuted else ""
 
-    async def remember(summary: str) -> None:
+    async def remember(summary: str, result: c.ToolResult | None = None) -> None:
         async with sessions.begin() as db:
-            await _owned(db, user_id, interview_id)
+            interview = await _owned(db, user_id, interview_id)
             turn = await db.get(InterviewTurn, UUID(context.current_turn_id), with_for_update=True)
             if turn is not None:
                 turn.decision = asdict(replace(decision.data, reason_summary=summary))
+                if result is not None:
+                    # 다음 질문이 decision을 교체해도 실제 조회 결과와 한계는 별도로 보존한다.
+                    state = dict(interview.context_state or {})
+                    raw_traces = state.get("evidence_tool_results", {})
+                    if not isinstance(raw_traces, dict):
+                        raise AgentStateError("tool_history_invalid")
+                    traces = dict(raw_traces)
+                    traces[str(turn.id)] = asdict(result)
+                    interview.context_state = {**state, "evidence_tool_results": traces}
 
     await remember("근거 조회 요청; 실제 확인 아직 없음; 요청: " + requested + unexecuted_summary)
     limits = evidence_limits
@@ -733,7 +870,7 @@ async def _retrieve(
         summary += "; 오류: " + result.error_code
     if result.limitations:
         summary += "; 한계: " + "; ".join(result.limitations)
-    await remember(summary)
+    await remember(summary, result)
     if stored and on_evidence_check is not None:
         await on_evidence_check(stored)
     return result, summary
