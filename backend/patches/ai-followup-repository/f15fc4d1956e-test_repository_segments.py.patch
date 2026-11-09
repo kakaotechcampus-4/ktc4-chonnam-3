@@ -1,0 +1,36 @@
+diff --git a/backend/tests/agents/test_repository_segments.py b/backend/tests/agents/test_repository_segments.py
+--- a/backend/tests/agents/test_repository_segments.py
++++ b/backend/tests/agents/test_repository_segments.py
+@@ -60,3 +60,32 @@
+     assert [(source.start_line, source.end_line) for source in sources] == [(2, 3), (4, 5)]
+     assert [source.content for source in sources] == ["two\nthree\n", "four\nfive\n"]
+     assert not limitations
++
++
++def test_whitespace_only_overlap_is_omitted_without_losing_valid_source_or_positions():
++    from app.features.interview.source_segments import segment_text
++
++    text = "alpha\n\nbeta\n"
++    sources, limitations = segment_text(
++        "module/arbitrary.src", text, max_segment_bytes=8, total_bytes=8
++    )
++    assert [(source.content, source.start_line, source.end_line) for source in sources] == [
++        ("alpha\n\n", 1, 2)
++    ]
++    assert all(source.content.strip() for source in sources)
++    assert any("공백" in note and "2-2" in note for note in limitations)
++    assert any("3-3" in note for note in limitations)
++
++
++def test_leading_whitespace_segment_does_not_prevent_later_valid_lines():
++    from app.features.interview.source_segments import segment_text
++
++    text = "\n\nlong line\nok\n"
++    sources, limitations = segment_text(
++        "module/arbitrary.src", text, max_segment_bytes=3, total_bytes=12
++    )
++    assert [(source.content, source.start_line, source.end_line) for source in sources] == [
++        ("ok\n", 4, 4)
++    ]
++    assert any("공백" in note and "1-2" in note for note in limitations)
++    assert any("한 줄 크기 상한" in note and ":3" in note for note in limitations)
