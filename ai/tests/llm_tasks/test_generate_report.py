@@ -349,7 +349,13 @@ def payload_with_requirements(linked):
 def test_linked_requirement_ids_are_resolved_to_text_for_the_score_request(run):
     _, (score, _) = run(payload_with_requirements(["jd-1"]))
     assert score.requests[0].payload["turns"][3]["jd_requirements"] == [
-        {"id": "jd-1", "category": "required", "text": "Redis 운영 경험"}
+        {
+            "id": "jd-1",
+            "category": "required",
+            "text": "Redis 운영 경험",
+            "source_field": "jd_requirements.text",
+            "tech_tags": (),
+        }
     ]
 
 

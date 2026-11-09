@@ -1,0 +1,27 @@
+diff --git a/backend/app/features/report/history.py b/backend/app/features/report/history.py
+--- a/backend/app/features/report/history.py
++++ b/backend/app/features/report/history.py
+@@ -19,6 +19,7 @@
+     SessionRepository,
+ )
+ from app.features.interview.agent_context import _document_limitations
++from app.features.interview.repository_candidates import STATE_KEY, snapshot_paths
+ from app.features.interview.supplemental_sources import load_supplemental_sources
+ from app.llm_tasks.report import ReportDraftInvalidError
+ 
+@@ -133,6 +134,15 @@
+             for item in sources.values()
+             if item.repository_id is not None and item.git_ref is not None and item.path is not None
+         }
++        candidates = state.get(STATE_KEY, {})
++        if isinstance(candidates, dict):
++            for repository_id, ref in selections.items():
++                if ref is not None:
++                    # 조회 후보는 당시 허용 범위만 복원하며, 원문 근거에는 추가하지 않는다.
++                    locations.update(
++                        (str(repository_id), ref, path)
++                        for path in snapshot_paths(candidates.get(str(repository_id)), ref)
++                    )
+         for analysis in await db.scalars(
+             select(RepoAnalysis).where(
+                 RepoAnalysis.repository_id.in_(selections),

@@ -1,0 +1,26 @@
+diff --git a/ai/src/devon_ai/llm_tasks/report.py b/ai/src/devon_ai/llm_tasks/report.py
+--- a/ai/src/devon_ai/llm_tasks/report.py
++++ b/ai/src/devon_ai/llm_tasks/report.py
+@@ -220,6 +220,7 @@
+         for key, levels in _mapping(payload.get("rubrics"), "rubrics").items()
+         for level, text in _mapping(levels, "rubric").items()
+     )
++    requirements_by_id = _requirements(payload.get("requirements", []))
+     score_turns: list[c.ScoreTurn] = []
+     report_turns: list[c.ReportTurn] = []
+     requirements = tuple(
+@@ -259,9 +260,11 @@
+                 "question": turn.get("question"),
+                 "answer": answer,
+                 "question_contract": turn.get("question_contract"),
+-                "jd_requirement_ids": _items(
+-                    turn.get("jd_requirement_ids", []), "jd_requirement_ids"
+-                ),
++                # 최신 JD 경계 검사를 먼저 통과시키고 v2의 원문·출처 계약을 유지한다.
++                "jd_requirement_ids": [
++                    item["id"]
++                    for item in _linked(turn.get("jd_requirement_ids", []), requirements_by_id)
++                ],
+                 "jd_requirements": [
+                     {**asdict(item), "tech_tags": list(item.tech_tags)} for item in requirements
+                 ],
