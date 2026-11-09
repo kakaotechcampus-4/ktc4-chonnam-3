@@ -7,9 +7,14 @@
 
 | 패치 | 대상 | 적용 전 SHA256 | 적용 후 SHA256 | patch SHA256 |
 | --- | --- | --- | --- | --- |
-| `df69aa7dc2ee-ws.py.patch` | `backend/app/features/interview/ws.py` | `93d5ce744c787c819f919b33a4fd4d9cb007000cc547a22267d50a2731f621a4` | `a61c80e3fa17f762ad2020e7b825b7c2873d3c0c0b118458dbf2831f9913c356` | `438a5603df3cec64227c2293d8fc903b515ab2fef7c370c30c02643e3df7b821` |
+| `df69aa7dc2ee-ws.py.patch` | `backend/app/features/interview/ws.py` | `93d5ce744c787c819f919b33a4fd4d9cb007000cc547a22267d50a2731f621a4` | `470b7f05aa62c138f8b2ad2b6664e6ee3316c8ee98af483e01f52e019e293362` | `6c65a2d2dba1e10a010bbd85043bf73a34f6e69cd7aaaa3f18f42e726bff59f1` |
+| `review-question-replay-tests.py.patch` | `backend/tests/features/interview/test_question_replay.py` | `없음` | `399ef76af6bee2cb0b9593887699d7cf6b97cf1c988188ab2deb5956fdc330e2` | `a10218a168e84403f408074528e918373aba9120b92d1b3c6d758a2d6ff0fe94` |
 
 선행의 실제 병합 커밋으로 재기준한 뒤 적용한다. 적용 커밋·지문·통합 회귀를 spec/ai/implementation.md에 기록한 뒤에만 대기 패치를 제거한다.
+
+음성 다시 듣기 판정은 고정된 voice 모드에서만 실행합니다. WS 패치와 대응 다시 듣기 회귀는 함께 적용합니다. 현재 음성 면접의 미답변 질문만 합성하며, timeout 냉각·명시 인증 거절 정산·월별 초기화 근거를 보존합니다. #213·#185 등 선행의 실제 적용 후 통합 검증이 필요합니다.
+
+
 
 <details>
 <summary>이전 안내·과거 기준 지문(현재 적용 지문으로 사용 금지)</summary>
