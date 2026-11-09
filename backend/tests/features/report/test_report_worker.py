@@ -61,7 +61,8 @@ async def test_worker_success_enqueues_profile_summary_and_releases_lock(
     assert await app.state.redis.exists(f"report:gen:{interview.id}") == 0
     assert await app.state.redis.exists(f"report:fail:{interview.id}") == 0
     enqueue.assert_awaited_once_with(
-        "profile_summary", str(interview.user_id),
+        "profile_summary",
+        str(interview.user_id),
         _job_id=f"profile_summary:{interview.user_id}:{interview.id}",
     )
 

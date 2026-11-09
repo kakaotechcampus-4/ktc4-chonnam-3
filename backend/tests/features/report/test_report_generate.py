@@ -53,10 +53,6 @@ async def test_saves_report_and_six_scores(app, db, ctx, prompt):
     assert len(rows[0].evidence_turn_ids) == 1
 
 
-
-
-
-
 async def test_payload_has_only_fixed_score_keys_and_turns(app, ctx, prompt):
     generator = FakeGenerator()
     await _generate(app, ctx, generator)

@@ -1,12 +1,12 @@
 diff --git a/backend/tests/features/report/test_report_generate.py b/backend/tests/features/report/test_report_generate.py
 --- a/backend/tests/features/report/test_report_generate.py
 +++ b/backend/tests/features/report/test_report_generate.py
-@@ -53,8 +53,36 @@
+@@ -51,6 +51,38 @@
+     rows = (await db.scalars(select(ReportScore))).all()
+     assert {r.score_key for r in rows} == set(SCORE_KEYS)
      assert len(rows[0].evidence_turn_ids) == 1
- 
- 
--
--
++
++
 +async def test_report_success_also_commits_durable_profile_refresh(app, db, ctx, prompt):
 +    from app.db.models import ProfileRefreshRequest
 +
