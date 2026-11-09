@@ -8,6 +8,7 @@ from devon_ai import contracts as c
 from devon_ai.agents.director.agent import _RECOVERY_CODES, _object_schema, _references
 
 type Location = tuple[str, str, str]
+SUPPORTED_PROMPT_VERSIONS = frozenset({"director_v1", "director_v2"})
 
 
 class DirectorModelCall(Protocol):
@@ -92,19 +93,27 @@ def _review_schema() -> dict[str, object]:
     )
 
 
-def _plan_object(raw: object, expected: set[str], name: str) -> dict[str, object]:
-    if type(raw) is not dict or set(raw) != expected:
+def _plan_object(
+    raw: object, expected: set[str], name: str, *, optional: frozenset[str] = frozenset()
+) -> dict[str, object]:
+    if type(raw) is not dict or not expected - optional <= set(raw) or not set(raw) <= expected:
         raise c.ContractError("schema", name)
     return cast(dict[str, object], raw)
 
 
 def _plan_question(raw: object) -> c.Question:
     # 공통 decode의 부가 필드 무시 정책을 바꾸지 않고 새 planner의 중첩 출력만 엄격히 검사한다.
-    question = _plan_object(raw, {item.name for item in fields(c.Question)}, "Question")
+    question = _plan_object(
+        raw,
+        {item.name for item in fields(c.Question)},
+        "Question",
+        optional=frozenset({"question_type", "parent_turn_id"}),
+    )
     contract = _plan_object(
         question["question_contract"],
         {item.name for item in fields(c.QuestionContract)},
         "QuestionContract",
+        optional=frozenset({"evaluation_keys"}),
     )
     for name, expected in (
         ("required_points", {item.name for item in fields(c.RequiredPoint)}),
@@ -166,6 +175,9 @@ def _input_payload(
         raise c.ContractError("schema", "Director context")
     if type(prompt) is not c.PromptSpec or prompt.task_name != "director":
         raise c.ContractError("schema", "Director prompt")
+    # 최신 recipe를 지원한다고 간주하지 않는다. 구형 기본 필드 생략만 호환한다.
+    if prompt.version.partition("@")[0] not in SUPPORTED_PROMPT_VERSIONS:
+        raise c.ContractError("schema", "unsupported Director prompt version")
     if type(limits) is not c.CallLimits:
         raise c.ContractError("schema", "Director limits")
     if type(tool_results) is not tuple or any(

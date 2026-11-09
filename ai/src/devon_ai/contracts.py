@@ -7,6 +7,8 @@ from re import fullmatch
 from types import UnionType
 from typing import Literal, Union, cast, get_args, get_origin, get_type_hints
 
+from devon_ai.query_policy import ExternalQueryError, canonical_external_query
+
 FailureStage = Literal["parse", "schema", "semantic"]
 CallFailureStage = Literal["timeout", "provider", "parse", "schema", "semantic", "budget"]
 
@@ -503,6 +505,13 @@ class ExternalQueryRequest(_Contract):
         super().__post_init__()
         if len(self.query) > 1000 or len(self.purpose) > 2000:
             raise ContractError("schema", "external query length")
+
+    def validate_for_execution(self) -> str:
+        # 과거 저장 원문 복원은 유지하고 새 실행·전송 경계에서만 정책을 적용한다.
+        try:
+            return canonical_external_query(self.query)
+        except ExternalQueryError as exc:
+            raise ContractError("semantic", str(exc)) from None
 
 
 @dataclass(frozen=True)
@@ -1422,6 +1431,15 @@ SCORE_CANDIDATE_KEYS: dict[PersonaId, tuple[ScoreKeyId, ...]] = {
 
 
 @dataclass(frozen=True)
+class LinkedRequirement(_Contract):
+    """질문이 연결한 JD 요구사항. 점수 판정에 보조 정보로만 전달한다."""
+
+    id: str
+    category: str
+    text: str
+
+
+@dataclass(frozen=True)
 class ScoreTurn(_Contract):
     """점수 판정 입력의 확정 문답 한 턴. 질문 당시의 Question Contract를 함께 둔다.
 
@@ -1435,7 +1453,7 @@ class ScoreTurn(_Contract):
     answer: str | None
     question_contract: QuestionContract
     jd_requirement_ids: tuple[str, ...] = ()
-    jd_requirements: tuple[JDRequirement, ...] = ()
+    jd_requirements: tuple[LinkedRequirement, ...] = ()
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -1444,10 +1462,7 @@ class ScoreTurn(_Contract):
             frozenset(item.id for item in self.jd_requirements),
             "score JD references",
         )
-        if (
-            "company_job_fit" in self.question_contract.evaluation_keys
-            and not self.jd_requirement_ids
-        ):
+        if "company_job_fit" in self.question_contract.evaluation_keys and not self.jd_requirements:
             raise ContractError("semantic", "job fit JD references")
 
 

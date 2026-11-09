@@ -4,6 +4,8 @@ from dataclasses import asdict, fields
 
 from devon_ai import contracts as c
 
+SUPPORTED_PROMPT_VERSIONS = frozenset({"answer_analysis_v1"})
+
 type AnalysisChecked = c.ContractChecked[c.AnswerAnalysis]
 type Location = tuple[str, str, str]
 
@@ -192,6 +194,8 @@ async def analyze_answer(
     try:
         if type(prompt) is not c.PromptSpec or prompt.task_name != "answer_analysis":
             raise c.ContractError("schema", "answer_analysis prompt")
+        if prompt.version.partition("@")[0] not in SUPPORTED_PROMPT_VERSIONS:
+            raise c.ContractError("schema", "unsupported answer_analysis prompt version")
         if type(limits) is not c.CallLimits:
             raise c.ContractError("schema", "answer_analysis limits")
         evidence_refs, jd_requirements = _check_input(
@@ -218,8 +222,16 @@ async def analyze_answer(
 
     def validate(raw: object) -> AnalysisChecked:
         # 계약 밖의 최상위 필드(점수 등)를 조용히 버리지 않고 schema 실패로 처리한다.
-        if type(raw) is not dict or set(raw) != {item.name for item in fields(c.AnswerAnalysis)}:
+        names = {item.name for item in fields(c.AnswerAnalysis)}
+        if (
+            type(raw) is not dict
+            or not names - {"external_queries"} <= set(raw)
+            or not set(raw) <= names
+        ):
             raise c.ContractError("schema", "AnswerAnalysis")
+        # schema1의 생략·빈 기본값만 호환하며 새 외부조회 기능을 backport하지 않는다.
+        if raw.get("external_queries"):
+            raise c.ContractError("schema", "unsupported external query")
         return validate_checked(c.decode(c.AnswerAnalysis, raw))
 
     request = c.ModelRequest(

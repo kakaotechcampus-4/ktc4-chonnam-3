@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import ipaddress
+import json
 import math
 import re
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
+from devon_ai.query_policy import ExternalQueryError, canonical_external_query
 from pydantic import SecretStr
 
 
@@ -174,6 +176,10 @@ class TavilyClient:
         budget: SearchBudget,
         max_results: int | None = None,
     ) -> SearchResult:
+        try:
+            query = canonical_external_query(query)
+        except ExternalQueryError as exc:
+            raise SearchError(str(exc)) from None
         allowed = _domains(domains)
         limit = self.settings.max_results if max_results is None else max_results
         try:
@@ -270,8 +276,6 @@ class TavilyClient:
                             data.extend(chunk)
                             if len(data) > self.settings.max_response_bytes:
                                 raise SearchError("response_too_large")
-                        import json
-
                         body = json.loads(data)
         except (httpx.TimeoutException, TimeoutError):
             raise SearchError("timeout") from None

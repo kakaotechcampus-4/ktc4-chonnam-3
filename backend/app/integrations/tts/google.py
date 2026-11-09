@@ -6,16 +6,20 @@ import asyncio
 import base64
 import binascii
 import json
+import logging
 import math
 from collections.abc import Awaitable, Callable, Mapping
-from contextlib import suppress
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Literal, Protocol
 
 import httpx
 from anyio import CancelScope
+from anyio.lowlevel import checkpoint_if_cancelled
 from pydantic import SecretStr
+
+logger = logging.getLogger(__name__)
+FINALIZATION_TIMEOUT_SECONDS = 1.0
 
 
 class TtsError(Exception):
@@ -41,6 +45,10 @@ class TTSSettings:
     def __post_init__(self) -> None:
         if self.provider != "google_cloud":
             raise ValueError("Unsupported TTS provider")
+        for name in ("api_key", "access_token"):
+            value = getattr(self, name)
+            if value is not None and not value.get_secret_value().strip():
+                object.__setattr__(self, name, None)
         credentials = (self.api_key, self.access_token)
         if not any(value is not None and value.get_secret_value().strip() for value in credentials):
             raise ValueError("TTS credentials are required")
@@ -73,6 +81,41 @@ class SpeechAudio:
     mime_type: str
     voice_id: str
     provider: str
+
+
+class CompletedSpeechCancelled(asyncio.CancelledError):
+    """이미 확보한 오디오를 캐시에 마무리한 뒤 호출자 취소를 전파한다."""
+
+    def __init__(self, audio: SpeechAudio) -> None:
+        self.audio = audio
+        super().__init__("completed_speech_cancelled")
+
+
+async def complete_audio_finalization[T](operation: Callable[[], Awaitable[T]]) -> T:
+    """마무리는 유한 시간만 보호한다. 취소를 성공 응답으로 바꾸거나 task를 방치하지 않는다."""
+
+    async def limited() -> T:
+        async with asyncio.timeout(FINALIZATION_TIMEOUT_SECONDS):
+            return await operation()
+
+    task = asyncio.create_task(limited())
+    cancelled = False
+    # AnyIO 취소와 직접 Task.cancel 모두 다룬다. task는 완료까지 이 지역 참조로 유지한다.
+    with CancelScope(shield=True):
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                cancelled = True
+            except Exception:
+                break
+    try:
+        result = task.result()
+    finally:
+        if cancelled:
+            raise asyncio.CancelledError
+    await checkpoint_if_cancelled()
+    return result
 
 
 class SpeechSynthesizer(Protocol):
@@ -118,6 +161,20 @@ async def _budgeted(
     budget: CharacterBudget, text: str, operation: Callable[[], Awaitable[SpeechAudio]]
 ) -> SpeechAudio:
     receipt = await budget.reserve(text)
+
+    async def settle(outcome: Literal["success", "uncertain", "rejected"]) -> None:
+        async def operation() -> None:
+            try:
+                await budget.settle(receipt, outcome)
+            except TtsError:
+                # 예약 used/pending은 환불하거나 재초기화하지 않는다. 원문·토큰은 기록하지 않는다.
+                logger.warning("tts_budget_settlement_unavailable", extra={"outcome": outcome})
+
+        try:
+            await complete_audio_finalization(operation)
+        except TimeoutError:
+            logger.warning("tts_budget_settlement_timeout", extra={"outcome": outcome})
+
     try:
         result = await operation()
     except BaseException as exc:
@@ -127,10 +184,15 @@ async def _budgeted(
             if isinstance(exc, TtsError) and exc.reason == "unauthorized"
             else "uncertain"
         )
-        with CancelScope(shield=True), suppress(TtsError):
-            await budget.settle(receipt, outcome)
+        try:
+            await settle(outcome)
+        except asyncio.CancelledError:
+            pass
         raise
-    await budget.settle(receipt, "success")
+    try:
+        await settle("success")
+    except asyncio.CancelledError:
+        raise CompletedSpeechCancelled(result) from None
     return result
 
 
