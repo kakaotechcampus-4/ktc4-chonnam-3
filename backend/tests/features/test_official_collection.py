@@ -17,9 +17,10 @@ from app.integrations.search.tavily import SearchBudget, TavilyClient
     "query", ["database=unapproved_database", "host=unapproved_host", "ssl=require"]
 )
 def test_cli_rejects_connection_query_options_before_any_io(query):
+    from scripts.configure_ai_knowledge import KnowledgeTarget
+
     from app.features.knowledge.official_catalog import OfficialSourceError
     from scripts.collect_official_sources import validate_collection_target
-    from scripts.configure_ai_knowledge import KnowledgeTarget
 
     url = "postgresql+asyncpg://devon:devon@127.0.0.1:15441/approved_test?" + query
     settings = Settings(_env_file=None, database_url=url)
@@ -30,9 +31,10 @@ def test_cli_rejects_connection_query_options_before_any_io(query):
 
 
 async def test_actual_connected_database_is_verified_without_any_write(test_database_url):
+    from scripts.configure_ai_knowledge import KnowledgeTarget
+
     from app.features.knowledge.official_catalog import OfficialSourceError
     from scripts.collect_official_sources import verify_collection_database
-    from scripts.configure_ai_knowledge import KnowledgeTarget
 
     url = make_url(test_database_url)
     assert url.database
