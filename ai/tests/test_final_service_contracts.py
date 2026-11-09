@@ -108,8 +108,8 @@ def test_declared_evaluation_keys_allow_technical_turn_to_observe_job_fit():
         "JD와 프로젝트 경험을 연결해 설명해 주세요.",
         "answer",
         contract(evaluation_keys=("company_job_fit",)),
-        ("jd-1",),
-        (c.LinkedRequirement("jd-1", "required", "requirement"),),
+        jd_requirement_ids=("jd-1",),
+        jd_requirements=(c.LinkedRequirement("jd-1", "required", "requirement"),),
     )
     assert c.score_candidate_keys(turn) == ("company_job_fit",)
 
@@ -154,8 +154,8 @@ def test_report_score_receives_explicit_keys_and_their_actual_jd_reference_text(
         "question",
         "answer",
         contract(evaluation_keys=("company_job_fit",)),
-        ("jd-1",),
-        (requirement,),
+        jd_requirement_ids=("jd-1",),
+        jd_requirements=(requirement,),
     )
     item = _payload((turn,), ())["turns"][0]
     assert item["candidate_keys"] == ["company_job_fit"]
