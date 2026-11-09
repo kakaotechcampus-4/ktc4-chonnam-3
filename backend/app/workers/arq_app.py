@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
 from app.core.crypto import TokenCipher
+from app.core.logging import configure_logging
 from app.features.interview.prepare_lease import JOB_TIMEOUT_SECONDS
 from app.workers.tasks.initial_sync import initial_sync
 from app.workers.tasks.interview_prep import interview_prep
@@ -18,6 +19,7 @@ from app.workers.tasks.report_generate import report_generate
 
 async def startup(ctx: dict[str, Any]) -> None:
     settings = get_settings()
+    configure_logging(settings.log_level, json_logs=settings.is_prod or settings.log_json)
     settings.validate_auth()
     ctx["settings"] = settings
     ctx["engine"] = create_async_engine(settings.database_url, pool_pre_ping=True)

@@ -1,0 +1,15 @@
+diff --git a/backend/app/integrations/llm/client.py b/backend/app/integrations/llm/client.py
+--- a/backend/app/integrations/llm/client.py
++++ b/backend/app/integrations/llm/client.py
+@@ -162,6 +162,11 @@
+     if request.limits.stream:
+         body["stream"] = True
+     return json.dumps(body, ensure_ascii=False, allow_nan=False).encode("utf-8")
++
++
++def request_size(request: ModelRequest) -> int:
++    """실제 전송과 같은 직렬화로 입력 예산을 측정하며 요청 내용은 반환하지 않는다."""
++    return len(_body(request))
+ 
+ 
+ def _stream_envelope(raw: bytes) -> dict[str, object]:
