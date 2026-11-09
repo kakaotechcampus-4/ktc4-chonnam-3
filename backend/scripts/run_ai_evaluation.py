@@ -517,3 +517,7 @@ def main() -> int:
     output.save(result, "completed")
     print(json.dumps(result["summary"], ensure_ascii=False))
     return technical_exit_code(result)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
