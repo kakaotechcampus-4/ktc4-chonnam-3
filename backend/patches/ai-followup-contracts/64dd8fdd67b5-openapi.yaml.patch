@@ -1,7 +1,7 @@
 diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.yaml
 --- a/spec/shared/contracts/openapi.yaml
 +++ b/spec/shared/contracts/openapi.yaml
-@@ -363,6 +363,51 @@
+@@ -363,6 +363,54 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ApiError'
@@ -12,7 +12,10 @@ diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.
 +      description: >-
 +        Explicitly regenerates the missing next question after saved answer analysis
 +        succeeded and Director generation failed. The server preserves prior turns,
-+        analyses, evidence, selected code versions and failed call records. One manual
++        analyses, evidence, selected code versions and failed call records. Permanent
++        authentication or quota failures are not eligible. On refresh GET returns
++        questionRetryState so the same requestId can be restored. A replay may rotate
++        realtime session only for the current unanswered target turn. One manual
 +        round is allowed per target question; each round has one Plan and one independent
 +        Review. A safe rewrite rejection also permits one automatic round. Including
 +        initial generation, the target question has at most six provider attempts.
@@ -53,7 +56,7 @@ diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.
    /interviews/{id}/prepare/retry:
      post:
        operationId: retryInterviewPrepare
-@@ -446,6 +491,12 @@
+@@ -446,6 +494,12 @@
                  $ref: '#/components/schemas/GeneratingResponse'
          '401':
            $ref: '#/components/responses/Error'
@@ -66,7 +69,7 @@ diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.
          '409':
            $ref: '#/components/responses/Error'
    /interviews/{id}/retry:
-@@ -1111,6 +1162,31 @@
+@@ -1111,6 +1165,49 @@
          interviewId:
            type: string
  
@@ -79,6 +82,24 @@ diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.
 +          type: string
 +          format: uuid
 +          description: Reuse this value when the preceding HTTP result is unknown.
++
++    QuestionRetryState:
++      type: object
++      required: [requestId, turnNo, status, expiresAt]
++      properties:
++        requestId:
++          type: string
++          format: uuid
++        turnNo:
++          type: integer
++          minimum: 1
++          maximum: 9
++        status:
++          type: string
++          enum: [running, succeeded, failed]
++        expiresAt:
++          type: string
++          format: date-time
 +
 +    QuestionRetryResponse:
 +      type: object
@@ -98,7 +119,7 @@ diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.
      InterviewTurn:
        type: object
        required: [turn, persona, question, answer, mainIndex, followUpDepth]
-@@ -1207,6 +1283,16 @@
+@@ -1207,6 +1304,24 @@
            nullable: true
            allOf:
              - $ref: '#/components/schemas/InterviewLastError'
@@ -112,6 +133,14 @@ diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.
 +          maximum: 1
 +          default: 0
 +          description: Manual recovery rounds claimed for the current missing target question.
++        questionRetryState:
++          nullable: true
++          allOf:
++            - $ref: '#/components/schemas/QuestionRetryState'
++          description: >-
++            Optional persisted manual request state. Restore requestId on refresh and
++            poll GET while running. Expiry or unknown transport results never authorize
++            a new requestId or model round. Null when no relevant manual request exists.
  
      ScoreItem:
        type: object
