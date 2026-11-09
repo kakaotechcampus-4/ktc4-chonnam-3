@@ -86,7 +86,7 @@ export default function Report() {
               </span>
               ON
             </div>
-            <p className="text-sm text-muted">레포트를 만들고 있어요...</p>
+            <p className="text-sm text-muted">리포트를 만들고 있어요...</p>
           </div>
         )}
         {showError && (

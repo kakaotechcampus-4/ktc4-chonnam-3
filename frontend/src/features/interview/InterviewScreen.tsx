@@ -748,8 +748,6 @@ export default function InterviewScreen() {
         <p className="text-[11px] font-bold text-error">연결이 끊겼어요 · 다시 연결하는 중이에요</p>
       )}
 
-      {thinking && !evidence && <p className="text-[11px] text-muted">다음 질문을 만들고 있어요</p>}
-
       {evidence && (
         <p className="rounded-card bg-accent-soft px-3 py-2 text-[11px] text-accent">
           근거 확인 중 · {evidence.repository} / {evidence.file}
