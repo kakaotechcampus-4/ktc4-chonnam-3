@@ -19,6 +19,7 @@ from app.db.models.interview import InterviewSession, InterviewTurn, SessionRepo
 from app.db.models.knowledge import DomainQuestionFrame, PromptVersion, ScoreCriterion
 from app.db.models.llm_call import LLMCallRecord
 from app.db.models.metric import Event
+from app.db.models.official_source import OfficialSourceSnapshot
 from app.db.models.posting import JdRequirement, JobPosting
 from app.db.models.report import InterviewReport, ReportDisagreement, ReportScore
 from app.db.models.user import GithubAccount, User
@@ -39,6 +40,7 @@ __all__ = [
     "JdRequirement",
     "JobPosting",
     "LLMCallRecord",
+    "OfficialSourceSnapshot",
     "PromptVersion",
     "RepoAnalysis",
     "RepoMatchScore",
