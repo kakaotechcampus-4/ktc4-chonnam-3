@@ -209,3 +209,86 @@ class BudgetedSpeechSynthesizer:
         return await _budgeted(
             self.budget, text, lambda: self.synthesizer.synthesize(text, persona)
         )
+
+
+class GoogleTTSClient:
+    def __init__(
+        self,
+        settings: TTSSettings,
+        transport: httpx.AsyncBaseTransport | None = None,
+        *,
+        budget: CharacterBudget | None = None,
+    ) -> None:
+        self.settings, self.transport = settings, transport
+        self.budget = budget
+
+    async def synthesize(self, text: str, persona: str) -> SpeechAudio:
+        voice = validate_free_request(self.settings, text, persona)
+        if self.budget is None:
+            raise TtsError("budget_unavailable")
+        return await _budgeted(self.budget, text, lambda: self._synthesize(text, voice))
+
+    async def _synthesize(self, text: str, voice: str) -> SpeechAudio:
+        headers = {}
+        if self.settings.access_token is not None:
+            headers["Authorization"] = "Bearer " + self.settings.access_token.get_secret_value()
+            # 사용자 OAuth의 실제 quota 프로젝트를 무료 문자 예산의 프로젝트와 맞춘다.
+            if self.settings.budget_project:
+                headers["X-Goog-User-Project"] = self.settings.budget_project
+        elif self.settings.api_key is not None:
+            # API 키를 query string에 넣으면 HTTP 접근 로그에 남으므로 공식 헤더를 사용한다.
+            headers["X-Goog-Api-Key"] = self.settings.api_key.get_secret_value()
+        payload = {
+            "input": {"text": text},
+            "voice": {"languageCode": self.settings.language_code, "name": voice},
+            "audioConfig": {"audioEncoding": "MP3"},
+        }
+        try:
+            async with asyncio.timeout(self.settings.timeout_seconds):
+                async with httpx.AsyncClient(
+                    timeout=self.settings.timeout_seconds,
+                    transport=self.transport,
+                    follow_redirects=False,
+                    trust_env=False,
+                ) as client:
+                    async with client.stream(
+                        "POST",
+                        "https://texttospeech.googleapis.com/v1/text:synthesize",
+                        headers=headers,
+                        json=payload,
+                    ) as response:
+                        if response.status_code != 200:
+                            status = response.status_code
+                            raise TtsError(
+                                "unauthorized"
+                                if status in (401, 403)
+                                else "rate_limited"
+                                if status == 429
+                                else "provider_error"
+                            )
+                        content = bytearray()
+                        # base64와 작은 JSON 부가 정보만 허용하고 디코딩 후 다시 검사한다.
+                        maximum = 4 * ((self.settings.max_audio_bytes + 2) // 3) + 1024
+                        async for chunk in response.aiter_bytes():
+                            content.extend(chunk)
+                            if len(content) > maximum:
+                                raise TtsError("audio_too_large")
+                        body = json.loads(content)
+        except (httpx.TimeoutException, TimeoutError):
+            raise TtsError("timeout") from None
+        except httpx.HTTPError:
+            raise TtsError("provider_error") from None
+        except (ValueError, UnicodeError):
+            raise TtsError("invalid_response") from None
+        encoded = body.get("audioContent") if isinstance(body, dict) else None
+        if not isinstance(encoded, str) or not encoded:
+            raise TtsError("invalid_response")
+        try:
+            audio = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error):
+            raise TtsError("invalid_response") from None
+        if not audio:
+            raise TtsError("invalid_response")
+        if len(audio) > self.settings.max_audio_bytes:
+            raise TtsError("audio_too_large")
+        return SpeechAudio(audio, "audio/mpeg", voice, self.settings.provider)
