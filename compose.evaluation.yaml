@@ -1,0 +1,42 @@
+name: devon-evaluation
+
+services:
+  evaluation:
+    profiles: [evaluation]
+    image: devon-ai-evaluation:local
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.evaluation
+      args:
+        RUNTIME_IMAGE: ${EVAL_RUNTIME_IMAGE:?Set EVAL_RUNTIME_IMAGE to the runtime image built from this checkout}
+    # 기본 평가는 외부 서비스 없이 입력과 계약만 검사한다.
+    network_mode: none
+    volumes:
+      # 선택 코호트가 참조하는 과거 snapshot·형제 코호트를 같은 상대 구조로 제공한다.
+      # 원문과 정답은 이미지에 복사하지 않으며 실행에서도 읽기 전용이다.
+      - type: bind
+        source: ${EVAL_REFERENCE_DIR:-./ai/evals}/source_snapshot_20261108
+        target: /srv/ai/evals/source_snapshot_20261108
+        read_only: true
+      - type: bind
+        source: ${EVAL_REFERENCE_DIR:-./ai/evals}/service_regression
+        target: /srv/ai/evals/service_regression
+        read_only: true
+      - type: bind
+        source: ${EVAL_CASES_DIR:?Set EVAL_CASES_DIR to an explicit case directory}
+        target: /srv/ai/evals/cases
+        read_only: true
+      - type: bind
+        source: ${EVAL_OUTPUT_DIR:?Set EVAL_OUTPUT_DIR to an explicit output directory}
+        target: /evaluation/output
+    command:
+      - --cases
+      - /srv/ai/evals/cases
+      # 사례 폴더의 검증 전용 manifest는 이미지의 같은 버전 프롬프트를 참조한다.
+      - --manifest
+      - /srv/ai/evals/cases/${EVAL_MANIFEST_FILE:-runtime-manifest.json}
+      - --split
+      - all
+      - --output
+      - /evaluation/output/result.json
+      - --dry-run

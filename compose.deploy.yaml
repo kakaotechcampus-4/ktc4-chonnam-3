@@ -10,6 +10,8 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      runtime-prompts:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     ports:
@@ -33,6 +35,18 @@ services:
         condition: service_healthy
     restart: "no"
 
+  # 같은 릴리스의 11개 소비 계약을 검사한 뒤 한 트랜잭션으로 프롬프트를 등록한다.
+  runtime-prompts:
+    env_file: .env.deploy
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "scripts.configure_ai_runtime", "--output", "/tmp/ai-runtime.json", "--apply"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
   worker:
     env_file: .env.deploy
     build:
@@ -41,6 +55,8 @@ services:
     command: ["arq", "app.workers.analysis_app.WorkerSettings"]
     depends_on:
       migrate:
+        condition: service_completed_successfully
+      runtime-prompts:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
