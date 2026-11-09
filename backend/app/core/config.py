@@ -185,6 +185,8 @@ class Settings(BaseSettings):
     max_ai_recommended: int = 5
     interview_max_turns: int = INTERVIEW_MAX_TURNS
     interview_duration_seconds: int = 1200
+    # 원래 enqueue 와 겹치지 않도록 이 시간 이상 preparing 인 면접만 reaper 가 재등록한다.
+    interview_prep_reaper_min_age_seconds: int = Field(default=60, gt=0)
     # 원문 byte 상한은 준비·진행 중 근거 조회에서 공유하고 PREPARE 상한은 준비에만 쓴다.
     director_evidence_max_response_bytes: LLMInteger = Field(default=131072, gt=0)
     director_evidence_max_total_bytes: LLMInteger = Field(default=262144, gt=0)
