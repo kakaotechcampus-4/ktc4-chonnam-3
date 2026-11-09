@@ -147,7 +147,15 @@ def test_a_model_call_returning_something_else_is_a_programming_error(run, kit):
 def test_linked_jd_requirements_reach_the_request_as_reference_only(run, kit):
     requirement = c.LinkedRequirement("jd-1", "required", "Redis 운영 경험")
     turns = tuple(
-        c.ScoreTurn(t.turn_id, t.persona, t.question, t.answer, t.question_contract, (requirement,))
+        c.ScoreTurn(
+            t.turn_id,
+            t.persona,
+            t.question,
+            t.answer,
+            t.question_contract,
+            jd_requirement_ids=(requirement.id,),
+            jd_requirements=(requirement,),
+        )
         if t.turn_id == "turn-4"
         else t
         for t in TURNS
@@ -156,6 +164,62 @@ def test_linked_jd_requirements_reach_the_request_as_reference_only(run, kit):
     assert run(provider, turns=turns).succeeded
     sent = provider.requests[0].payload["turns"]
     assert sent[3]["jd_requirements"] == [
-        {"id": "jd-1", "category": "required", "text": "Redis 운영 경험"}
+        {
+            "id": "jd-1",
+            "category": "required",
+            "text": "Redis 운영 경험",
+        }
     ]
     assert sent[0]["jd_requirements"] == []
+
+
+@pytest.mark.parametrize("version", ["report_score_v3", "report_score_v3@release-20261110"])
+def test_v3_deployment_identity_preserves_each_turns_source_boundary(run, kit, version):
+    own = c.Evidence("own", "repo-1", "a" * 40, "code", "app.py", None, "first source", None)
+    other = c.Evidence("other", "repo-1", "a" * 40, "code", "test.py", None, "second source", None)
+    turns = (
+        replace(TURNS[0], evidence_refs=("own",)),
+        replace(TURNS[1], evidence_refs=("other",)),
+        *TURNS[2:],
+    )
+    lookup = c.ReportToolResult(
+        TURNS[2].turn_id, c.ToolResult("tool_error", (), (), ("lookup unavailable",), "tool_failed")
+    )
+    provider = kit.Provider(output())
+    assert run(
+        provider,
+        turns=turns,
+        prompt=replace(PROMPT, version=version),
+        evidence=(own, other),
+        tool_results=(lookup,),
+    ).succeeded
+    request = provider.requests[0]
+    assert request.prompt.version == version
+    assert not {"evidence", "tool_results", "supplemental_sources", "source_notes"}.intersection(
+        request.payload
+    )
+    sent = request.payload["turns"]
+    assert sent[0]["evidence_refs"] == ["own"]
+    assert [item["content"] for item in sent[0]["evidence"]] == ["first source"]
+    assert sent[1]["evidence_refs"] == ["other"]
+    assert [item["content"] for item in sent[1]["evidence"]] == ["second source"]
+    assert sent[0]["tool_results"] == []
+    assert sent[2]["tool_results"][0]["status"] == "tool_error"
+    assert sent[2]["evidence"] == []
+
+
+@pytest.mark.parametrize("version", ["report_score_v2", "report_score_v2@release-20261110"])
+def test_v2_deployment_identity_keeps_the_existing_global_source_payload(run, kit, version):
+    source = c.Evidence("own", "repo-1", "a" * 40, "code", "app.py", None, "first source", None)
+    provider = kit.Provider(output())
+    assert run(provider, prompt=replace(PROMPT, version=version), evidence=(source,)).succeeded
+    request = provider.requests[0]
+    assert request.prompt.version == version
+    assert {
+        "evidence",
+        "tool_results",
+        "supplemental_sources",
+        "source_notes",
+    } <= request.payload.keys()
+    assert request.payload["evidence"][0]["content"] == "first source"
+    assert "evidence_refs" not in request.payload["turns"][0]

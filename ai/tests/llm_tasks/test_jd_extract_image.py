@@ -1,0 +1,175 @@
+"""이미지 공고 요구사항은 실제 전사와 분류 제목에 근거해야 한다."""
+
+import importlib
+from collections import Counter
+
+import pytest
+
+from devon_ai import contracts as c
+
+
+def parse(item, blocks=None):
+    name = "devon_ai.llm_tasks.jd_extract_image"
+    assert importlib.util.find_spec(name) is not None, "이미지 JD 검증 경계가 필요하다"
+    module = importlib.import_module(name)
+    return module.parse_image_requirements(
+        {"requirements": [item], "limitations": []}, blocks or {"B1": "우대사항\nRedis 경험"}
+    )
+
+
+def item(**updates):
+    return {
+        "category": "preferred",
+        "text": "Redis 경험",
+        "tech_tags": ["Redis"],
+        "source_ids": ["B1"],
+        **updates,
+    }
+
+
+def test_transcribed_preferred_requirement_retains_actual_source():
+    result = parse(item())
+    assert result.requirements[0].category == "preferred"
+    assert result.requirements[0].source_ids == ("B1",)
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"category": "required"},
+        {"source_ids": ["unknown"]},
+        {"text": "Redis 운영 성과"},
+        {"tech_tags": ["Kubernetes"]},
+    ],
+)
+def test_unsupported_requirement_is_rejected_without_discarding_source(updates):
+    result = parse(item(**updates))
+    assert result.requirements == () and result.rejected
+
+
+@pytest.mark.parametrize("updates", [{"source_ids": "B1"}, {"category": []}])
+def test_schema_error_is_distinct_from_semantic_rejection(updates):
+    with pytest.raises(c.ContractError) as caught:
+        parse(item(**updates))
+    assert caught.value.stage == "schema"
+
+
+def test_technology_name_must_not_be_a_substring_of_another_name():
+    result = parse(
+        item(text="Google Cloud 경험", tech_tags=["Go"]), {"B1": "우대사항\nGoogle Cloud 경험"}
+    )
+    assert result.requirements == () and result.rejected
+
+
+def test_historical_poster_keeps_work_and_bulleted_preference_sections():
+    from devon_ai.llm_tasks.jd_extract_image import parse_image_requirements
+
+    # 2015년 공개 포스터의 실제 전사·모델 후보를 재생한다. 사이트 URL 지원 검증은 아니다.
+    blocks = {
+        "P1-E8": "업무",
+        "P1-E9": "-Ruby on Rails 기반 자소설닷컴 웹서비스 개발",
+        "P1-E10": "-프론트앤드와 백앤드 전반적으로 참여",
+        "P1-E11": "▪우대사항",
+        "P1-E12": "-Ruby on Rails 개발 경험",
+        "P1-E13": "-AngularJS 사용 경험",
+        "P1-E14": "-현 졸업생 및 2016년 2월 졸업 예정자",
+        "P1-E15": "- 취업 준비 경험",
+    }
+    candidates = [
+        ("responsibility", "P1-E8", "P1-E9", ["Ruby on Rails"]),
+        ("responsibility", "P1-E8", "P1-E10", []),
+        ("preferred", "P1-E11", "P1-E12", ["Ruby on Rails"]),
+        ("preferred", "P1-E11", "P1-E13", ["AngularJS"]),
+        ("preferred", "P1-E11", "P1-E14", []),
+        ("preferred", "P1-E11", "P1-E15", []),
+    ]
+    payload = {
+        "requirements": [
+            {
+                "category": category,
+                "text": blocks[quote_id],
+                "tech_tags": tags,
+                "source_ids": [heading_id, quote_id],
+            }
+            for category, heading_id, quote_id, tags in candidates
+        ],
+        "limitations": [],
+    }
+
+    result = parse_image_requirements(payload, blocks)
+
+    assert Counter(row.category for row in result.requirements) == {
+        "responsibility": 2,
+        "preferred": 4,
+    }
+    assert result.rejected == ()
+    assert tuple(row.source_ids for row in result.requirements) == (
+        ("P1-E8", "P1-E9"),
+        ("P1-E8", "P1-E10"),
+        ("P1-E11", "P1-E12"),
+        ("P1-E11", "P1-E13"),
+        ("P1-E11", "P1-E14"),
+        ("P1-E11", "P1-E15"),
+    )
+    assert tuple(row.text for row in result.requirements) == (
+        "-Ruby on Rails 기반 자소설닷컴 웹서비스 개발",
+        "-프론트앤드와 백앤드 전반적으로 참여",
+        "-Ruby on Rails 개발 경험",
+        "-AngularJS 사용 경험",
+        "-현 졸업생 및 2016년 2월 졸업 예정자",
+        "- 취업 준비 경험",
+    )
+
+
+@pytest.mark.parametrize(
+    "heading",
+    ["업무", "업무 내용", "주요 업무", "담당업무", "수행 업무", "직무내용", "Job Responsibilities"],
+)
+def test_explicit_work_heading_aliases_preserve_responsibility(heading):
+    result = parse(item(category="responsibility"), {"B1": f"{heading}\nRedis 경험"})
+    assert len(result.requirements) == 1
+    assert result.requirements[0].category == "responsibility"
+
+
+@pytest.mark.parametrize("prefix", ["▪", "• ", "●", "○ ", "■ ", "□", "◆", "◇ ", "▶ ", "- ", "* "])
+def test_bulleted_heading_keeps_its_explicit_category(prefix):
+    result = parse(item(), {"B1": f"{prefix}우대사항：\nRedis 경험"})
+    assert len(result.requirements) == 1
+    assert result.requirements[0].category == "preferred"
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "업무 경험이 있는 분",
+        "Redis 업무를 담당합니다",
+        "업무: Redis 서비스를 운영합니다",
+        "▪ 업무 문서 작성 경험",
+        "Job responsibilities include Redis operation",
+    ],
+)
+def test_work_word_inside_a_sentence_does_not_establish_a_heading(sentence):
+    result = parse(item(category="responsibility"), {"B1": f"{sentence}\nRedis 경험"})
+    assert result.requirements == ()
+    assert result.rejected == ("item_0:category_source_ambiguous",)
+
+
+def test_recognized_bullets_do_not_promote_preferred_to_required():
+    result = parse(item(category="required"), {"B1": "▪우대사항\nRedis 경험"})
+    assert result.requirements == ()
+    assert result.rejected == ("item_0:category_source_ambiguous",)
+
+
+def test_last_explicit_heading_before_quote_controls_a_shared_block():
+    result = parse(item(), {"B1": "업무\nAPI 개발\n▪우대사항\nRedis 경험"})
+    assert len(result.requirements) == 1
+    assert result.requirements[0].category == "preferred"
+
+
+def test_conflicting_explicit_heading_sources_are_still_ambiguous():
+    result = parse(
+        item(source_ids=["B1", "B2"]),
+        {"B1": "■필수사항\nRedis 경험", "B2": "▪우대사항"},
+    )
+    assert result.requirements == ()
+    assert result.rejected == ("item_0:category_source_ambiguous",)
