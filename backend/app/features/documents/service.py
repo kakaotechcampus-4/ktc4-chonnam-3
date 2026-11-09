@@ -46,7 +46,7 @@ async def preview_document(
     max_source_chars: int = 262144,
     doc_type: Literal["portfolio", "cover_letter"] = "portfolio",
     vision_client: EliceVisionClient | None = None,
-    vision_pdf_layout: bool = True,
+    vision_pdf_layout: bool = False,
     vision_unavailable: bool = False,
 ) -> DocumentPreviewResponse:
     user_id = user if isinstance(user, UUID) else user.id
@@ -75,7 +75,7 @@ async def preview_document(
             mime_type = _VISION_MIME_TYPES[suffix]
         needs_vision = (
             document_format is None
-            # 텍스트 제목만 있는 페이지에도 이미지 표·도식이 함께 있을 수 있다.
+            # 완전한 텍스트 PDF의 레이아웃 보완은 명시적으로 선택한 경우에만 전송한다.
             or (document_format is DocumentFormat.PDF and vision_pdf_layout)
             or result.error_code == "no_text_layer"
             or (result.details.get("pageCount", 0) > result.details.get("extractedPages", 0))

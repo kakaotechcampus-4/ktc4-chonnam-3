@@ -9,6 +9,7 @@ from app.integrations.extract.base import ExtractionBlock, ExtractionResult
 from app.integrations.extract.github_urls import extract_github_full_names
 from app.integrations.vision.elice import EliceVisionClient, VisionError
 from app.shared.enums import DocumentExtractStatus
+from app.shared.storage_values import validate_storage_strings
 
 
 async def supplement_with_vision(
@@ -24,7 +25,7 @@ async def supplement_with_vision(
         vision = await client.extract(data, mime_type, filename=filename)
         # 공급자 결과의 비표준 숫자 등이 원문 저장 전체를 깨뜨리지 않게 먼저 확인한다.
         json.dumps(vision.raw_result, allow_nan=False, ensure_ascii=False).encode("utf-8")
-        _validate_storage_strings(vision.raw_result)
+        validate_storage_strings(vision.raw_result)
     except (VisionError, ValueError, UnicodeError, RecursionError) as exc:
         reason = exc.reason if isinstance(exc, VisionError) else "vision_metadata_invalid"
         return mark_vision_unavailable(native, reason), []
@@ -133,16 +134,3 @@ def mark_vision_unavailable(native: ExtractionResult, reason: str) -> Extraction
         source_is_partial=True,
         limitations=tuple(dict.fromkeys(native.limitations + (reason, "unread_document_regions"))),
     )
-
-
-def _validate_storage_strings(value: object) -> None:
-    pending = [value]
-    while pending:
-        current = pending.pop()
-        if isinstance(current, str) and "\x00" in current:
-            raise ValueError("Invalid JSON storage character")
-        if isinstance(current, dict):
-            pending.extend(current.keys())
-            pending.extend(current.values())
-        elif isinstance(current, list):
-            pending.extend(current)

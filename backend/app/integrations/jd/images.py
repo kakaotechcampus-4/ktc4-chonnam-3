@@ -9,11 +9,11 @@ from urllib.parse import urljoin
 import httpx
 
 from app.core.config import Settings
-from app.features.documents.vision_processing import _validate_storage_strings
 from app.integrations.jd.base import PostingContent
 from app.integrations.jd.body_images import WANTED_IMAGE_DOMAINS
 from app.integrations.search.tavily import SearchError, checked_source_url
 from app.integrations.vision.elice import EliceVisionClient, VisionError
+from app.shared.storage_values import validate_storage_strings
 
 
 class _ImageError(Exception):
@@ -118,7 +118,7 @@ async def collect_posting_images(
                     filename=f"posting-{index}.{'png' if mime == 'image/png' else 'jpg'}",
                 )
                 json.dumps(result.raw_result, allow_nan=False, ensure_ascii=False).encode("utf-8")
-                _validate_storage_strings(result.raw_result)
+                validate_storage_strings(result.raw_result)
                 records.append(
                     {
                         "url": url,

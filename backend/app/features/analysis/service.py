@@ -86,7 +86,9 @@ async def create_run(
                 cover_letter_document_id=request.cover_letter_document_id,
                 fingerprint=fingerprint,
                 queued_at=datetime.now(UTC),
-                steps=initial_steps(request.document_id is not None),
+                steps=initial_steps(
+                    request.document_id is not None or request.cover_letter_document_id is not None
+                ),
             )
             .on_conflict_do_nothing(
                 index_elements=["user_id", "fingerprint"],

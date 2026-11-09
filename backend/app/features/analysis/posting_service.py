@@ -37,6 +37,17 @@ def normalize_posting_url(posting_url: str) -> str:
 
 def _fresh(posting: JobPosting | None, now: datetime, ttl: timedelta) -> bool:
     # 전달된 TTL의 경계까지 재사용하며, 단순 캐시 조회로 유효 기간을 연장하지 않는다.
+    if posting is not None:
+        health = _image_health(posting.raw_payload or {})
+        if health is not None and (
+            health["collection_status"] in {"failed", "partial"}
+            or (
+                isinstance(health["extraction"], dict)
+                and health["extraction"].get("status") in {"failed", "partial"}
+            )
+        ):
+            # 일부 이미지가 누락돼도 나머지 JD 추출 자체는 성공할 수 있다.
+            ttl = min(ttl, timedelta(seconds=60))
     return (
         posting is not None and posting.fetched_at is not None and posting.fetched_at >= now - ttl
     )
@@ -57,6 +68,22 @@ def _content(snapshot: dict[str, object]) -> dict[str, object]:
             if key not in {"image_processing", "image_extraction"}
         }
     return content
+
+
+def _image_health(snapshot: dict[str, object]) -> dict[str, object] | None:
+    extraction = snapshot.get("_image_extraction")
+    metadata = snapshot.get("source_metadata")
+    processing = metadata.get("image_processing") if isinstance(metadata, dict) else None
+    if not isinstance(extraction, dict) and not isinstance(processing, dict):
+        return None
+    # 시도 시간·job ID가 달라진 것만으로 새 버전을 만들지는 않는다.
+    return {
+        "extraction": {
+            key: extraction.get(key) if isinstance(extraction, dict) else None
+            for key in ("status", "limitations", "rejected", "failure")
+        },
+        "collection_status": processing.get("status") if isinstance(processing, dict) else None,
+    }
 
 
 def _snapshot_content(content: PostingContent) -> dict[str, object]:
@@ -257,6 +284,7 @@ async def complete_posting(
             current is not None
             and current.raw_payload is not None
             and _content(current.raw_payload) == _content(snapshot)
+            and _image_health(current.raw_payload) == _image_health(snapshot)
             and await _same_requirements(db, current, drafts)
         ):
             # 내용·요구사항 ID·최초 생성 시각은 불변이며 실제 재확인 시각만 갱신한다.

@@ -5,7 +5,7 @@ import hashlib
 from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from typing import cast
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 from devon_ai import contracts as c
@@ -24,6 +24,8 @@ from app.llm_tasks.prompt_loader import (
     PromptNotFoundError,
     load_active_prompt,
 )
+
+CLAIM_POLL_SECONDS = 0.1
 
 
 def _state(row: InterviewSession, document_id: UUID, status: str, error: str | None = None) -> None:
@@ -83,14 +85,50 @@ async def _prepare_document(
     settings: Settings,
     http_client: httpx.AsyncClient | None,
 ) -> None:
+    try:
+        timeout = 3 * settings.require_llm().call_limits("doc_claims").timeout_seconds
+    except ValueError:
+        await _prepare_document_once(
+            sessions, interview_id, document_id, job_id, settings, http_client
+        )
+        return
+    try:
+        # 다른 면접의 결과를 DB 잠금 밖에서 기다리며 동일 문서의 모델 호출을 중복하지 않는다.
+        # 대기·실행·저장을 합쳐 기존 문서 한 건의 3T 준비 예산을 넘지 않는다.
+        async with asyncio.timeout(timeout):
+            while True:
+                if not await _prepare_document_once(
+                    sessions, interview_id, document_id, job_id, settings, http_client
+                ):
+                    break
+                await asyncio.sleep(CLAIM_POLL_SECONDS)
+    except TimeoutError:
+        async with sessions.begin() as db:
+            row = await _interview(db, interview_id)
+            if row is not None and owns_preparation(row, job_id=job_id):
+                _state(row, document_id, "not_available", "document_claims_wait_timeout")
+
+
+async def _prepare_document_once(
+    sessions: async_sessionmaker[AsyncSession],
+    interview_id: UUID,
+    document_id: UUID,
+    job_id: UUID,
+    settings: Settings,
+    http_client: httpx.AsyncClient | None,
+) -> bool:
+    run_id = uuid4()
     async with sessions.begin() as db:
         row = await _interview(db, interview_id)
         if row is None or not owns_preparation(row, job_id=job_id):
-            return
+            return False
         if document_id not in {item.id for item in await selected_documents(db, row)}:
-            return
+            return False
         document = await db.scalar(
-            select(UserDocument).where(UserDocument.id == document_id).with_for_update()
+            select(UserDocument)
+            .where(UserDocument.id == document_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
         assert document is not None
         snapshot = document.source_snapshot
@@ -108,21 +146,21 @@ async def _prepare_document(
         if not snapshot or not snapshot.get("text"):
             document.claims_status = "not_available"
             _state(row, document_id, "not_available", "document_source_unavailable")
-            return
+            return False
         text = snapshot["text"]
         if type(text) is not str or hashlib.sha256(text.encode()).hexdigest() != snapshot.get(
             "text_hash"
         ):
             document.claims_status, document.claims_error_code = "failed", "document_source_invalid"
             _state(row, document_id, "failed", "document_source_invalid")
-            return
+            return False
         try:
             # 본문·모델이 불변인 prompt version도 캐시 키에 포함한다.
             prompt = await load_active_prompt(db, "doc_claims")
             llm = settings.require_llm()
         except (PromptNotFoundError, PromptConfigurationError, ValueError):
             _state(row, document_id, "failed", "doc_claims_not_configured")
-            return
+            return False
         source_version = snapshot["text_hash"]
         if (
             document.claims_status == "succeeded"
@@ -130,14 +168,14 @@ async def _prepare_document(
             and document.claims_prompt_version == prompt.version
         ):
             _state(row, document_id, "succeeded")
-            return
+            return False
         if document.claims_status == "running" and document.updated_at > datetime.now(
             UTC
-        ) - timedelta(seconds=max(180, 2 * (settings.llm_timeout_seconds or 0) + 60)):
+        ) - timedelta(seconds=3 * llm.call_limits("doc_claims").timeout_seconds):
             _state(row, document_id, "pending")
-            return
+            return True
         document.claims_status, document.claims_error_code = "running", None
-        document.claims_run_id = job_id
+        document.claims_run_id = run_id
         _state(row, document_id, "pending")
 
     attempts: list[c.AttemptMetadata] = []
@@ -148,9 +186,13 @@ async def _prepare_document(
             if row is None:
                 return
             document = await db.scalar(
-                select(UserDocument).where(UserDocument.id == document_id).with_for_update()
+                select(UserDocument)
+                .where(UserDocument.id == document_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
             )
             record = LLMCallRecord(
+                id=run_id,
                 interview_session_id=interview_id,
                 task_name="doc_claims",
                 attempts=[asdict(item) for item in result.attempts],
@@ -160,7 +202,7 @@ async def _prepare_document(
             valid = (
                 owns_preparation(row, job_id=job_id)
                 and document is not None
-                and document.claims_run_id == job_id
+                and document.claims_run_id == run_id
                 and document_id in {item.id for item in await selected_documents(db, row)}
                 and document.source_snapshot
                 and document.source_snapshot.get("text_hash") == source_version
@@ -175,9 +217,10 @@ async def _prepare_document(
                     if cancelled
                     else "selected_document_or_preparation_changed"
                 )
-                if document is not None and document.claims_run_id == job_id:
+                owns_reservation = document is not None and document.claims_run_id == run_id
+                if document is not None and owns_reservation:
                     document.claims_status, document.claims_run_id = "pending", None
-                if owns_preparation(row, job_id=job_id):
+                if owns_reservation and owns_preparation(row, job_id=job_id):
                     _state(
                         row,
                         document_id,
@@ -194,8 +237,26 @@ async def _prepare_document(
                 )
                 _state(row, document_id, "failed", result.failure.error_code)
                 return
+            try:
+                # 위치를 모두 확인한 뒤에만 새 Claim을 저장해 부분 성공을 만들지 않는다.
+                locations = [
+                    claim_location(snapshot, item.paragraph_no, item.source_line)
+                    for item in result.claims
+                ]
+            except ValueError:
+                record.failure = asdict(
+                    c.CallFailure(
+                        "semantic", "document_source_invalid", "Claim source location rejected."
+                    )
+                )
+                document.claims_status, document.claims_error_code = (
+                    "failed",
+                    "document_source_invalid",
+                )
+                _state(row, document_id, "failed", "document_source_invalid")
+                return
             active_claims = []
-            for item in result.claims:
+            for item, location in zip(result.claims, locations, strict=True):
                 existing = await db.scalar(
                     select(DocumentClaim).where(
                         DocumentClaim.document_id == document_id,
@@ -212,9 +273,7 @@ async def _prepare_document(
                         tech_tags=list(item.tech_tags),
                         paragraph_no=item.paragraph_no,
                         source_text=item.source_line,
-                        source_location=claim_location(
-                            snapshot, item.paragraph_no, item.source_line
-                        ),
+                        source_location=location,
                         source_version=source_version,
                     )
                     db.add(existing)
@@ -247,3 +306,4 @@ async def _prepare_document(
         )
         raise
     await store(result)
+    return False

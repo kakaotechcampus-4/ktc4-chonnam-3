@@ -162,5 +162,5 @@ async def classify_saved_posting(
         if current.raw_payload.get(DOMAIN_METADATA_KEY) != previous:
             # 늦은 이전 호출이 더 최근 판정이나 다른 원문의 분류를 덮어쓰지 않는다.
             return
-        current.domain_category = decision.category
+        current.domain_category = None if decision.failure else decision.category
         current.raw_payload = {**current.raw_payload, DOMAIN_METADATA_KEY: metadata}

@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 from dataclasses import asdict, dataclass, replace
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -40,6 +41,15 @@ from app.llm_tasks.prompt_loader import (
 )
 
 CODE_INPUT_BYTES = 65536
+
+
+def _expires(state: dict[str, Any]) -> datetime | None:
+    raw = state.get("document_claim_comparison_expires_at")
+    try:
+        value = datetime.fromisoformat(raw) if isinstance(raw, str) else None
+    except ValueError:
+        return None
+    return value if value is not None and value.tzinfo is not None else None
 
 
 def _hash(value: object) -> str:
@@ -265,6 +275,8 @@ async def prepare_selected_claim_comparisons(
             state.get("document_claim_comparison_status") == "running"
             and state.get("document_claim_comparison_job") == str(job_id)
             and state.get("document_claim_comparison_input") == fingerprint
+            and (expires := _expires(state)) is not None
+            and expires > datetime.now(UTC)
         ):
             return
         run_id = uuid4()
@@ -274,6 +286,13 @@ async def prepare_selected_claim_comparisons(
             "document_claim_comparison_run_id": str(run_id),
             "document_claim_comparison_job": str(job_id),
             "document_claim_comparison_input": fingerprint,
+            "document_claim_comparison_started_at": datetime.now(UTC).isoformat(),
+            "document_claim_comparison_expires_at": (
+                datetime.now(UTC)
+                + timedelta(
+                    seconds=3 * llm.call_limits("claim_code").timeout_seconds if llm else 30
+                )
+            ).isoformat(),
         }
 
     attempts: list[c.AttemptMetadata] = []
@@ -344,6 +363,11 @@ async def prepare_selected_claim_comparisons(
                 interview.context_state or {}
             ).get("document_claim_comparison_run_id") != str(run_id):
                 record.discard_reason = "preparation_changed"
+                return
+            expires = _expires(interview.context_state or {})
+            if expires is None or expires <= datetime.now(UTC):
+                record.discard_reason = "comparison_lease_expired"
+                _state(interview, "pending", 0, "comparison_lease_expired")
                 return
             current = await _input(db, interview)
             if needs_model:

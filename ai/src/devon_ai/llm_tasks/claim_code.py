@@ -5,7 +5,9 @@ from re import fullmatch
 from typing import Literal, cast
 
 from devon_ai import contracts as c
+from devon_ai.prompt_versions import require_prompt_version
 
+SUPPORTED_PROMPT_VERSIONS = frozenset({"claim_code_v1"})
 ComparisonStatus = Literal["consistent", "conflicting", "unverified"]
 MAX_CLAIMS = 40
 MAX_EVIDENCES = 16
@@ -168,8 +170,9 @@ async def compare_claims(
             or any(type(item) is not c.Evidence for item in evidences)
         ):
             raise c.ContractError("schema", "claim comparison input")
-        if prompt.task_name != "claim_code" or prompt.version != "claim_code_v1":
-            raise c.ContractError("schema", "claim comparison prompt")
+        require_prompt_version(
+            prompt, task_name="claim_code", supported_versions=SUPPORTED_PROMPT_VERSIONS
+        )
         if len(claims) > MAX_CLAIMS or len(evidences) > MAX_EVIDENCES:
             raise c.ContractError("schema", "comparison input budget")
         ids = []

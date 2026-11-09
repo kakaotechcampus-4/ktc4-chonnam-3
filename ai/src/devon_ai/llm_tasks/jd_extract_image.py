@@ -7,6 +7,9 @@ from typing import Literal, cast
 
 from devon_ai import contracts as c
 
+SUPPORTED_PROMPT_VERSIONS = frozenset({"jd_extract_image_v1"})
+
+
 Category = Literal["required", "preferred", "responsibility"]
 _HEADINGS = {
     "required": (
