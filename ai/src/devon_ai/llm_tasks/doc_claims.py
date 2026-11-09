@@ -9,7 +9,9 @@ from dataclasses import dataclass
 from typing import Literal, get_args
 
 from devon_ai import contracts as c
+from devon_ai.prompt_versions import require_prompt_version
 
+SUPPORTED_PROMPT_VERSIONS = frozenset({"doc_claims_v1", "doc_claims_v2"})
 ClaimType = Literal["tech_usage", "implementation", "outcome", "role"]
 CLAIM_TYPES: tuple[ClaimType, ...] = get_args(ClaimType)
 SCHEMA_VERSION = "1"
@@ -119,12 +121,9 @@ async def extract_claims(
 ) -> ClaimExtraction:
     """포트폴리오 추출 텍스트 1건에서 Claim을 뽑는다. 호출·검증 실패는 기록하고 빈 결과다."""
     try:
-        if (
-            type(prompt) is not c.PromptSpec
-            or prompt.task_name != "doc_claims"
-            or prompt.version != "doc_claims_v1"
-        ):
-            raise c.ContractError("schema", "doc_claims prompt")
+        require_prompt_version(
+            prompt, task_name="doc_claims", supported_versions=SUPPORTED_PROMPT_VERSIONS
+        )
         if type(limits) is not c.CallLimits:
             raise c.ContractError("schema", "doc_claims limits")
         if type(text) is not str:
