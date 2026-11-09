@@ -1,0 +1,29 @@
+"""빈 선택 자격증명이 다른 유효한 인증 수단을 가리지 않게 한다."""
+
+import pytest
+
+from app.core.config import Settings
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+@pytest.mark.parametrize("valid", ["tts_api_key", "tts_access_token"])
+def test_blank_tts_credential_does_not_mask_the_other_valid_credential(blank, valid):
+    other = "tts_access_token" if valid == "tts_api_key" else "tts_api_key"
+    settings = Settings(
+        _env_file=None,
+        tts_provider="google_cloud",
+        tts_voice_map={"hr_manager": "hr", "tech_lead": "tech", "domain_lead": "domain"},
+        tts_monthly_character_limit=100,
+        tts_budget_project="test-project",
+        **{valid: "synthetic-key", other: blank},
+    )
+    assert getattr(settings, other) is None
+    resolved = settings.require_tts()
+    resolved_name = "api_key" if valid == "tts_api_key" else "access_token"
+    assert getattr(resolved, resolved_name).get_secret_value() == "synthetic-key"
+
+
+def test_all_blank_tts_credentials_do_not_configure_the_provider():
+    settings = Settings(_env_file=None, tts_provider="google_cloud", tts_api_key=" ")
+    with pytest.raises(ValueError):
+        settings.require_tts()
