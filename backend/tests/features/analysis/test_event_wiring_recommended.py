@@ -1,13 +1,9 @@
 """repo_recommended 이벤트 연결: 추천 결과 저장 시 run당 1건. task-17"""
 
-from types import SimpleNamespace
-
-import pytest
-from sqlalchemy import column, select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.metric import Event
-from app.features.analysis import matching, queries
 from app.features.analysis.candidates import prepare_candidates
 from app.features.analysis.matching import refresh_matches
 from tests.event_helpers import broken_events as broken_events
@@ -77,24 +73,20 @@ async def test_event_failure_does_not_block_match_save(
     assert await names(db_session) == []
 
 
-async def test_dedup_check_failure_keeps_match_save(
-    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+async def test_event_lookup_lock_timeout_does_not_rollback_matches(
+    db_session: AsyncSession, session_factory
 ) -> None:
-    """중복 확인 SELECT 가 DB 오류를 내도 추천 결과는 commit 되고 이벤트만 건너뛴다."""
     run, _ = await seed_run(db_session)
-    # 존재하지 않는 컬럼을 조회해 PostgreSQL 이 실제로 오류를 내게 한다.
-    monkeypatch.setattr(
-        matching,
-        "Event",
-        SimpleNamespace(
-            event_name=column("no_such_event_name"), analysis_job_id=column("no_such_job_id")
-        ),
-    )
+    async with session_factory() as blocker:
+        await blocker.execute(text("LOCK TABLE events IN ACCESS EXCLUSIVE MODE"))
+        try:
+            await db_session.execute(text("SET LOCAL lock_timeout = '150ms'"))
+            rows = await refresh_matches(db_session, run.id)
+            await db_session.commit()
+        finally:
+            await blocker.rollback()
 
-    rows = await refresh_matches(db_session, run.id)
-    await db_session.commit()
-
+    assert len(rows) == 8
     assert sum(row.is_recommended for row in rows) == 5
-    await db_session.rollback()
-    assert len(await queries.run_matches(db_session, run.id)) == 8
+    # 선택 지표의 조회 실패도 업무 결과와 분리하고 성공 이벤트를 지어내지 않는다.
     assert await names(db_session) == []
