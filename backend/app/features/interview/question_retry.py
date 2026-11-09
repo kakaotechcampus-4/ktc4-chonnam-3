@@ -688,3 +688,60 @@ async def retry_question(
         except RedisError:
             raise AppError(Reason.INTERNAL_ERROR) from None
     return QuestionRetryResponse(interview_id=interview_id, session_id=session_id, turn_no=target)
+
+
+async def auto_retry_question(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    user_id: UUID,
+    interview_id: UUID,
+    failed: QuestionExecution,
+    settings: LLMSettings,
+    http_client: httpx.AsyncClient | None = None,
+) -> QuestionExecution | None:
+    """정확히 복원한 안전 rewrite 한 번만 자동 실행한다. 일반 실패는 수동 경로로 둔다."""
+    if failed.failure is None or failed.failure.error_code != "director_candidate_rewrite":
+        return None
+    from devon_ai.agents.director.runtime import recovery_feedback_from_attempts
+
+    async with sessions() as db:
+        record = await db.get(LLMCallRecord, failed.call_id)
+        prompt = await db.scalar(
+            select(PromptVersion).where(
+                PromptVersion.task_name == "director", PromptVersion.is_active.is_(True)
+            )
+        )
+        if (
+            record is None
+            or prompt is None
+            or prompt.version.partition("@")[0] not in {"director_v7", "director_v8"}
+        ):
+            return None
+        feedback = recovery_feedback_from_attempts(
+            record.attempts, failure_code=failed.failure.error_code
+        )
+        if feedback is None or feedback.recovery.recovery != "rewrite":
+            return None
+    try:
+        entry, scope = await _reserve(
+            sessions,
+            user_id=user_id,
+            interview_id=interview_id,
+            request_id=uuid5(failed.call_id, "automatic-rewrite"),
+            kind="auto",
+            settings=settings,
+            expected_failed_call_id=failed.call_id,
+        )
+    except AppError:
+        return None
+    if scope is None:
+        return None
+    return await _run(
+        sessions,
+        user_id=user_id,
+        interview_id=interview_id,
+        entry=entry,
+        scope=scope,
+        settings=settings,
+        http_client=http_client,
+    )
