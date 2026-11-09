@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import json
 import sys
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -12,7 +12,11 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
 from app.core.config import Settings
-from app.features.knowledge.official_catalog import OfficialSourceError, load_catalog
+from app.features.knowledge.official_catalog import (
+    MAX_PAGE_CONTENT_CHARS,
+    OfficialSourceError,
+    load_catalog,
+)
 from app.features.knowledge.official_collection import collect_official_catalog
 from app.integrations.search.tavily import SearchBudget, TavilyClient
 from scripts.configure_ai_knowledge import KnowledgeTarget, _target_identity
@@ -86,7 +90,14 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 # 실제 DB 확인을 HTTP·원문 저장보다 먼저 완료한다. dry-run에서는 접속하지 않는다.
                 await verify_collection_database(engine, target)
-                provider = TavilyClient(settings.require_tavily())
+                # 수집은 더 큰 유한 원문을 읽되 모델에는 검증된 절만 전달한다.
+                provider = TavilyClient(
+                    replace(
+                        settings.require_tavily(),
+                        max_content_chars=MAX_PAGE_CONTENT_CHARS,
+                        max_response_bytes=4194304,
+                    )
+                )
                 result = await collect_official_catalog(
                     async_sessionmaker(engine, expire_on_commit=False),
                     catalog_keys=tuple(args.key),
@@ -120,6 +131,9 @@ def main(argv: list[str] | None = None) -> int:
                     + "\n"
                 )
                 raise
+    except FileExistsError:
+        print("output_already_exists: use a new output path with a unique run ID.", file=sys.stderr)
+        return 1
     except Exception:
         print(
             "Official collection failed; preserve audit and check explicit target/settings.",

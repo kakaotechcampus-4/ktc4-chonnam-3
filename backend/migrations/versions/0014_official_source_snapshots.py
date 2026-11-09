@@ -73,6 +73,9 @@ def upgrade():
     op.execute("""CREATE TRIGGER official_snapshot_immutable BEFORE UPDATE OR DELETE
         ON official_source_snapshots FOR EACH ROW
         EXECUTE FUNCTION reject_official_snapshot_mutation()""")
+    op.execute("""CREATE TRIGGER official_snapshot_no_truncate BEFORE TRUNCATE
+        ON official_source_snapshots FOR EACH STATEMENT
+        EXECUTE FUNCTION reject_official_snapshot_mutation()""")
 
 
 def downgrade():

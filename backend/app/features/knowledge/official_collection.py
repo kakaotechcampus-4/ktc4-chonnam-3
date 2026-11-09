@@ -1,7 +1,9 @@
 """시작 시 자동 수집하지 않고 명시 요청한 공식 URL만 유한 예산으로 수집한다."""
 
 from dataclasses import asdict
+from uuid import UUID
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.features.knowledge.official_catalog import (
@@ -75,14 +77,20 @@ async def collect_official_catalog(
                     snapshots.append(prepare_snapshot(entry, source))
                 except OfficialSourceError as exc:
                     failures[entry.catalog_key] = str(exc)
-    identifiers = (
-        await store_snapshots(sessions, tuple(snapshots), actor=actor)
-        if snapshots and sessions is not None
-        else ()
-    )
+    identifiers: list[UUID] = []
+    # 항목별 트랜잭션으로 이미 수집한 다른 원문과 외부 사용량의 감사 기록을 보존한다.
+    if sessions is not None:
+        for snapshot in snapshots:
+            try:
+                identifiers.extend(await store_snapshots(sessions, (snapshot,), actor=actor))
+            except OfficialSourceError as exc:
+                failures[snapshot.entry.catalog_key] = str(exc)
+            except SQLAlchemyError:
+                failures[snapshot.entry.catalog_key] = "snapshot_store_failed"
     return {
         "format_version": 1,
         "catalog_version": "official-catalog.v1",
+        "catalog_verification": "url_access_only_extraction_is_verified_per_run",
         "mode": "applied" if apply else "dry_run",
         "actor": actor.strip(),
         "sources": [asdict(item) for item in entries],

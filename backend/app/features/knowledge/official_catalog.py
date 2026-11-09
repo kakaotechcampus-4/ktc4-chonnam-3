@@ -5,12 +5,16 @@ import json
 import re
 from collections.abc import Iterator
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from app.integrations.search.tavily import WebSource, checked_source_url
 
 COMMON_DOMAINS = ("developer.mozilla.org", "docs.python.org")
+# 수집 원문과 모델에 전달할 절은 별도 예산으로 제한한다.
+MAX_PAGE_CONTENT_CHARS = 196608
+MAX_SECTION_CONTENT_CHARS = 24000
 OFFICIAL_DOMAINS = {
     "finance": ("developers.kftc.or.kr", "openbanking.or.kr"),
     "game": ("partner.steamgames.com",),
@@ -21,7 +25,7 @@ OFFICIAL_DOMAINS = {
     "etc": ("elice.io",),
 }
 _TECHNOLOGIES = {
-    "python": ("python", "asyncio"),
+    "python": ("python", "asyncio", "파이썬"),
     "http": ("http", "429", "retry-after"),
     "redis": ("redis",),
     "openbanking": ("openbanking", "open banking", "오픈뱅킹"),
@@ -48,6 +52,24 @@ _STOP = frozenset(
 )
 _HEAD = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+_CONCEPTS = {
+    "cancellation": ("cancel", "취소"),
+    "balance": ("balance", "잔액"),
+    "authentication": ("authentication", "인증"),
+    "security": ("security", "보안"),
+    "session": ("session", "세션"),
+    "architecture": ("architecture", "구조", "아키텍처"),
+    "isolation": ("isolation", "격리"),
+    "transaction": ("transaction", "트랜잭션"),
+    "arrival_time": ("arrival_time", "도착시간", "도착시각"),
+    "departure_time": ("departure_time", "출발시간", "출발시각"),
+}
+_KO_STOP = frozenset(
+    (
+        "공식 문서 설명 설명해 설명해주세요 알려주세요 어떻게 무엇인가요 동작 동작을 처리 "
+        "원리 관련 자료 확인 방법 요청 영어 한국어 질문"
+    ).split()
+)
 
 
 class OfficialSourceError(ValueError):
@@ -70,7 +92,11 @@ class CatalogEntry:
 
     @property
     def definition_hash(self) -> str:
-        return hashlib.sha256(json.dumps(asdict(self), sort_keys=True).encode()).hexdigest()
+        values = asdict(self)
+        # 검증 시각·설명 갱신은 기존 인용을 무효화하지 않는다. 접근 정책은 포함한다.
+        values.pop("verified_at")
+        values.pop("limitations")
+        return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -97,11 +123,29 @@ def scope_domains(category: str | None) -> tuple[str, ...]:
 
 
 def load_catalog() -> tuple[CatalogEntry, ...]:
-    raw = json.loads(Path(__file__).with_name("official_catalog.json").read_text("utf-8"))
-    if raw.get("version") != "official-catalog.v1" or not isinstance(raw.get("sources"), list):
+    try:
+        content = Path(__file__).with_name("official_catalog.json").read_text("utf-8")
+        if len(content) > 131072:
+            raise OfficialSourceError("catalog_invalid")
+        return _parse_catalog(content)
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        raise OfficialSourceError("catalog_invalid") from exc
+
+
+@lru_cache(maxsize=4)
+def _parse_catalog(content: str) -> tuple[CatalogEntry, ...]:
+    # 파일 내용이 캐시 키여서 수정·테스트 격리 시 이전 항목을 잘못 재사용하지 않는다.
+    raw = json.loads(content)
+    if (
+        not isinstance(raw, dict)
+        or raw.get("version") != "official-catalog.v1"
+        or not isinstance(raw.get("sources"), list)
+    ):
         raise OfficialSourceError("catalog_invalid")
     result = []
     for value in raw["sources"]:
+        if not isinstance(value, dict):
+            raise OfficialSourceError("catalog_invalid")
         item = CatalogEntry(
             **{
                 **value,
@@ -149,9 +193,8 @@ def _query_version(query: str) -> str | None:
 def _language(query: str) -> str | None:
     if re.search(r"한국어|\bkorean\b|\bko-KR\b", query, re.I):
         return "ko"
-    return (
-        "en" if re.search(r"\benglish\b", query, re.I) or not re.search(r"[가-힣]", query) else None
-    )
+    # 질문 작성 언어는 원문 언어 제한이 아니다. 명시한 언어만 제한한다.
+    return "en" if re.search(r"\benglish\b", query, re.I) else None
 
 
 def _source_language(source: WebSource) -> str | None:
@@ -173,7 +216,8 @@ def _has_alias(text: str, alias: str) -> bool:
     if re.search(r"[가-힣]", alias):
         return alias in text
     # Java와 JavaScript, 단어 안에 우연히 들어 있는 기술 이름을 구분한다.
-    return re.search(r"(?<![a-z0-9_])" + re.escape(alias) + r"(?![a-z_])", text) is not None
+    suffix = r"(?![a-z0-9_])" if alias[-1:].isdigit() else r"(?![a-z_])"
+    return re.search(r"(?<![a-z0-9_])" + re.escape(alias) + suffix, text) is not None
 
 
 def source_matches_query(
@@ -220,11 +264,27 @@ def source_matches_query(
     terms = [
         term
         for term in re.findall(r"[a-z][a-z0-9_.-]{2,}|[가-힣]{2,}|\b[1-5]\d{2}\b", query.casefold())
-        if term not in _STOP and term not in aliases
+        if term not in _STOP and term not in aliases and term not in _KO_STOP
     ]
 
+    expanded: list[str] = []
+    for term in terms:
+        concepts = [
+            concept
+            for concept, spellings in _CONCEPTS.items()
+            if re.search(r"[가-힣]", term) and term in spellings
+        ]
+        # 알려진 한영 개념만 대응시킨다. 알 수 없는 질의어는 계속 원문에서 확인한다.
+        expanded.extend(concepts or (term,))
+    terms = list(dict.fromkeys(expanded))
+
     def present(term: str) -> bool:
-        return term in body or term in {"cancellation", "cancelled", "cancels"} and "cancel" in body
+        return (
+            term in body
+            or any(alias in body for alias in _CONCEPTS.get(term, ()))
+            or term in {"cancelled", "cancels"}
+            and "cancel" in body
+        )
 
     if not terms or not all(present(term) for term in terms):
         return False, ("query_terms_missing",)
@@ -275,7 +335,7 @@ def _headings(lines: list[str]) -> Iterator[tuple[int, re.Match[str]]]:
 def prepare_snapshot(entry: CatalogEntry, source: WebSource) -> SnapshotDraft:
     if source.content_scope != "extracted_page" or entry.availability != "public_verified":
         raise OfficialSourceError("source_not_extractable")
-    if len(source.content) > 24000:
+    if len(source.content) > MAX_PAGE_CONTENT_CHARS:
         raise OfficialSourceError("source_content_budget")
     if hashlib.sha256(source.content.encode()).hexdigest() != source.content_hash:
         raise OfficialSourceError("source_hash_mismatch")
@@ -311,6 +371,8 @@ def prepare_snapshot(entry: CatalogEntry, source: WebSource) -> SnapshotDraft:
     ):
         raise OfficialSourceError("requested_section_empty")
     content = "\n".join(lines[start:end]).rstrip()
+    if len(content) > MAX_SECTION_CONTENT_CHARS:
+        raise OfficialSourceError("section_content_budget")
     return SnapshotDraft(
         entry,
         url,
