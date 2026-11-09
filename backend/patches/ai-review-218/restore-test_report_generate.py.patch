@@ -1,0 +1,42 @@
+diff --git a/backend/tests/features/report/test_report_generate.py b/backend/tests/features/report/test_report_generate.py
+--- a/backend/tests/features/report/test_report_generate.py
++++ b/backend/tests/features/report/test_report_generate.py
+@@ -53,8 +53,36 @@
+     assert len(rows[0].evidence_turn_ids) == 1
+ 
+ 
+-
+-
++async def test_report_success_also_commits_durable_profile_refresh(app, db, ctx, prompt):
++    from app.db.models import ProfileRefreshRequest
++
++    assert await _generate(app, ctx, FakeGenerator()) == "created"
++    report = await db.scalar(select(InterviewReport))
++    signal = await db.scalar(select(ProfileRefreshRequest))
++    assert signal is not None
++    assert (signal.report_id, signal.report_revision, signal.status) == (report.id, 1, "pending")
++
++
++async def test_profile_enqueue_failure_keeps_report_and_pending_signal(
++    app, db, ctx, prompt, monkeypatch
++):
++    from unittest.mock import AsyncMock
++
++    from redis.exceptions import ConnectionError
++
++    from app.db.models import ProfileRefreshRequest
++    from app.workers.tasks.report_generate import _enqueue_profile_summary
++
++    assert await _generate(app, ctx, FakeGenerator()) == "created"
++    monkeypatch.setattr(
++        app.state.redis, "enqueue_job", AsyncMock(side_effect=ConnectionError("down"))
++    )
++    await _enqueue_profile_summary(
++        {"session_factory": app.state.session_factory, "redis": app.state.redis}, ctx[0].id
++    )
++    assert await db.scalar(select(func.count()).select_from(InterviewReport)) == 1
++    signal = await db.scalar(select(ProfileRefreshRequest))
++    assert signal.status == "pending" and signal.last_error == "queue_unavailable"
+ 
+ 
+ async def test_payload_has_only_fixed_score_keys_and_turns(app, ctx, prompt):
