@@ -219,3 +219,56 @@ def test_rejudge_reuses_output_preserves_failure_and_refuses_changed_input_or_ou
     changed["cases"][0]["expectation_hash"] = "changed"
     with pytest.raises(ValueError, match="case hash"):
         validate_rejudge_source(cases, changed)
+
+
+def test_actual_validated_artifacts_are_separate_and_hash_checked_when_rejudging():
+    expectation = {
+        "allowed": [],
+        "forbidden": [],
+        "grader_controls": [],
+        "review": {"status": "unreviewed"},
+    }
+    case = Case("report", 1, "report", "dev", "group", {"history": []}, expectation)
+    artifacts = {
+        "schema_version": "validated-report-claims.v1",
+        "claims": [
+            {
+                "section": "summary.strengths",
+                "persona": None,
+                "claim_index": 0,
+                "text": "observed",
+                "turn_refs": ["1"],
+                "evidence_refs": [],
+            }
+        ],
+    }
+
+    async def execute(kind, payload):
+        return Execution({"summary": "observed"}, artifacts=artifacts)
+
+    seen = []
+
+    def grader(rubric, output):
+        seen.append(json.loads(output))
+        return "accept"
+
+    original = asyncio.run(
+        run_cases([case], execute, metadata={}, grader=grader, diagnostic_judge=True)
+    )
+    assert original["cases"][0]["output"] == {"summary": "observed"}
+    assert seen[0] == {"public_output": {"summary": "observed"}, "validated_artifacts": artifacts}
+    assert len(original["cases"][0]["artifacts_hash"]) == 64
+    asyncio.run(rejudge_cases([case], original, grader, metadata={}))
+    assert seen[1] == seen[0]
+    altered = copy.deepcopy(original)
+    altered["cases"][0]["artifacts"]["claims"][0]["turn_refs"] = ["9"]
+    with pytest.raises(ValueError, match="artifacts hash"):
+        validate_rejudge_source([case], altered)
+    altered = copy.deepcopy(original)
+    altered["cases"][0]["artifacts"] = None
+    with pytest.raises(ValueError, match="artifacts hash"):
+        validate_rejudge_source([case], altered)
+    altered = copy.deepcopy(original)
+    del altered["cases"][0]["artifacts_hash"]
+    with pytest.raises(ValueError, match="artifacts hash"):
+        validate_rejudge_source([case], altered)
