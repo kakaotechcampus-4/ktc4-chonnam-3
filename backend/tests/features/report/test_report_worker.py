@@ -6,7 +6,7 @@ import pytest
 from devon_ai import contracts as c
 from sqlalchemy import func, select, update
 
-from app.db.models import InterviewReport, ReportScore, ScoreCriterion
+from app.db.models import InterviewReport, ProfileRefreshRequest, ReportScore, ScoreCriterion
 from app.features.report import service
 from app.llm_tasks.report import (
     ReportDraftInvalidError,
@@ -60,8 +60,15 @@ async def test_worker_success_enqueues_profile_summary_and_releases_lock(
     assert await _counts(db) == (1, 6)
     assert await app.state.redis.exists(f"report:gen:{interview.id}") == 0
     assert await app.state.redis.exists(f"report:fail:{interview.id}") == 0
-    # 고정 _job_id 는 ARQ 결과 보존 중 재enqueue 를 버리므로 쓰지 않는다.
-    enqueue.assert_awaited_once_with("profile_summary", str(interview.user_id))
+    signal = await db.scalar(select(ProfileRefreshRequest))
+    assert signal.status == "queued" and signal.dispatch_attempts == 1
+    enqueue.assert_awaited_once_with(
+        "profile_summary",
+        str(interview.user_id),
+        str(signal.id),
+        1,
+        _job_id=f"profile_summary:{interview.user_id}:{signal.id}:1",
+    )
 
 
 async def test_worker_failure_records_history_and_keeps_lock(
@@ -140,6 +147,37 @@ async def test_worker_without_active_rubrics_records_failure(
     assert failure in (b"report_rubric_unavailable", "report_rubric_unavailable")
     assert await _counts(db) == (0, 0)
     enqueue.assert_not_awaited()
+
+
+async def test_failed_legacy_job_is_not_automatically_called_again(
+    app, db, ctx, prompt, worker_env, enqueue, monkeypatch
+):
+    interview, _ = ctx
+    generator = FakeGenerator(error=RuntimeError("fixture failure"))
+    _use(monkeypatch, generator)
+    await worker.report_generate(worker_env, str(interview.id))
+    await worker.report_generate(worker_env, str(interview.id))
+    assert len(generator.calls) == 1
+    assert await _counts(db) == (0, 0)
+
+
+async def test_redis_owner_read_failure_marks_the_claimed_request_failed(
+    app, db, ctx, prompt, worker_env, enqueue, monkeypatch
+):
+    from unittest.mock import AsyncMock
+
+    from redis.exceptions import RedisError
+
+    from app.db.models.report import ReportGenerationRequest
+
+    interview, _ = ctx
+    generator = FakeGenerator()
+    _use(monkeypatch, generator)
+    monkeypatch.setattr(app.state.redis, "get", AsyncMock(side_effect=RedisError("fixture")))
+    await worker.report_generate(worker_env, str(interview.id))
+    request = (await db.scalars(select(ReportGenerationRequest))).one()
+    assert request.status == "failed" and request.error_code == "queue_unavailable"
+    assert generator.calls == []
 
 
 def test_failure_codes_are_stable():
