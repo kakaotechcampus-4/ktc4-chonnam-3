@@ -7,6 +7,7 @@ from dataclasses import asdict, replace
 import httpx
 import pytest
 from devon_ai import contracts as c
+from devon_ai.agents.director.runtime import RecoveryFeedback
 
 from app.agents.director.runtime_adapter import execute_director
 from app.core.config import Settings
@@ -81,7 +82,8 @@ def response(value):
     )
 
 
-async def test_director_adapter_shares_two_attempts_and_forwards_provider_settings():
+@pytest.mark.parametrize("with_feedback", [False, True])
+async def test_director_adapter_shares_two_attempts_and_forwards_provider_settings(with_feedback):
     candidate = question()
     outputs = [
         dict(question=asdict(candidate), intent="역할 확인", reason_summary="자기소개"),
@@ -113,11 +115,18 @@ async def test_director_adapter_shares_two_attempts_and_forwards_provider_settin
             budget=budget,
             http_client=http,
             attempt_sink=attempts,
+            recovery_feedback=RecoveryFeedback(
+                candidate, c.CandidateRecovery("rewrite", "문장과 계약을 일치시킨다.")
+            )
+            if with_feedback
+            else None,
         )
     assert result.succeeded and result.data.question.data == candidate
     assert [payload["operation"] for payload in payloads] == ["plan", "review"]
     assert result.attempts == tuple(attempts)
     assert [attempt.attempt for attempt in attempts] == [1, 2]
+    assert ("recovery_feedback" in payloads[0]) is with_feedback
+    assert "recovery_feedback" not in payloads[1]
 
 
 async def test_answer_adapter_cannot_retry_past_the_requested_single_attempt():
