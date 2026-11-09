@@ -7,6 +7,7 @@ import sys
 from dataclasses import asdict, replace
 from pathlib import Path
 
+from scripts.configure_ai_knowledge import KnowledgeTarget, _target_identity
 from sqlalchemy import func, select
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
@@ -19,7 +20,6 @@ from app.features.knowledge.official_catalog import (
 )
 from app.features.knowledge.official_collection import collect_official_catalog
 from app.integrations.search.tavily import SearchBudget, TavilyClient
-from scripts.configure_ai_knowledge import KnowledgeTarget, _target_identity
 
 
 def validate_collection_target(settings: Settings, target: KnowledgeTarget) -> str:

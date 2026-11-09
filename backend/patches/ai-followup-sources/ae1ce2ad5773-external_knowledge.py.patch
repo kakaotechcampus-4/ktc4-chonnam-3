@@ -36,18 +36,18 @@ diff --git a/backend/app/features/interview/external_knowledge.py b/backend/app/
  _PRIVATE = SENSITIVE_QUERY
  
  
-@@ -145,6 +140,10 @@
+@@ -145,7 +140,10 @@
      cached_ids: set[UUID] = set()
      pending: list[c.ExternalQueryRequest] = []
      cached_limitations: list[str] = []
 +    collected: list[tuple[str, WebSource]] = []
 +    snapshot_links: dict[tuple[str, str], UUID] = {}
-+    provider = client
+     provider = client
 +    error_code = None
      async with sessions.begin() as db:
          interview = await db.scalar(
              select(InterviewSession)
-@@ -167,7 +166,7 @@
+@@ -168,7 +166,7 @@
              )
              .where(AnalysisJob.id == interview.analysis_job_id)
          )
@@ -56,7 +56,7 @@ diff --git a/backend/app/features/interview/external_knowledge.py b/backend/app/
          state = dict(interview.context_state or {})
  
          def unavailable(reason: str) -> ExternalKnowledgeResult:
-@@ -195,9 +194,9 @@
+@@ -196,9 +194,9 @@
          for query in queries:
              alias = cache.get(_cache_key(query.query, domains))
              if alias is not None and cutoff <= alias.validated_at <= now:
@@ -68,7 +68,7 @@ diff --git a/backend/app/features/interview/external_knowledge.py b/backend/app/
                              InterviewExternalSource.interview_session_id == interview_id,
                              InterviewExternalSource.user_id == user_id,
                              InterviewExternalSource.id.in_(alias.source_ids),
-@@ -205,11 +204,45 @@
+@@ -206,17 +204,45 @@
                          )
                      )
                  )
@@ -105,10 +105,12 @@ diff --git a/backend/app/features/interview/external_knowledge.py b/backend/app/
 +                    snapshot_links[(item.source.url, item.source.content_hash)] = item.snapshot_id
 +                continue
              pending.append(query)
-+        if pending and provider is None:
-+            try:
-+                provider = TavilyClient(settings.require_tavily())
-+            except ValueError:
+         if pending and provider is None:
+             try:
+-                # 캐시로 끝나는 조회는 자격증명을 요구하거나 공급자를 생성하지 않는다.
+                 provider = TavilyClient(settings.require_tavily())
+             except ValueError:
+-                return unavailable("external_tool_not_configured")
 +                if not collected and not cached_ids:
 +                    return unavailable("external_tool_not_configured")
 +                cached_limitations.append("external_tool_not_configured")
@@ -116,7 +118,7 @@ diff --git a/backend/app/features/interview/external_knowledge.py b/backend/app/
          try:
              usage = _usage(state.get("external_search_usage"))
              reservations = _reservations(state.get("external_search_reservations"))
-@@ -222,7 +255,11 @@
+@@ -229,7 +255,11 @@
          call_limit = min(settings.tavily_max_calls, max(0, available_calls)) if pending else 0
          credit_limit = min(settings.tavily_max_credits, max(0, available_credits)) if pending else 0
          if pending and (call_limit < 2 or credit_limit < 2):
@@ -129,7 +131,7 @@ diff --git a/backend/app/features/interview/external_knowledge.py b/backend/app/
          usage["calls"] = int(usage.get("calls", 0)) + call_limit
          usage["credits"] = int(usage.get("credits", 0)) + credit_limit
          state["external_search_usage"] = usage
-@@ -231,12 +268,11 @@
+@@ -238,10 +268,8 @@
          interview.context_state = state
  
      budget = SearchBudget(call_limit, credit_limit)
@@ -139,11 +141,8 @@ diff --git a/backend/app/features/interview/external_knowledge.py b/backend/app/
 -    error_code = None
      try:
          for query in pending:
-+            assert provider is not None
-             search = await provider.search(
-                 query.query, domains=domains, budget=budget, max_results=3
-             )
-@@ -257,7 +293,13 @@
+             assert provider is not None
+@@ -265,7 +293,13 @@
                  *extracted.limitations,
                  *(f"extraction:{failure.reason}" for failure in extracted.failures),
              )
@@ -158,7 +157,7 @@ diff --git a/backend/app/features/interview/external_knowledge.py b/backend/app/
      except SearchError as exc:
          error_code = exc.reason
          limitations.append(f"external_lookup:{exc.reason}")
-@@ -299,6 +341,7 @@
+@@ -307,6 +341,7 @@
                  "tool_error", (), domains, ("stale_interview",), "stale_interview"
              )
          refreshed: dict[str, set[UUID]] = {}
@@ -166,7 +165,7 @@ diff --git a/backend/app/features/interview/external_knowledge.py b/backend/app/
          for query_text, source in collected:
              existing = await db.scalar(
                  select(InterviewExternalSource).where(
-@@ -312,6 +355,7 @@
+@@ -320,6 +355,7 @@
                  existing = InterviewExternalSource(
                      user_id=user_id,
                      interview_session_id=interview_id,
@@ -174,7 +173,7 @@ diff --git a/backend/app/features/interview/external_knowledge.py b/backend/app/
                      query_text=query_text,
                      url=source.url,
                      title=source.title,
-@@ -325,7 +369,12 @@
+@@ -333,7 +369,12 @@
                  db.add(existing)
                  await db.flush()
              cached_ids.add(existing.id)
@@ -188,7 +187,7 @@ diff --git a/backend/app/features/interview/external_knowledge.py b/backend/app/
          sources = tuple(
              source
              for source in await load_supplemental_sources(db, interview_id)
-@@ -352,7 +401,7 @@
+@@ -360,7 +401,7 @@
          cache = _query_cache(state.get("external_query_cache"))
          for key, ids in refreshed.items():
              cache[key] = _CachedQuery(
