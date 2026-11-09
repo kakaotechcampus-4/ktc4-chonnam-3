@@ -55,8 +55,9 @@ export function parseClientMessage(data: unknown): WsClientMessage | null {
   try {
     const parsed: unknown = JSON.parse(data);
     if (typeof parsed !== 'object' || parsed === null) return null;
-    const { type, turn, mimeType } = parsed as Record<string, unknown>;
+    const { type, turn, mimeType, text } = parsed as Record<string, unknown>;
     if (typeof turn !== 'number') return null;
+    if (type === 'answer' && typeof text === 'string') return { type: 'answer', turn, text };
     if (type === 'answerStart' && typeof mimeType === 'string') {
       return { type: 'answerStart', turn, mimeType };
     }
