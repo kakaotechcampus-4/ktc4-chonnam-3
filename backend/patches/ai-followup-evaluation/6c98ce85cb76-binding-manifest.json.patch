@@ -1,0 +1,11 @@
+diff --git a/ai/evals/service_regression/binding-manifest.json b/ai/evals/service_regression/binding-manifest.json
+--- a/ai/evals/service_regression/binding-manifest.json
++++ b/ai/evals/service_regression/binding-manifest.json
+@@ -418,5 +418,6 @@
+     "sha256": "32d1692614daa3bcb9bee561e87f454c5f1d1aa6165f6ac899f3684b8c661e6f",
+     "sha256_format": "utf8_lf",
+     "review_status": "unreviewed"
+-  }
++  },
++  "source_snapshot": "source_snapshot_20261108"
+ }

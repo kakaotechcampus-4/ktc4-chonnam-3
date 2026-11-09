@@ -1,0 +1,41 @@
+diff --git a/ai/tests/test_eval_report_source_binding.py b/ai/tests/test_eval_report_source_binding.py
+--- a/ai/tests/test_eval_report_source_binding.py
++++ b/ai/tests/test_eval_report_source_binding.py
+@@ -6,6 +6,7 @@
+ 
+ import pytest
+ from eval_cases import load_cases
++from source_snapshot import source_file
+ 
+ ROOT = Path(__file__).parents[1] / "evals"
+ COHORT = ROOT / "report_source_binding_cohort"
+@@ -17,14 +18,18 @@
+     snapshot = json.loads((COHORT / "binding-manifest.json").read_text(encoding="utf-8"))
+     assert snapshot["source_hash_format"] == "utf8_lf"
+     for entry in snapshot["cases"]:
+-        raw = (ROOT / "inputs" / f"{entry['source_case']}.json").read_bytes()
++        raw = source_file(COHORT, snapshot, f"inputs/{entry['source_case']}.json").read_bytes()
+         assert (
+             entry["source_sha256"]
+             == hashlib.sha256(raw.decode("utf-8").replace("\r\n", "\n").encode()).hexdigest()
+         )
+     assert snapshot["binding_semantics"] == "new_synthetic_available_materials_not_historical_usage"
+     for case in cases:
+-        old = json.loads((ROOT / "inputs" / f"{case.case_id}.v1.json").read_text(encoding="utf-8"))
++        old = json.loads(
++            source_file(COHORT, snapshot, f"inputs/{case.case_id}.v1.json").read_text(
++                encoding="utf-8"
++            )
++        )
+         previous = json.loads(
+             (ROOT / "service_regression/inputs" / f"{case.case_id}.v2.json").read_text(
+                 encoding="utf-8"
+@@ -69,7 +74,7 @@
+ def test_committed_source_provenance_survives_checkout_line_endings(line_ending):
+     manifest = json.loads((COHORT / "binding-manifest.json").read_text(encoding="utf-8"))
+     for entry in manifest["cases"]:
+-        original = (ROOT / "inputs" / f"{entry['source_case']}.json").read_bytes()
++        original = source_file(COHORT, manifest, f"inputs/{entry['source_case']}.json").read_bytes()
+         lf = original.decode("utf-8").replace("\r\n", "\n")
+         checkout = lf if line_ending == "lf" else lf.replace("\n", "\r\n")
+         assert (

@@ -1,0 +1,11 @@
+diff --git a/ai/evals/component_regression/binding-manifest.json b/ai/evals/component_regression/binding-manifest.json
+--- a/ai/evals/component_regression/binding-manifest.json
++++ b/ai/evals/component_regression/binding-manifest.json
+@@ -32,5 +32,6 @@
+     }
+   ],
+   "quality_gate": "human_criteria_review_required",
+-  "holdout_status": "not_a_holdout"
++  "holdout_status": "not_a_holdout",
++  "source_snapshot": "source_snapshot_20261108"
+ }
