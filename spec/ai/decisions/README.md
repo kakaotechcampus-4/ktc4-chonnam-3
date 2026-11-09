@@ -61,6 +61,8 @@ Director 후속 게시의 코어 경계는 [0023](0023-director-runtime.md), 별
 
 - [0030 문서 Claim의 검증 순서와 서비스 연결 경계](0030-document-claims-validation-boundary.md): Accepted, 2026-10-30. 0029의 AI 내부 추출 범위는 유지하되 전체 schema 검사 후 줄 ID 검사를 적용한다. 면접 준비 상태·기존 답변 `claim_checks` 재사용·호출 단위 설명을 정정한다. 서비스 활성화와 BE·Director·사용자 확인 정책의 합의를 대신하지 않는다.
 
+- [0040 Director 입력의 원문 중복 제거](0040-director-single-copy-source-input.md): Accepted for local development. 구현은 PR #223이며 레포 구조 선정 PR #224와 구분한다.
+
 ## 결정 상태와 후속 작업
 
 [0018](0018-existing-baseline-bulk-resolution.md)에 따라 현재 Sprint 1 범위에서 추가 사용자 선택이 필요한 항목은 없다. 기존 ID별 실제 작업은 [구현·검수 인계](../../../ai/docs/pipeline.md#기존-id별-구현검수-인계), Sprint 2의 미정 세부는 [후속 목록](../features/extensions.md#sprint-2-착수-시-검토할-사항)에서 관리한다. 확정한 설명은 해당 기능 명세와 이 디렉터리에 보존한다. 기존 ID는 재번호화하거나 재사용하지 않으며 항목 이동을 결정·구현 완료로 해석하지 않는다.

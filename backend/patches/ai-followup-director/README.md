@@ -8,11 +8,15 @@
 | 패치 | 대상 | 적용 전 SHA256 | 적용 후 SHA256 | patch SHA256 |
 | --- | --- | --- | --- | --- |
 | `0a6431ee6f3e-runtime-prompts.json.patch` | `ai/prompts/runtime-prompts.json` | `1ea9e9552f26ccdeee5304750830edc756e4bfc3d4a764f45bba76105eadf2a0` | `389313f4702ed1568b1fc6d47cc8b7fe2224332f327bd15651ce85e1ccbc0be7` | `63915d3be2e834be047111b270658ab81ce48e19cafcdf7c17383da7719b8f8a` |
-| `a3232ed1b94d-test_runtime.py.patch` | `ai/tests/agents/director/test_runtime.py` | `ffdd9a21a076b358f8b8864f119165a08488603e26f01e3b6b427d7589b2e726` | `6bf36189bbc070ace4a8cc25b188719a6bd37bf0f692a73fc5d7e42e9eeba3c0` | `d757e821b0dd942dcc95d74102edf265cb7063fdb710123e7789725e73959837` |
+| `a3232ed1b94d-test_runtime.py.patch` | `ai/tests/agents/director/test_runtime.py` | `4f3475bca9b79905de6e3f1b98b8d7bf20468033caf86ad620f9a45a4ee89e7f` | `6327021c1e9d1f1f1810f9c334495406e84a8b87a7f7865a378e2343cd4c0f94` | `93b234cde66e23be41d562398d1117b0902e858f3c5d80bc630e64c0582bbfcb` |
 | `c710088e06e9-test_configure_ai_runtime.py.patch` | `backend/tests/test_configure_ai_runtime.py` | `ca50adcc7b7bc628a1fb48796b6e3127460ed079fe41915241e6e7e9542a7132` | `494ec3b78c0515fbd238bb4be2fa5126f86bec492ec5f865f987036fc0910a1a` | `ead9765bb1682e6281a306aa3bd6c0bcf6567edfa4a54c32df3d5787b03a9459` |
-| `ce4eee9a5b86-runtime.py.patch` | `ai/src/devon_ai/agents/director/runtime.py` | `de01622b0cb7d2bb59a5d1563890163093d9527e6b9dc29ea0342b9a26520420` | `3d8ab8ff4c4829955d752799ea9fd06ed431362ed4573e54dba394bbd7915f39` | `7942ebf7b1ebda66ab5e43ef65ad60a08f9540c31a82f681c19f9a381e259bcd` |
+| `ce4eee9a5b86-runtime.py.patch` | `ai/src/devon_ai/agents/director/runtime.py` | `1adc7f2bca324307bd326107113e54894e6aceb8dee32764e708c5b1bd438309` | `cab10e3a197313697389bdb61d54e3972363e98cbbbd01b7c2b965658bbf6b73` | `c23896a03759aa2cf546590cd6c3d140a2348fe8b0f21c4b6647423c61f77c3a` |
 
 선행의 실제 병합 커밋으로 재기준한 뒤 적용한다. 적용 커밋·지문·통합 회귀를 spec/ai/implementation.md에 기록한 뒤에만 대기 패치를 제거한다.
+
+선행 PR은 #213·#216과 평가 실행기의 #214, 요청 크기 도우미의 #222입니다. #213의 지원 버전 검사를 #216에서도 보존한 뒤 이 runtime 패치를 적용합니다. 호출 시점 검사와 등록 시점 검사를 모두 유지하며 알 수 없는 버전은 모델 호출 전에 거절합니다. 복구 참고자료는 v7·v8의 Plan에만 전달하고 독립 Review에는 전달하지 않습니다. ADR 0040의 투영 구현은 이 PR 소유입니다.
+
+
 
 <details>
 <summary>이전 안내·과거 기준 지문(현재 적용 지문으로 사용 금지)</summary>
