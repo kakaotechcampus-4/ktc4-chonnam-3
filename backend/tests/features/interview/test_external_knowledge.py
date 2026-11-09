@@ -3,8 +3,10 @@
 import httpx
 import pytest
 from devon_ai import contracts as c
+from sqlalchemy import func, select
 
 from app.core.config import Settings
+from app.db.models import InterviewExternalSource
 from app.integrations.search.tavily import TavilyClient
 from tests.features.interview.factories import make_interview, make_repo, make_run, make_user
 
@@ -22,6 +24,9 @@ async def test_verified_query_searches_extracts_stores_and_reuses_cache(app):
     def handler(request):
         calls.append(request.url.path)
         if request.url.path == "/search":
+            import json
+
+            assert json.loads(request.content)["query"] == "Redis session architecture"
             return httpx.Response(
                 200,
                 json={
@@ -54,7 +59,7 @@ async def test_verified_query_searches_extracts_stores_and_reuses_cache(app):
     args = dict(
         user_id=owner.id,
         interview_id=interview.id,
-        queries=(c.ExternalQueryRequest("Redis session architecture", "기술 개념 확인"),),
+        queries=(c.ExternalQueryRequest("  Redis session architecture  ", "기술 개념 확인"),),
         settings=settings,
         client=provider,
     )
@@ -62,9 +67,43 @@ async def test_verified_query_searches_extracts_stores_and_reuses_cache(app):
     assert first.status == "found"
     assert first.sources[0].content == "Actual official document text"
     assert first.sources[0].location == "https://elice.io/reference"
+    args["queries"] = (c.ExternalQueryRequest("Redis session architecture", "기술 개념 확인"),)
     second = await retrieve_external_knowledge(app.state.session_factory, **args)
     assert second.sources[0].source_id == first.sources[0].source_id
     assert calls == ["/search", "/extract"]
+    async with app.state.session_factory() as db:
+        rows = list(await db.scalars(select(InterviewExternalSource)))
+        assert len(rows) == 1 and rows[0].query_text == "Redis session architecture"
+
+
+async def test_one_unsafe_query_blocks_the_entire_batch_before_http_and_source_storage(app):
+    from app.features.interview.external_knowledge import retrieve_external_knowledge
+
+    async with app.state.session_factory.begin() as db:
+        owner = await make_user(db)
+        run = await make_run(db, owner)
+        repo = await make_repo(db, run)
+        interview = await make_interview(db, run, [repo], status="in_progress")
+
+    def forbidden(request):
+        pytest.fail("mixed unsafe batch reached provider")
+
+    settings = Settings(_env_file=None, tavily_api_key="fixture")
+    provider = TavilyClient(settings.require_tavily(), transport=httpx.MockTransport(forbidden))
+    result = await retrieve_external_knowledge(
+        app.state.session_factory,
+        user_id=owner.id,
+        interview_id=interview.id,
+        queries=(
+            c.ExternalQueryRequest("Redis TTL", "fixture"),
+            c.ExternalQueryRequest("Redis\nprivate", "fixture"),
+        ),
+        settings=settings,
+        client=provider,
+    )
+    assert result.error_code == "unsafe_external_query" and result.sources == ()
+    async with app.state.session_factory() as db:
+        assert await db.scalar(select(func.count()).select_from(InterviewExternalSource)) == 0
 
 
 @pytest.mark.parametrize(

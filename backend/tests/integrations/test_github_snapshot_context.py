@@ -7,6 +7,66 @@ import httpx
 
 from app.integrations.github.base import RepoSummary
 from app.integrations.github.client import GithubClient
+from app.integrations.github.snapshot import collect_snapshot_context
+
+
+async def test_tree_size_skips_unreadable_file_without_spending_contents_request():
+    sha, tree = "a" * 40, "b" * 40
+    small = b"service=true\n"
+    large = b"x" * 65536
+    blobs = {
+        path: hashlib.sha1(f"blob {len(data)}\0".encode() + data).hexdigest()
+        for path, data in (("a.config", large), ("b.config", small))
+    }
+    calls = []
+
+    def handler(request):
+        path = request.url.path.removeprefix("/repos/o/r")
+        calls.append(path)
+        if path == f"/git/commits/{sha}":
+            return httpx.Response(200, json={"sha": sha, "tree": {"sha": tree}})
+        if path == f"/git/trees/{tree}":
+            return httpx.Response(
+                200,
+                json={
+                    "sha": tree,
+                    "truncated": False,
+                    "tree": [
+                        {
+                            "path": path,
+                            "mode": "100644",
+                            "type": "blob",
+                            "sha": blobs[path],
+                            "size": len(data),
+                        }
+                        for path, data in (("a.config", large), ("b.config", small))
+                    ],
+                },
+            )
+        path = path.removeprefix("/contents/")
+        raw = large if path == "a.config" else small
+        return httpx.Response(
+            200,
+            json={
+                "type": "file",
+                "path": path,
+                "sha": blobs[path],
+                "encoding": "base64",
+                "size": len(raw),
+                "content": base64.b64encode(raw).decode(),
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        client = GithubClient("fixture", client=http)
+        structure, files, limitations = await collect_snapshot_context(
+            "o/r", sha, client._snapshot_json, max_requests=3, max_files=1
+        )
+    assert structure == ("a.config", "b.config")
+    assert [item.path for item in files] == ["b.config"]
+    assert "/contents/a.config" not in calls
+    assert calls == [f"/git/commits/{sha}", f"/git/trees/{tree}", "/contents/b.config"]
+    assert limitations
 
 
 async def test_l1_snapshot_pins_readme_and_nested_supporting_text_to_one_sha():

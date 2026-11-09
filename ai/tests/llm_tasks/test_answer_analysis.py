@@ -236,6 +236,42 @@ def test_no_remaining_budget_is_a_budget_failure_without_a_call(kit, run):
     assert result.failure.stage == "budget" and provider.requests == []
 
 
+def test_new_model_external_query_is_rejected_without_invalidating_historical_decode(kit, run):
+    raw = kit.analysis_output(
+        needs_verification=True,
+        external_queries=[{"query": "me@example.invalid Redis", "purpose": "fixture"}],
+    )
+    assert c.decode(c.AnswerAnalysis, raw).external_queries[0].query == "me@example.invalid Redis"
+    provider = kit.Provider(raw)
+    result = run(provider, prompt=replace(kit.PROMPT, version="answer_analysis_v2"))
+    assert result.failure is not None and result.failure.stage == "semantic"
+    assert len(provider.requests) == 1
+
+
+def test_query_execution_policy_is_rechecked_when_injected_callable_skips_validator(kit, run):
+    candidate = c.decode(
+        c.AnswerAnalysis,
+        kit.analysis_output(
+            needs_verification=True,
+            external_queries=[{"query": "me@example.invalid Redis", "purpose": "fixture"}],
+        ),
+    )
+    historical = c.validate_analysis(
+        candidate,
+        question=kit.checked_question(),
+        answer_text=kit.ANSWER,
+        evidence_refs=frozenset(),
+        allowed_locations=frozenset(),
+    )
+
+    async def bypasses(request, validator):
+        return c.ModelResult(historical, None, (kit.metadata(),))
+
+    result = run(bypasses, prompt=replace(kit.PROMPT, version="answer_analysis_v2"))
+    assert result.failure.stage == "semantic" and result.data is None
+    assert result.attempts == (kit.metadata(),)
+
+
 def test_a_model_call_that_skips_the_validator_cannot_return_unchecked_analysis(kit, run):
     other = c.validate_analysis(
         c.decode(c.AnswerAnalysis, kit.analysis_output()),

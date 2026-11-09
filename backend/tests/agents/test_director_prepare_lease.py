@@ -117,6 +117,9 @@ async def test_replaced_owner_cannot_store_late_director_question(agent_sessions
         }
     assert await recover_preparations(agent_sessions) == 1
     async with agent_sessions() as db:
+        expired = await db.get(LLMCallRecord, old_call)
+        assert expired is not None
+        assert expired.discard_reason == "preparation_lease_expired"
         await retry_prepare(
             db, Broker(), user_id=ready["owner"], interview_id=ready["interview_id"]
         )
@@ -128,7 +131,8 @@ async def test_replaced_owner_cannot_store_late_director_question(agent_sessions
         turns = (await db.scalars(select(InterviewTurn))).all()
         assert len(turns) == 1
         record = await db.get(LLMCallRecord, old_call)
-        assert record.discard_reason == "context_changed"
+        assert record is not None and record.turn_id is None
+        assert record.discard_reason == "preparation_lease_expired"
         assert len(record.attempts) == 2
     assert new_transport.github == []
 
@@ -137,9 +141,17 @@ def test_prepare_maximum_allowed_timeouts_fit_actual_worker_budget():
     # 두 문서·두 레포·Claim 대조까지 포함한 현재 17T 준비 예산의 경계를 확인한다.
     # 반올림으로 계산 합이 1770.0000000000002가 되지 않도록 경계 안쪽 값을 쓴다.
     boundary = nextafter((prepare_lease.PREPARATION_DEADLINE_SECONDS - 2 * 30 - 30) / 17, 0)
-    prepare_lease.validate_timeout(30, boundary)
+    prepare_lease.validate_timeout(
+        30, boundary, deep_seconds=boundary, claim_seconds=boundary, document_seconds=boundary
+    )
     with pytest.raises(prepare_lease.PreparationTimeoutError):
-        prepare_lease.validate_timeout(30, boundary + 0.001)
+        prepare_lease.validate_timeout(
+            30,
+            boundary + 0.001,
+            deep_seconds=boundary + 0.001,
+            claim_seconds=boundary + 0.001,
+            document_seconds=boundary + 0.001,
+        )
     prepare_lease.validate_timeout(300, 1)
     with pytest.raises(prepare_lease.PreparationTimeoutError):
         prepare_lease.validate_timeout(900, 1)
