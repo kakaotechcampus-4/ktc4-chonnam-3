@@ -424,3 +424,169 @@ async def _execute(
             )
         _store(row, ledger)
     return outcome
+
+
+async def _run(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    user_id: UUID,
+    interview_id: UUID,
+    entry: dict[str, object],
+    scope: _Scope,
+    settings: LLMSettings,
+    http_client: httpx.AsyncClient | None,
+) -> QuestionExecution:
+    # HTTP 응답 취소가 이미 시작한 생성 작업을 취소하거나 같은 requestId를 다시 실행하지 않는다.
+    task = asyncio.create_task(
+        _execute(
+            sessions,
+            user_id=user_id,
+            interview_id=interview_id,
+            entry=entry,
+            scope=scope,
+            settings=settings,
+            http_client=http_client,
+        )
+    )
+    _RUNNING.add(task)
+
+    def finished(done: asyncio.Task[QuestionExecution]) -> None:
+        _RUNNING.discard(done)
+        if not done.cancelled():
+            done.exception()
+
+    task.add_done_callback(finished)
+    return await asyncio.shield(task)
+
+
+async def retry_question(
+    sessions: async_sessionmaker[AsyncSession],
+    redis: Redis,
+    *,
+    user_id: UUID,
+    interview_id: UUID,
+    request_id: UUID,
+    settings: LLMSettings,
+    http_client: httpx.AsyncClient | None = None,
+) -> QuestionRetryResponse:
+    entry, scope = await _reserve(
+        sessions,
+        user_id=user_id,
+        interview_id=interview_id,
+        request_id=request_id,
+        kind="manual",
+        settings=settings,
+    )
+    if scope is not None:
+        outcome = await _run(
+            sessions,
+            user_id=user_id,
+            interview_id=interview_id,
+            entry=entry,
+            scope=scope,
+            settings=settings,
+            http_client=http_client,
+        )
+        if outcome.turn_id is None:
+            # 구버전 실패 뒤 명시 복구가 먼저 온 경우에도 미사용 자동 rewrite 한 번은 허용한다.
+            automatic = await auto_retry_question(
+                sessions,
+                user_id=user_id,
+                interview_id=interview_id,
+                failed=outcome,
+                settings=settings,
+                http_client=http_client,
+            )
+            if automatic is not None and automatic.turn_id is not None:
+                async with sessions.begin() as db:
+                    row = await _owned(db, user_id, interview_id)
+                    ledger = _ledger(row)
+                    saved = ledger[str(request_id)]
+                    saved.update(
+                        status="succeeded",
+                        turn_id=str(automatic.turn_id),
+                        completion="automatic_after_manual",
+                    )
+                    saved.setdefault("session_id", secrets.token_urlsafe(32))
+                    _store(row, ledger)
+                outcome = automatic
+        if outcome.turn_id is None:
+            raise AppError(Reason.QUESTION_RETRY_FAILED)
+    async with sessions.begin() as db:
+        row = await _owned(db, user_id, interview_id)
+        entry = _ledger(row)[str(request_id)]
+        turn = await db.get(InterviewTurn, UUID(str(entry["turn_id"])))
+        if row.status != "in_progress" or turn is None or turn.interview_session_id != interview_id:
+            raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE)
+        session_id = str(entry["session_id"])
+        target = int(str(entry["target"]))
+    try:
+        execute = cast(Callable[..., Awaitable[object]], redis.eval)
+        await execute(
+            _ROTATE,
+            1,
+            f"rt:interview:{interview_id}",
+            session_id,
+            json.dumps({"interviewId": str(interview_id), "userId": str(user_id)}),
+            7200,
+        )
+    except RedisError:
+        raise AppError(Reason.INTERNAL_ERROR) from None
+    return QuestionRetryResponse(interview_id=interview_id, session_id=session_id, turn_no=target)
+
+
+async def auto_retry_question(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    user_id: UUID,
+    interview_id: UUID,
+    failed: QuestionExecution,
+    settings: LLMSettings,
+    http_client: httpx.AsyncClient | None = None,
+) -> QuestionExecution | None:
+    """정확히 복원한 안전 rewrite 한 번만 자동 실행한다. 일반 실패는 수동 경로로 둔다."""
+    if failed.failure is None or failed.failure.error_code != "director_candidate_rewrite":
+        return None
+    from devon_ai.agents.director.runtime import recovery_feedback_from_attempts
+
+    async with sessions() as db:
+        record = await db.get(LLMCallRecord, failed.call_id)
+        prompt = await db.scalar(
+            select(PromptVersion).where(
+                PromptVersion.task_name == "director", PromptVersion.is_active.is_(True)
+            )
+        )
+        if (
+            record is None
+            or prompt is None
+            or prompt.version.partition("@")[0] not in {"director_v7", "director_v8"}
+        ):
+            return None
+        feedback = recovery_feedback_from_attempts(
+            record.attempts, failure_code=failed.failure.error_code
+        )
+        if feedback is None or feedback.recovery.recovery != "rewrite":
+            return None
+    try:
+        entry, scope = await _reserve(
+            sessions,
+            user_id=user_id,
+            interview_id=interview_id,
+            request_id=uuid5(failed.call_id, "automatic-rewrite"),
+            kind="auto",
+            settings=settings,
+            expected_failed_call_id=failed.call_id,
+        )
+    except AppError:
+        return None
+    if scope is None:
+        return None
+    return await _run(
+        sessions,
+        user_id=user_id,
+        interview_id=interview_id,
+        entry=entry,
+        scope=scope,
+        settings=settings,
+        http_client=http_client,
+    )
