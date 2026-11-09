@@ -134,3 +134,40 @@ async def test_cancelled_provider_request_keeps_reservation_as_uncertain(redis):
     assert await redis.hget(budget.key, "used") == b"4"
     assert await redis.hget(budget.key, "uncertain") == b"4"
     assert await redis.hget(budget.key, "pending") == b"0"
+
+
+async def test_paid_audio_is_cached_on_settle_epoch_failure_and_new_synthesis_stays_closed(redis):
+    from uuid import uuid4
+
+    from app.features.interview.question_audio import AudioQuestion, QuestionAudioService
+    from app.integrations.tts.google import SpeechAudio
+
+    await initialize_budget(
+        redis, project="epoch-fixture", remaining_characters=100, monthly_limit=100
+    )
+    budget = RedisCharacterBudget(redis, project="epoch-fixture", monthly_limit=100)
+    calls = []
+
+    class Paid:
+        async def synthesize(self, text, persona):
+            calls.append(text)
+            # 전용 Redis의 이 시험 key만 다른 epoch를 가진 복원본 상태로 만든다.
+            await redis.hset(budget.key, "run_id", "old-server-fixture")
+            return SpeechAudio(b"ID3fixture", "audio/mpeg", "fixture", "fixture")
+
+    settings = TTSSettings(
+        voice_map={p: "ko-KR-Chirp3-HD-Charon" for p in ("tech_lead", "domain_lead", "hr_manager")},
+        api_key=SecretStr("fixture"),
+        monthly_character_limit=100,
+        budget_project="epoch-fixture",
+    )
+    service = QuestionAudioService(
+        redis, BudgetedSpeechSynthesizer(Paid(), settings, budget), settings
+    )
+    source = AudioQuestion(uuid4(), 1, uuid4(), "질문", "tech_lead")
+    assert (await service.get(source)).data == b"ID3fixture"
+    assert (await service.get(source)).data == b"ID3fixture" and len(calls) == 1
+    assert await redis.hget(budget.key, "used") == b"2"
+    assert await redis.hget(budget.key, "pending") == b"2"
+    with pytest.raises(TtsError, match="budget_epoch_changed"):
+        await budget.reserve("다음 질문")

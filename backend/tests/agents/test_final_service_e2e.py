@@ -142,7 +142,7 @@ async def test_preparation_nine_answers_report_and_profile_share_one_real_flow(
         monkeypatch.setattr(profile_summary, "get_settings", lambda: app.state.settings)
         registered = importlib.import_module("app.workers.arq_app").WorkerSettings.functions
         assert {"interview_prep", "report_generate", "profile_summary"} <= {
-            item.__name__ for item in registered
+            getattr(item, "coroutine", item).__name__ for item in registered
         }
 
         async def enqueue_preparation():
