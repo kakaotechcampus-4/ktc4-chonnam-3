@@ -109,7 +109,7 @@ def test_declared_evaluation_keys_allow_technical_turn_to_observe_job_fit():
         "answer",
         contract(evaluation_keys=("company_job_fit",)),
         ("jd-1",),
-        (c.JDRequirement("jd-1", "requirement", "required", "jd.text", ()),),
+        (c.LinkedRequirement("jd-1", "required", "requirement"),),
     )
     assert c.score_candidate_keys(turn) == ("company_job_fit",)
 
@@ -147,7 +147,7 @@ def test_external_query_rejects_oversized_query_before_a_provider_call():
 def test_report_score_receives_explicit_keys_and_their_actual_jd_reference_text():
     from devon_ai.llm_tasks.report_score import _payload
 
-    requirement = c.JDRequirement("jd-1", "Distributed services", "required", "jd.text", ())
+    requirement = c.LinkedRequirement("jd-1", "required", "Distributed services")
     turn = c.ScoreTurn(
         "turn-1",
         "tech_lead",

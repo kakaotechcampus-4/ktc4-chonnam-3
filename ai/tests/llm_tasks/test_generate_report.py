@@ -161,7 +161,10 @@ def test_image_jd_notes_and_limits_reach_score_and_narrative_without_becoming_ev
         assert "jd_image:image_count_limit" in request["limitations"]
         assert {item["evidence_id"] for item in request["evidence"]} == {"e1"}
     score = providers[0].requests[0].payload
-    assert score["turns"][1]["jd_requirements"][0]["source_field"] == "job_posting.source_blocks"
+    assert score["turns"][1]["jd_requirements"] == [
+        {"id": "jd-image", "category": "required", "text": "Python 개발 경험"}
+    ]
+    assert score["source_notes"][0]["source_field"] == "job_posting.source_blocks"
 
 
 @pytest.mark.parametrize("failure", ["unasked", "hash", "excerpt_without_limit"])
@@ -494,3 +497,28 @@ def test_a_bad_report_prompt_stops_everything_before_any_model_call(kit):
             )
         )
     assert called == []
+
+
+def test_score_turn_contains_only_linked_requirements_in_the_merged_contract():
+    source = payload(
+        requirements=[{"id": "jd-1", "category": "required", "text": "Redis 운영 경험"}]
+    )
+    source["turns"][3]["jd_requirement_ids"] = ["jd-1"]
+    source["requirements"].append(
+        {"id": "jd-unasked", "category": "preferred", "text": "미질문 영역"}
+    )
+    turns, _, _ = report._build_inputs(source)
+    assert turns[0].jd_requirements == ()
+    assert turns[3].jd_requirements == (c.LinkedRequirement("jd-1", "required", "Redis 운영 경험"),)
+
+
+def test_linked_requirement_contract_does_not_require_a_second_duplicate_id_list():
+    turn = c.ScoreTurn(
+        "1",
+        "domain_lead",
+        "질문",
+        "답변",
+        c.decode(c.QuestionContract, {**CONTRACT, "evaluation_keys": ["company_job_fit"]}),
+        jd_requirements=(c.LinkedRequirement("jd-1", "required", "Redis 운영 경험"),),
+    )
+    assert c.score_candidate_keys(turn) == ("company_job_fit",)
