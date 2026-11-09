@@ -179,7 +179,7 @@ def test_live_search_relevance_requires_requested_api_identifiers_not_only_pytho
     assert source_matches_query(query, valid)[0]
     assert not source_matches_query(query, source("CancelledError and TimeoutError"))[0]
     assert not source_matches_query(query, source(valid.content, version="3.10"))[0]
-    assert not source_matches_query(query, source(valid.content, language="fr"))[0]
+    assert not source_matches_query(query + " english", source(valid.content, language="fr"))[0]
 
 
 def test_generic_live_source_must_have_actual_query_terms():

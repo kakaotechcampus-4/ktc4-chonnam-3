@@ -78,7 +78,21 @@ async def app(app_settings):
 
         tables = ", ".join('"' + table.name + '"' for table in Base.metadata.sorted_tables)
         async with application.state.session_factory() as session:
+            # URL로 격리된 테스트 DB만 허용한 위 fixture 안에서 소유자 권한으로 초기화한다.
+            # 실제 요청 중에는 트리거가 켜져 있어 TRUNCATE 거부 회귀를 그대로 검증한다.
+            await session.execute(
+                text(
+                    "ALTER TABLE official_source_snapshots "
+                    "DISABLE TRIGGER official_snapshot_no_truncate"
+                )
+            )
             await session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+            await session.execute(
+                text(
+                    "ALTER TABLE official_source_snapshots "
+                    "ENABLE TRIGGER official_snapshot_no_truncate"
+                )
+            )
             await session.commit()
         await application.state.redis.flushdb()
         yield application
