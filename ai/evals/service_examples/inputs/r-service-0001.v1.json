@@ -1,0 +1,270 @@
+{
+  "case_id": "r-service-0001",
+  "version": 1,
+  "control": {
+    "kind": "report",
+    "split": "dev",
+    "source_group_id": "synthetic-service-smoke",
+    "synthetic": true
+  },
+  "payload": {
+    "service_task": "report",
+    "service_input": {
+      "requirements": [
+        {
+          "id": "synthetic-jd-1",
+          "category": "required",
+          "text": "Explain API reliability and test strategy."
+        }
+      ],
+      "rubrics": {
+        "communication": {
+          "0": "Synthetic smoke rubric for communication, level 0; not a reviewed production scoring standard.",
+          "1": "Synthetic smoke rubric for communication, level 1; not a reviewed production scoring standard.",
+          "2": "Synthetic smoke rubric for communication, level 2; not a reviewed production scoring standard.",
+          "3": "Synthetic smoke rubric for communication, level 3; not a reviewed production scoring standard.",
+          "4": "Synthetic smoke rubric for communication, level 4; not a reviewed production scoring standard."
+        },
+        "company_job_fit": {
+          "0": "Synthetic smoke rubric for company_job_fit, level 0; not a reviewed production scoring standard.",
+          "1": "Synthetic smoke rubric for company_job_fit, level 1; not a reviewed production scoring standard.",
+          "2": "Synthetic smoke rubric for company_job_fit, level 2; not a reviewed production scoring standard.",
+          "3": "Synthetic smoke rubric for company_job_fit, level 3; not a reviewed production scoring standard.",
+          "4": "Synthetic smoke rubric for company_job_fit, level 4; not a reviewed production scoring standard."
+        },
+        "contribution_clarity": {
+          "0": "Synthetic smoke rubric for contribution_clarity, level 0; not a reviewed production scoring standard.",
+          "1": "Synthetic smoke rubric for contribution_clarity, level 1; not a reviewed production scoring standard.",
+          "2": "Synthetic smoke rubric for contribution_clarity, level 2; not a reviewed production scoring standard.",
+          "3": "Synthetic smoke rubric for contribution_clarity, level 3; not a reviewed production scoring standard.",
+          "4": "Synthetic smoke rubric for contribution_clarity, level 4; not a reviewed production scoring standard."
+        },
+        "problem_solving": {
+          "0": "Synthetic smoke rubric for problem_solving, level 0; not a reviewed production scoring standard.",
+          "1": "Synthetic smoke rubric for problem_solving, level 1; not a reviewed production scoring standard.",
+          "2": "Synthetic smoke rubric for problem_solving, level 2; not a reviewed production scoring standard.",
+          "3": "Synthetic smoke rubric for problem_solving, level 3; not a reviewed production scoring standard.",
+          "4": "Synthetic smoke rubric for problem_solving, level 4; not a reviewed production scoring standard."
+        },
+        "project_understanding": {
+          "0": "Synthetic smoke rubric for project_understanding, level 0; not a reviewed production scoring standard.",
+          "1": "Synthetic smoke rubric for project_understanding, level 1; not a reviewed production scoring standard.",
+          "2": "Synthetic smoke rubric for project_understanding, level 2; not a reviewed production scoring standard.",
+          "3": "Synthetic smoke rubric for project_understanding, level 3; not a reviewed production scoring standard.",
+          "4": "Synthetic smoke rubric for project_understanding, level 4; not a reviewed production scoring standard."
+        },
+        "technical_reasoning": {
+          "0": "Synthetic smoke rubric for technical_reasoning, level 0; not a reviewed production scoring standard.",
+          "1": "Synthetic smoke rubric for technical_reasoning, level 1; not a reviewed production scoring standard.",
+          "2": "Synthetic smoke rubric for technical_reasoning, level 2; not a reviewed production scoring standard.",
+          "3": "Synthetic smoke rubric for technical_reasoning, level 3; not a reviewed production scoring standard.",
+          "4": "Synthetic smoke rubric for technical_reasoning, level 4; not a reviewed production scoring standard."
+        }
+      },
+      "turns": [
+        {
+          "turn_no": 1,
+          "persona": "hr_manager",
+          "question": "Describe your actual role and team responsibilities.",
+          "answer": "This is a synthetic answer for pipeline smoke validation, without verified repository facts.",
+          "question_contract": {
+            "purpose": "Describe your actual role and team responsibilities.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "Describe your actual role and team responsibilities."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "Describe your actual role and team responsibilities.",
+            "evaluation_keys": [
+              "contribution_clarity",
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 2,
+          "persona": "tech_lead",
+          "question": "Explain the purpose and request flow of your project.",
+          "answer": "This is a synthetic answer for pipeline smoke validation, without verified repository facts.",
+          "question_contract": {
+            "purpose": "Explain the purpose and request flow of your project.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "Explain the purpose and request flow of your project."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "Explain the purpose and request flow of your project.",
+            "evaluation_keys": [
+              "project_understanding",
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 3,
+          "persona": "tech_lead",
+          "question": "Explain one design choice, its conditions and alternatives.",
+          "answer": "This is a synthetic answer for pipeline smoke validation, without verified repository facts.",
+          "question_contract": {
+            "purpose": "Explain one design choice, its conditions and alternatives.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "Explain one design choice, its conditions and alternatives."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "Explain one design choice, its conditions and alternatives.",
+            "evaluation_keys": [
+              "technical_reasoning",
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 4,
+          "persona": "tech_lead",
+          "question": "Explain a problem, how you investigated it and how you checked a fix.",
+          "answer": "This is a synthetic answer for pipeline smoke validation, without verified repository facts.",
+          "question_contract": {
+            "purpose": "Explain a problem, how you investigated it and how you checked a fix.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "Explain a problem, how you investigated it and how you checked a fix."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "Explain a problem, how you investigated it and how you checked a fix.",
+            "evaluation_keys": [
+              "problem_solving",
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 5,
+          "persona": "tech_lead",
+          "question": "Connect your experience to the supplied JD requirement about API reliability and testing.",
+          "answer": "This is a synthetic answer for pipeline smoke validation, without verified repository facts.",
+          "question_contract": {
+            "purpose": "Connect your experience to the supplied JD requirement about API reliability and testing.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "Connect your experience to the supplied JD requirement about API reliability and testing."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [
+              {
+                "kind": "jd_requirement",
+                "id": "synthetic-jd-1"
+              }
+            ],
+            "evaluation_scope": "Connect your experience to the supplied JD requirement about API reliability and testing.",
+            "evaluation_keys": [
+              "company_job_fit",
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [
+            "synthetic-jd-1"
+          ],
+          "evidences": []
+        },
+        {
+          "turn_no": 6,
+          "persona": "tech_lead",
+          "question": "Explain a tradeoff in your chosen testing approach.",
+          "answer": "This is a synthetic answer for pipeline smoke validation, without verified repository facts.",
+          "question_contract": {
+            "purpose": "Explain a tradeoff in your chosen testing approach.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "Explain a tradeoff in your chosen testing approach."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "Explain a tradeoff in your chosen testing approach.",
+            "evaluation_keys": [
+              "technical_reasoning",
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 7,
+          "persona": "tech_lead",
+          "question": "Explain the conditions under which an alternative would be preferable.",
+          "answer": "This is a synthetic answer for pipeline smoke validation, without verified repository facts.",
+          "question_contract": {
+            "purpose": "Explain the conditions under which an alternative would be preferable.",
+            "required_points": [
+              {
+                "key": "explanation",
+                "description": "Explain the conditions under which an alternative would be preferable."
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_scope": "Explain the conditions under which an alternative would be preferable.",
+            "evaluation_keys": [
+              "technical_reasoning",
+              "communication"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 8,
+          "persona": "domain_lead",
+          "question": "Explain a domain concept clearly for an unfamiliar colleague.",
+          "answer": "This is a synthetic answer for pipeline smoke validation, without verified repository facts.",
+          "question_contract": {
+            "purpose": "Explain a domain concept clearly for an unfamiliar colleague.",
+            "required_points": [
+              {
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
