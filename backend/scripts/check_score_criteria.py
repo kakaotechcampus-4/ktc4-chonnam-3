@@ -6,9 +6,13 @@ backend 에서 ``python -m scripts.check_score_criteria`` 로 실행한다. DB·
 비어 있지 않은 문자열일 때만 exit 0 이다(AI 계약 RubricLevel 이 거절하는 값을 통과시키지 않는다).
 report:fail:* 는 활성화 전에 실패한 면접의 재시도 대상이며 삭제하지 않는다.
 
-활성화 절차(시점은 평가 담당이 검수 후 정한다). 먼저 활성 행이 있는지 이 스크립트로 확인한다.
+활성화 절차(시점은 평가 담당이 검수 후 정한다). seed_all 은 score_criteria 와
+domain_question_frames 를 같은 트랜잭션에서 갱신하므로 실행 전에 두 테이블의 활성 행을
+모두 확인한다.
+  SELECT (SELECT count(*) FROM score_criteria WHERE is_active) AS score_active,
+         (SELECT count(*) FROM domain_question_frames WHERE is_active) AS frame_active;
 
-[활성 행이 없는 DB — 신규·비활성]
+[score_active=0 이고 frame_active=0 인 DB — 신규·비활성]
 1. ``python -m scripts.seed_all`` 로 rubric 초안을 등록한다(신규 행은 is_active=FALSE).
 2. 문구를 검수한다.
 3. 6행을 한 트랜잭션에서 한 번에 켠다. 일부만 켜면 리포트 생성이 실패한다.
@@ -17,13 +21,15 @@ report:fail:* 는 활성화 전에 실패한 면접의 재시도 대상이며 �
                        'communication', 'contribution_clarity', 'company_job_fit');
 4. 이 스크립트를 실행해 ok=true 와 활성 6개를 확인하고 결과를 #206 에 남긴다.
 
-[이미 활성 행이 있는 DB]
-seed_all 을 먼저 실행하지 않는다. 충돌 시 is_active 를 유지한 채 rubric·label·description 을
-seed 초안으로 덮어쓰고 커밋하므로, 검수 전에 활성 문구가 바뀐다. 도메인 질문 프레임
-(domain_question_frames)도 함께 갱신되며 이는 점수 기준 점검과 별도 범위다.
-1. DB 의 현재 문구와 seed 의 후보 문구를 비교해 검수한다.
-2. 승인한 변경만 적용한다.
-3. 이 스크립트로 ok=true 를 확인하고 결과를 #206 에 남긴다.
+[score_active>0 또는 frame_active>0 인 DB — 한쪽만 활성인 혼합 상태 포함]
+seed_all 을 실행하지 않는다. 충돌 시 is_active 를 유지한 채 본문을 seed 초안으로 덮어쓰고
+커밋하므로, 검수 전에 활성 점수 문구(score_active>0)나 활성 도메인 질문 프레임 문구
+(frame_active>0)가 바뀐다. 도메인 프레임은 점수 기준 점검과 별도 범위다.
+1. 활성인 쪽의 DB 현재 문구와 seed 후보 문구를 비교해 검수한다.
+2. 점수 기준만 필요하면 seed_all 대신 scripts.seed_score_criteria.seed_score_criteria 만
+   한 트랜잭션에서 호출한다(도메인 프레임 호출 제외). 승인한 변경만 적용한다.
+3. 비활성이던 점수 기준은 위 [신규·비활성] 3번처럼 켠다.
+4. 이 스크립트로 ok=true 를 확인하고 결과를 #206 에 남긴다.
 """
 
 import asyncio
