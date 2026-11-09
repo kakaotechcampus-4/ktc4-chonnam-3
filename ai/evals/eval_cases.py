@@ -15,6 +15,7 @@ KINDS = {"evidence", "question", "flow", "report"}
 SPLITS = {"dev", "holdout"}
 CONTROL_KINDS = {"allowed", "forbidden", "ambiguous", "invalid_ref", "tool_failure"}
 REVIEW_STATUSES = {"unreviewed", "approved", "pending", "invalid"}
+PERSONA_QUOTA = {"tech_lead": 6, "domain_lead": 2, "hr_manager": 1}
 # Public report score keys (ADR 0010). Copied here because evals must not import the runtime.
 SCORE_KEYS = {
     "project_understanding",
@@ -24,8 +25,6 @@ SCORE_KEYS = {
     "contribution_clarity",
     "company_job_fit",
 }
-# Persona quota of one 9-turn interview (ADR 0008): history count + persona_left must equal this.
-PERSONA_QUOTA = {"tech_lead": 6, "domain_lead": 2, "hr_manager": 1}
 PAIR_ROLES = {"stronger", "weaker"}
 _PAIR_KEYS = {"pair_id", "role", "key", "min_gap"}
 
@@ -164,7 +163,8 @@ def _check_contract(case_id: str, contract: Any) -> None:
     """Question Contract subset a report payload carries (ai/evals/README.md)."""
     keys = ("purpose", "required_points", "evaluation_scope")
     points: Any = contract.get("required_points") if isinstance(contract, dict) else None
-    ok = isinstance(contract, dict) and set(contract) == set(keys)
+    optional = {"assumptions", "basis_refs", "evaluation_keys"}
+    ok = isinstance(contract, dict) and set(keys) <= set(contract) <= set(keys) | optional
     ok = ok and _text(contract["purpose"]) and _text(contract["evaluation_scope"])
     ok = ok and isinstance(points, list) and bool(points)
     ok = ok and all(
@@ -214,25 +214,53 @@ def _check_links(case: Case, history: list[dict[str, Any]]) -> None:
             raise CaseError(f"{name}: tool_results item is not a valid ToolResult for a turn")
 
 
-def _history(case: Case) -> list[dict[str, Any]]:
+def _history(case: Case, *, allow_legacy_report_contracts: bool = False) -> list[dict[str, Any]]:
     history = case.payload.get("history")
+    explicit = case.payload.get("service_task") == "report"
+    if explicit:
+        service = case.payload.get("service_input")
+        turns = service.get("turns") if isinstance(service, dict) else None
+        if not isinstance(turns, list) or not all(isinstance(turn, dict) for turn in turns):
+            raise CaseError(f"{case.case_id}: runtime report needs service_input.turns")
+        history = [
+            {
+                "turn": turn.get("turn_no"),
+                "persona": turn.get("persona"),
+                "question": turn.get("question"),
+                "answer": turn.get("answer"),
+                "question_contract": turn.get("question_contract"),
+                **(
+                    {"follows": turn["parent_turn_no"]}
+                    if turn.get("parent_turn_no") is not None
+                    else {}
+                ),
+            }
+            for turn in turns
+        ]
     turns_ok = isinstance(history, list) and all(isinstance(t, dict) for t in history)
     if not turns_ok or not history:
         raise CaseError(f"{case.case_id}: a report case needs a non-empty payload.history list")
     for turn in history:
-        if type(turn.get("turn")) is not int or not all(
-            isinstance(turn.get(k), str) for k in ("persona", "question", "answer")
+        if (
+            type(turn.get("turn")) is not int
+            or not all(isinstance(turn.get(k), str) for k in ("persona", "question"))
+            or not (isinstance(turn.get("answer"), str) or explicit and turn.get("answer") is None)
         ):
             raise CaseError(
                 f"{case.case_id}: history needs int turn and str persona/question/answer"
             )
     numbers = [turn["turn"] for turn in history]
-    if len(set(numbers)) != len(
-        numbers
-    ):  # 비교 시트가 turn 번호로 답변을 모으므로 중복은 덮어쓴다.
+    if len(set(numbers)) != len(numbers):
         raise CaseError(f"{case.case_id}: history turn numbers must be unique, got {numbers}")
+    # 축약 v1의 검수만 명시적으로 허용한다. 서비스 입력·부분 계약은 계속 엄격히 검사한다.
+    contracts_required = (
+        explicit
+        or not allow_legacy_report_contracts
+        or any("question_contract" in turn for turn in history)
+    )
     for turn in history:
-        _check_contract(case.case_id, turn.get("question_contract"))
+        if contracts_required:
+            _check_contract(case.case_id, turn.get("question_contract"))
         follows = turn.get("follows")
         if "follows" in turn and (
             type(follows) is not int or follows not in numbers or follows >= turn["turn"]
@@ -242,7 +270,20 @@ def _history(case: Case) -> list[dict[str, Any]]:
     return list(history)
 
 
-def _check_pairs(cases: list[Case]) -> None:
+def _report_frame(case: Case) -> dict[str, Any]:
+    """쌍 비교에서 답변만 제외하고 원문·rubric·계약을 모두 보존한다."""
+    frame = copy.deepcopy(case.payload)
+    turns = (
+        frame["service_input"]["turns"]
+        if frame.get("service_task") == "report"
+        else frame["history"]
+    )
+    for turn in turns:
+        turn.pop("answer", None)
+    return frame
+
+
+def _check_pairs(cases: list[Case], *, allow_legacy_report_contracts: bool = False) -> None:
     """A pair is two report cases that differ only in answers, so only answers can move a score."""
     groups: dict[str, list[Case]] = {}
     for case in cases:
@@ -262,13 +303,8 @@ def _check_pairs(cases: list[Case]) -> None:
                 raise CaseError(f"pair {pair_id}: both cases must use the same {field}")
         frames, answers = [], []
         for case in (first, second):
-            history = _history(case)
-            frames.append(
-                (
-                    [{k: v for k, v in turn.items() if k != "answer"} for turn in history],
-                    {k: v for k, v in case.payload.items() if k != "history"},
-                )
-            )
+            history = _history(case, allow_legacy_report_contracts=allow_legacy_report_contracts)
+            frames.append(_report_frame(case))
             answers.append([turn.get("answer") for turn in history])
         if frames[0] != frames[1]:
             raise CaseError(f"pair {pair_id}: questions, personas and evidence must be identical")
@@ -277,7 +313,7 @@ def _check_pairs(cases: list[Case]) -> None:
 
 
 def _check_persona_quota(case: Case) -> None:
-    """persona_left is what remains, so past turns plus remaining must add up to the quota."""
+    """진행한 질문과 남은 할당이 6·2·1을 충족하며 음수가 없는지 검사한다."""
     left, history = case.payload.get("persona_left"), case.payload.get("history")
     if left is None:
         return
@@ -295,8 +331,13 @@ def _check_persona_quota(case: Case) -> None:
             )
 
 
-def load_cases(root: Path) -> list[Case]:
+def load_cases(root: Path, *, allow_legacy_report_contracts: bool = False) -> list[Case]:
     """Load every input/expectation pair under root, or raise CaseError."""
+    from source_snapshot import is_historical_snapshot, validate_bound_sources
+
+    if is_historical_snapshot(root):
+        raise CaseError("Historical source snapshot cannot be used as current evaluation cases")
+    validate_bound_sources(root)
     inputs = _load_dir(root / "inputs", _INPUT_KEYS)
     expectations = _load_dir(root / "expectations", _EXPECTATION_KEYS, _EXPECTATION_OPTIONAL)
     orphans = sorted(set(inputs) ^ set(expectations))
@@ -322,14 +363,13 @@ def load_cases(root: Path) -> list[Case]:
         )
     for case in cases:
         if case.kind == "report":
-            _history(case)
+            _history(case, allow_legacy_report_contracts=allow_legacy_report_contracts)
+        _check_persona_quota(case)
     splits: dict[str, set[str]] = {}
     for case in cases:
         splits.setdefault(case.source_group_id, set()).add(case.split)
     leaked = sorted(group for group, used in splits.items() if len(used) > 1)
     if leaked:
         raise CaseError(f"source_group_id used in both dev and holdout: {leaked}")
-    for case in cases:
-        _check_persona_quota(case)
-    _check_pairs(cases)
+    _check_pairs(cases, allow_legacy_report_contracts=allow_legacy_report_contracts)
     return cases
