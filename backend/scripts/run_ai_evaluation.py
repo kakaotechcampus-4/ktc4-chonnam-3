@@ -267,7 +267,8 @@ async def execute(args: argparse.Namespace) -> dict[str, Any]:
         prompts, limits, metadata = load_manifest(args.manifest)
     else:
         assert settings is not None
-        prompts, limits = {}, settings.call_limits("evaluation_judge")
+        # 작업별 제한은 manifest의 task_limits로만 지정한다. 인자 없는 호출을 쓴다.
+        prompts, limits = {}, settings.call_limits()
         metadata = {"prompts": [], "limits": asdict(limits), "task_limits": {}}
     task_limits = {
         task: replace(limits, **values) for task, values in metadata["task_limits"].items()
