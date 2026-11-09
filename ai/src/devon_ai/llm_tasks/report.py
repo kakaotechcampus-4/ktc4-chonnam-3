@@ -14,6 +14,7 @@ from devon_ai.llm_tasks import report_score
 from devon_ai.report_scores import compute_scores
 
 type NarrativeChecked = c.ContractChecked[c.ReportNarrative]
+SUPPORTED_PROMPT_VERSIONS = frozenset({"report_v1", "report_v2", "report_v3"})
 
 
 def _object(properties: dict[str, object]) -> dict[str, object]:
@@ -61,6 +62,7 @@ def _payload(report_input: c.ReportInput) -> dict[str, object]:
                 "question": turn.question,
                 "answer": turn.answer,
                 "question_contract": asdict(turn.question_contract),
+                "jd_requirement_ids": list(turn.jd_requirement_ids),
                 "follows": turn.follows,
                 "evidence_refs": list(turn.evidence_refs),
                 "analysis": None if turn.analysis is None else asdict(turn.analysis),
@@ -72,6 +74,9 @@ def _payload(report_input: c.ReportInput) -> dict[str, object]:
             {"turn_id": item.turn_id, "result": asdict(item.result)}
             for item in report_input.tool_results
         ],
+        "limitations": list(report_input.limitations),
+        "supplemental_sources": [asdict(item) for item in report_input.supplemental_sources],
+        "source_notes": [asdict(item) for item in report_input.source_notes],
     }
 
 
@@ -209,6 +214,8 @@ def _linked(raw: object, requirements: dict[str, dict[str, object]]) -> list[dic
 
 def _build_inputs(
     payload: Mapping[str, object],
+    *,
+    allow_legacy_requirements: bool = False,
 ) -> tuple[tuple[c.ScoreTurn, ...], tuple[c.RubricLevel, ...], c.ReportInput]:
     """BE payload를 두 task의 입력 계약으로 옮긴다. turn_id는 str(turn_no)다."""
     rubric = tuple(
@@ -216,7 +223,10 @@ def _build_inputs(
         for key, levels in _mapping(payload.get("rubrics"), "rubrics").items()
         for level, text in _mapping(levels, "rubric").items()
     )
-    requirements = _requirements(payload.get("requirements"))
+    # 과거 입력의 키 누락만 명시적으로 허용한다. null·손상 값과 알 수 없는 연결은 거절한다.
+    requirements_by_id = _requirements(
+        payload.get("requirements", [] if allow_legacy_requirements else None)
+    )
     score_turns: list[c.ScoreTurn] = []
     report_turns: list[c.ReportTurn] = []
     evidence: dict[str, c.Evidence] = {}
@@ -243,7 +253,13 @@ def _build_inputs(
                 "question": turn.get("question"),
                 "answer": answer,
                 "question_contract": turn.get("question_contract"),
-                "jd_requirements": _linked(turn.get("jd_requirement_ids", []), requirements),
+                # 질문이 실제 연결한 요구사항만 점수 턴에 전달한다. 출처는 source_notes로 분리한다.
+                "jd_requirement_ids": [
+                    item["id"]
+                    for item in _linked(turn.get("jd_requirement_ids", []), requirements_by_id)
+                ],
+                "jd_requirements": _linked(turn.get("jd_requirement_ids", []), requirements_by_id),
+                "evidence_refs": refs,
             },
         )
         parent, analysis = turn.get("parent_turn_no"), turn.get("analysis")
@@ -258,10 +274,29 @@ def _build_inputs(
                 analysis=None if analysis is None else c.decode(c.AnswerAnalysis, analysis),
                 evidence_refs=tuple(refs),
                 question_contract=score_turn.question_contract,
+                jd_requirement_ids=score_turn.jd_requirement_ids,
             )
         )
-    # 근거 조회 결과(ToolResult)는 BE가 저장하지 않아 비워 둔다.
-    report_input = c.ReportInput(tuple(report_turns), tuple(evidence.values()), ())
+    tool_results = tuple(
+        c.decode_strict(c.ReportToolResult, raw)
+        for raw in _items(payload.get("tool_results", []), "tool_results")
+    )
+    limitations = tuple(_items(payload.get("limitations", []), "limitations"))
+    supplemental = tuple(
+        c.decode_strict(c.SupplementalSource, item)
+        for item in _items(payload.get("supplemental_sources", []), "supplemental_sources")
+    )
+    report_input = c.ReportInput(
+        tuple(report_turns),
+        tuple(evidence.values()),
+        tool_results,
+        cast(tuple[str, ...], limitations),
+        supplemental,
+        tuple(
+            c.decode_strict(c.JDSourceNote, item)
+            for item in _items(payload.get("source_notes", []), "source_notes")
+        ),
+    )
     return tuple(score_turns), rubric, report_input
 
 
@@ -328,6 +363,7 @@ async def generate_report(
     prompts: Mapping[str, c.PromptSpec],
     limits: c.CallLimits,
     model_call_factory: Callable[[], c.ModelCall[object]],
+    allow_legacy_requirements: bool = False,
 ) -> dict[str, object]:
     """리포트 초안을 만든다. 점수는 모델이 아니라 report_scores가 계산한다(total_score는 없다).
 
@@ -336,7 +372,9 @@ async def generate_report(
     """
     import asyncio  # 패키지 import 시점에 불러오지 않는다(import 격리 시험)
 
-    score_turns, rubric, report_input = _build_inputs(payload)
+    score_turns, rubric, report_input = _build_inputs(
+        payload, allow_legacy_requirements=allow_legacy_requirements
+    )
     score_prompt, report_prompt = prompts.get("report_score"), prompts.get("report")
     # 모델을 부르기 전에 두 task의 입력을 모두 확인한다(한쪽만 호출되고 끝나지 않게).
     if type(score_prompt) is not c.PromptSpec or score_prompt.task_name != "report_score":
@@ -356,6 +394,11 @@ async def generate_report(
             rubric=rubric,
             prompt=score_prompt,
             limits=limits,
+            supplemental_sources=report_input.supplemental_sources,
+            limitations=report_input.limitations,
+            evidence=report_input.evidence,
+            tool_results=report_input.tool_results,
+            source_notes=report_input.source_notes,
             model_call=cast(c.ModelCall[report_score.ScoreChecked], model_call_factory()),
         ),
         write_narrative(

@@ -3,6 +3,10 @@
 from dataclasses import asdict
 
 from devon_ai import contracts as c
+from devon_ai.source_readers import describe_source
+
+SUPPORTED_PROMPT_VERSIONS = frozenset({"repo_deep_v1", "repo_deep_v2"})
+
 
 type CacheIdentity = tuple[str, str, str, str]
 type DeepChecked = c.ContractChecked[c.DeepAnalysisResult]
@@ -69,7 +73,15 @@ async def analyze_deep(
         return c.ModelResult(None, failure, ())
     request = c.ModelRequest(
         prompt=prompt,
-        payload={"repository": asdict(item)},
+        payload={
+            "repository": asdict(item),
+            "source_readers": [describe_source(source) for source in item.sources],
+            "analysis_constraints": [
+                "각 관찰은 제공된 path와 read_scope를 정확히 참조한다.",
+                "서로 다른 모듈의 구현·설정·테스트 연결은 실제 읽은 구간이 뒷받침할 때만 확인한다.",
+                "구문 해석 한계와 미확인 연결을 limitations에 남기며 개인 기여를 추측하지 않는다.",
+            ],
+        },
         schema_name="RepoDeep",
         schema_version="1",
         output_schema=_output_schema(),
