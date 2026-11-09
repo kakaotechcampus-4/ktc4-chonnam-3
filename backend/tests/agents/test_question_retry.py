@@ -263,3 +263,264 @@ async def test_late_result_is_not_published_after_scope_changes(agent_sessions, 
     async with agent_sessions() as db:
         assert len(list(await db.scalars(select(InterviewTurn)))) == 1
     assert len(calls) == 2
+
+
+async def test_expired_reservation_is_terminal_without_provider_calls(agent_sessions, agent_seed):
+    from datetime import UTC, datetime, timedelta
+
+    from app.features.interview.question_retry import _reserve
+
+    await failed_question(agent_sessions, agent_seed)
+    request_id = uuid4()
+    await _reserve(
+        agent_sessions,
+        user_id=agent_seed["owner"],
+        interview_id=agent_seed["interview_id"],
+        request_id=request_id,
+        kind="manual",
+        settings=settings(),
+    )
+    async with agent_sessions.begin() as db:
+        row = await db.get(InterviewSession, agent_seed["interview_id"])
+        state = deepcopy(row.context_state)
+        state["question_retry_v1"][str(request_id)]["deadline"] = (
+            datetime.now(UTC) - timedelta(seconds=1)
+        ).isoformat()
+        row.context_state = state
+
+    async def forbidden(req):
+        pytest.fail("expired reservation called the model")
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(forbidden)) as http:
+        for rid, expected in [
+            (request_id, "question_retry_failed"),
+            (uuid4(), "question_retry_limit"),
+        ]:
+            with pytest.raises(AppError) as error:
+                await retry(agent_sessions, agent_seed, Redis(), rid, http)
+            assert error.value.reason.value == expected
+
+
+@pytest.mark.parametrize("cause", ["timeout", "context_changed"])
+async def test_running_retry_failure_returns_the_documented_error_and_is_not_reexecuted(
+    agent_sessions, agent_seed, monkeypatch, cause
+):
+    from app.features.interview import director_service
+    from app.features.interview.agent_context import AgentStateError
+
+    turn_id, _ = await failed_question(agent_sessions, agent_seed)
+    calls = []
+
+    async def fail(*args, **kwargs):
+        calls.append(kwargs["call_id"])
+        if cause == "timeout":
+            raise TimeoutError
+        raise AgentStateError("context_changed")
+
+    monkeypatch.setattr(director_service, "start_director", fail)
+    request_id = uuid4()
+    for _ in range(2):
+        with pytest.raises(AppError) as error:
+            await retry(agent_sessions, agent_seed, Redis(), request_id, None)
+        assert error.value.reason.value == "question_retry_failed"
+    assert len(calls) == 1
+    async with agent_sessions() as db:
+        row = await db.get(InterviewSession, agent_seed["interview_id"])
+        assert row.context_state["question_retry_v1"][str(request_id)]["status"] == "failed"
+        turn = await db.get(InterviewTurn, turn_id)
+        assert turn.answer_text == "팀원 담당입니다" and turn.analysis is not None
+
+
+@pytest.mark.parametrize("status,allowed", [(503, True), (401, False)])
+async def test_provider_failure_policy_survives_real_storage_and_changed_description(
+    agent_sessions, agent_seed, status, allowed
+):
+    from dataclasses import replace
+
+    from pydantic import SecretStr
+
+    from app.features.interview.question_retry import availability
+    from app.integrations.llm.client import call_model
+    from tests.integrations.test_llm_client import request, validate
+
+    _, failed_id = await failed_question(agent_sessions, agent_seed)
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda req: httpx.Response(status, headers={"Retry-After": "0"})
+        )
+    ) as http:
+        result = await call_model(
+            replace(request(), max_attempts=1),
+            validate,
+            api_key=SecretStr("fixture"),
+            base_url="https://provider.invalid/v1",
+            http_client=http,
+        )
+    async with agent_sessions.begin() as db:
+        row = await db.get(LLMCallRecord, failed_id)
+        row.failure = {**asdict(result.failure), "reason_summary": "설명 문구가 변경됐습니다."}
+        row.attempts = [asdict(item) for item in result.attempts]
+    async with agent_sessions() as db:
+        stored = await db.get(LLMCallRecord, failed_id)
+        assert stored.failure["provider_status"] == status
+        interview = await db.get(InterviewSession, agent_seed["interview_id"])
+        # 두 번째 값은 남은 횟수가 아닌 이미 사용한 수동 재생성 횟수다.
+        assert await availability(db, interview) == ((True, 0) if allowed else (False, 0))
+
+
+async def test_availability_excludes_t3_failure_and_reports_manual_limit(
+    agent_sessions, agent_seed
+):
+    from app.features.interview.question_retry import _reserve, availability
+
+    await failed_question(agent_sessions, agent_seed)
+    async with agent_sessions() as db:
+        row = await db.get(InterviewSession, agent_seed["interview_id"])
+        assert await availability(db, row) == (True, 0)
+    await _reserve(
+        agent_sessions,
+        user_id=agent_seed["owner"],
+        interview_id=agent_seed["interview_id"],
+        request_id=uuid4(),
+        kind="manual",
+        settings=settings(),
+    )
+    async with agent_sessions() as db:
+        row = await db.get(InterviewSession, agent_seed["interview_id"])
+        assert await availability(db, row) == (False, 1)
+
+
+async def test_manual_retry_after_four_answers_keeps_all_original_rows(agent_sessions, agent_seed):
+    from app.db.models import RepoAnalysis
+
+    turn_id, failed_id = await failed_question(agent_sessions, agent_seed)
+    async with agent_sessions.begin() as db:
+        row = await db.get(InterviewSession, agent_seed["interview_id"])
+        row.current_turn = 4
+        first = await db.get(InterviewTurn, turn_id)
+        for number in range(2, 5):
+            db.add(
+                InterviewTurn(
+                    interview_session_id=row.id,
+                    turn_no=number,
+                    persona="tech_lead",
+                    question_text=first.question_text,
+                    question_contract=first.question_contract,
+                    topic_code="role",
+                    status="answered",
+                    answer_text=first.answer_text,
+                    analysis=first.analysis,
+                )
+            )
+        await db.flush()
+        fourth = await db.scalar(
+            select(InterviewTurn).where(
+                InterviewTurn.interview_session_id == row.id, InterviewTurn.turn_no == 4
+            )
+        )
+        db.add(
+            LLMCallRecord(
+                interview_session_id=row.id,
+                turn_id=fourth.id,
+                turn_no=4,
+                task_name="answer_analysis",
+                attempts=[{"error_stage": None}],
+            )
+        )
+        (await db.get(LLMCallRecord, failed_id)).turn_no = 5
+    async with agent_sessions() as db:
+        before = [
+            (turn.id, turn.question_text, turn.answer_text, turn.analysis)
+            for turn in await db.scalars(select(InterviewTurn).order_by(InterviewTurn.turn_no))
+        ]
+        analyses = [
+            (item.id, item.head_sha, item.result) for item in await db.scalars(select(RepoAnalysis))
+        ]
+    calls = []
+
+    async def handler(req):
+        calls.append(req)
+        return response(plan("tech_lead") if len(calls) == 1 else approved_review())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        result = await retry(agent_sessions, agent_seed, Redis(), uuid4(), http)
+    assert result.turn_no == 5 and len(calls) == 2
+    async with agent_sessions() as db:
+        after = [
+            (turn.id, turn.question_text, turn.answer_text, turn.analysis)
+            for turn in await db.scalars(
+                select(InterviewTurn)
+                .where(InterviewTurn.turn_no <= 4)
+                .order_by(InterviewTurn.turn_no)
+            )
+        ]
+        assert before == after
+        assert analyses == [
+            (item.id, item.head_sha, item.result) for item in await db.scalars(select(RepoAnalysis))
+        ]
+
+
+async def v7(sessions):
+    from app.db.models import PromptVersion
+
+    async with sessions.begin() as db:
+        prompt = await db.scalar(select(PromptVersion).where(PromptVersion.task_name == "director"))
+        prompt.version = "director_v7"
+
+
+@pytest.mark.parametrize("accept_auto", [True, False])
+async def test_initial_auto_then_manual_never_exceeds_three_director_rounds(
+    agent_sessions, agent_seed, accept_auto
+):
+    import json
+
+    from app.features.interview.director_service import process_answer
+
+    await seed_turns(agent_sessions, agent_seed)
+    await v7(agent_sessions)
+    requests = []
+    reviews = 0
+
+    async def handler(req):
+        nonlocal reviews
+        payload = json.loads(json.loads(req.content)["input"][0]["content"][0]["text"])
+        requests.append(payload)
+        if "answer" in payload:
+            return response(asdict(analysis()))
+        if payload["operation"] == "plan":
+            return response(plan("tech_lead"))
+        reviews += 1
+        return response({**approved_review(), "wording_valid": accept_auto and reviews == 2})
+
+    request_id = uuid4()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+        first = await process_answer(
+            agent_sessions,
+            user_id=agent_seed["owner"],
+            interview_id=agent_seed["interview_id"],
+            turn_no=1,
+            text="팀원 담당입니다",
+            call_id=uuid4(),
+            settings=settings(),
+            http_client=http,
+        )
+        assert len(requests) == 5  # T3 한 번 + 최초 두 번 + 안전 자동 복구 두 번
+        if accept_auto:
+            assert first.next_turn_id is not None and first.failure is None
+        else:
+            assert first.next_turn_id is None and first.failure is not None
+            for rid, expected in [
+                (request_id, "question_retry_failed"),
+                (request_id, "question_retry_failed"),
+                (uuid4(), "question_retry_limit"),
+            ]:
+                with pytest.raises(AppError) as error:
+                    await retry(agent_sessions, agent_seed, Redis(), rid, http)
+                assert error.value.reason.value == expected
+            assert len(requests) == 7  # T3를 제외하면 질문 대상 총 여섯 번
+    async with agent_sessions() as db:
+        original = list(
+            await db.scalars(select(LLMCallRecord).where(LLMCallRecord.task_name == "director"))
+        )
+        assert len(original) == (2 if accept_auto else 3)
+        assert sum(len(record.attempts) for record in original) == (4 if accept_auto else 6)
