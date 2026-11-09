@@ -82,25 +82,36 @@ diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.
    /interviews/{id}/prepare/retry:
      post:
        operationId: retryInterviewPrepare
-@@ -431,7 +489,9 @@
+@@ -431,7 +489,11 @@
        summary: Disagree with one persona's feedback
        description: >-
          The path parameter is interviewId. A report is unique per interview, so no
 -        separate reportId is issued.
 +        separate reportId is issued. Submission records a concern only and never
 +        changes scores automatically. expectedRevision must match the displayed
-+        report; omission is accepted only for the original revision 1.
++        report; omission is accepted only for the original revision 1. The unique
++        submission unit is (interviewId, revision, persona); a new published
++        revision does not inherit a previous revision's submitted flag.
        parameters:
          - $ref: '#/components/parameters/InterviewId'
        requestBody:
-@@ -447,8 +507,38 @@
+@@ -447,8 +509,46 @@
            $ref: '#/components/responses/Error'
          '401':
            $ref: '#/components/responses/Error'
 +        '404':
 +          $ref: '#/components/responses/Error'
          '409':
-           $ref: '#/components/responses/Error'
+-          $ref: '#/components/responses/Error'
++          description: >-
++            already_submitted for the same report revision and persona;
++            report_unavailable when the interview is not completed, no report
++            exists, or expectedRevision does not match the current revision.
++            This reason alone does not distinguish absence from a stale revision.
++          content:
++            application/json:
++              schema:
++                $ref: '#/components/schemas/ApiError'
 +  /interviews/{id}/report/retry:
 +    post:
 +      operationId: retryReportGeneration
@@ -132,7 +143,7 @@ diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.
  components:
    securitySchemes:
      sessionCookie:
-@@ -526,7 +616,11 @@
+@@ -526,7 +626,11 @@
        enum: [text, voice]
        description: >-
          New interviews are voice. text remains only for interviews created before
@@ -145,20 +156,22 @@ diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.
      DocumentExtractStatus:
        type: string
        enum: [succeeded, partial, failed]
-@@ -757,7 +851,11 @@
+@@ -757,7 +861,13 @@
            description: Sprint 1 accepts Wanted URLs only.
          documentId:
            type: string
 -          description: Must come from POST /documents/preview. Omit to skip doc_extract.
++          nullable: true
 +          description: Owned portfolio ID from POST /documents/preview; used as a repository recommendation hint and interview source. Omit to skip portfolio doc_extract.
 +        coverLetterDocumentId:
 +          type: string
++          nullable: true
 +          format: uuid
 +          description: Owned cover_letter ID from POST /documents/preview. Optional and independent of documentId; used for interview claims, never substituted for the portfolio recommendation hint. A changed selection creates a distinct analysis input.
  
      CreateAnalysisRunResponse:
        type: object
-@@ -1003,7 +1101,7 @@
+@@ -1003,7 +1113,7 @@
  
      InterviewTurn:
        type: object
@@ -167,7 +180,7 @@ diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.
        properties:
          turn:
            type: integer
-@@ -1014,6 +1112,14 @@
+@@ -1014,6 +1124,14 @@
          answer:
            type: string
            nullable: true
@@ -182,7 +195,7 @@ diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.
  
      InterviewLastError:
        type: object
-@@ -1140,6 +1246,7 @@
+@@ -1140,6 +1258,7 @@
        type: object
        required:
          - interviewId
@@ -190,7 +203,7 @@ diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.
          - position
          - positionLabel
          - totalScore
-@@ -1154,6 +1261,10 @@
+@@ -1154,6 +1273,10 @@
        properties:
          interviewId:
            type: string
@@ -201,7 +214,7 @@ diff --git a/spec/shared/contracts/openapi.yaml b/spec/shared/contracts/openapi.
          position:
            type: string
          positionLabel:
-@@ -1212,3 +1323,7 @@
+@@ -1212,3 +1335,7 @@
          comment:
            type: string
            maxLength: 500
