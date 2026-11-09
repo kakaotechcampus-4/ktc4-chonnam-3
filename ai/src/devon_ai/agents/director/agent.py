@@ -76,6 +76,8 @@ def _references(
         add(c.BasisRef("jd_requirement", requirement.id), requirement.text)
     for turn in context.history:
         add(c.BasisRef("answer_turn", turn.turn_id), turn.answer)
+    for supplemental in context.supplemental_sources:
+        add(c.BasisRef(supplemental.kind, supplemental.source_id), supplemental.content)
     for ref, text in extra.items():
         if type(ref) is not c.BasisRef or type(text) is not str or not text.strip():
             raise c.ContractError("schema", "source text")
@@ -88,6 +90,18 @@ def _references(
         else:
             raise c.ContractError("semantic", "source outside context")
     return sources
+
+
+def _model_reference_texts(sources: Mapping[c.BasisRef, str]) -> list[dict[str, str]]:
+    """검증된 참조 중 Context 밖의 공고만 보강한다. Context 원문을 다시 직렬화하지 않는다.
+
+    _references는 그 밖의 extra를 거절한다. 서버의 전체 원문 map은 인용·ID 검증에 그대로 쓴다.
+    """
+    return [
+        {"kind": ref.kind, "id": ref.id, "text": text}
+        for ref, text in sources.items()
+        if ref.kind == "job_posting"
+    ]
 
 
 async def generate_question(
@@ -164,6 +178,9 @@ async def generate_question(
         # 표현을 생성하는 단계에서 이미 정한 목적·확인내용·근거를 다른 계획으로 바꿀 수 없다.
         if candidate.question_contract != question_contract:
             raise c.ContractError("semantic", "prepared question contract")
+        # 이 구형 진입점은 부모 관계를 계획하지 않는다. 자동 Director의 관계 계약을 우회하지 않는다.
+        if candidate.question_type != "main" or candidate.parent_turn_id is not None:
+            raise c.ContractError("semantic", "prepared question relation")
         return c.validate_question_candidate(
             candidate,
             allowed_personas=context.allowed_personas,
@@ -174,7 +191,8 @@ async def generate_question(
 
     def validate(raw: object) -> c.Question:
         fields = {"persona", "text", "topic_code", "evidence_refs", "jd_requirement_ids"}
-        if type(raw) is not dict or set(raw) != fields:
+        optional = {"question_type", "parent_turn_id"}
+        if type(raw) is not dict or not fields <= set(raw) <= fields | optional:
             raise c.ContractError("schema", "DirectorQuestion")
         evidence_refs = raw["evidence_refs"]
         jd_requirement_ids = raw["jd_requirement_ids"]
@@ -189,6 +207,8 @@ async def generate_question(
             question_contract=question_contract,
             evidence_refs=cast(tuple[str, ...], tuple(evidence_refs)),
             jd_requirement_ids=cast(tuple[str, ...], tuple(jd_requirement_ids)),
+            question_type=cast(Literal["main", "follow_up"], raw.get("question_type", "main")),
+            parent_turn_id=cast(str | None, raw.get("parent_turn_id")),
         )
         return validate_candidate(candidate)
 
@@ -197,9 +217,7 @@ async def generate_question(
         payload={
             "context": asdict(context),
             "question_contract": asdict(question_contract),
-            "reference_texts": [
-                {"kind": ref.kind, "id": ref.id, "text": text} for ref, text in sources.items()
-            ],
+            "reference_texts": _model_reference_texts(sources),
             "answer_analysis": analysis_data,
         },
         schema_name="DirectorQuestion",
