@@ -156,11 +156,69 @@ def _check_expectation(name: str, exp: dict[str, Any]) -> None:
             raise CaseError(f"{name}: approved cannot have open pending_notes")
 
 
-def _history(case: Case) -> list[dict[str, Any]]:
+def _text(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _check_contract(case_id: str, contract: Any) -> None:
+    """Question Contract subset a report payload carries (ai/evals/README.md)."""
+    keys = ("purpose", "required_points", "evaluation_scope")
+    points: Any = contract.get("required_points") if isinstance(contract, dict) else None
+    ok = isinstance(contract, dict) and set(contract) == set(keys)
+    ok = ok and _text(contract["purpose"]) and _text(contract["evaluation_scope"])
+    ok = ok and isinstance(points, list) and bool(points)
+    ok = ok and all(
+        isinstance(p, dict) and set(p) == {"key", "description"} and all(map(_text, p.values()))
+        for p in points
+    )
+    if not ok or len({p["key"] for p in points}) != len(points):
+        raise CaseError(f"{case_id}: history turn needs a valid question_contract")
+
+
+TOOL_STATUSES = {"found", "not_found", "insufficient_analysis", "tool_error"}
+
+
+def _check_links(case: Case, history: list[dict[str, Any]]) -> None:
+    """Optional turn evidence_refs and payload tool_results must point at real refs and turns."""
+    name = case.case_id
+    evidence = case.payload.get("evidence", [])
+    refs = {item.get("ref") for item in evidence if isinstance(item, dict)}
+    for turn in history:
+        linked = turn.get("evidence_refs", [])
+        if (
+            not isinstance(linked, list)
+            or len(set(map(str, linked))) != len(linked)
+            or not all(isinstance(ref, str) and ref in refs for ref in linked)
+        ):
+            raise CaseError(f"{name}: evidence_refs must name registered evidence refs once each")
+    numbers = {turn["turn"] for turn in history}
+    results = case.payload.get("tool_results", [])
+    if not isinstance(results, list):
+        raise CaseError(f"{name}: tool_results must be a list")
+    for item in results:
+        keys = {"turn", "status", "limitations", "error_code"}
+        if not isinstance(item, dict) or set(item) != keys:
+            raise CaseError(f"{name}: tool_results item needs {sorted(keys)}")
+        limits, code = item["limitations"], item["error_code"]
+        ok = type(item["turn"]) is int and item["turn"] in numbers
+        ok = ok and _one_of(item["status"], TOOL_STATUSES)
+        ok = ok and isinstance(limits, list) and all(_text(text) for text in limits)
+        ok = ok and (code is None or _text(code))
+        if ok and item["status"] == "tool_error":
+            ok = code is not None and bool(limits)
+        if ok and item["status"] == "insufficient_analysis":
+            ok = code is None and bool(limits)
+        if ok and item["status"] in ("found", "not_found"):
+            ok = code is None
+        if not ok:
+            raise CaseError(f"{name}: tool_results item is not a valid ToolResult for a turn")
+
+
+def _history(case: Case, *, allow_legacy_report_contracts: bool = False) -> list[dict[str, Any]]:
     history = case.payload.get("history")
     turns_ok = isinstance(history, list) and all(isinstance(t, dict) for t in history)
     if not turns_ok or not history:
-        raise CaseError(f"{case.case_id}: a pair case needs a non-empty payload.history list")
+        raise CaseError(f"{case.case_id}: a report case needs a non-empty payload.history list")
     for turn in history:
         if type(turn.get("turn")) is not int or not all(
             isinstance(turn.get(k), str) for k in ("persona", "question", "answer")
@@ -173,10 +231,24 @@ def _history(case: Case) -> list[dict[str, Any]]:
         numbers
     ):  # 비교 시트가 turn 번호로 답변을 모으므로 중복은 덮어쓴다.
         raise CaseError(f"{case.case_id}: history turn numbers must be unique, got {numbers}")
+    contracts_required = (
+        case.payload.get("service_task") == "report"
+        or not allow_legacy_report_contracts
+        or any("question_contract" in turn for turn in history)
+    )
+    for turn in history:
+        if contracts_required:
+            _check_contract(case.case_id, turn.get("question_contract"))
+        follows = turn.get("follows")
+        if "follows" in turn and (
+            type(follows) is not int or follows not in numbers or follows >= turn["turn"]
+        ):
+            raise CaseError(f"{case.case_id}: follows must name an earlier turn")
+    _check_links(case, history)
     return list(history)
 
 
-def _check_pairs(cases: list[Case]) -> None:
+def _check_pairs(cases: list[Case], *, allow_legacy_report_contracts: bool = False) -> None:
     """A pair is two report cases that differ only in answers, so only answers can move a score."""
     groups: dict[str, list[Case]] = {}
     for case in cases:
@@ -196,7 +268,7 @@ def _check_pairs(cases: list[Case]) -> None:
                 raise CaseError(f"pair {pair_id}: both cases must use the same {field}")
         frames, answers = [], []
         for case in (first, second):
-            history = _history(case)
+            history = _history(case, allow_legacy_report_contracts=allow_legacy_report_contracts)
             frames.append(
                 (
                     [{k: v for k, v in turn.items() if k != "answer"} for turn in history],
@@ -229,8 +301,13 @@ def _check_persona_quota(case: Case) -> None:
             )
 
 
-def load_cases(root: Path) -> list[Case]:
+def load_cases(root: Path, *, allow_legacy_report_contracts: bool = False) -> list[Case]:
     """Load every input/expectation pair under root, or raise CaseError."""
+    from source_snapshot import is_historical_snapshot, validate_bound_sources
+
+    if is_historical_snapshot(root):
+        raise CaseError("Historical source snapshot cannot be used as current evaluation cases")
+    validate_bound_sources(root)
     inputs = _load_dir(root / "inputs", _INPUT_KEYS)
     expectations = _load_dir(root / "expectations", _EXPECTATION_KEYS, _EXPECTATION_OPTIONAL)
     orphans = sorted(set(inputs) ^ set(expectations))
@@ -254,6 +331,9 @@ def load_cases(root: Path) -> list[Case]:
                 expectations[stem],
             )
         )
+    for case in cases:
+        if case.kind == "report":
+            _history(case, allow_legacy_report_contracts=allow_legacy_report_contracts)
     splits: dict[str, set[str]] = {}
     for case in cases:
         splits.setdefault(case.source_group_id, set()).add(case.split)
@@ -262,5 +342,5 @@ def load_cases(root: Path) -> list[Case]:
         raise CaseError(f"source_group_id used in both dev and holdout: {leaked}")
     for case in cases:
         _check_persona_quota(case)
-    _check_pairs(cases)
+    _check_pairs(cases, allow_legacy_report_contracts=allow_legacy_report_contracts)
     return cases

@@ -12,10 +12,32 @@ SNAPSHOT_DIRECTORY = "source_snapshot_20261108"
 
 def is_historical_snapshot(root: Path) -> bool:
     marker = root / "provenance.json"
-    return (
-        marker.is_file()
-        and json.loads(marker.read_text(encoding="utf-8")).get("purpose") == "binding_source_only"
-    )
+    return marker.is_file() and _snapshot_marker(root)["purpose"] == "binding_source_only"
+
+
+def _snapshot_marker(root: Path) -> dict[str, Any]:
+    # 자료 손상은 경로·파서의 내부 예외 대신 같은 검증 오류로 알린다.
+    try:
+        marker = json.loads((root / "provenance.json").read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        raise ValueError("Invalid historical source snapshot") from None
+    if (
+        not isinstance(marker, dict)
+        or marker.get("schema_version") != "historical-eval-snapshot.v1"
+        or marker.get("purpose") != "binding_source_only"
+        or marker.get("current_gold") is not False
+        or not isinstance(files := marker.get("files"), dict)
+        or not files
+        or any(
+            type(relative) is not str
+            or type(digest) is not str
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+            for relative, digest in files.items()
+        )
+    ):
+        raise ValueError("Invalid historical source snapshot")
+    return marker
 
 
 def source_file(cohort: Path, manifest: dict[str, Any], relative: str) -> Path:
@@ -51,13 +73,7 @@ def validate_bound_sources(cohort: Path) -> None:
     if manifest["source_snapshot"] != SNAPSHOT_DIRECTORY:
         raise ValueError("Unknown source snapshot")
     archive = cohort.parent / SNAPSHOT_DIRECTORY
-    marker = json.loads((archive / "provenance.json").read_text(encoding="utf-8"))
-    if (
-        marker.get("schema_version") != "historical-eval-snapshot.v1"
-        or marker.get("purpose") != "binding_source_only"
-        or marker.get("current_gold") is not False
-    ):
-        raise ValueError("Invalid historical source snapshot")
+    marker = _snapshot_marker(archive)
     for relative, expected in marker["files"].items():
         current = source_file(cohort, manifest, relative).read_bytes()
         if hashlib.sha256(current).hexdigest() != expected:
