@@ -145,7 +145,7 @@ def test_a_model_call_returning_something_else_is_a_programming_error(run, kit):
 
 
 def test_linked_jd_requirements_reach_the_request_as_reference_only(run, kit):
-    requirement = c.JDRequirement("jd-1", "Redis 운영 경험", "required", "requirements", ())
+    requirement = c.LinkedRequirement("jd-1", "required", "Redis 운영 경험")
     turns = tuple(
         c.ScoreTurn(
             t.turn_id,
@@ -168,8 +168,6 @@ def test_linked_jd_requirements_reach_the_request_as_reference_only(run, kit):
             "id": "jd-1",
             "category": "required",
             "text": "Redis 운영 경험",
-            "source_field": "requirements",
-            "tech_tags": (),
         }
     ]
     assert sent[0]["jd_requirements"] == []
