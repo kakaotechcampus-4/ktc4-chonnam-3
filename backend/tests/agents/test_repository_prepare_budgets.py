@@ -266,3 +266,10 @@ async def test_cached_paths_do_not_gain_model_time_as_extra_network_budget():
     with pytest.raises(SourcePreparationError, match="repository_source_timeout"):
         await collect(transport, config(director_prepare_timeout_seconds=0.15), paths=(SOURCE,))
     assert transport.model_inputs == []
+
+
+async def test_network_deadline_still_limits_source_reads_after_slow_selection():
+    transport = Repository(model_delay=0.3, source_delay=0.3)
+    with pytest.raises(SourcePreparationError, match="repository_source_timeout"):
+        await collect(transport, config(director_prepare_timeout_seconds=0.15))
+    assert len(transport.model_inputs) == 1
