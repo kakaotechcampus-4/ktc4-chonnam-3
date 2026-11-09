@@ -250,3 +250,270 @@ def _bindings(cases: list[Any]) -> dict[str, dict[str, object]]:
                 "error_code": type(error).__name__,
             }
     return bindings
+
+
+async def execute(args: argparse.Namespace) -> dict[str, Any]:
+    llm_judge = getattr(args, "llm_judge", False)
+    calibration_only = getattr(args, "calibrate_judge_only", False)
+    judge_maximum = getattr(args, "max_judge_attempts", None)
+    diagnostic_judge = getattr(args, "diagnostic_judge", False)
+    rejudge_path = getattr(args, "rejudge_results", None)
+    judge_prompt_version = getattr(args, "judge_prompt_version", None)
+    if judge_prompt_version is not None and (
+        not llm_judge
+        or getattr(args, "judge_prompt", None) is None
+        or type(judge_prompt_version) is not str
+        or not 1 <= len(judge_prompt_version) <= 100
+        or any(not (char.isalnum() or char in "_.@-") for char in judge_prompt_version)
+    ):
+        raise ValueError("explicit Judge prompt version requires a bounded custom Judge prompt")
+    if rejudge_path is not None and (
+        args.execute or calibration_only or not llm_judge or args.max_model_attempts is not None
+    ):
+        raise ValueError(
+            "--rejudge-results requires only bounded --llm-judge, no service execution"
+        )
+    if diagnostic_judge and (not args.execute or not (llm_judge or args.grader)):
+        raise ValueError("--diagnostic-judge requires explicit --execute and a grader")
+    if calibration_only and not llm_judge:
+        raise ValueError("--calibrate-judge-only requires --llm-judge")
+    if llm_judge and not (args.execute or calibration_only or rejudge_path is not None):
+        raise ValueError("--llm-judge requires explicit execution or calibration-only mode")
+    if llm_judge and (type(judge_maximum) is not int or judge_maximum < 1):
+        raise ValueError("--llm-judge requires positive --max-judge-attempts")
+    if not llm_judge and judge_maximum is not None:
+        raise ValueError("--max-judge-attempts requires --llm-judge")
+    if args.grader and llm_judge:
+        raise ValueError("--grader and --llm-judge are mutually exclusive")
+    if args.execute and (type(args.max_model_attempts) is not int or args.max_model_attempts < 1):
+        raise ValueError("--execute requires positive --max-model-attempts")
+    if args.grader and not args.execute:
+        raise ValueError("validation mode does not execute a grader")
+    if not calibration_only and args.manifest is None:
+        raise ValueError("service execution/validation requires --manifest")
+    # 축약 v1 예외는 control 검수 모드에만 열고 서비스·재판정의 기본 검증은 유지한다.
+    loaded_cases = (
+        load_cases(args.cases, allow_legacy_report_contracts=True)
+        if calibration_only
+        else load_cases(args.cases)
+    )
+    cases = [case for case in loaded_cases if args.split == "all" or case.split == args.split]
+    if args.approved_only:
+        cases = [case for case in cases if case.expectation["review"]["status"] == "approved"]
+    bindings = _bindings(cases)
+    previous = None
+    previous_bytes = None
+    if rejudge_path is not None:
+        previous_bytes = await asyncio.to_thread(Path(rejudge_path).read_bytes)
+        previous = json.loads(previous_bytes)
+        if not isinstance(previous, dict) or previous.get("run_state") not in {None, "completed"}:
+            raise ValueError("rejudge source must be a completed result")
+        previous_metadata = previous.get("metadata")
+        if not isinstance(previous_metadata, dict) or not dataset_matches(
+            previous_metadata.get("dataset"), args.cases
+        ):
+            raise ValueError("rejudge dataset or binding manifest mismatch")
+        # 무결성 확인을 Settings/HTTP client 생성보다 먼저 끝낸다.
+        validate_rejudge_source(cases, previous, bindings=bindings)
+    settings = None
+    if args.execute or llm_judge:
+        env_file = getattr(args, "env_file", None)
+        settings = (
+            Settings(_env_file=env_file) if env_file is not None else get_settings()
+        ).require_llm()
+    if args.manifest is not None:
+        prompts, limits, metadata = load_manifest(args.manifest)
+    else:
+        assert settings is not None
+        # 작업별 제한은 manifest의 task_limits로만 지정한다. 인자 없는 호출을 쓴다.
+        prompts, limits = {}, settings.call_limits()
+        metadata = {"prompts": [], "limits": asdict(limits), "task_limits": {}}
+    task_limits = {
+        task: replace(limits, **values) for task, values in metadata["task_limits"].items()
+    }
+    metadata.update(source_metadata())
+    metadata["dataset"] = dataset_metadata(args.cases)
+    metadata.update(
+        started_at=datetime.now(UTC).isoformat(),
+        split=args.split,
+        mode="rejudge"
+        if rejudge_path is not None
+        else "judge_calibration"
+        if calibration_only
+        else "execute"
+        if args.execute
+        else "validate",
+        max_model_attempts=args.max_model_attempts,
+        max_judge_attempts=judge_maximum,
+        diagnostic_judge=diagnostic_judge,
+    )
+
+    def unused_factory() -> None:
+        raise RuntimeError("validation must not call a model")
+
+    factory: Any = unused_factory
+    model_budget = None
+    if args.execute:
+        model_budget = ModelAttemptBudget(args.max_model_attempts, settings)
+        factory = model_budget.factory
+    grader = None
+    judge_budget = None
+    model_judge = None
+    if args.grader:
+        # 별도 Judge를 명시한 경우만 판정한다. 고정 정답 문장 일치를 기본 Judge로 두지 않는다.
+        module, name = args.grader.split(":", 1)
+        grader = getattr(importlib.import_module(module), name)
+        if not callable(grader):
+            raise ValueError("grader must be callable")
+        metadata["grader"] = args.grader
+    if llm_judge:
+        assert settings is not None
+        assert type(judge_maximum) is int
+        prompt_path = (
+            getattr(args, "judge_prompt", None) or REPO_ROOT / "ai/prompts/evaluation-judge-v2.md"
+        )
+        template = prompt_path.read_text(encoding="utf-8-sig")
+        prompt = c.PromptSpec(
+            "evaluation_judge",
+            judge_prompt_version or "evaluation-judge-v2",
+            settings.llm_default_model,
+            template,
+        )
+        judge_budget = ModelAttemptBudget(judge_maximum, settings)
+        judge_limits = task_limits.get("evaluation_judge", limits)
+        model_judge = ModelJudge(
+            prompt,
+            judge_limits,
+            judge_budget.factory,
+            sensitive_values=(settings.openai_api_key.get_secret_value(), settings.llm_base_url),
+        )
+        grader = model_judge
+        metadata["grader"] = {
+            "kind": "bounded_llm_judge",
+            "model": prompt.model,
+            "prompt_version": prompt.version,
+            "template_sha256": hashlib.sha256(template.encode()).hexdigest(),
+            "limits": asdict(judge_limits),
+        }
+    if previous is not None:
+        assert grader is not None and previous_bytes is not None
+        metadata["rejudge_source_sha256"] = hashlib.sha256(previous_bytes).hexdigest()
+        result = await rejudge_cases(
+            cases,
+            previous,
+            grader,
+            metadata=metadata,
+            bindings=bindings,
+            checkpoint=getattr(args, "_checkpoint", None),
+        )
+    else:
+        result = await run_cases(
+            cases,
+            ServiceExecutor(
+                prompts, limits, factory, dry_run=not args.execute, task_limits=task_limits
+            ),
+            metadata=metadata,
+            grader=grader,
+            calibration_only=calibration_only,
+            bindings=bindings,
+            diagnostic_judge=diagnostic_judge,
+            checkpoint=getattr(args, "_checkpoint", None),
+        )
+    if model_budget is not None:
+        result["service_budget"] = {
+            "maximum": args.max_model_attempts,
+            "remaining": model_budget.remaining,
+        }
+    if judge_budget is not None:
+        result["judge_budget"] = {"maximum": judge_maximum, "remaining": judge_budget.remaining}
+        result["judge_audit"] = model_judge.records if model_judge is not None else []
+        attempts = [attempt for record in result["judge_audit"] for attempt in record["attempts"]]
+        result["judge_summary"] = {
+            "judgments": len(result["judge_audit"]),
+            "http_attempts": len(attempts),
+            "failed_judgments": sum(
+                record["failure"] is not None for record in result["judge_audit"]
+            ),
+            "input_tokens": sum(attempt["input_tokens"] for attempt in attempts)
+            if attempts and all(type(attempt.get("input_tokens")) is int for attempt in attempts)
+            else None,
+            "output_tokens": sum(attempt["output_tokens"] for attempt in attempts)
+            if attempts and all(type(attempt.get("output_tokens")) is int for attempt in attempts)
+            else None,
+        }
+    return result
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--cases", type=Path, required=True, help="inputs/expectations를 포함한 사례 경로"
+    )
+    parser.add_argument(
+        "--manifest", type=Path, help="서비스 실행·검증에 필요한 프롬프트·CallLimits JSON"
+    )
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--split", choices=("dev", "holdout", "all"), default="dev")
+    parser.add_argument("--approved-only", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--execute", action="store_true")
+    mode.add_argument(
+        "--rejudge-results",
+        type=Path,
+        help="기존 성공 출력만 원문 context와 재판정한다. 서비스 모델은 실행하지 않음",
+    )
+    mode.add_argument(
+        "--calibrate-judge-only",
+        action="store_true",
+        help="서비스 실행 없이 검수된 control 출력만 Judge 교정",
+    )
+    mode.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="기본 동작: 입력만 검증하고 모델·Judge를 호출하지 않음",
+    )
+    parser.add_argument("--max-model-attempts", type=int)
+    judges = parser.add_mutually_exclusive_group()
+    judges.add_argument(
+        "--llm-judge", action="store_true", help="별도 명시 예산으로 공통 gateway의 모델 Judge 실행"
+    )
+    parser.add_argument("--max-judge-attempts", type=int)
+    parser.add_argument(
+        "--diagnostic-judge",
+        action="store_true",
+        help="미검수 사례도 진단하되 승인·정식 품질 분모에는 포함하지 않음",
+    )
+    parser.add_argument(
+        "--env-file", type=Path, help="선택 실행 설정 파일; 값은 결과에 기록하지 않음"
+    )
+    parser.add_argument(
+        "--judge-prompt", type=Path, help="선택적 Judge prompt 파일; 기본 evaluation-judge-v2.md"
+    )
+    parser.add_argument(
+        "--judge-prompt-version", help="별도 Judge prompt의 명시 버전; 기본 v2는 변경하지 않음"
+    )
+    judges.add_argument(
+        "--grader", help="선택적 동기/비동기 Judge 모듈:함수. 비용·상한은 해당 함수 책임"
+    )
+    args = parser.parse_args()
+    if args.execute and (args.max_model_attempts is None or args.max_model_attempts < 1):
+        parser.error("--execute requires positive --max-model-attempts")
+    if args.grader and not args.execute:
+        parser.error("--grader requires --execute")
+    try:
+        output = RunOutput(args.output)
+    except FileExistsError:
+        parser.error("output must be a new file; existing results are preserved")
+    args._checkpoint = output.checkpoint
+    try:
+        result = asyncio.run(execute(args))
+    except ValueError as error:
+        output.stop("failed", type(error).__name__)
+        parser.error(str(error))
+    except BaseException as error:
+        interrupted = isinstance(error, (KeyboardInterrupt, asyncio.CancelledError))
+        output.stop("interrupted" if interrupted else "failed", type(error).__name__)
+        raise
+    output.save(result, "completed")
+    print(json.dumps(result["summary"], ensure_ascii=False))
+    return technical_exit_code(result)
