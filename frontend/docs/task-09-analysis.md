@@ -46,7 +46,7 @@
 2026-09-22 사용자 요청으로 보완 필요 항목으로만 표시했다가, 2026-11-04 README 없는 저장소 하나로도 run 전체가 partial이 되어 면접을 시작할 수 없는 문제를 확인하고 보류를 해제했다.
 
 - 기존 [부분 실패 기준](../../spec/backend/features/analysis-run.md#부분-실패)은 DB `partial` → FE `failed`이며 성공 결과는 조회할 수 있다. 이 기준과 API는 변경하지 않는다.
-- [AnalysisFailed.tsx](../src/features/analysis/AnalysisFailed.tsx)는 result API 조회가 성공하고 `succeeded` 저장소가 1개 이상이면 “분석에 성공한 저장소 보기” 버튼으로 기존 저장소 선택 화면에 연결한다. 결과가 없는 실패 run은 result API가 `409 not_ready`라 버튼을 표시하지 않는다.
+- [AnalysisFailed.tsx](../src/features/analysis/AnalysisFailed.tsx)는 result API 조회가 성공하고 `succeeded` 저장소가 1개 이상이면 버튼을 거치지 않고 실패 안내 없이 기존 저장소 선택 화면으로 바로 이동한다. [RepoSelect.tsx](../src/features/analysis/RepoSelect.tsx)는 선택할 수 없는 카드가 있으면 “일부 레포는 분석하지 못했어요. 흐리게 표시된 레포는 선택할 수 없어요.”를 보여 준다. 결과가 없는 실패 run은 result API가 `409 not_ready`라 실패 화면에 남는다. 화면 기준은 [분석 명세](../../spec/frontend/features/analysis.md)를 따른다.
 - 모의 서버는 BE처럼 결과가 없는 실패 run의 result 조회를 `409 not_ready`로 응답하고, 부분 실패 run seed(`SEED_PARTIAL_RUN_ID`)로 두 경우를 재현한다.
 - 실제 BE·GitHub와의 연결 확인은 별도로 한다.
 
