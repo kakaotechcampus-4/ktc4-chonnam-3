@@ -15,6 +15,8 @@ import {
   type CreateInterviewRequest,
   type CreateInterviewResponse,
   type InterviewDetailResponse,
+  type RetryQuestionRequest,
+  type RetryQuestionResponse,
   type ReportResponse,
   type ReportGeneratingResponse,
   type FeedbackDisagreementRequest,
@@ -104,6 +106,8 @@ export const api = {
     request<ReportResponse | ReportGeneratingResponse>(`/interviews/${id}/report`),
   retryInterview: (id: string) =>
     request<CreateInterviewResponse>(`/interviews/${id}/retry`, { method: 'POST' }),
+  retryQuestion: (id: string, body: RetryQuestionRequest) =>
+    requestJson<RetryQuestionResponse>(`/interviews/${id}/question/retry`, 'POST', body),
   /** 나가기·레포 재선택의 면접 중단. 이미 abandoned면 다시 불러도 204다. api-spec.md #24. */
   abandonInterview: (id: string) =>
     request<void>(`/interviews/${id}/abandon`, { method: 'POST' }),

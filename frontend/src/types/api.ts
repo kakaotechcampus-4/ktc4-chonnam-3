@@ -311,6 +311,22 @@ export type InterviewDetailResponse = {
   remainingSeconds: number;
   turns: InterviewTurn[];
   lastError: InterviewLastError | null;
+  /** 구버전 응답에서는 생략된다. 저장 T3 이후 질문 생성만 복구할 때 서버가 허용한다. */
+  canRetryQuestion?: boolean;
+  questionRetryCount?: number;
+};
+
+export type QuestionRetryFailureReason =
+  | 'question_retry_unavailable'
+  | 'question_retry_in_progress'
+  | 'question_retry_failed'
+  | 'question_retry_limit';
+
+export type RetryQuestionRequest = { requestId: string };
+export type RetryQuestionResponse = {
+  interviewId: string;
+  sessionId: string;
+  turnNo: number;
 };
 
 // 4. WebSocket 메시지 타입 — frontend/docs/api-spec.md #18
