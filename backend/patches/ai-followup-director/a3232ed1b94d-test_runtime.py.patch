@@ -478,3 +478,37 @@ diff --git a/ai/tests/agents/director/test_runtime.py b/ai/tests/agents/director
 +        else "director-plan.v2"
 +    )
      properties = provider.requests[0].output_schema["properties"]["question"]["properties"]
+     assert "evaluation_keys" in properties["question_contract"]["required"]
+     assert "parent_turn_id" in properties
+     assert len(provider.requests) == 2
+     assert [request.max_attempts for request in provider.requests] == [1, 1]
++
++
++def test_v8_restores_readable_feedback_policy_without_rewriting_historical_prompts():
++    prompts = Path(__file__).resolve().parents[3] / "prompts"
++    v6 = (prompts / "director-runtime-v6.md").read_bytes()
++    v8 = (prompts / "director-runtime-v8.md").read_bytes()
++    assert v8.startswith(v6)
++    suffix = v8[len(v6) :].decode("utf-8")
++    assert "?" not in suffix and "\ufffd" not in suffix
++    assert suffix.count("\n- ") == 5
++    for policy in (
++        "유한 질문 복구 참고자료 — director_v8",
++        "비권위적 참고자료",
++        "operation=review에는 피드백을 전달하지 않는다",
++        "현재 제공된 실제 ID enum",
++        "Plan 1회와 독립 Review 1회",
++    ):
++        assert policy in suffix
++    recipe = json.loads((prompts / "runtime-prompts.json").read_text(encoding="utf-8"))
++    assert recipe["director"] == {"version": "director_v8", "template": "director-runtime-v8.md"}
+ 
+ 
+ @pytest.mark.parametrize("keys", [(), ("technical_reasoning", "communication")])
+@@ -876,4 +1332,5 @@
+     assert provider.requests[1].payload["current_answer"]["answer"] == (
+         "종료 콜백을 확인하지 못했습니다."
+     )
+-    assert provider.requests[1].payload["reference_texts"][0]["text"] == evidence.content
++    assert provider.requests[1].payload["reference_texts"] == []
++    assert provider.requests[1].payload["context"]["evidence"][0] == asdict(evidence)
