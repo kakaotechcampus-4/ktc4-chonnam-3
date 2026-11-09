@@ -872,3 +872,259 @@ def test_unsolicited_plan_fields_do_not_bypass_the_strict_output_schema():
     assert result.failure is not None and result.failure.stage == "schema"
     assert result.data is None
     assert len(provider.requests) == 1
+
+
+def run_version(provider, ctx, *, version="director_v4", **options):
+    return asyncio.run(
+        runtime().run_director(
+            ctx,
+            prompt=replace(PROMPT, version=version),
+            limits=LIMITS,
+            model_call=provider,
+            **options,
+        )
+    )
+
+
+def completed_turn_context(answered):
+    personas = (
+        "hr_manager",
+        "tech_lead",
+        "tech_lead",
+        "domain_lead",
+        "tech_lead",
+        "tech_lead",
+        "domain_lead",
+        "tech_lead",
+        "tech_lead",
+    )[:answered]
+    history = tuple(
+        c.HistoryTurn(f"turn-{number}", persona, f"질문 {number}", f"답변 {number}", None)
+        for number, persona in enumerate(personas, 1)
+    )
+    return context(
+        turn_no=min(answered + 1, 9),
+        current_turn_id=history[-1].turn_id if history else None,
+        current_question_contract=question().question_contract if history else None,
+        history=history,
+        persona_counts=tuple(
+            c.PersonaCount(persona, personas.count(persona))
+            for persona in ("hr_manager", "tech_lead", "domain_lead")
+        ),
+        allowed_personas=("tech_lead",) if history else ("hr_manager",),
+    )
+
+
+@pytest.mark.parametrize(
+    "version",
+    [
+        "director_v5",
+        "director_v5@luna",
+        "director_v5@sol",
+        "director_v6",
+        "director_v6@luna",
+        "director_v6@sol",
+        "director_v7",
+        "director_v7@recovery",
+        "director_v8",
+        "director_v8@recovery",
+    ],
+)
+def test_v5_eight_answers_leave_the_ninth_question_for_plan_and_review(version):
+    ctx = completed_turn_context(8)
+    candidate = replace(question(), persona="tech_lead")
+    provider = Provider(plan(candidate), review())
+    result = run_version(provider, ctx, version=version)
+
+    assert result.succeeded and result.data.decision.data.next_step == "ask"
+    assert len(provider.requests) == 2
+    for request in provider.requests:
+        assert request.payload["turn_state"] == {
+            "phase": "generate_next_question",
+            "next_question_no": 9,
+            "answered_turn_count": 8,
+            "last_answered_turn_no": 8,
+            "last_answered_turn_id": "turn-8",
+            "total_questions": 9,
+            "remaining_questions": 1,
+            "is_final_question": True,
+            "finish_authority": "controller_after_final_answer",
+        }
+        assert request.payload["current_answer"]["answer"] == "답변 8"
+        assert request.payload["context"]["history"] == asdict(ctx)["history"]
+        assert request.max_attempts == 1
+    assert [request.payload["operation"] for request in provider.requests] == ["plan", "review"]
+
+
+@pytest.mark.parametrize("version", ["director_v5", "director_v6", "director_v7", "director_v8"])
+def test_v5_first_hr_question_has_no_previous_answer_or_completed_turn(version):
+    provider = Provider(plan(), review())
+    result = run_version(provider, completed_turn_context(0), version=version)
+
+    assert result.succeeded and result.data.question.data.persona == "hr_manager"
+    for request in provider.requests:
+        state = request.payload["turn_state"]
+        assert state["next_question_no"] == 1
+        assert state["answered_turn_count"] == 0
+        assert state["last_answered_turn_no"] is None
+        assert state["last_answered_turn_id"] is None
+        assert state["remaining_questions"] == 9
+        assert state["is_final_question"] is False
+        assert request.payload["current_answer"] is None
+
+
+@pytest.mark.parametrize("invalid", ["nine_answers", "next_number", "last_answer", "counts"])
+@pytest.mark.parametrize("version", ["director_v5", "director_v6", "director_v7", "director_v8"])
+def test_v5_invalid_turn_state_never_calls_a_provider_or_invents_completion(invalid, version):
+    ctx = completed_turn_context(9 if invalid == "nine_answers" else 8)
+    if invalid == "next_number":
+        ctx = replace(ctx, turn_no=8)
+    elif invalid == "last_answer":
+        ctx = replace(ctx, current_turn_id="turn-7")
+    elif invalid == "counts":
+        ctx = replace(ctx, persona_counts=(c.PersonaCount("tech_lead", 8),))
+    provider = Provider()
+
+    result = run_version(provider, ctx, version=version)
+
+    assert result.data is None and result.failure.error_code == "director_input_invalid"
+    assert result.failure.stage == "semantic"
+    assert not result.attempts and not provider.requests
+
+
+@pytest.mark.parametrize("version", ["director_v5", "director_v6", "director_v7", "director_v8"])
+def test_v5_turn_clarification_does_not_approve_an_independent_review_rejection(version):
+    candidate = replace(question(), persona="tech_lead")
+    provider = Provider(plan(candidate), review(context_valid=False, safe_alternative=False))
+    result = run_version(provider, completed_turn_context(8), version=version)
+
+    assert result.data is None
+    assert candidate_recovery(result.failure).recovery == "no_valid_candidate"
+    assert len(provider.requests) == 2
+
+
+def test_v4_payload_does_not_gain_a_v5_turn_state():
+    provider = Provider(plan(), review())
+    result = run_version(provider, context(), version="director_v4")
+    assert result.succeeded
+    assert all("turn_state" not in request.payload for request in provider.requests)
+
+
+def reference_candidate_context():
+    identifier = "9ced62ee-0598-4386-a7a5-862a599521ce"
+    evidence = c.Evidence(identifier, "repo-1", REF, "code", "saveEvent.ts", None, "save()", None)
+    ctx = replace(
+        completed_turn_context(3),
+        repositories=(c.ContextRepository("repo-1", REF, True, (), ()),),
+        evidence=(evidence,),
+        jd_requirements=(c.JDRequirement("jd-1", "요구사항", "required", "requirements", ()),),
+        evaluation_targets=(c.EvaluationTarget("tech_lead", ("problem_solving", "communication")),),
+    )
+    candidate = replace(
+        question(),
+        persona="tech_lead",
+        evidence_refs=(identifier,),
+        question_type="follow_up",
+        parent_turn_id="turn-3",
+        question_contract=replace(
+            question().question_contract,
+            basis_refs=(c.BasisRef("evidence", identifier), c.BasisRef("answer_turn", "turn-3")),
+            evaluation_keys=("problem_solving", "communication"),
+        ),
+    )
+    return candidate, ctx
+
+
+@pytest.mark.parametrize(
+    "version",
+    [
+        "director_v6",
+        "director_v6@luna",
+        "director_v6@sol",
+        "director_v7",
+        "director_v7@recovery",
+        "director_v8",
+        "director_v8@recovery",
+    ],
+)
+def test_v6_plan_bounds_registered_ids_and_personas_before_model_generation(version):
+    candidate, ctx = reference_candidate_context()
+    provider = Provider(plan(candidate), review())
+    result = run_version(provider, ctx, version=version)
+    assert result.succeeded
+    request = provider.requests[0]
+    assert request.schema_version == "director-plan.v3"
+    props = request.output_schema["properties"]["question"]["properties"]
+    assert props["persona"]["enum"] == ["tech_lead"]
+    assert props["evidence_refs"]["items"]["enum"] == list(candidate.evidence_refs)
+    assert "9ced62ee-0598-4386-a7a-862a599521ce" not in props["evidence_refs"]["items"]["enum"]
+    assert props["jd_requirement_ids"]["items"]["enum"] == ["jd-1"]
+    assert set(props["parent_turn_id"]["enum"]) == {None, "turn-1", "turn-2", "turn-3"}
+    variants = props["question_contract"]["properties"]["basis_refs"]["items"]["anyOf"]
+    ids = {
+        item["properties"]["kind"]["enum"][0]: item["properties"]["id"]["enum"] for item in variants
+    }
+    assert ids == {
+        "evidence": list(candidate.evidence_refs),
+        "answer_turn": ["turn-1", "turn-2", "turn-3"],
+        "jd_requirement": ["jd-1"],
+    }
+    assert request.payload["turn_state"]["next_question_no"] == 4
+    assert provider.requests[1].schema_version == "director-review.v1"
+
+
+def test_v6_actual_uuid_typo_remains_a_semantic_rejection_without_correction():
+    candidate, ctx = reference_candidate_context()
+    typo = replace(candidate, evidence_refs=("9ced62ee-0598-4386-a7a-862a599521ce",))
+    provider = Provider(plan(typo), review())
+    result = run_version(provider, ctx, version="director_v6")
+    assert result.data is None and result.failure.stage == "semantic"
+    assert len(provider.requests) == 1
+    assert provider.outputs == [review()]
+    assert provider.requests[0].output_schema["properties"]["question"]["properties"][
+        "evidence_refs"
+    ]["items"]["enum"] == list(candidate.evidence_refs)
+    with pytest.raises(c.ContractError, match="evidence_refs"):
+        runtime()._validate_candidate(typo, ctx, runtime()._references(ctx, {}), True)
+
+
+def test_v6_registered_but_unlinked_evidence_still_fails_cross_reference_validation():
+    candidate, ctx = reference_candidate_context()
+    second = replace(ctx.evidence[0], evidence_id="other-registered-id")
+    ctx = replace(ctx, evidence=ctx.evidence + (second,))
+    invalid = replace(candidate, evidence_refs=(second.evidence_id,))
+    provider = Provider(plan(invalid), review())
+    result = run_version(provider, ctx, version="director_v6")
+    assert result.data is None and result.failure.stage == "semantic"
+    assert len(provider.requests) == 1
+
+
+def test_v6_empty_source_registry_has_no_selectable_evidence_or_jd_ids():
+    provider = Provider(plan(), review())
+    assert run_version(provider, context(), version="director_v6").succeeded
+    props = provider.requests[0].output_schema["properties"]["question"]["properties"]
+    for field in ("evidence_refs", "jd_requirement_ids"):
+        assert props[field]["maxItems"] == 0
+        assert "enum" not in props[field]["items"]
+    assert props["question_contract"]["properties"]["basis_refs"]["maxItems"] == 0
+    assert props["parent_turn_id"]["enum"] == [None]
+
+
+def test_v6_invalid_source_snapshot_is_rejected_before_any_model_call():
+    candidate, ctx = reference_candidate_context()
+    ctx = replace(ctx, evidence=(replace(ctx.evidence[0], git_ref="b" * 40),))
+    provider = Provider()
+    result = run_version(provider, ctx, version="director_v6")
+    assert result.data is None and result.failure.stage == "semantic"
+    assert not provider.requests
+
+
+def test_v5_plan_schema_is_not_retroactively_narrowed_to_v6_ids():
+    candidate, ctx = reference_candidate_context()
+    provider = Provider(plan(candidate), review())
+    assert run_version(provider, ctx, version="director_v5").succeeded
+    request = provider.requests[0]
+    assert request.schema_version == "director-plan.v2"
+    assert request.output_schema["properties"]["question"]["properties"]["evidence_refs"][
+        "items"
+    ] == {"type": "string"}
