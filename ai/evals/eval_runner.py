@@ -220,3 +220,219 @@ def _diagnostic_verdict(judgment: Mapping[str, Any]) -> str:
         )
     verdict = judgment.get("verdict")
     return verdict if type(verdict) is str and verdict in VERDICTS else "error"
+
+
+def _automatic_checks(
+    rows: Sequence[Mapping[str, Any]], controls: Mapping[str, Any] | None
+) -> dict[str, Any]:
+    inputs_passed = inputs_failed = service_passed = service_failed = 0
+    for row in rows:
+        if row["review_status"] == "invalid" or row.get("execution_scope") == "judge_controls_only":
+            continue
+        if row["error_stage"] == "input":
+            inputs_failed += 1
+        elif row["status"] in {"succeeded", "validated_only"} or (
+            row["status"] == "failed" and row["error_stage"] != "configuration"
+        ):
+            inputs_passed += 1
+        if row["status"] == "succeeded":
+            service_passed += 1
+        elif row["status"] == "failed" and row["error_stage"] not in {
+            "input",
+            "configuration",
+            "budget",
+        }:
+            service_failed += 1
+    reports = [row for row in rows if row["kind"] == "report"]
+    checked_reports = [row for row in reports if row["status"] == "succeeded"]
+    bad_forms = sum(bool(check_form(row["output"])) for row in checked_reports)
+    control_rows = controls.get("controls", []) if controls else []
+    controls_passed = controls_failed = 0
+    for control in control_rows:
+        judgment = control["judge"]
+        failure = judgment.get("failure")
+        if failure and failure.get("error_code") == "evaluation_budget_exhausted":
+            continue
+        if not failure and judgment.get("verdict") == control["expected_verdict"]:
+            controls_passed += 1
+        else:
+            controls_failed += 1
+    candidates = [row for row in rows if row["review_status"] not in {"approved", "invalid"}]
+    judgments = [row["diagnostic_judge"] for row in candidates if row["diagnostic_judge"]]
+    diagnostic_failed = sum(_diagnostic_verdict(item) == "error" for item in judgments)
+    diagnostic_passed = sum(_diagnostic_verdict(item) in VERDICTS for item in judgments)
+    return {
+        "input_contract": _check_summary(len(rows), inputs_passed, inputs_failed),
+        "service_execution": _check_summary(len(rows), service_passed, service_failed),
+        "report_form": _check_summary(len(reports), len(checked_reports) - bad_forms, bad_forms),
+        "judge_controls": _check_summary(len(control_rows), controls_passed, controls_failed),
+        # Judge가 유효한 reject를 반환해도 실행 자체는 성공이다. 판정별 수는 별도로 남긴다.
+        "diagnostic_judge_execution": _check_summary(
+            len(candidates), diagnostic_passed, diagnostic_failed
+        ),
+    }
+
+
+async def run_cases(
+    cases: Sequence[Case],
+    executor: Executor,
+    *,
+    metadata: Mapping[str, object],
+    grader: GraderLike | None = None,
+    calibration_only: bool = False,
+    bindings: Mapping[str, Mapping[str, object]] | None = None,
+    diagnostic_judge: bool = False,
+    checkpoint: Checkpoint | None = None,
+) -> dict[str, Any]:
+    """검수 전 실행도 진단 기록으로 남기고 품질 통과와 분모에서는 구분한다."""
+    rows: list[dict[str, Any]] = []
+    outputs: dict[str, object] = {}
+    for case in cases:
+        stem = f"{case.case_id}.v{case.version}"
+        await _checkpoint(checkpoint, metadata, rows, len(cases), stem)
+        review_status = case.expectation["review"]["status"]
+        row: dict[str, Any] = {
+            "case": stem,
+            "kind": case.kind,
+            "split": case.split,
+            "source_group_id": case.source_group_id,
+            "review_status": review_status,
+            "input_hash": _hash(case.payload),
+            "expectation_hash": _hash(case.expectation),
+            "quality": f"excluded_{review_status}",
+            "cost_usd": None,
+            "cost_status": "not_configured",
+            "attempts": [],
+            "output": None,
+            "input_tokens": None,
+            "output_tokens": None,
+            "error_stage": None,
+            "error_code": None,
+            "input_binding": dict(bindings.get(stem, {})) if bindings else None,
+            "judge": None,
+            "diagnostic_judge": None,
+            "service_latency_ms": 0,
+        }
+        if review_status == "invalid":
+            row.update(status="not_executed", latency_ms=0)
+            rows.append(row)
+            await _checkpoint(checkpoint, metadata, rows, len(cases), None)
+            continue
+        if calibration_only:
+            binding = bindings.get(stem, {}) if bindings else {}
+            row.update(
+                status="not_executed",
+                latency_ms=0,
+                error_stage="input" if binding.get("error_code") else None,
+                error_code=binding.get("error_code"),
+                execution_scope="judge_controls_only",
+            )
+            if review_status == "approved":
+                row["quality"] = "not_graded"
+            rows.append(row)
+            await _checkpoint(checkpoint, metadata, rows, len(cases), None)
+            continue
+        started = time.perf_counter()
+        attempts: tuple[dict[str, Any], ...] = ()
+        try:
+            # 실행기는 입력만 받는다. 정답·pair·검수·control 종류를 함께 전달하지 않는다.
+            execution = await executor(case.kind, case.model_input())
+            attempts = execution.attempts
+            row.update(
+                status="validated_only" if execution.validated_only else "succeeded",
+                output=execution.output,
+                output_hash=_hash(execution.output),
+                service_latency_ms=round((time.perf_counter() - started) * 1000),
+            )
+            if execution.artifacts is not None:
+                checked_artifacts = validate_artifacts(dict(execution.artifacts))
+                row.update(
+                    artifacts=checked_artifacts,
+                    artifacts_hash=_hash(checked_artifacts),
+                )
+            if not execution.validated_only:
+                outputs[stem] = execution.output
+            if review_status == "approved":
+                row["quality"] = "not_graded"
+            if grader is not None and not execution.validated_only:
+                if review_status == "approved" or diagnostic_judge:
+                    rubric = {
+                        key: copy.deepcopy(case.expectation[key])
+                        for key in ("allowed", "forbidden")
+                    }
+                    try:
+                        judgment = await call_grader(
+                            grader,
+                            rubric,
+                            _candidate(execution.output, execution.artifacts),
+                            source_context=build_judge_context(case.model_input()),
+                        )
+                        field = "judge" if review_status == "approved" else "diagnostic_judge"
+                        row[field] = asdict(judgment)
+                        verdict = judgment.verdict
+                        if judgment.failure is not None:
+                            raise ValueError("judge execution failed")
+                        if verdict not in VERDICTS:
+                            raise ValueError("invalid grader verdict")
+                        if review_status == "approved":
+                            row["quality"] = verdict
+                    except Exception:
+                        if review_status == "approved":
+                            row["quality"] = "judge_error"
+                        elif row["diagnostic_judge"] is None:
+                            row["diagnostic_judge"] = {
+                                "verdict": None,
+                                "failure": {
+                                    "stage": "judge",
+                                    "error_code": "diagnostic_judge_error",
+                                },
+                            }
+        except ExecutionError as exc:
+            attempts = exc.attempts
+            row.update(status="failed", error_stage=exc.stage, error_code=exc.code)
+            if review_status == "approved":
+                row["quality"] = "execution_failed"
+        except Exception as exc:
+            row.update(status="failed", error_stage="executor", error_code=type(exc).__name__)
+            if review_status == "approved":
+                row["quality"] = "execution_failed"
+        row["attempts"] = list(attempts)
+        row["input_tokens"] = _usage(attempts, "input_tokens")
+        row["output_tokens"] = _usage(attempts, "output_tokens")
+        row["latency_ms"] = round((time.perf_counter() - started) * 1000)
+        rows.append(row)
+        await _checkpoint(checkpoint, metadata, rows, len(cases), None)
+    counts = Counter(row["status"] for row in rows)
+    evaluated = {"accept", "reject", "ambiguous", "judge_error", "execution_failed"}
+    controls = None
+    if grader is not None:
+        try:
+            controls = await check_grader_async(cases, grader)
+        except Exception as exc:
+            controls = {"status": "failed", "error_code": type(exc).__name__}
+    return {
+        "format_version": 1,
+        "metadata": dict(metadata),
+        "cases": rows,
+        "summary": {
+            "total": len(rows),
+            "statuses": dict(counts),
+            "approved_cases": sum(row["review_status"] == "approved" for row in rows),
+            "quality_denominator": sum(row["quality"] in evaluated for row in rows),
+            "quality_passes": sum(row["quality"] == "accept" for row in rows),
+            "automatic_checks": _automatic_checks(rows, controls),
+            "diagnostic_verdicts": dict(
+                Counter(
+                    _diagnostic_verdict(row["diagnostic_judge"])
+                    for row in rows
+                    if row["diagnostic_judge"] is not None
+                )
+            ),
+            "human_review_status": "deferred",
+            "release_gate_passed": None,
+            "quality_gate_status": "human_criteria_and_judge_calibration_required",
+        },
+        "report_checks": grade_reports(cases, outputs, only_approved=True),
+        # Judge 자체의 오수락·오거절은 서비스 출력의 판정과 별도 결과로 기록한다.
+        "grader_controls": controls,
+    }
