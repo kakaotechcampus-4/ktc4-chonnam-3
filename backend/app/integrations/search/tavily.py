@@ -160,3 +160,182 @@ def checked_source_url(url: object, domains: tuple[str, ...]) -> str:
     if not any(host == domain or host.endswith("." + domain) for domain in allowed):
         raise SearchError("invalid_source")
     return urlunsplit(("https", host, value.path or "/", value.query, ""))
+
+
+class TavilyClient:
+    def __init__(
+        self, settings: TavilySettings, transport: httpx.AsyncBaseTransport | None = None
+    ) -> None:
+        self.settings, self.transport = settings, transport
+
+    async def search(
+        self,
+        query: str,
+        *,
+        domains: tuple[str, ...],
+        budget: SearchBudget,
+        max_results: int | None = None,
+    ) -> SearchResult:
+        try:
+            query = canonical_external_query(query)
+        except ExternalQueryError as exc:
+            raise SearchError(str(exc)) from None
+        allowed = _domains(domains)
+        limit = self.settings.max_results if max_results is None else max_results
+        try:
+            query_bytes = len(query.encode("utf-8")) if isinstance(query, str) else 0
+        except UnicodeError:
+            raise SearchError("invalid_query") from None
+        if (
+            not isinstance(query, str)
+            or not query.strip()
+            or query_bytes > 4096
+            or type(limit) is not int
+            or not 1 <= limit <= self.settings.max_results
+        ):
+            raise SearchError("invalid_query")
+        body = await self._post(
+            "search",
+            {
+                "query": query,
+                "search_depth": "basic",
+                "max_results": limit,
+                "include_domains": list(allowed),
+                "include_domains_mode": "restrict",
+                "include_answer": False,
+                "include_raw_content": False,
+                "auto_parameters": False,
+                "include_usage": True,
+            },
+            budget,
+        )
+        sources, limitations = self._sources(body, "content", "search_snippet", allowed, None)
+        return SearchResult(sources, _credits(body), limitations)
+
+    async def extract(
+        self, urls: tuple[str, ...], *, domains: tuple[str, ...], budget: SearchBudget
+    ) -> ExtractResult:
+        allowed = _domains(domains)
+        if not 1 <= len(urls) <= 5:
+            raise SearchError("invalid_source")
+        checked = tuple(dict.fromkeys(checked_source_url(url, allowed) for url in urls))
+        body = await self._post(
+            "extract",
+            {
+                "urls": list(checked),
+                "extract_depth": "basic",
+                "format": "markdown",
+                "include_images": False,
+                "include_usage": True,
+            },
+            budget,
+        )
+        sources, limitations = self._sources(
+            body, "raw_content", "extracted_page", allowed, set(checked)
+        )
+        returned = {item.url for item in sources}
+        failures = tuple(
+            ExtractFailure(url, "extraction_failed") for url in checked if url not in returned
+        )
+        return ExtractResult(sources, failures, _credits(body), limitations)
+
+    async def _post(
+        self, operation: str, payload: dict[str, object], budget: SearchBudget
+    ) -> dict[str, object]:
+        budget.reserve()
+        try:
+            async with asyncio.timeout(self.settings.timeout_seconds):
+                async with httpx.AsyncClient(
+                    timeout=self.settings.timeout_seconds,
+                    transport=self.transport,
+                    follow_redirects=False,
+                    trust_env=False,
+                ) as client:
+                    async with client.stream(
+                        "POST",
+                        "https://api.tavily.com/" + operation,
+                        headers={
+                            "Authorization": "Bearer " + self.settings.api_key.get_secret_value()
+                        },
+                        json=payload,
+                    ) as response:
+                        if response.status_code != 200:
+                            status = response.status_code
+                            reason = (
+                                "unauthorized"
+                                if status in (401, 403)
+                                else "rate_limited"
+                                if status == 429
+                                else "quota_exhausted"
+                                if status in (402, 432, 433)
+                                else "provider_error"
+                            )
+                            raise SearchError(reason)
+                        data = bytearray()
+                        async for chunk in response.aiter_bytes():
+                            data.extend(chunk)
+                            if len(data) > self.settings.max_response_bytes:
+                                raise SearchError("response_too_large")
+                        body = json.loads(data)
+        except (httpx.TimeoutException, TimeoutError):
+            raise SearchError("timeout") from None
+        except httpx.HTTPError:
+            raise SearchError("provider_error") from None
+        except (ValueError, UnicodeError):
+            raise SearchError("invalid_response") from None
+        if not isinstance(body, dict):
+            raise SearchError("invalid_response")
+        budget.settle(_credits(body))
+        return body
+
+    def _sources(
+        self,
+        body: dict[str, object],
+        content_key: str,
+        scope: Literal["search_snippet", "extracted_page"],
+        domains: tuple[str, ...],
+        requested: set[str] | None,
+    ) -> tuple[tuple[WebSource, ...], tuple[str, ...]]:
+        rows = body.get("results")
+        if not isinstance(rows, list):
+            raise SearchError("invalid_response")
+        found: list[WebSource] = []
+        limitations: list[str] = []
+        for row in rows[: self.settings.max_results if requested is None else 5]:
+            if not isinstance(row, dict):
+                raise SearchError("invalid_response")
+            try:
+                url = checked_source_url(row.get("url"), domains)
+            except SearchError:
+                limitations.append("out_of_scope_result")
+                continue
+            if requested is not None and url not in requested:
+                limitations.append("unexpected_result")
+                continue
+            content = row.get(content_key)
+            if not isinstance(content, str) or not content.strip():
+                limitations.append("empty_content")
+                continue
+            truncated = len(content) > self.settings.max_content_chars
+            content = content[: self.settings.max_content_chars]
+            found.append(
+                WebSource(
+                    url,
+                    row.get("title") if isinstance(row.get("title"), str) else None,
+                    content,
+                    scope,
+                    datetime.now(UTC).isoformat(),
+                    hashlib.sha256(content.encode()).hexdigest(),
+                    row.get("published_date")
+                    if isinstance(row.get("published_date"), str)
+                    else None,
+                    ("content_truncated",) if truncated else (),
+                )
+            )
+        return tuple(found), tuple(dict.fromkeys(limitations))
+
+
+def _credits(body: dict[str, object]) -> int | None:
+    usage = body.get("usage")
+    value = usage.get("credits") if isinstance(usage, dict) else None
+    return value if type(value) is int and value >= 0 else None
