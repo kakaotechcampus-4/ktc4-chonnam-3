@@ -140,6 +140,7 @@ async def test_mlapi_console_vision_setting_is_connected_to_preview(client, db, 
 
 
 async def test_native_pdf_title_still_requests_layout_and_preserves_ocr_table(client, db, app):
+    app.state.settings.vision_pdf_layout = True
     owner = User(name="Mixed PDF owner")
     db.add(owner)
     await db.commit()
@@ -229,6 +230,7 @@ async def test_pdf_layout_supplement_can_be_explicitly_disabled(client, db, app)
 async def test_invalid_optional_vision_configuration_preserves_native_content(
     client, db, app, filename, data, status
 ):
+    app.state.settings.vision_pdf_layout = True
     owner = User(name="Invalid vision config owner")
     db.add(owner)
     await db.commit()
