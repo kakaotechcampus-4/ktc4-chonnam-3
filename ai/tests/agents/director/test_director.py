@@ -47,8 +47,11 @@ def candidate(contract, **changes):
 
 def model_output(question):
     data = asdict(question)
-    del data["question_contract"]
-    return data
+    # 기존 생성기의 출력 계약은 dataclass의 내부 관계 필드와 별개다.
+    return {
+        key: data[key]
+        for key in ("persona", "text", "topic_code", "evidence_refs", "jd_requirement_ids")
+    }
 
 
 def metadata():
@@ -146,9 +149,7 @@ def test_jd_category_survives_context_decode_and_director_payload(
     # 실제 Director가 만든 요청을 JSON으로 변환해 모델 호출 경계의 필드명·값을 확인한다.
     payload = json.loads(json.dumps(provider.requests[0].payload))
     assert payload["context"]["jd_requirements"] == [requirement]
-    assert payload["reference_texts"] == [
-        {"kind": "jd_requirement", "id": "jd-1", "text": "Python API 개발"}
-    ]
+    assert payload["reference_texts"] == []
 
 
 @pytest.mark.parametrize(
@@ -244,8 +245,8 @@ def test_followup_uses_real_source_text_and_injected_reviewer(context, contract)
     assert result.succeeded
     assert reviewed == [(asdict(context), question)]
     texts = provider.requests[0].payload["reference_texts"]
-    assert {"kind": "evidence", "id": "ev-1", "text": "cache code"} in texts
-    assert {"kind": "answer_turn", "id": "answered-turn-1", "text": "캐시를 담당했습니다."} in texts
+    assert texts == []
+    assert provider.requests[0].payload["context"] == asdict(context)
 
 
 @pytest.mark.parametrize(
