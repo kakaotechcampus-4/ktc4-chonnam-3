@@ -213,7 +213,7 @@ Sprint 1의 `question` 수신은 질문 전달 완료를 뜻하며 `questionEnd`
 | --- | --- | --- | --- |
 | `answer_too_long` | `ERR_ANSWER_TOO_LONG` | ✅ | 같은 턴 재제출 |
 | `answer_rejected` | `ERR_ANSWER_REJECTED` | ✅ | 같은 턴 재제출 (저장 실패) |
-| `question_failed` | `ERR_QUESTION_FAILED` | ❌ 진행 중 분석·질문 생성 실패 / ✅ 연결 교체·서버 오류 | ❌: "다음 질문을 만들지 못해 면접을 이어갈 수 없어요" — [같은 레포로 다시 시작](abandon → `POST /interviews/{id}/retry` → 새 면접 준비) · [나가기](abandon → 홈). retry 실패 안내는 재도전과 같다. ✅: 재연결 ([공통 0010](../../shared/decisions/0010-in-progress-question-failed-unrecoverable.md)) |
+| `question_failed` | `ERR_QUESTION_FAILED` | ❌ 진행 중 분석·질문 생성 실패 / ✅ 연결 교체·서버 오류 | ❌: GET이 허용하면 저장된 답변으로 #27 이어가기. 복구가 불가능하면 [같은 레포로 다시 시작](abandon → `POST /interviews/{id}/retry` → 새 면접 준비) · [나가기](abandon → 홈). retry 실패 안내는 재도전과 같다. ✅: 재연결 ([공통 0010](../../shared/decisions/0010-in-progress-question-failed-unrecoverable.md)) |
 | `question_gen_timeout` | `ERR_QUESTION_GEN_TIMEOUT` | ✅ | 면접 준비 실패 — `POST /interviews/{id}/prepare/retry` |
 | `persona_build_failed` | `ERR_PERSONA_BUILD_FAILED` | ✅ | 면접 준비 실패 — `POST /interviews/{id}/prepare/retry` |
 | `criteria_set_failed` | `ERR_CRITERIA_SET_FAILED` | ✅ | 면접 준비 실패 — `POST /interviews/{id}/prepare/retry` |
@@ -226,7 +226,7 @@ Sprint 1의 `question` 수신은 질문 전달 완료를 뜻하며 `questionEnd`
 
 `error`는 `reason`과 `recoverable`을 함께 보고 위 원인별 처리로 분기한다. [0010 결정](../../ai/decisions/0010-sprint1-interface-runtime-decisions.md)에 따라 LLM의 timeout/provider 오류·parse/schema 실패만 공통 호출 계층에서 자동 1회 재시도한다(최초 호출 포함 최대 2회). semantic 실패는 재호출하지 않는다. 진행 중 분석·질문 생성이 실패하면 `question_failed`는 `recoverable: false`로 온다([공통 0010](../../shared/decisions/0010-in-progress-question-failed-unrecoverable.md)). 연결 교체·서버 오류의 `recoverable: true`도 FE가 추가 재시도하거나 재연결로 LLM을 다시 호출하는 근거가 아니다.
 
-허용된 시도 후에도 질문 생성에 실패하면 [기존 면접 실패 정책](../../ai/features/interviewer.md#공개-메시지와-보류-항목)에 따라 오류 안내·기록 보존·명시적 나가기와 새 면접 흐름을 유지한다. 진행 중 면접의 새 수동 이어가기는 추가하지 않는다. 실패한 면접은 `in_progress`로 남으므로 FE는 abandon을 먼저 보낸 뒤 같은 레포로 재도전하거나 홈으로 나가게 한다(abandon 없이 홈으로 보내면 같은 run의 새 면접이 `409 session_limit_exceeded`가 된다).
+허용된 시도 후에도 질문 생성에 실패하면 [기존 면접 실패 정책](../../ai/features/interviewer.md#공개-메시지와-보류-항목)에 따라 오류 안내·기록 보존·명시적 나가기와 새 면접 흐름을 유지한다. [공통 0011](../../shared/decisions/0011-bounded-question-recovery.md)에 따라 저장 T3 이후 다음 질문 실패에만 서버가 허용한 명시 수동 이어가기 1라운드를 제공한다. GET의 questionRetryState로 요청 ID·진행 상태를 복원하며 새 UUID나 답변 재전송으로 우회하지 않는다. 실패한 면접은 `in_progress`로 남으므로 FE는 abandon을 먼저 보낸 뒤 같은 레포로 재도전하거나 홈으로 나가게 한다(abandon 없이 홈으로 보내면 같은 run의 새 면접이 `409 session_limit_exceeded`가 된다).
 
 `recoverable: false`면 서버가 WS 연결을 닫는다. 오류 안내나 연결 종료만으로 DB 상태를 `completed` 또는 `abandoned`로 바꾸지 않는다. 정상 완료는 9번째 답변 처리 완료, `abandoned`는 명시적 나가기 확인·레포 재선택에 따른다. 오류 전달·종료 요청·실패 기록 복원의 실제 연결은 구현·검증 대상이다.
 
@@ -275,7 +275,7 @@ Sprint 1의 `question` 수신은 질문 전달 완료를 뜻하며 `questionEnd`
 - 9번째 질문 수신만으로 완료하지 않고 답변 처리 뒤 `interviewEnd`에서 종료하며, 이탈·실패 기록에는 정상 완료 배분을 강제하지 않는다.
 - 준비 4단계 체크리스트 실시간 갱신
 - 준비 실패 → 면접 준비 실패 화면 전환, 실패 단계만 ✕ 표시
-- `reason`·`recoverable`에 맞는 안내와 액션 표시; `question_failed`에서 FE·재연결의 추가 LLM 재시도 없음
+- `reason`·`recoverable`에 맞는 안내와 액션 표시; `question_failed`에서 FE·재연결의 임의 LLM 재시도 없음. 공통 0011의 서버 허용 복구 API와 같은 요청 ID만 사용
 - 2000자 초과 → `answer_too_long` 처리, 같은 턴 재제출
 - `error.reason` 분기 확인 (Sprint 1 9종)
 - `onclose` 재연결 시 GET으로 세션·turns 먼저 확인; 401이면 refresh 없이 로그인 이동
@@ -299,3 +299,5 @@ Sprint 1의 `question` 수신은 질문 전달 완료를 뜻하며 `questionEnd`
 | 오디오 포맷 | — | `audio/webm; codecs=opus`, 48000Hz, mono, 최대 180초 |
 
 `answerMode`로 화면 로직을 분기하게 만들어 두면 Sprint 2 전환 시 이 값을 무시하지 않아도 된다.
+
+질문 복구 API 성공 후 새 WS 질문이 30초 안에 오지 않으면 결과 불명으로 안내하고 같은 요청 재확인·나가기를 연다. 진행 중 요청의 새로고침에서는 GET questionRetryState의 UUID를 복원한다. 실제 검토·실행 결과는 구현 기록에서 관리한다.

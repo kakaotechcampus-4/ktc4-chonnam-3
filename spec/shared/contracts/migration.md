@@ -47,9 +47,9 @@
 [공통 0011](../decisions/0011-bounded-question-recovery.md)에 따라 안전한 질문 후보 반려는
 자동 1라운드, 저장된 답변으로 이어받기는 명시 수동 1라운드로 제한한다.
 `POST /interviews/{id}/question/retry`의 요청 ID 재생과 새 realtime sessionId,
-GET의 선택 필드 `canRetryQuestion`·`questionRetryCount`, 409의
+GET의 선택 필드 `canRetryQuestion`·`questionRetryCount`·`questionRetryState`, 409의
 `question_retry_unavailable/in_progress/failed/limit`를 OpenAPI에 추가한다.
-기존 0010과 실패 기록을 보존하고 T3 재실행·전체 면접 초기화·검토 생략은 하지 않는다.
+0011은 기존 0010의 다음 질문 복구 금지 범위만 부분 대체한다. 0010 원문과 실패 기록을 보존하고 T3 재실행·전체 면접 초기화·검토 생략은 하지 않는다.
 이 행은 계약 변경이며 실제 구현·검증 결과나 팀 승인 상태를 대신하지 않는다.
 
 ## PR #15 JD 분류 정합화

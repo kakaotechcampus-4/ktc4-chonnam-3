@@ -7,9 +7,12 @@
 
 | 패치 | 대상 | 적용 전 SHA256 | 적용 후 SHA256 | patch SHA256 |
 | --- | --- | --- | --- | --- |
-| `64dd8fdd67b5-openapi.yaml.patch` | `spec/shared/contracts/openapi.yaml` | `38b427483a1ecfec7fba7bbab1521134329038c86ef4b83dd5a593673235fb20` | `559ee7bcf7655067c70d744604487c6ef4512dd77a2134221ad3009adb09407a` | `3b9903081a9a6097d751f463db90ad0249ef6d3e8f52a13aec139fb897eb83e2` |
+| `64dd8fdd67b5-openapi.yaml.patch` | `spec/shared/contracts/openapi.yaml` | `56177eaf37ba3d373f8783caa66aca96636c0ad41d37aee99ec446d158629c82` | `4c2c682d9671381827bbaad1d8a67eb161cf7e693d5f0b82059676dfa5546f9a` | `587ceb165805816d927defc379276b8d8d5dad9c7b7223fe79d8386908974e13` |
+| `e4690d14d501-api-spec.md.patch` | `frontend/docs/api-spec.md` | `ae94a2d78da0a6f6ec3591f2ee82267d2a6bdd04d6b16584dcb65a4a909c7841` | `e502accbfcefd3bf58ce9adb6bc1dd99d6aace99d80e8a37579ddc35d59a7d91` | `4695103df1a2d01f3dde5b61f9596013759a7d907823b850547966f1faf6456b` |
 
 선행의 실제 병합 커밋으로 재기준한 뒤 적용한다. 새 REST OpenAPI·FE 설명·REST 회귀는 함께 반영한다. 적용 커밋·지문·통합 회귀를 spec/ai/implementation.md에 기록한 뒤에만 대기 패치를 제거한다.
+
+공통 0011 원본은 이 계약 PR에 두고 0010의 다음 질문 복구 금지 범위만 부분 대체합니다. OpenAPI와 FE API 설명은 #212 계약 이후 함께 적용합니다. questionRetryState로 저장 UUID·실행 상태·기한을 복원하며 FE 합의와 로컬 승인을 구분합니다.
 
 <details>
 <summary>이전 안내·과거 기준 지문(현재 적용 지문으로 사용 금지)</summary>
