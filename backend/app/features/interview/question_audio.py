@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import secrets
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
@@ -21,7 +22,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError
 from app.db.models import InterviewSession, InterviewTurn
-from app.integrations.tts.google import SpeechAudio, SpeechSynthesizer, TtsError, TTSSettings
+from app.integrations.tts.google import (
+    FINALIZATION_TIMEOUT_SECONDS,
+    CompletedSpeechCancelled,
+    SpeechAudio,
+    SpeechSynthesizer,
+    TtsError,
+    TTSSettings,
+    complete_audio_finalization,
+)
 from app.shared.enums import Reason
 
 _RELEASE = """
@@ -29,6 +38,7 @@ if redis.call('GET', KEYS[1]) == ARGV[1] then
 return redis.call('DEL', KEYS[1]) end
 return 0
 """
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -86,6 +96,39 @@ class QuestionAudioService:
             + hashlib.sha256(value.encode()).hexdigest()
         )
 
+    async def _cache_completed(
+        self, key: str, audio: SpeechAudio, check_current: Callable[[], Awaitable[bool]] | None
+    ) -> None:
+        validated = False
+
+        async def store() -> None:
+            nonlocal validated
+            if (
+                not audio.data
+                or len(audio.data) > self.settings.max_audio_bytes
+                or audio.mime_type not in {"audio/mpeg", "audio/wav", "audio/ogg"}
+            ):
+                raise TtsError("invalid_response")
+            if check_current is not None and not await check_current():
+                raise TtsError("source_changed")
+            validated = True
+            try:
+                await self.redis.set(
+                    key,
+                    audio.mime_type.encode() + b"\n" + audio.data,
+                    ex=self.settings.cache_ttl_seconds,
+                )
+            except RedisError:
+                # 이미 얻은 결과는 반환한다. 새 합성의 예약·epoch 검사는 계속 fail-closed다.
+                logger.warning("question_audio_cache_write_unavailable")
+
+        try:
+            await complete_audio_finalization(store)
+        except TimeoutError:
+            if not validated:
+                raise TtsError("source_check_unavailable") from None
+            logger.warning("question_audio_cache_write_timeout")
+
     async def get(
         self, question: AudioQuestion, *, check_current: Callable[[], Awaitable[bool]] | None = None
     ) -> SpeechAudio:
@@ -93,7 +136,9 @@ class QuestionAudioService:
         lock = key + ":lock"
         acquired = False
         try:
-            async with asyncio.timeout(self.settings.timeout_seconds + 1):
+            # 공급자 대기와 정산·캐시 두 마무리 상한을 합쳐 lock이 먼저 풀리지 않게 한다.
+            operation_seconds = self.settings.timeout_seconds + 2 * FINALIZATION_TIMEOUT_SECONDS
+            async with asyncio.timeout(operation_seconds + 1):
                 while True:
                     cached = await self.redis.get(key)
                     if cached is not None:
@@ -101,29 +146,23 @@ class QuestionAudioService:
                     if await self.redis.get(key + ":failed") is not None:
                         raise TtsError("temporarily_unavailable")
                     acquired = bool(
-                        await self.redis.set(
-                            lock, owner, nx=True, ex=ceil(self.settings.timeout_seconds) + 2
-                        )
+                        await self.redis.set(lock, owner, nx=True, ex=ceil(operation_seconds) + 2)
                     )
                     if acquired:
                         # 최초 조회와 잠금 획득 사이에 다른 요청이 결과를 남겼을 수 있다.
                         cached = await self.redis.get(key)
                         if cached is not None:
                             return self._decode(question, cached)
-                        audio = await self.synthesizer.synthesize(question.text, question.persona)
-                        if (
-                            not audio.data
-                            or len(audio.data) > self.settings.max_audio_bytes
-                            or audio.mime_type not in {"audio/mpeg", "audio/wav", "audio/ogg"}
-                        ):
-                            raise TtsError("invalid_response")
-                        if check_current is not None and not await check_current():
-                            raise TtsError("source_changed")
-                        await self.redis.set(
-                            key,
-                            audio.mime_type.encode() + b"\n" + audio.data,
-                            ex=self.settings.cache_ttl_seconds,
-                        )
+                        try:
+                            audio = await self.synthesizer.synthesize(
+                                question.text, question.persona
+                            )
+                        except CompletedSpeechCancelled as exc:
+                            try:
+                                await self._cache_completed(key, exc.audio, check_current)
+                            finally:
+                                raise asyncio.CancelledError from None
+                        await self._cache_completed(key, audio, check_current)
                         return audio
                     await asyncio.sleep(0.05)
         except TimeoutError:
@@ -141,8 +180,12 @@ class QuestionAudioService:
         finally:
             if acquired:
                 with CancelScope(shield=True), suppress(RedisError):
-                    execute = cast(Callable[..., Awaitable[object]], self.redis.execute_command)
-                    await execute("EVAL", _RELEASE, 1, lock, owner)
+                    with suppress(TimeoutError):
+                        async with asyncio.timeout(FINALIZATION_TIMEOUT_SECONDS):
+                            execute = cast(
+                                Callable[..., Awaitable[object]], self.redis.execute_command
+                            )
+                            await execute("EVAL", _RELEASE, 1, lock, owner)
 
     def _decode(self, question: AudioQuestion, raw: bytes | str) -> SpeechAudio:
         if not isinstance(raw, bytes):
