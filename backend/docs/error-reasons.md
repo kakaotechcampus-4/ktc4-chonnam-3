@@ -52,6 +52,11 @@ OAuth와 분석·면접 등 모든 기능은 같은 레지스트리를 사용한
 | 면접 준비 재시도 | `session_limit_exceeded` | 409 |
 | 면접 준비 재시도 | `session_expired` | 410 |
 | 면접 조회 | `not_found` | 404 |
+| 면접 중단 | `already_completed` | 409 |
+| 다음 질문 이어가기 | `question_retry_unavailable` | 409 |
+| 다음 질문 이어가기 | `question_retry_in_progress` | 409 |
+| 다음 질문 이어가기 | `question_retry_failed` | 409 |
+| 다음 질문 이어가기 | `question_retry_limit` | 409 |
 | 재시도 | `not_found` | 404 |
 | 재시도 | `original_not_completed` | 409 |
 | 재시도 | `repository_unavailable` | 409 |
@@ -193,3 +198,5 @@ DB `analysis_jobs.status='partial'`은 FE `RunStatus`에 `failed`로 매핑한�
 | `answer_stale_turn` | true | 없음 | 이미 지나간 턴(`turn`이 현재 턴보다 작음)에 대한 늦은 답변. |
 
 `tts_failed`는 만들지 않는다. 질문 음성이 없거나 재생에 실패하면 FE가 질문 텍스트를 보여 준다(0007).
+
+`stt_unavailable`은 WebSocket 연결과 저장된 답변을 유지한다. FE는 답변을 차단하고 오류를 안내하며, 명시적 나가기로 `abandon`을 요청한다. 이 오류만으로 면접을 자동 종료하거나 저장된 입력 모드를 바꾸지 않는다.

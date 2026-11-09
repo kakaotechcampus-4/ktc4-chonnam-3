@@ -4,8 +4,8 @@ PR #57의 게시본은 미병합 #45의 수집 구현과 해당 파일의 보안
 
 ## 1. 현재 저장소의 배포 구성
 
-[`compose.deploy.yaml`](../../compose.deploy.yaml)은 `db`·`redis`·`migrate`·`api`·`worker`·`caddy`를
-실행하도록 구성되어 있다. `migrate`가 `alembic upgrade head`를 완료해야 API와 worker가 시작한다.
+[`compose.deploy.yaml`](../../compose.deploy.yaml)은 `db`·`redis`·`migrate`·`runtime-prompts`·`api`·`worker`·`caddy`를
+실행하도록 구성되어 있다. `migrate`가 `alembic upgrade head`를 완료하고 `runtime-prompts`가 등록을 마쳐야 API와 worker가 시작한다.
 [`frontend/Caddyfile.deploy`](../../frontend/Caddyfile.deploy)는 DuckDNS HTTPS origin 하나에서
 FE 정적 파일과 API를 제공하며 공개 `/auth/github/*`에는 내부 `/api` 접두사를 붙여 전달한다.
 
@@ -19,8 +19,9 @@ FE 정적 파일과 API를 제공하며 공개 `/auth/github/*`에는 내부 `/a
                                                 migrate / db / redis
 ```
 
-아래 LLM·활성 프롬프트 준비를 마친 뒤 저장소 루트에서 `docker compose -f compose.deploy.yaml up -d --build`로
-시작한다. 새 DB 또는 migration 호환성을 확인한 DB를 사용한다. 이전 `0002`·`0003` OAuth migration이
+아래 LLM·활성 프롬프트 준비를 확인한 뒤 저장소 루트에서 `./ops/deploy.sh`로 시작한다.
+이 스크립트는 같은 릴리스 이미지를 빌드하고 구 API·worker를 중지한 뒤 migration → 11종 프롬프트 등록 → API·worker 기동 순서로 실행한다.
+등록이 실패하면 새 API·worker를 시작하지 않는다. 새 DB 또는 migration 호환성을 확인한 DB를 사용한다. 이전 `0002`·`0003` OAuth migration이
 적용된 volume은 이력·스키마부터 확인하며, 시작 오류를 피하려고 데이터를 삭제하거나 임의 stamp하지 않는다.
 
 API는 `app.main:app --no-access-log`, worker는 `arq app.workers.analysis_app.WorkerSettings`로 실행한다.
@@ -40,25 +41,35 @@ worker 미실행이나 Redis 장애가 지속되는 동안에는 복구되지 �
 `LLM_MAX_OUTPUT_TOKENS`, `LLM_MAX_INPUT_BYTES`, `LLM_MAX_RESPONSE_BYTES`가 필수다.
 비밀값을 저장소에 올리지 않으며, 바꾼 환경값은 컨테이너를 재생성해 적용한다.
 
-`scripts.seed_all`은 도메인 지식만 넣으며 `prompt_versions`를 등록하지 않는다. 실제 L1 분석 전에는
-운영 대상 DB의 `repo_shallow` 활성 버전·모델·본문을 확인한다. 등록이 필요하면 검수된 UTF-8 파일과
+`scripts.seed_all`은 도메인 지식만 넣으며 `prompt_versions`를 등록하지 않는다.
+`runtime-prompts`는 `ai/prompts/runtime-prompts.json`의 실행용 11종을
+`python -m scripts.configure_ai_runtime --output /tmp/ai-runtime.json --apply`로 등록한다.
+repo_shallow·repo_deep·domain_category·doc_claims·director·claim_code·jd_extract_image·answer_analysis·report_score·report·profile_summary의
+소비 모듈과 지원 버전을 검사하고 한 트랜잭션으로 활성화한다. LLM API는 호출하지 않는다.
+운영 대상 DB의 활성 버전·모델·본문은 릴리스 전에 검수한다. 개별 등록이 필요하면 검수된 UTF-8 파일과
 새 version을 준비해 [프롬프트 등록 절차](llm-connection.md#앱에서-사용할-프롬프트-등록)를 따른다.
 환경의 모델명을 바꿔도 이미 등록된 DB prompt의 모델은 바뀌지 않는다.
 
 최초 배포는 이미지 build와 migration을 마친 뒤 API·worker에 트래픽을 열기 전에 등록한다.
-아래는 저장소 루트에서 실행할 등록 예시이며, 파일 경로·version·대상 `.env.deploy`를 확인하고 사용한다.
+아래는 자동 배포와 같은 순서의 수동 실행 예시다. 대상 `.env.deploy`와 릴리스 이미지를 확인하고 사용한다.
 이미 같은 검수본이 활성화돼 있으면 재등록할 필요가 없다. 진단용 prompt를 운영용으로 대신 쓰지 않는다.
 
 ```text
-docker compose -f compose.deploy.yaml build api worker migrate
+docker compose -f compose.deploy.yaml build api worker migrate runtime-prompts
 docker compose -f compose.deploy.yaml up -d --wait db redis
-docker compose -f compose.deploy.yaml run --rm --no-deps migrate
-docker compose -f compose.deploy.yaml run --rm --no-deps -v /absolute/path/reviewed-prompt.md:/tmp/reviewed-prompt.md:ro worker python -m scripts.register_prompt --task repo_shallow --version reviewed_l1_v1 --template /tmp/reviewed-prompt.md
+docker compose -f compose.deploy.yaml stop api worker
+docker compose -f compose.deploy.yaml up --no-deps --force-recreate --exit-code-from migrate migrate
+docker compose -f compose.deploy.yaml up --no-deps --force-recreate --exit-code-from runtime-prompts runtime-prompts
+docker compose -f compose.deploy.yaml up -d --remove-orphans
 ```
 
 등록과 활성 전환은 한 transaction이며, 기존 version의 모델·본문을 덮어쓰지 않는다. 등록 로그의
 task·version·model을 확인하고 같은 DB의 활성 row가 맞는지 확인한다. 일반 health와 합성 입력 연결 점검의
 성공은 활성 prompt·실제 분석·SSE까지 검증한 결과가 아니므로 배포 후 분석 접수부터 완료까지 따로 확인한다.
+
+같은 task/version의 모델·본문이 다르면 등록과 배포를 중단한다. 기존 행을 덮어쓰거나 자동 stamp하지 않는다.
+모델 교체처럼 별도 배포 버전이 필요하면 `--deployment <검수한-식별자>`로 새 manifest를 준비·검수하고,
+해당 릴리스의 `runtime-prompts` 명령에도 같은 인자를 명시한 뒤 적용한다.
 
 별도 `app.deploy_check:app`은 `/api/health`만 제공하는 점검 앱으로 남아 있으며 현재 compose의
 실행 대상은 아니다. `ops/deploy.sh`의 health 성공은 GitHub 로그인·세션·worker까지 검증한 결과가
@@ -86,14 +97,15 @@ REST 재시도는 완료된 단계의 고정 입력·산출물이 같으면 재�
 버전으로 교체하고 진행 중인 준비 작업은 먼저 배출한다.
 [복구 결정](../../spec/backend/decisions/0011-interview-preparation-resume-and-recovery.md)을 따른다.
 
-`max_tries=1`, `job_timeout=600`을 유지하며 준비 시작 시 다음을 검사한다.
-`2 × DIRECTOR_PREPARE_TIMEOUT_SECONDS + 4 × LLM_TIMEOUT_SECONDS + 30 ≤ 600`.
+`max_tries=1`, 일반 작업의 `job_timeout=600`을 유지한다. 준비·리포트는 작업별 1800초,
+프로필은 별도 공통 상수의 600초로 등록한다. 프로필의 running 전달 lease는 630초이며 busy 재전달은 최대 600초 뒤다.
+준비 시작 시에는 L2·문서 대조·Director의 단계별 호출 예산이 1770초 전체 준비 기한 안에 드는지 검사한다.
 이는 외부 호출 예산의 설정 검사이며 DB 지연 보장은 아니다. 필수 LLM 설정 누락이나
 proxy 쌍 불일치는 비재시도 오류이므로 설정 수정·재시작 뒤 새 면접을 접수한다.
 
 면접 준비 전 대상 DB의 `repo_deep`·`director`·`answer_analysis` 활성 버전·모델·본문과
 점수 기준·도메인 프레임을 확인한다. `seed_all`은 prompt를 넣지 않는다. 검수한 UTF-8 본문을
-기존 등록 절차로 각각 등록하며, 예시 prompt를 운영용으로 자동 활성화하거나 기존 version을
+위 실행 recipe 등록 절차로 등록하며, 예시 prompt를 운영용으로 자동 활성화하거나 기존 version을
 덮어쓰지 않는다. 실제 모델 품질과 배포 후 면접 흐름은 별도로 확인한다.
 
 ## 2. 쿠키
