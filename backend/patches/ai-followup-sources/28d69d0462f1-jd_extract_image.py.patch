@@ -1,7 +1,7 @@
 diff --git a/ai/src/devon_ai/llm_tasks/jd_extract_image.py b/ai/src/devon_ai/llm_tasks/jd_extract_image.py
 --- a/ai/src/devon_ai/llm_tasks/jd_extract_image.py
 +++ b/ai/src/devon_ai/llm_tasks/jd_extract_image.py
-@@ -14,8 +14,13 @@
+@@ -17,8 +17,13 @@
          r"|required(?: qualifications)?|requirements"
      ),
      "preferred": r"우대(?:\s*사항|\s*조건)?|preferred(?: qualifications)?",
@@ -16,7 +16,7 @@ diff --git a/ai/src/devon_ai/llm_tasks/jd_extract_image.py b/ai/src/devon_ai/llm
  
  
  @dataclass(frozen=True)
-@@ -38,7 +43,8 @@
+@@ -41,7 +46,8 @@
      prefix = text[: text.find(excerpt)] if excerpt in text else text
      found = []
      for category, pattern in _HEADINGS.items():
