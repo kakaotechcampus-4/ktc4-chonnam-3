@@ -145,6 +145,7 @@ async def retrieve_external_knowledge(
     cached_ids: set[UUID] = set()
     pending: list[c.ExternalQueryRequest] = []
     cached_limitations: list[str] = []
+    provider = client
     async with sessions.begin() as db:
         interview = await db.scalar(
             select(InterviewSession)
@@ -210,6 +211,12 @@ async def retrieve_external_knowledge(
                     cached_limitations.extend(alias.limitations)
                     continue
             pending.append(query)
+        if pending and provider is None:
+            try:
+                # 캐시로 끝나는 조회는 자격증명을 요구하거나 공급자를 생성하지 않는다.
+                provider = TavilyClient(settings.require_tavily())
+            except ValueError:
+                return unavailable("external_tool_not_configured")
         try:
             usage = _usage(state.get("external_search_usage"))
             reservations = _reservations(state.get("external_search_reservations"))
@@ -237,6 +244,7 @@ async def retrieve_external_knowledge(
     error_code = None
     try:
         for query in pending:
+            assert provider is not None
             search = await provider.search(
                 query.query, domains=domains, budget=budget, max_results=3
             )
