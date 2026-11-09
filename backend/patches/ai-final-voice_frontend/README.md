@@ -1,3 +1,20 @@
+# 후속 패치 적용 검증
+
+<!-- verified-current-patches -->
+아래 표만 현재 게시 payload의 개별 재생 결과다. UTF-8 LF 기준 SHA256이며 `없음`은 신규/삭제 파일이다. `git apply --check` 뒤 별도 sandbox에서 실제 적용하고 선언된 원문 목표와 대조했다. **여러 PR의 전체 순서 적용·서비스 통합 통과를 뜻하지 않는다.**
+
+일부 적용 전 원문은 미병합 선행을 결합한 로컬 기준이다. 지문만 맞춘 대체 코드를 만들거나 선행 구현을 이 PR에 복사하지 않고, 실제 병합된 선행 커밋에서 다시 기준을 확인한다.
+
+| 패치 | 대상 | 적용 전 SHA256 | 적용 후 SHA256 | patch SHA256 |
+| --- | --- | --- | --- | --- |
+| `df69aa7dc2ee-ws.py.patch` | `backend/app/features/interview/ws.py` | `93d5ce744c787c819f919b33a4fd4d9cb007000cc547a22267d50a2731f621a4` | `a61c80e3fa17f762ad2020e7b825b7c2873d3c0c0b118458dbf2831f9913c356` | `438a5603df3cec64227c2293d8fc903b515ab2fef7c370c30c02643e3df7b821` |
+
+선행의 실제 병합 커밋으로 재기준한 뒤 적용한다. 적용 커밋·지문·통합 회귀를 spec/ai/implementation.md에 기록한 뒤에만 대기 패치를 제거한다.
+
+<details>
+<summary>이전 안내·과거 기준 지문(현재 적용 지문으로 사용 금지)</summary>
+
+<!-- historical-patch-guidance -->
 # 질문 음성·예산과 FE 계약 실행 연결 후속 변경
 
 이 디렉터리는 미병합 선행 구현에 대한 **이번 신규 수정 구간만** 보존한다.
@@ -28,3 +45,5 @@ patch 안의 앞뒤 문맥은 위치 확인을 위한 것이며 선행 구현 �
 
 실행 결과와 남은 작업의 원본 기록은 `spec/ai/implementation.md`다.
 PR 본문의 게시본 검증과 과거 로컬 통합 검증을 구분해서 읽는다.
+
+</details>
