@@ -144,7 +144,12 @@ async def test_http_request_and_checked_question_reach_existing_jsonb_boundary(c
     }
     assert set(schema["required"]) == set(schema["properties"])
     assert schema["additionalProperties"] is False
-    assert to_turn_jsonb(result, column="question_contract") == wire(contract)
+    # 내부 입력의 빈 확장 필드는 기존 Turn 저장 형식에 추가하지 않는다.
+    stored_contract = wire(contract)
+    assert stored_contract.pop("evaluation_keys") == []
+    assert len(stored_contract) == 5
+    assert to_turn_jsonb(result, column="question_contract") == stored_contract
+    assert c.decode_strict(c.QuestionContract, stored_contract) == contract
     assert result.attempts[0].model == "actual-model-snapshot"
     assert result.attempts[0].raw_output == raw
     assert result.attempts[0].input_tokens == 100
