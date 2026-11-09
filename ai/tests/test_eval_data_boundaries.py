@@ -212,12 +212,18 @@ def test_approved_rejects_same_account_and_blank_names(tmp_path, review):
         load_cases(tmp_path)
 
 
+def _contract():
+    return {
+        "purpose": "기술 선택 이유 확인",
+        "required_points": [{"key": "reason", "description": "선택 이유"}],
+        "evaluation_scope": "선택 이유를 평가한다",
+    }
+
+
 def _report_input(case_id, answer, kind="report", source_group="sg-1", question="왜 Redis인가요?"):
     inp = _input(case_id, kind=kind, source_group_id=source_group)
-    inp["payload"] = {
-        "history": [{"turn": 1, "persona": "tech_lead", "question": question, "answer": answer}],
-        "evidence": [],
-    }
+    turn = {"turn": 1, "persona": "tech_lead", "question": question, "answer": answer}
+    inp["payload"] = {"history": [{**turn, "question_contract": _contract()}], "evidence": []}
     return inp
 
 
@@ -329,6 +335,116 @@ def test_pair_history_turn_needs_all_fields(tmp_path, missing):
     _write_report_pair(tmp_path, strong=strong)
     with pytest.raises(CaseError, match="history needs"):
         load_cases(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        None,
+        {},
+        {"purpose": "p", "required_points": [], "evaluation_scope": "s"},
+        {
+            "purpose": " ",
+            "required_points": [{"key": "k", "description": "d"}],
+            "evaluation_scope": "s",
+        },
+        {
+            "purpose": "p",
+            "required_points": [{"key": "k", "description": "d"}],
+            "evaluation_scope": "",
+        },
+        {"purpose": "p", "required_points": [{"key": "k"}], "evaluation_scope": "s"},
+        {
+            "purpose": "p",
+            "required_points": [{"key": "k", "description": "d"}, {"key": "k", "description": "e"}],
+            "evaluation_scope": "s",
+        },
+    ],
+)
+def test_report_turn_needs_a_valid_question_contract(tmp_path, bad):
+    solo = _report_input("r-1", "a")
+    solo["payload"]["history"][0]["question_contract"] = bad
+    _pair(tmp_path, solo, _expectation("r-1"))
+    with pytest.raises(CaseError, match="question_contract"):
+        load_cases(tmp_path)
+
+
+def test_report_case_without_pair_still_needs_history(tmp_path):
+    solo = _report_input("r-1", "a")
+    solo["payload"] = {"answer": "no history"}
+    _pair(tmp_path, solo, _expectation("r-1"))
+    with pytest.raises(CaseError, match="history"):
+        load_cases(tmp_path)
+
+
+@pytest.mark.parametrize("follows", [1, 2, 0, True, "1", None])
+def test_follows_must_name_an_earlier_turn(tmp_path, follows):
+    solo = _report_input("r-1", "a")
+    solo["payload"]["history"].append(
+        {**solo["payload"]["history"][0], "turn": 2, "follows": follows}
+    )
+    _pair(tmp_path, solo, _expectation("r-1"))
+    if type(follows) is int and follows == 1:
+        assert load_cases(tmp_path)
+    else:
+        with pytest.raises(CaseError, match="follows"):
+            load_cases(tmp_path)
+
+
+def _solo(**payload):
+    case = _report_input("r-1", "a")
+    case["payload"].update(payload)
+    return case
+
+
+def _load_solo(tmp_path, case):
+    _pair(tmp_path, case, _expectation("r-1"))
+    return load_cases(tmp_path)
+
+
+def test_turn_evidence_refs_and_tool_results_load_when_valid(tmp_path):
+    case = _solo(
+        evidence=[{"ref": "m1", "path": "p", "lines": "1", "text": "t"}],
+        tool_results=[
+            {"turn": 1, "status": "tool_error", "limitations": ["조회 실패"], "error_code": "x"},
+            {"turn": 1, "status": "not_found", "limitations": [], "error_code": None},
+        ],
+    )
+    case["payload"]["history"][0]["evidence_refs"] = ["m1"]
+    assert _load_solo(tmp_path, case)
+
+
+@pytest.mark.parametrize("linked", [["m9"], ["m1", "m1"], "m1", [1]])
+def test_turn_evidence_refs_must_name_registered_refs_once(tmp_path, linked):
+    case = _solo(evidence=[{"ref": "m1", "path": "p", "lines": "1", "text": "t"}])
+    case["payload"]["history"][0]["evidence_refs"] = linked
+    with pytest.raises(CaseError, match="evidence_refs"):
+        _load_solo(tmp_path, case)
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        {"turn": 2, "status": "not_found", "limitations": [], "error_code": None},
+        {"turn": 1, "status": "unknown", "limitations": [], "error_code": None},
+        {"turn": 1, "status": "tool_error", "limitations": [], "error_code": "x"},
+        {"turn": 1, "status": "tool_error", "limitations": ["a"], "error_code": None},
+        {"turn": 1, "status": "insufficient_analysis", "limitations": [], "error_code": None},
+        {"turn": 1, "status": "not_found", "limitations": [], "error_code": "x"},
+        {"turn": True, "status": "not_found", "limitations": [], "error_code": None},
+        {"turn": 1, "status": "not_found", "limitations": [" "], "error_code": None},
+        {"turn": 1, "status": "not_found", "limitations": [], "error_code": None, "extra": 1},
+        {"turn": 1, "status": "not_found"},
+    ],
+)
+def test_bad_tool_results_are_rejected(tmp_path, item):
+    with pytest.raises(CaseError, match="tool_results"):
+        _load_solo(tmp_path, _solo(tool_results=[item]))
+
+
+def test_tool_results_must_be_a_list(tmp_path):
+    with pytest.raises(CaseError, match="tool_results"):
+        _load_solo(tmp_path, _solo(tool_results={"turn": 1}))
 
 
 def test_pair_history_turn_numbers_must_be_unique(tmp_path):

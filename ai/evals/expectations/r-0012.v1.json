@@ -1,0 +1,62 @@
+{
+ "case_id": "r-0012",
+ "version": 1,
+ "source_fact": "F-R1-001",
+ "allowed": [
+  {
+   "id": "a1",
+   "purpose": "턴 6의 의존성 근거 조회가 실패해 선언을 확인하지 못했다고 서술하고 turn 6을 연결한다"
+  },
+  {
+   "id": "a2",
+   "purpose": "조회 실패(tool_error)와 코드에 없음을 구분해 쓴다"
+  },
+  {
+   "id": "a3",
+   "purpose": "턴 6의 답변은 사용자 진술로 서술한다"
+  }
+ ],
+ "forbidden": [
+  {
+   "id": "f1",
+   "reason": "조회가 실패했는데 코드에 의존성이 없다고 서술",
+   "type": "tool_error_as_missing"
+  },
+  {
+   "id": "f2",
+   "reason": "조회 실패를 사용자의 거짓 진술이나 역량 부족으로 서술",
+   "type": "tool_error_as_weakness"
+  },
+  {
+   "id": "f3",
+   "reason": "조회하지 못한 의존성 선언을 확인된 사실로 서술",
+   "type": "overclaim"
+  },
+  {
+   "id": "f4",
+   "reason": "존재하지 않는 turn 번호나 evidence ref를 근거로 인용",
+   "type": "invalid_ref"
+  }
+ ],
+ "grader_controls": [
+  {
+   "kind": "allowed",
+   "output": "턴 6에서 web, jpa, redis 스타터를 선언했다고 말했지만 근거 조회가 실패해 의존성 선언은 확인하지 못했습니다(turn 6). 이는 사용자 진술로만 남깁니다."
+  },
+  {
+   "kind": "forbidden",
+   "output": "build.gradle에 redis 의존성이 없으므로 턴 6의 설명은 사실과 다릅니다."
+  },
+  {
+   "kind": "invalid_ref",
+   "output": "턴 6의 의존성 선언은 조회 실패로 확인하지 못했습니다(turn 12, m9)."
+  }
+ ],
+ "review": {
+  "status": "unreviewed",
+  "author": "geonyeong325",
+  "reviewer": null,
+  "reviewed_at": null,
+  "pending_notes": []
+ }
+}

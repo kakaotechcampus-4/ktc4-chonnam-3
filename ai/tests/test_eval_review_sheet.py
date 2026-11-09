@@ -125,6 +125,13 @@ def test_interview_sheet_uses_policy_and_readable_history(tmp_path):
     assert "확인 범위" not in sheet and "정책에 맞는 좋은 다음 행동" in sheet
 
 
+_CONTRACT = {
+    "purpose": "질문 목적",
+    "required_points": [{"key": "p", "description": "요구한 내용"}],
+    "evaluation_scope": "평가 범위",
+}
+
+
 def _report(root: Path, case_id: str, version: int, role: str | None, answer: str) -> None:
     inp = {
         "case_id": case_id,
@@ -132,8 +139,11 @@ def _report(root: Path, case_id: str, version: int, role: str | None, answer: st
         "control": {"kind": "report", "split": "dev", "source_group_id": "sg-1", "synthetic": True},
         "payload": {
             "history": [
-                {"turn": 1, "persona": "hr_manager", "question": "Q1", "answer": "같은 답"},
-                {"turn": 2, "persona": "tech_lead", "question": "Q2", "answer": answer},
+                {**turn, "question_contract": _CONTRACT}  # loader 는 report 의 모든 턴에 요구한다
+                for turn in (
+                    {"turn": 1, "persona": "hr_manager", "question": "Q1", "answer": "같은 답"},
+                    {"turn": 2, "persona": "tech_lead", "question": "Q2", "answer": answer},
+                )
             ]
         },
     }
