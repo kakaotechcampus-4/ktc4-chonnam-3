@@ -9,11 +9,14 @@ diff --git a/backend/app/features/report/history.py b/backend/app/features/repor
  from app.features.interview.supplemental_sources import load_supplemental_sources
  from app.llm_tasks.report import ReportDraftInvalidError
  
-@@ -133,6 +134,15 @@
+@@ -133,6 +134,18 @@
              for item in sources.values()
              if item.repository_id is not None and item.git_ref is not None and item.path is not None
          }
 +        candidates = state.get(STATE_KEY, {})
++        if STATE_KEY in state and not isinstance(candidates, dict):
++            # 구형 기록의 키 누락과 손상을 구분한다. 손상으로 새 조회 권한은 만들지 않는다.
++            limitations.append("historical_repository_candidates_invalid")
 +        if isinstance(candidates, dict):
 +            for repository_id, ref in selections.items():
 +                if ref is not None:
