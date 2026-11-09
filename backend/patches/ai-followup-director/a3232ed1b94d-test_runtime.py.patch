@@ -1,0 +1,240 @@
+diff --git a/ai/tests/agents/director/test_runtime.py b/ai/tests/agents/director/test_runtime.py
+--- a/ai/tests/agents/director/test_runtime.py
++++ b/ai/tests/agents/director/test_runtime.py
+@@ -2,6 +2,7 @@
+ import importlib
+ import json
+ from dataclasses import asdict, replace
++from pathlib import Path
+ 
+ import pytest
+ 
+@@ -143,6 +144,178 @@
+     ]
+     assert [r.payload["operation"] for r in provider.requests] == ["plan", "review"]
+     assert provider.requests[1].payload["question"] == asdict(question())
++
++
++def test_recovery_feedback_is_strictly_restored_from_original_rejected_attempts():
++    provider = Provider(
++        plan(), review(contract_matches=False, reason_summary="문장이 필수 확인내용을 묻지 않았다.")
++    )
++    result = run(provider)
++    attempts = json.loads(json.dumps([asdict(item) for item in result.attempts]))
++    feedback = runtime().recovery_feedback_from_attempts(
++        attempts, failure_code=result.failure.error_code
++    )
++    assert feedback.previous_candidate == question()
++    assert feedback.recovery == c.CandidateRecovery(
++        "rewrite", "문장이 필수 확인내용을 묻지 않았다."
++    )
++    assert "묻지 않았다" not in repr(feedback)
++    assert attempts == json.loads(json.dumps([asdict(item) for item in result.attempts]))
++
++
++@pytest.mark.parametrize(
++    "corruption",
++    [
++        "raw",
++        "extra",
++        "approved",
++        "unsafe",
++        "replan",
++        "model",
++        "schema",
++        "incomplete",
++        "stage",
++        "duplicate",
++        "metadata_extra",
++        "plan_extra",
++        "prompt",
++        "attempt",
++    ],
++)
++def test_unclear_or_mismatched_feedback_cannot_authorize_a_rewrite(corruption):
++    result = run(Provider(plan(), review(contract_matches=False)))
++    attempts = json.loads(json.dumps([asdict(item) for item in result.attempts]))
++    if corruption == "raw":
++        attempts[1]["raw_output"] = "not-json"
++    elif corruption == "extra":
++        raw = json.loads(attempts[1]["raw_output"])
++        raw["approve_anything"] = True
++        attempts[1]["raw_output"] = json.dumps(raw)
++    elif corruption in {"approved", "unsafe", "replan"}:
++        raw = json.loads(attempts[1]["raw_output"])
++        raw[
++            "contract_matches"
++            if corruption == "approved"
++            else "safe_alternative"
++            if corruption == "unsafe"
++            else "context_valid"
++        ] = corruption == "approved"
++        attempts[1]["raw_output"] = json.dumps(raw)
++    elif corruption == "model":
++        attempts[1]["model"] = "other-model"
++    elif corruption == "schema":
++        attempts[1]["schema_version"] = "another-schema"
++    elif corruption == "incomplete":
++        attempts.pop()
++    elif corruption == "duplicate":
++        attempts[1]["raw_output"] = attempts[1]["raw_output"].replace(
++            '"plan_valid": true', '"plan_valid": false, "plan_valid": true'
++        )
++    elif corruption == "metadata_extra":
++        attempts[1]["approved"] = True
++    elif corruption == "plan_extra":
++        raw = json.loads(attempts[0]["raw_output"])
++        raw["question"]["approved"] = True
++        attempts[0]["raw_output"] = json.dumps(raw)
++    elif corruption == "prompt":
++        attempts[1]["prompt_version"] = "other-version"
++    elif corruption == "attempt":
++        attempts[1]["attempt"] = 1
++    else:
++        attempts[1]["error_stage"] = "parse"
++    assert (
++        runtime().recovery_feedback_from_attempts(
++            attempts, failure_code="director_candidate_rewrite"
++        )
++        is None
++    )
++
++
++def test_recovery_feedback_goes_only_to_the_new_plan_and_review_stays_independent():
++    previous = run(Provider(plan(), review(contract_matches=False)))
++    feedback = runtime().recovery_feedback_from_attempts(
++        previous.attempts, failure_code=previous.failure.error_code
++    )
++    provider = Provider(plan(), review(contract_matches=False))
++    result = run(provider, recovery_feedback=feedback)
++    assert result.failure.error_code == "director_candidate_rewrite"
++    assert len(provider.requests) == 2
++    assert all(request.max_attempts == 1 for request in provider.requests)
++    assert provider.requests[0].payload["recovery_feedback"] == {
++        "version": "director-recovery.v1",
++        "previous_candidate": asdict(question()),
++        "recovery": "rewrite",
++        "review_reason_summary": feedback.recovery.reason_summary,
++    }
++    assert "recovery_feedback" not in provider.requests[1].payload
++    assert provider.requests[0].payload["reference_texts"] == []
++
++
++def test_default_recovery_option_preserves_the_existing_normal_requests():
++    old, explicit = Provider(plan(), review()), Provider(plan(), review())
++    assert run(old).succeeded
++    assert run(explicit, recovery_feedback=None).succeeded
++    assert [request.payload for request in old.requests] == [
++        request.payload for request in explicit.requests
++    ]
++
++
++def test_v8_keeps_v7_normal_payload_and_isolates_feedback_from_the_new_review():
++    previous = run(Provider(plan(), review(contract_matches=False)))
++    feedback = runtime().recovery_feedback_from_attempts(
++        previous.attempts, failure_code=previous.failure.error_code
++    )
++    legacy, current = Provider(plan(), review()), Provider(plan(), review())
++    assert run_version(legacy, context(), version="director_v7@stored").succeeded
++    assert run_version(current, context(), version="director_v8@publication").succeeded
++    assert [request.payload for request in legacy.requests] == [
++        request.payload for request in current.requests
++    ]
++    recovered = Provider(plan(), review(contract_matches=False))
++    result = asyncio.run(
++        runtime().run_director(
++            context(),
++            prompt=replace(PROMPT, version="director_v8@publication"),
++            limits=LIMITS,
++            model_call=recovered,
++            recovery_feedback=feedback,
++        )
++    )
++    assert result.failure.error_code == "director_candidate_rewrite"
++    assert len(recovered.requests) == 2
++    assert all(request.max_attempts == 1 for request in recovered.requests)
++    assert recovered.requests[0].payload["recovery_feedback"]["previous_candidate"] == asdict(
++        question()
++    )
++    assert "recovery_feedback" not in recovered.requests[1].payload
++    assert all(request.payload["reference_texts"] == [] for request in recovered.requests)
++
++
++def test_invalid_feedback_is_rejected_before_either_model_attempt():
++    provider = Provider(plan(), review())
++    result = run(provider, recovery_feedback={"previous_candidate": plan(), "recovery": "rewrite"})
++    assert result.failure.error_code == "director_input_invalid"
++    assert not result.attempts and not provider.requests
++
++
++@pytest.mark.parametrize("version", ["director_v7@recovery", "director_v8@recovery"])
++def test_recovery_prompt_preserves_turn_state_and_actual_reference_enum_guards(version):
++    provider = Provider(plan(), review())
++    result = asyncio.run(
++        runtime().run_director(
++            context(),
++            prompt=replace(PROMPT, version=version),
++            limits=LIMITS,
++            model_call=provider,
++        )
++    )
++    assert result.succeeded
++    assert provider.requests[0].payload["turn_state"]["next_question_no"] == 1
++    assert provider.requests[1].payload["turn_state"]["answered_turn_count"] == 0
++    assert provider.requests[0].schema_version == "director-plan.v3"
++    props = provider.requests[0].output_schema["properties"]["question"]["properties"]
++    assert props["persona"]["enum"] == ["hr_manager"]
++    assert props["evidence_refs"]["maxItems"] == 0
+ 
+ 
+ def run_coverage(provider, candidate):
+@@ -384,8 +557,8 @@
+         assert request.payload["answer_analysis"]["contribution_scope"]["scope"] == "teammate"
+         assert request.payload["context"]["history"][0]["answer"] == "팀원이 캐시를 구현했습니다."
+         sources = request.payload["reference_texts"]
+-        assert {"kind": "evidence", "id": "ev-1", "text": "def cached(): return None"} in sources
+-        assert {"kind": "job_posting", "id": "job-1", "text": "실제 채용 공고"} in sources
++        assert request.payload["context"]["evidence"][0] == asdict(evidence)
++        assert sources == [{"kind": "job_posting", "id": "job-1", "text": "실제 채용 공고"}]
+ 
+ 
+ def test_runtime_preserves_both_attempts_when_review_provider_fails():
+@@ -677,7 +850,266 @@
+     )
+ 
+ 
+-@pytest.mark.parametrize("version", ["director_v3", "director_v4", "future-fixture-version"])
++def completed_turn_context(answered):
++    personas = (
++        "hr_manager",
++        "tech_lead",
++        "tech_lead",
++        "domain_lead",
++        "tech_lead",
++        "tech_lead",
++        "domain_lead",
++        "tech_lead",
++        "tech_lead",
++    )[:answered]
++    history = tuple(
++        c.HistoryTurn(f"turn-{number}", persona, f"질문 {number}", f"답변 {number}", None)
++        for number, persona in enumerate(personas, 1)
++    )
++    return context(
++        turn_no=min(answered + 1, 9),
++        current_turn_id=history[-1].turn_id if history else None,
++        current_question_contract=question().question_contract if history else None,
++        history=history,
++        persona_counts=tuple(
++            c.PersonaCount(persona, personas.count(persona))
++            for persona in ("hr_manager", "tech_lead", "domain_lead")
++        ),
++        allowed_personas=("tech_lead",) if history else ("hr_manager",),
++    )
++
++
++@pytest.mark.parametrize(
++    "version",
++    [
++        "director_v5",
++        "director_v5@luna",
