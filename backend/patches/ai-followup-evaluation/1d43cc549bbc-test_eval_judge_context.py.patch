@@ -1,0 +1,29 @@
+diff --git a/ai/tests/test_eval_judge_context.py b/ai/tests/test_eval_judge_context.py
+--- a/ai/tests/test_eval_judge_context.py
++++ b/ai/tests/test_eval_judge_context.py
+@@ -15,7 +15,11 @@
+ 
+ def test_original_source_and_location_reach_context_without_filling_missing_sha():
+     folder = Path(__file__).parents[1] / "evals"
+-    original = next(case for case in load_cases(folder) if case.case_id == "q-0004")
++    original = next(
++        case
++        for case in load_cases(folder, allow_legacy_report_contracts=True)
++        if case.case_id == "q-0004"
++    )
+     payload = original.model_input()
+     payload["review"] = {"text": "secret-review-label"}
+     payload["evidence"][0]["grader_controls"] = [{"text": "secret-control-label"}]
+@@ -104,7 +108,11 @@
+ 
+ def test_actual_prior_rejected_candidate_is_history_and_never_a_raw_material():
+     folder = Path(__file__).parents[1] / "evals"
+-    original = next(case for case in load_cases(folder) if case.case_id == "q-0010")
++    original = next(
++        case
++        for case in load_cases(folder, allow_legacy_report_contracts=True)
++        if case.case_id == "q-0010"
++    )
+     context = build_judge_context(original.model_input())
+     assert context["source"]["rejected_candidate"] == original.payload["rejected_candidate"]
+     assert "prior_candidate_is_not_raw_source" in context["limitations"]

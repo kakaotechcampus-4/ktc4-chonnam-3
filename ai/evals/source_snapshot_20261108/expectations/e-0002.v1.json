@@ -1,0 +1,18 @@
+{"case_id": "e-0002", "version": 1,
+ "source_fact": "F-R1-003",
+ "allowed": [
+  {"id": "a1", "purpose": "주석(m1)이 별도 트랜잭션에서 커밋되어 롤백돼도 폐기가 유지된다고 설명한다고 말한다"},
+  {"id": "a2", "purpose": "revokeAll()의 실제 선언과 전파 설정은 자료에 없어 확인하지 못했다고 밝힌다"}
+ ],
+ "forbidden": [
+  {"id": "f1", "reason": "주석만으로 폐기가 실제로 유지된다고 단정", "type": "P4"},
+  {"id": "f2", "reason": "읽지 않은 revokeAll()·다른 서비스의 동작을 추론", "type": "P5"},
+  {"id": "f3", "reason": "누가 이 처리를 설계했는지 개인 기여를 말함", "type": "P1"}
+ ],
+ "grader_controls": [
+  {"kind": "allowed", "output": "rotate() 위 주석(m1)은 revokeAll()이 REQUIRES_NEW로 별도 커밋돼 롤백돼도 폐기가 유지된다고 설명합니다. revokeAll()의 선언은 자료에 없어 실제로 그렇게 동작하는지는 확인하지 못했습니다."},
+  {"kind": "forbidden", "output": "REQUIRES_NEW를 쓰므로 롤백돼도 토큰 폐기가 항상 유지됩니다."},
+  {"kind": "ambiguous", "output": "주석에 REQUIRES_NEW가 언급돼 있어 폐기가 유지될 가능성이 높아 보입니다."},
+  {"kind": "invalid_ref", "output": "m2의 revokeAll() 선언에 REQUIRES_NEW가 붙어 있습니다."}
+ ],
+ "review": {"status": "approved", "author": "geonyeong325", "reviewer": "kyeonsol", "reviewed_at": "2026-11-02", "pending_notes": []}}

@@ -1,0 +1,41 @@
+diff --git a/ai/tests/test_eval_verification_component.py b/ai/tests/test_eval_verification_component.py
+--- a/ai/tests/test_eval_verification_component.py
++++ b/ai/tests/test_eval_verification_component.py
+@@ -6,6 +6,7 @@
+ 
+ import pytest
+ from eval_cases import load_cases
++from source_snapshot import source_file
+ 
+ ROOT = Path(__file__).resolve().parents[2]
+ COHORT = ROOT / "ai/evals/component_regression"
+@@ -43,7 +44,9 @@
+     assert manifest["source_hash_format"] == "utf8_lf"
+     assert len(manifest["source_files"]) == 4
+     for relative, expected in manifest["source_files"].items():
+-        normalized = (ROOT / relative).read_text(encoding="utf-8").encode("utf-8")
++        normalized = (
++            source_file(COHORT, manifest, relative).read_text(encoding="utf-8").encode("utf-8")
++        )
+         assert hashlib.sha256(normalized).hexdigest() == expected
+     (binding,) = manifest["bindings"]
+     assert binding["case"] == "q-0007.v3"
+@@ -61,14 +64,15 @@
+ def test_source_binding_is_portable_without_rewriting_original_json(tmp_path, newline):
+     manifest = read(COHORT / "binding-manifest.json")
+     for relative, expected in manifest["source_files"].items():
+-        original = (ROOT / relative).read_bytes()
++        original_path = source_file(COHORT, manifest, relative)
++        original = original_path.read_bytes()
+         # 체크아웃 줄바꿈만 바꾼 사본에서 동일한 출처 해시를 검증한다.
+         copy = tmp_path / Path(relative).name
+         copy.write_bytes(original.replace(b"\r\n", b"\n").replace(b"\n", newline))
+         normalized = copy.read_text(encoding="utf-8").encode("utf-8")
+         assert hashlib.sha256(normalized).hexdigest() == expected
+-        assert read(copy) == read(ROOT / relative)
+-        assert (ROOT / relative).read_bytes() == original
++        assert read(copy) == read(original_path)
++        assert original_path.read_bytes() == original
+ 
+ 
+ def test_pure_component_manifest_needs_no_model_prompt_or_hidden_rubric_input():

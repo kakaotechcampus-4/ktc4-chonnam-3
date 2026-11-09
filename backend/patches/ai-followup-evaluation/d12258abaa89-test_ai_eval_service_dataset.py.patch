@@ -1,0 +1,34 @@
+diff --git a/backend/tests/test_ai_eval_service_dataset.py b/backend/tests/test_ai_eval_service_dataset.py
+--- a/backend/tests/test_ai_eval_service_dataset.py
++++ b/backend/tests/test_ai_eval_service_dataset.py
+@@ -13,6 +13,7 @@
+ 
+ from eval_cases import load_cases  # noqa: E402
+ from eval_runner import ExecutionError  # noqa: E402
++from source_snapshot import source_file  # noqa: E402
+ 
+ from scripts.ai_eval_bridge import prepare  # noqa: E402
+ 
+@@ -40,7 +41,9 @@
+     manifest = json.loads((DATASET / "binding-manifest.json").read_text(encoding="utf-8"))
+     assert manifest["original_file_hash_format"] == "utf8_lf"
+     for relative, expected in manifest["original_files"].items():
+-        normalized = (ROOT / relative).read_text(encoding="utf-8").encode("utf-8")
++        normalized = (
++            source_file(DATASET, manifest, relative).read_text(encoding="utf-8").encode("utf-8")
++        )
+         assert hashlib.sha256(normalized).hexdigest() == expected
+     assert len(manifest["original_files"]) == 58
+     bindings = manifest["bindings"]
+@@ -52,7 +55,10 @@
+ 
+ def test_holdout_source_groups_are_new_and_cannot_relabel_the_existing_dev_sources():
+     cases = dataset()
+-    old_groups = {case.source_group_id for case in load_cases(ROOT / "ai/evals")}
++    old_groups = {
++        case.source_group_id
++        for case in load_cases(ROOT / "ai/evals", allow_legacy_report_contracts=True)
++    }
+     dev_groups = old_groups | {case.source_group_id for case in cases if case.split == "dev"}
+     holdout_groups = {case.source_group_id for case in cases if case.split == "holdout"}
+     assert dev_groups.isdisjoint(holdout_groups)

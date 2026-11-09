@@ -1,0 +1,33 @@
+diff --git a/ai/evals/README.md b/ai/evals/README.md
+--- a/ai/evals/README.md
++++ b/ai/evals/README.md
+@@ -75,7 +75,8 @@
+ - 턴마다 `question_contract`가 있어야 한다. 질문을 하기 전에 정한 질문 목적(`purpose`), 요구한 내용
+   (`required_points`, key는 질문 안에서 고유), 평가 범위(`evaluation_scope`)이며, 점수 판정이 묻지 않은
+   key를 낮게 매기지 않도록 하는 근거다. 실제 Question Contract의 `assumptions`·`basis_refs`는 평가용
+-  형식에서 뺐다. loader가 모든 `report` 사례에서 이 형식을 검사한다.
++  형식에서 뺐다. 기본 loader와 서비스 자료는 이 형식을 검사하며, 축약 v1의 명시적 검수 예외는
++  아래 원본 버전 구분을 따른다.
+ - 턴의 선택 필드 `follows`는 그 턴이 후속 질문인 이전 턴 번호다. 있으면 더 앞선 실제 턴이어야 한다.
+ - 턴의 선택 필드 `evidence_refs`는 그 턴의 질문·평가 근거로 쓴 `evidence`의 `ref` 목록이다. 서술이 인용한
+   근거가 인용한 턴에 묶여 있는지 보는 기준이며 없는 ref나 같은 ref를 두 번 쓰면 loader가 거부한다.
+@@ -161,3 +162,19 @@
+ 
+ 실제 사용자 자료나 공개하지 않은 holdout 정답을 여기에 커밋하지 않는다. 임시 평가 출력은 무시되는
+ `ai/report/` 경로에 저장한다.
++
++
++## 현재 검수 원본과 과거 출처의 구분
++
++현재 inputs/expectations의 v1은 최신 develop 원본을 유지한다. 검수 상태를 코호트 실행 성공으로
++approved로 올리지 않는다. 검수 시트는 버전별 파일명을 사용하고 쌍의 비교 정보를 표시한다.
++
++최신 pilot v1의 report에는 축약 history만 있다. 검수 시트와 control 교정은
++load_cases(..., allow_legacy_report_contracts=True)를 명시해서만 이 형식을 읽는다.
++기본 loader와 실제 service_input의 Question Contract 검사는 완화하지 않는다.
++
++source_snapshot_20261108은 기존 service_regression/report_source_binding_cohort/
++component_regression이 참조한 이전 58개 JSON과 사실표의 불변 사본이다. 과거 approved 메타데이터도
++그 당시 출처의 일부이며 현재 품질 분모가 아니다. snapshot은 실행 사례로 직접 로드하지 못한다.
++각 binding-manifest의 source_snapshot이 이 출처를 명시하고 기존 지문을 그대로 검증한다.
++원문·기준·v2/v3 입력을 새 결과에 맞춰 고치지 않는다.

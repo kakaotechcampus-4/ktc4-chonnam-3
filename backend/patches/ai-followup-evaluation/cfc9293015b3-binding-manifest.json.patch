@@ -1,0 +1,11 @@
+diff --git a/ai/evals/report_source_binding_cohort/binding-manifest.json b/ai/evals/report_source_binding_cohort/binding-manifest.json
+--- a/ai/evals/report_source_binding_cohort/binding-manifest.json
++++ b/ai/evals/report_source_binding_cohort/binding-manifest.json
+@@ -240,5 +240,6 @@
+       "human_review_status": "deferred"
+     }
+   ],
+-  "source_hash_format": "utf8_lf"
++  "source_hash_format": "utf8_lf",
++  "source_snapshot": "source_snapshot_20261108"
+ }

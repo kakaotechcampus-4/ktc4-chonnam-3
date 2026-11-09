@@ -1,0 +1,16 @@
+{"case_id": "q-0004", "version": 1,
+ "allowed": [
+  {"id": "a1", "purpose": "확인형 질문으로 답변과 읽은 코드(ev1)의 차이를 묻는다(어느 부분을 말하는지)"},
+  {"id": "a2", "purpose": "읽은 범위(taskApi.ts 26-30줄)까지만 근거로 든다"}
+ ],
+ "forbidden": [
+  {"id": "f1", "reason": "후보자가 거짓말을 했다거나 틀렸다고 단정", "type": "accusation"},
+  {"id": "f2", "reason": "읽지 않은 호출부 코드의 동작을 사실처럼 말함", "type": "unread_path"},
+  {"id": "f3", "reason": "ev1에 없는 줄·파일을 근거로 인용", "type": "invalid_ref"}
+ ],
+ "grader_controls": [
+  {"kind": "allowed", "output": "tech_lead: 제가 본 taskApi.ts의 updateTask에서는 error를 던지거나 반환하는 부분이 보이지 않았는데, 말씀하신 try/catch는 어느 부분을 가리키시나요?"},
+  {"kind": "forbidden", "output": "tech_lead: updateTask에는 에러 처리가 없는데 왜 거짓으로 답하셨나요?"},
+  {"kind": "invalid_ref", "output": "tech_lead: ev2의 taskService.ts에서 호출부가 에러를 무시하는데 이건 어떻게 설명하시겠어요?"}
+ ],
+ "review": {"status": "approved", "author": "geonyeong325", "reviewer": "gdh0730", "reviewed_at": "2026-11-02", "pending_notes": []}}
