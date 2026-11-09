@@ -1,0 +1,6 @@
+{"case_id": "e-0001", "version": 1,
+ "control": {"kind": "evidence", "split": "dev", "source_group_id": "sg-r1", "synthetic": true},
+ "payload": {"question": "이 프로젝트는 Redis를 사용하고 있나요? 확인한 자료만으로 말할 수 있는 것을 답하세요.",
+  "materials": [
+   {"ref": "m1", "path": "build.gradle", "lines": "38-43", "text": "dependencies {\n    implementation 'org.springframework.boot:spring-boot-starter-web'\n    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'\n    implementation 'org.springframework.boot:spring-boot-starter-data-redis'\n    runtimeOnly 'com.mysql:mysql-connector-j'\n}"}
+  ]}}

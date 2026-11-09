@@ -1,0 +1,6 @@
+{"case_id": "e-0006", "version": 1,
+ "control": {"kind": "evidence", "split": "dev", "source_group_id": "sg-r2", "synthetic": true},
+ "payload": {"question": "이 서비스는 Supabase를 DB로 운영하고 있나요? 확인한 자료만으로 답하세요.",
+  "materials": [
+   {"ref": "m1", "path": "README.md", "lines": "26-30", "text": "## 서비스 아키텍처\n\n- 서버리스 DB : Supabase"}
+  ]}}
