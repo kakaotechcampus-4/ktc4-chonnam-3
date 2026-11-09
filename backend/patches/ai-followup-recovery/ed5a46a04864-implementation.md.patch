@@ -1,0 +1,240 @@
+diff --git a/spec/ai/implementation.md b/spec/ai/implementation.md
+--- a/spec/ai/implementation.md
++++ b/spec/ai/implementation.md
+@@ -2737,3 +2737,563 @@
+ 기존 실제 공급자 실행 결과를 이번 변경의 새 결과로 재사용하지 않는다.
+ 외부 모델·STT·TTS·Vision·검색 유료 호출과 사람 평가는 이번에 실행하지 않는다.
+ 지속되는 결정은 [0041](decisions/0041-published-pr-dependency-order.md)에 남긴다.
++
++
++## 2026-11-08 — 기존 작업의 신규 변경 게시와 실제 자료 후속 보완
++
++사용자 요청에 따라 기존 작업을 먼저 게시하고, 별도 `feature/ai-real-source-hardening-20261108`에서 후속 구현을 시작했다.
++기존 통합본·index·원본 1104파일과 선행 PR은 보존했다. 초기 설계·task·testing 문서는 변경하지 않는다.
++후속 결정은 [0039](decisions/0039-real-source-coverage-and-official-snapshots.md)다.
++
++### 신규 부분만 게시한 PR
++
++모든 base는 `develop@18f4105b2e7e9885df118d283badbf59692ec5b4`다.
++선행 기준본과 동결 원본을 대조한 신규 변경은 403경로이며 추가 263·수정 140·삭제 0이다.
++직접 변경 384개·후속 patch 19개와 적용 안내 12개로 총 415경로를 게시했고 그룹 간 중복은 0개다.
++선행 tip·상속 커밋은 제외했으며 341커밋 모두 추가+삭제가 300줄 이하이고 최대 270줄이다.
++독립 재생에서 403개를 모두 적용한 전체 1104파일이 동결본과 UTF-8 LF 지문까지 일치했다.
++
++| PR | 범위 | 파일 | 커밋 | 추가/삭제 |
++| --- | --- | ---: | ---: | ---: |
++| [#212](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/212) | 공개 API와 AI 내부 계약 정의 | 5 | 3 | +337/-23 |
++| [#213](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/213) | 공급자·실행 설정 및 개발 초기화 | 44 | 80 | +4749/-28 |
++| [#214](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/214) | 평가 실행·근거 기반 Judge·CLI·CI | 26 | 23 | +3786/-18 |
++| [#215](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/215) | 서비스 평가 사례·원문 연결·회귀 자료 | 98 | 83 | +15742/-0 |
++| [#216](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/216) | Director·답변 분석·레포 원문·근거 Tool | 104 | 41 | +7549/-218 |
++| [#217](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/217) | 문서 Claim·공고 이미지·도메인 연결 | 52 | 26 | +4762/-161 |
++| [#218](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/218) | 리포트 재시도·검토·버전과 프로필 갱신 | 47 | 71 | +5045/-170 |
++| [#219](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/219) | 질문 음성·예산과 FE 계약 실행 연결 | 39 | 14 | +2451/-235 |
++
++8개 모두 Draft다. **patch는 PR 병합만으로 실행되지 않는다.** 선행 반영, 기준 지문 확인, 신규 patch 적용과 최종 통합 검증이 필요하다.
++원격 HEAD·base·Draft·전체 파일 목록·커밋 목록·규모·UTF-8 본문을 게시 후 실제 다시 읽어 대조했다.
++직접 게시 Python·JSON·YAML 329개, 그룹별 diff 검사와 현재 materialized 공통 형식 검사는 통과했다.
++후속 patch 계약까지 검증한 결과는 아니며 구현 그룹의 단독 수집 실패도 그대로 PR에 기록했다.
++원격 #212의 BE CI는 1736통과·1skip, migration CI도 통과했다.
++#213~219의 CI 실패 13 job은 제외한 선행·다른 그룹·비활성 patch 누락으로 설명됐으며 실패 상태를 통과로 바꾸지 않았다.
++완전한 게시 조합의 CI 통과나 잔존 결함 0을 증명한 것은 아니다.
++공개 415파일을 실제 민감 설정 10개와 메모리에서 대조해 값 일치 0건을 확인했고 private 환경 파일은 게시하지 않았다.
++근거는 보존한 `ai-final-publication-20261108/`의 `publication-verification.json`, `branch-verification.json`, `validation-summary.json`, `remote-prs.json`, `remote-ci-audit.json`이다.
++
++### 게시 전 실제 자료 검증에서 확인한 범위
++
++- Memos는 실제 8원문·58659bytes·1698줄을 읽었다. Umami도 실제 8원문을 분석했다. 전체 레포 실행·개인 기여 검증은 아니다.
++- Healthchecks의 기본 L1 50초 timeout과 개행 전용 겹침 구간 오류는 보존했다. 별도 timeout 진단 성공을 원래 실행 성공으로 바꾸지 않았다.
++- Halo의 옛 L2는 설정 8개에 편중됐으며 Java·테스트 원문은 0개였다. 이를 전체 Java 프로젝트 분석 성공으로 세지 않는다.
++- 실제 Wanted 개발자 공고 361487은 API→제품→격리 DB에서 요구사항 20건의 원문 인용을 확인했다. 구조화 본문이므로 모델·Vision 0회가 정상이며 기존 9턴의 합성 JD와 다른 검증이다.
++- 자소설의 2015년 실제 이미지 공고는 Vision 31블록·sol 후보 6개를 얻었지만 기존 분류 제목 검사에서 최종 0개를 채택했다. 후보의 인용·참조 6/6은 맞았다. Wanted 이미지나 새 사이트 adapter 완료 증거가 아니다.
++
++### 별도 개발본의 후속 보완
++
++이미지 제목의 명시 별칭·bullet을 인식하도록 보완했다. 저장된 실제 출력 재생에서 업무 2·우대 4·필수 0이며 인용·참조·기술명은 그대로다.
++문장 속 단어, 우대의 필수 승격, 모호한 절과 불일치 인용은 계속 거절한다. 회귀 18 RED 뒤 관련 35 GREEN, 이 변경 후 AI 전체 809·Ruff·format·mypy가 통과했다. 외부 모델 재호출은 0회다.
++별도 Halo 구조 진단은 같은 SHA의 공개 GET 1회로 1111590bytes·4209항목·일반 파일 3323·Java 1386·test Java 383을 확인했다.
++이 진단은 구조 크기·범위 계측이며 실제 collector의 canonical tree chain이나 선정·L2 성공으로 세지 않는다.
++L1 180초·기타 작업 시간 예시를 정렬했고 설정/준비 deadline 31개 회귀가 통과했다. sol·xhigh·stream·출력 128000과 worker 1800초는 보존했다.
++FE API 문서의 revision·이의제기·명시 리포트 재시도 설명을 실제 동작에 맞추고 GET report의 기존 404 누락을 OpenAPI에 추가했다. 공개 동작을 새로 만들지 않았다.
++이후 구조 inventory/window 분리와 공유 공식 snapshot 경로를 구현했다. 구체적인 검증 범위는 아래와 같다.
++이 후속 변경은 #212~219에 추가 게시하지 않았다. 사람 검수는 계속 `사람 검수 대기`이며 자동 통과만 `자동 검증 완료`로 기록한다.
++
++### 실제 구조·원문과 공식 자료의 후속 검증
++
++준비 collector의 구조 응답·전체 수집·원문·모델 입력 예산을 분리했다.
++`repository_sources.py`와 `repository_source_selection.py`는 전체 inventory와 실제 모델 선정 window를 따로 보존한다.
++`prepare._save_analysis`는 경로·SHA·전달 범위·미확인 범위를 저장하며 기존 면접 중 조회 권한을 확장하지 않는다.
++저장된 Halo 실제 tree의 오프라인 계측에서는 4209항목 중 후보 3328개를 1437개 window로 제한한 요청이 262127/262144bytes였다.
++별도 live matrix의 실제 선정 요청은 후보 1435개·262141/262144bytes·HTTP 200이었다. 사전 계측과 실제 모델 전송 수치를 같은 회차로 합치지 않는다.
++Java 1386개·test Java 383개를 전체 목록에서 확인했고, 실제 선정된 8원문에는 Java·테스트·설정·frontend가 포함됐다.
++개행 전용 겹침 구간은 빈 SourceDocument로 만들지 않으며 원래 줄 위치와 생략 한계를 보존한다.
++
++새 실제 레포 matrix에서 Healthchecks·Umami·Memos는 L1→실제 파일 선정→L2 각각 5개 관찰의 저장용 결과까지 성공했다.
++Halo는 L1·선정 성공 후 L2 120초 timeout으로 실패했다. 이 원본 실패는 그대로 보존했다.
++같은 저장 입력·schema·전송 body의 별도 180초 진단은 약 113초에 5개 관찰로 완료됐다.
++입력 토큰 대부분이 cache hit였으므로 180초가 필수이거나 timeout 확대만이 성공 원인이라고 해석하지 않는다.
++matrix 12회와 별도 진단 1회로 총 실제 모델 13/16회를 사용했고 진단의 GitHub·DB 호출은 0회다.
++독립 대조는 32파일·34구간에서 SHA·경로·줄 위치·모델 입력·저장용 UUID/참조를 확인했다.
++30파일은 전체 Git blob을 대조했고 Healthchecks와 Memos의 큰 파일 각 1개는 prefix 범위만 확인했다.
++Python AST·JSON reader와 나머지 원문 구간 처리는 검증했지만 모든 언어의 전용 해석기나 TOML 실자료 검증을 주장하지 않는다.
++
++공식 자료는 `official_catalog.json`의 8개 항목과 명시 CLI→Tavily 추출→공유 불변 snapshot→면접별 소유 원문 경로를 추가했다.
++JS shell인 TourAPI 항목은 부적합으로 남기고, URL 접근 확인을 실제 본문·요청 절 추출 성공과 구분했다.
++`OfficialSourceSnapshot`은 사용자·면접 FK 없이 원문·추출 Markdown 줄·hash·시각·한계를 저장한다.
++기존 `InterviewExternalSource`에는 snapshot FK를 남기며 소유권·인용·검색 상태·부족 시 Tavily fallback을 유지한다.
++실제 MDN·Python URL의 Tavily 추출 1회는 HTTP 200이었다. MDN 원문 4306자를 격리 PostgreSQL에 저장했고
++첫 수집 시 사용자·면접 행이 없는 상태와 이후 면접별 원문 복사·재사용을 추가 외부 HTTP 0회로 확인했다.
++Python의 실제 캡처는 링크가 포함된 Markdown 제목 때문에 최초 절 추출에 실패했다.
++제목 인식 수정 후 같은 캡처 재생에서 Task Groups 절 165~201줄을 확인했다. 추가 API·DB 쓰기는 0회다.
++모든 catalog 항목의 provider 실추출 성공이나 다국어 의미 매칭의 완전성을 증명한 결과는 아니다.
++legacy 캐시 키 순서, 유데이터 downgrade 거절, CLI URL query 우회 거절·실제 DB 확인도 회귀로 보완했다.
++관련 70개 테스트·정적 검사·migration 정합성 검증이 통과했으며 기존 원문과 최초 실패 기록을 덮어쓰지 않았다.
++
++### 긴 실제 면접에서 확인한 입력 중복과 재검증
++
++실제 Wanted 361487의 요구사항 20건과 고정 SHA의 Umami 원문·분석을 재사용했다.
++사용자·소유 관계와 지원자 답변은 검증용 합성 입력이다. 실제 개인의 기여·성과 검증은 아니다.
++`actual-01`은 3턴 뒤 지원자 답변 생성용 검증 입력의 50초 timeout으로 중단됐다.
++별도 명시한 `actual-02`는 미답변 4번 질문부터 정상 답변을 제출했지만 6턴 분석 뒤 질문 7의 입력 상한에서 중단됐다.
++당시 Director 요청 264553bytes가 262144 상한을 초과해 provider 시도 0회로 거절됐고, 6개 답변·분석과 호출 기록은 남았다.
++이 두 회차의 실패를 완료로 변경하지 않았으며 누적 실제 모델 호출은 26회였다.
++
++[0040](decisions/0040-director-single-copy-source-input.md)에 따라 `agent._model_reference_texts`와 `runtime._input_payload`에서
++Context의 같은 원문을 `reference_texts`에 중복 전달하는 부분만 제거했다.
++서버의 전체 참조 검증 map, 모든 Context·원문 위치·SHA·문답 이력·기여 정정과 현재·과거 분석은 그대로다.
++Context 밖에서 허용한 `job_posting` 원문은 별도로 전달하며 출력 계약·프롬프트·독립 Plan/Review 두 시도는 바꾸지 않았다.
++실제 실패 입력의 무모델 재구성은 264553→174853bytes였으며 상한 확대나 과거 이력 삭제는 하지 않았다.
++9번째 질문·8이력·큰 원문·최신 기여 정정·위조 근거 ID의 실제 gateway 회귀는 2 RED→2 GREEN이었다.
++수정 뒤 AI 전체 809개와 Ruff·format 119파일·mypy 28소스, root의 동일 gateway 회귀 2개가 통과했다.
++
++수정 전 전체 BE 검사에서는 격리 DB 이름의 fixture 조건 불일치와 의미가 부족한 원문 mock을 먼저 발견했다.
++실패 회차를 보존하고 DB 접두사·실제 의미 원문 fixture·MYPYPATH를 올바르게 지정한 별도 실행에서
++2472통과·1skip, 전체 Ruff·format·mypy 235소스·공통 형식 검사를 확인했다. 외부 provider 호출은 0회다.
++이는 Director 중복 제거 전 결과다. 수정 후 별도 BE 전수 회차는 2474통과·1skip·12warning이었다.
++전체 Ruff·format·mypy 235소스·공통 계약 부분 형식 검사도 통과했고, 검사 전후 537개 Python 소스 지문이 일치했다.
++격리 PostgreSQL/Redis와 외부 네트워크 차단으로 실행했으며 provider 호출 0회다.
++실제 모델의 새 9턴 검증과 단독 게시본의 CI 성공으로 이 결과를 확대하지 않는다.
++
++수정 후 runtime/evaluation 이미지를 새 `20261108-director-budget` 태그로 빌드했다.
++외부 네트워크 없이 실제 설치된 AI와 각각 305·313파일의 지문·catalog 8개·민감 환경 파일 미포함을 확인했다.
++컨테이너의 평가 입력 계약 검사는 `--split all`로 32+8+1=41건 `validated_only`이며 모델·DB 호출 0회다.
++최초 기본 dev split 29건만 검사한 명령의 단언 실패는 보존하고 전체 split 검사와 구분했다.
++이 검사는 Judge 내용 평가·사람 승인·운영 release gate 통과를 뜻하지 않는다.
++
++### 수정 후 새 정상 면접의 최종 실행
++
++`actual-03`은 이전 실패 세션의 Director를 강제로 다시 실행하지 않았다.
++제품 `abandon_interview`→`retry_interview`로 새 세션을 만들고, 전용 Redis의 실제 queue에서
++`interview_prep` ARQ 작업 1건을 소비했다. 준비 작업은 complete 1·failed 0이었다.
++새 세션의 기본 `answer_mode=voice`는 보존했으며, 이후 문답은 STT 뒤의 텍스트 입력에 해당하는
++`process_answer` 서비스 함수로 검증했다. 실제 STT/TTS·브라우저·OAuth의 전체 경로 검증은 아니다.
++리포트·프로필도 실제 서비스 함수를 호출했으며 해당 후처리 ARQ worker 전체 실행으로 세지 않는다.
++
++실제 Wanted 요구사항과 Umami 고정 SHA의 유효한 분석을 재사용했다.
++이번 준비에서 새 L1/L2 모델을 재실행한 것으로 세지 않으며, 새 9턴의 모델 호출은 실제 연결이다.
++지원자 답변·사용자·소유 관계는 검증용 합성 입력이다.
++
++| 저장·실행 항목 | 실제 결과 |
++| --- | --- |
++| 면접 | `completed`, 문답 9개·답변 분석 9개 |
++| 페르소나 | HR 1·기술 6·도메인 2 |
++| 리포트 | `created`, 점수 6개와 본문 저장 |
++| 프로필 | `updated`, 저장 행 존재 |
++| 모델 호출 | 신규 39회, 이전 실패 회차 26회를 계승해 누적 65/90회 |
++| 입력 상한 | 신규 39개 실제 wire의 최대 189194/262144bytes |
++| 원본 보존 | 이전 6답변·13호출 기록과 모든 `actual-01/02` 산출물 불변 |
++| 실행본 보존 | 305개 제품 파일·private 환경 파일 지문 불변, cleanup/export 오류 0 |
++
++7~9번 질문의 실제 Plan/Review 요청은 각각 174184/174916, 178024/179179, 187656/189194bytes였다.
++독립 감사에서 39개 전송 body의 실제 byte/hash와, 72회 문답 이력·페르소나·과거 분석 대조가 일치했다.
++Evidence 5개도 원래 L2 원문·줄 범위·고정 SHA와 일치했다. 새 조회 허용 범위나 개인 기여를 추정하지 않았다.
++이번 9턴의 추가 레포 조회 요청·외부 검색 요청·Tool trace·외부 원문 행은 모두 0건이었다.
++따라서 이 체인이 검색·보완 분석 분기의 실재발생까지 검증했다고 표현하지 않는다.
++해당 분기의 이전 별도 검증과 이번 공식 snapshot 수집·재사용 검증은 서로 구분한다.
++
++이 결과는 해당 입력·모델·설정에서의 기능 실행 **자동 검증 완료**다.
++미검수 rubric에 따른 점수·질문 내용의 품질 승인과 사람 검수는 대체하지 않는다.
++기존 `r-0008.v3`의 reject나 사람 검수 대기 상태도 새 기능 성공으로 변경하지 않았다.
++원본 실행·DB export·보존 기록은 `hardening/real-service-chain/actual-03/`,
++전수 검사는 `backend-verification-director/`, 새 이미지 검사는 `image-checks-director/`에 보존했다.
++게시한 PR 8개는 앞선 동결본의 신규 부분이며, 여기의 후속 보완은 별도 로컬 개발본에만 있다.
++선행 반영·후속 patch 적용·게시 조합 재검증과 운영 배포를 이번 로컬 실행 완료로 대신하지 않는다.
++
++## 2026-11-09 — 두 모델의 새 전체 연쇄 검증과 Director 입력 보완
++
++### 범위와 설계 결정
++
++기존 로컬 hardening 원본을 보존하고 별도 `ai-full-model-validation-20261108` 작업본에서 진행한다.
++사용자 요청의 기본 방향은 개발에 Luna를 사용하면서 Sol과 같은 조건으로 실제 기능 연쇄를 확인하는 것이다.
++설계 결정은 [0043](decisions/0043-director-turn-state-and-reference-constraints.md)에 기록했다.
++이 절은 공개 PR 게시·병합이나 운영 DB·환경 적용 완료를 뜻하지 않는다.
++
++Director의 [runtime](../../ai/src/devon_ai/agents/director/runtime.py)은 확정된 이력으로
++`next_question_no`, `answered_turn_count`, 직전 답변의 번호·ID와 남은 질문 수를 계산한다.
++8개 답변 이후의 9번 질문과 9개 답변을 모두 받은 종료 시점을 구분하며, 종료 권한은 Controller에 둔다.
++v6 Plan schema `director-plan.v3`는 실제 등록된 근거 종류별 ID·Evidence·JD·과거 parent·허용 페르소나를
++선택하도록 제한한다. 기존 semantic 검증과 Plan/Review 총 2시도는 유지하며 UUID 자동 보정은 하지 않는다.
++`director-runtime-v4.md`·v5 본문은 보존하고 새 v6 본문과 runtime recipe를 사용한다.
++공개 API와 기존 `Context` dataclass는 변경하지 않았다.
++
++[개발 환경 예시](../../backend/.env.example)는 Luna slot 1과 `OPENAI_MODEL=gpt-6-luna`를 기본 방향으로 두고
++Sol slot 3을 보존한다. 실제 task 모델은 DB 프롬프트에서 읽으므로 각 검증 DB에 모델별 새 deployment를 등록한다.
++각 실제 모델 실행 동안 private 환경 파일과 제품 소스를 고정했다.
++완료 뒤 수행한 로컬 기본 모델 전환은 아래의 실제 활성화 결과와 구분해 기록한다.
++
++### 완료된 자동 검사와 독립 task 실호출
++
++v6 반영 후 AI 전체 **840개**, BE 영향 검사 **56개**와 관련 정적 검사가 통과했다.
++이 수치는 해당 코드의 **자동 검증 완료**이며 새 전체 면접 연쇄의 완료 결과와 합산하지 않는다.
++원문 인용·참조 ID·마지막 질문·구버전 호환의 검증을 유지했고, 기존 의미 검증을 완화하지 않았다.
++
++고정 입력 재생에서 별도로 남았던 아래 네 task는 Sol/Luna 각각 실제 공급자로 실행했다.
++각 모델에서 task당 1회, 총 4회 호출로 모두 제품 검증을 통과했다.
++
++| 독립 task | 확인한 범위 |
++| --- | --- |
++| `domain_category` | 원문 기반 분류와 실패 없는 계약 반환 |
++| `doc_claims` | 합성 문서의 Claim 추출과 원문 줄 연결 |
++| `claim_code` | 기술 주장과 공개 코드 대조, 개인 역할·성과의 미확인 보존 |
++| `jd_extract_image` | 제공한 이미지 추출 블록에서 JD 요구사항과 참조 구성 |
++
++검증 입력은 공개 자료와 합성 문서·주장 fixture가 포함된 독립 사례다.
++새 사이트 URL adapter 지원이나 실제 개인 기여 검증, 모든 이미지 레이아웃의 성공으로 확대하지 않는다.
++산출물은 private `full-validation/tasks-{luna,sol}-01/tasks/summary.json`에 보존했다.
++
++### 모델이 요청한 보완 조회 분기의 실제 연결
++
++별도 자연 발생 조회 사례에서 각 모델은 실제 T3→레포 원문 조회→T3 재분석→다음 Plan/Review의 4회 모델 호출을 수행했다.
++모델이 요청한 Umami 고정 SHA의 구현·테스트 원문 2개를 실제 GitHub 응답과 blob hash로 대조했다.
++같은 원문·ID가 재분석 T3와 다음 Plan/Review 입력에 전달됐고, 다음 질문은 새 코드 근거 2개를 참조했다.
++이는 합성 질문·지원자 답변·소유 관계 fixture에서 제품 `process_answer`를 실행한 결과다.
++
++외부 자료 검색은 그 T3 재분석 이후에 실행되고 결과·한계가 다음 Director 입력으로 전달됐다.
++Luna의 해당 질의는 `insufficient_analysis`, `query_terms_missing`, 채택 원문 0건이었다.
++Sol은 MDN 원문 1건을 `found`로 전달했다. Sol의 다음 질문이 그 외부 원문을 별도로 인용한 것은 아니다.
++부족한 검색 결과를 `found`로 승격하거나 외부 자료가 당해 T3에 이미 반영됐다고 기록하지 않는다.
++두 모델의 코드 원문 전달·외부 상태·wire/참조 무결성에 대한 저장 산출물 감사는 통과했다.
++근거는 `full-validation/tool-natural-{luna,sol}-01/`과 `tool-natural-binding-audit-02.json`이다.
++이 독립 분기의 성공은 새 전체 9턴에서 같은 분기가 반드시 발생한다는 보장이 아니다.
++
++### 첫 전체 실행의 실패 보존과 같은 조건의 재검증
++
++첫 회차는 새 DB·Redis·DB 프롬프트에서 L1을 새로 생성하고, 그 모델이 선정한 원문으로 L2와 면접을 이어 갔다.
++Wanted 361487의 실제 요구사항 20건과 Umami SHA `559e3c607c23d2c72d9bd4f6481bda428255323c`를 사용했다.
++두 실행의 Wanted 원문·요구사항 hash가 일치했다. 과거 L1/L2 분석 결과는 서비스에 주입하지 않았다.
++지원자 답변은 두 실행 모두 별도 Luna 모델·같은 공개 원문 사실은행·합성 팀 역할을 사용했다.
++실제 개인의 경력·운영 경험·성과는 확인한 것으로 처리하지 않는다.
++
++- `luna-full-01`: 실제 모델 17회 후 3번 답변의 다음 Plan에서 Evidence UUID 오타가 semantic 검증에 걸려 중단됐다.
++  올바른 basis ID가 함께 있더라도 잘못된 `evidence_refs`를 자동 보정하거나 저장하지 않았다.
++- `sol-full-01`: 실제 모델 4회 후 L2가 원본 설정의 120초 한도에서 timeout되어 준비가 중단됐다.
++  L1·파일 선정 성공과 L2 실패를 구분하며, 200 stream 응답의 미완료 상태를 분석 성공으로 세지 않았다.
++
++두 회차의 DB·모델 입출력·호출 비용·원문·실패 상태는 그대로 보존했다.
++새 v6와 L1 180초/L2 160초를 양 모델에 공통 적용한 `luna-full-02`·`sol-full-02`를 별도로 실행했다.
++검증 중에는 프로세스 설정만 바꾸고 원본 환경 파일과 첫 회차의 설정·실패 기록은 보존했다.
++재검증은 첫 회차와 조건이 다르므로 최초 비교의 실패를 없애거나 같은 조건의 승리로 바꾸지 않는다.
++
++재검증의 목표는 새 L1→자체 파일 선정·실원문→새 L2→9턴 T3/Director→실제 report ARQ→profile outbox worker다.
