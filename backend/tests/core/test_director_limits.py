@@ -10,6 +10,9 @@ from app.core.config import Settings
     "field,value",
     [
         ("director_evidence_max_total_bytes", True),
+        ("director_prepare_max_response_bytes", True),
+        ("director_prepare_max_total_bytes", 0),
+        ("director_prepare_max_source_bytes", -1),
         ("director_prepare_max_entries", 0),
         ("director_prepare_max_depth", -1),
     ],
