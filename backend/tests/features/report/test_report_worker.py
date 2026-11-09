@@ -6,7 +6,7 @@ import pytest
 from devon_ai import contracts as c
 from sqlalchemy import func, select, update
 
-from app.db.models import InterviewReport, ProfileRefreshRequest, ReportScore, ScoreCriterion
+from app.db.models import InterviewReport, ReportScore, ScoreCriterion
 from app.features.report import service
 from app.llm_tasks.report import (
     ReportDraftInvalidError,
@@ -60,14 +60,9 @@ async def test_worker_success_enqueues_profile_summary_and_releases_lock(
     assert await _counts(db) == (1, 6)
     assert await app.state.redis.exists(f"report:gen:{interview.id}") == 0
     assert await app.state.redis.exists(f"report:fail:{interview.id}") == 0
-    signal = await db.scalar(select(ProfileRefreshRequest))
-    assert signal.status == "queued" and signal.dispatch_attempts == 1
     enqueue.assert_awaited_once_with(
-        "profile_summary",
-        str(interview.user_id),
-        str(signal.id),
-        1,
-        _job_id=f"profile_summary:{interview.user_id}:{signal.id}:1",
+        "profile_summary", str(interview.user_id),
+        _job_id=f"profile_summary:{interview.user_id}:{interview.id}",
     )
 
 
