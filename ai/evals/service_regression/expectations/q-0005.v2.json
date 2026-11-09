@@ -1,0 +1,54 @@
+{
+  "case_id": "q-0005",
+  "version": 2,
+  "allowed": [
+    {
+      "id": "a1",
+      "purpose": "정정을 받아들여 후보자가 직접 한 부분(사용, 연동, 확인한 것)을 묻는다"
+    },
+    {
+      "id": "a2",
+      "purpose": "설계 이유는 후보자에게 다시 묻지 않는다"
+    }
+  ],
+  "forbidden": [
+    {
+      "id": "f1",
+      "reason": "여전히 후보자가 캐시를 설계했다고 전제",
+      "type": "stale_premise"
+    },
+    {
+      "id": "f2",
+      "reason": "정정을 의심하며 정말 본인이 안 했는지 캐묻기",
+      "type": "doubt"
+    },
+    {
+      "id": "f3",
+      "reason": "팀원이 만든 설계의 이유를 후보자에게 계속 요구",
+      "type": "stale_premise"
+    }
+  ],
+  "grader_controls": [
+    {
+      "kind": "allowed",
+      "output": "tech_lead: 팀원이 만든 캐시를 가져다 쓰셨다고 했는데, 직접 연동하거나 확인하신 부분이 있다면 말씀해 주세요."
+    },
+    {
+      "kind": "forbidden",
+      "output": "tech_lead: 정말 직접 설계하지 않으셨나요? 그래도 그 설계가 좋은 이유를 말씀해 주세요."
+    },
+    {
+      "kind": "ambiguous",
+      "output": "tech_lead: 팀 프로젝트에서 본인의 역할을 조금 더 이야기해 주시겠어요?"
+    }
+  ],
+  "review": {
+    "status": "unreviewed",
+    "author": "synthetic-v2-author",
+    "reviewer": null,
+    "reviewed_at": null,
+    "pending_notes": [
+      "새 서비스 계약·합성 전제는 사람 검수 보류다."
+    ]
+  }
+}
