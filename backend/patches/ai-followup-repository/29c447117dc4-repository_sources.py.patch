@@ -10,15 +10,19 @@ diff --git a/backend/app/features/interview/repository_sources.py b/backend/app/
  from typing import cast
  
  import httpx
-@@ -12,6 +12,7 @@
+@@ -12,6 +12,11 @@
  from app.agents.director.tools import EvidenceScope
  from app.core.config import Settings
  from app.features.interview.repository_candidates import MAX_CANDIDATES, neighbor_candidates
-+from app.features.interview.repository_source_selection import selection_window
++from app.features.interview.repository_inventory import SourceInventory
++from app.features.interview.repository_source_selection import (
++    selection_window,
++    summarized_limitations,
++)
  from app.features.interview.repository_structure import recursive_files
  from app.features.interview.source_segments import segment_text
  from app.integrations.github.evidence import EvidenceReader, EvidenceReadError
-@@ -42,6 +43,9 @@
+@@ -42,6 +47,9 @@
      attempts: tuple[c.AttemptMetadata, ...]
      limitations: tuple[str, ...]
      candidate_paths: tuple[str, ...] = ()
@@ -28,7 +32,12 @@ diff --git a/backend/app/features/interview/repository_sources.py b/backend/app/
  
  
  # 항목 상한에 걸려도 핵심 코드가 먼저 수집되도록 같은 디렉터리 안에서 읽는 순서를 정한다.
-@@ -196,14 +200,16 @@
+@@ -192,18 +200,21 @@
+     budget: CallBudget,
+     paths: tuple[str, ...] | None = None,
+     read_scopes: tuple[tuple[str, str], ...] | None = None,
++    inventory: SourceInventory | None = None,
+     attempt_sink: list[c.AttemptMetadata] | None = None,
  ) -> SourceCollection:
      """경로 선택과 뒤따르는 L2 분석은 같은 CallBudget을 사용한다.
  
@@ -47,7 +56,7 @@ diff --git a/backend/app/features/interview/repository_sources.py b/backend/app/
      active_path: str | None = None
      try:
          # 앱 자격은 공개 데이터 quota용이다. 사용자 저장소 token을 원문 조회로 확대하지 않는다.
-@@ -216,14 +222,21 @@
+@@ -216,14 +227,23 @@
              http_client,
              scope.full_name,
              max_requests=settings.director_prepare_max_requests,
@@ -61,6 +70,8 @@ diff --git a/backend/app/features/interview/repository_sources.py b/backend/app/
          if shallow.repository_id != scope.repository_id or shallow.head_sha != scope.git_ref:
              raise SourcePreparationError("l1_snapshot_mismatch")
 -        async with asyncio.timeout(settings.director_prepare_timeout_seconds):
++        if inventory is not None and inventory.head_sha != scope.git_ref:
++            raise SourcePreparationError("repository_inventory_mismatch")
 +        llm = settings.require_llm() if paths is None else None
 +        selection_seconds = llm.call_limits(prompt.task_name).timeout_seconds if llm else 0
 +        # HTTP 예산과 선정 모델 예산을 더하되 모델 대기를 HTTP 시간으로 중복 소비하지 않는다.
@@ -72,13 +83,14 @@ diff --git a/backend/app/features/interview/repository_sources.py b/backend/app/
              repository = await reader.get("")
              if (
                  repository is None
-@@ -255,7 +268,25 @@
+@@ -255,7 +275,28 @@
                  selection_limit = min(settings.director_prepare_max_files, reader.requests_left)
                  if selection_limit == 0:
                      raise EvidenceReadError("evidence_budget_exhausted")
 -                llm = settings.require_llm()
 +                assert llm is not None
 +                inventory_limitations = tuple(limitations)
++                limitations = list(summarized_limitations(inventory_limitations))
 +                selection_request, model_candidates, window_notes = selection_window(
 +                    shallow=shallow,
 +                    prompt=prompt,
@@ -86,6 +98,8 @@ diff --git a/backend/app/features/interview/repository_sources.py b/backend/app/
 +                    limitations=tuple(limitations),
 +                    max_selected_files=selection_limit,
 +                    limits=llm.call_limits(prompt.task_name),
++                    max_enum_values=settings.repository_selection_max_enum_values,
++                    max_enum_characters=settings.repository_selection_max_enum_characters,
 +                )
 +                limitations.extend(window_notes)
 +                if not model_candidates:
@@ -99,7 +113,7 @@ diff --git a/backend/app/features/interview/repository_sources.py b/backend/app/
  
                  def validate(raw: object) -> tuple[str, ...]:
                      if (
-@@ -267,49 +298,33 @@
+@@ -267,49 +308,33 @@
                      selected = raw["selected_paths"]
                      if (
                          not 1 <= len(selected) <= selection_limit
@@ -171,10 +185,27 @@ diff --git a/backend/app/features/interview/repository_sources.py b/backend/app/
                  if result.data is None:
                      raise SourcePreparationError(
                          "l2_source_selection_failed",
-@@ -334,9 +349,11 @@
+@@ -320,7 +345,13 @@
+                 paths = result.data
+             if len(paths) > settings.director_prepare_max_files or len(set(paths)) != len(paths):
+                 raise SourcePreparationError("repository_source_limit")
+-            if read_scopes is not None:
++            if read_scopes is not None and inventory is not None:
++                # 같은 분석을 재사용할 때도 당시 보존한 구조만 후보로 삼는다.
++                candidates = inventory.paths
++                model_candidates = inventory.model_candidate_paths
++                inventory_limitations = inventory.limitations
++                limitations.extend(summarized_limitations(inventory_limitations))
++            elif read_scopes is not None:
+                 # 캐시 재검증 때도 새 모델 호출 없이 실제 구조를 확인하되 원문 예산을 남긴다.
+                 try:
+                     candidates, extra = await _structure(
+@@ -333,10 +364,12 @@
+                             reader.bytes_left // 2, len(paths) * reader.response_limit
                          ),
                      )
-                     limitations.extend(extra)
+-                    limitations.extend(extra)
++                    limitations.extend(summarized_limitations(tuple(extra)))
 +                    inventory_limitations = tuple(extra)
                  except EvidenceReadError:
                      candidates = ()
@@ -183,7 +214,7 @@ diff --git a/backend/app/features/interview/repository_sources.py b/backend/app/
              candidate_limit = min(MAX_CANDIDATES, max(1, settings.director_prepare_max_files * 2))
              # 실제 읽은 선정 경로도 area 채택 여부와 무관하게 재조회할 수 있어야 한다.
              neighbors = tuple(paths[:candidate_limit])
-@@ -345,12 +362,9 @@
+@@ -345,12 +378,9 @@
                  neighbors += neighbor_candidates(candidates, paths, limit=remaining)
              replace(scope, allowed_paths=frozenset(paths))
              # 원문 외의 식별자·L1·구간 메타데이터가 차지할 입력 공간을 남겨 둔다.
@@ -199,7 +230,7 @@ diff --git a/backend/app/features/interview/repository_sources.py b/backend/app/
              for position, path in enumerate(paths):
                  active_path = path
                  try:
-@@ -432,6 +446,9 @@
+@@ -432,6 +462,9 @@
                  tuple(attempts),
                  tuple(limitations),
                  neighbors,
@@ -209,7 +240,7 @@ diff --git a/backend/app/features/interview/repository_sources.py b/backend/app/
              )
      except (EvidenceReadError, c.ContractError) as error:
          code = error.code if isinstance(error, EvidenceReadError) else "repository_source_invalid"
-@@ -446,6 +463,9 @@
+@@ -446,6 +479,9 @@
                  tuple(attempts),
                  tuple(limitations),
                  neighbors,

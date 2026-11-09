@@ -188,6 +188,9 @@ class Settings(BaseSettings):
     # 원문 byte 상한은 준비·진행 중 근거 조회에서 공유하고 PREPARE 상한은 준비에만 쓴다.
     director_evidence_max_response_bytes: LLMInteger = Field(default=131072, gt=0)
     director_evidence_max_total_bytes: LLMInteger = Field(default=262144, gt=0)
+    # 선택한 공급자의 schema 제한에 맞추며 원문·모델 입력 byte 예산과 별도로 검사한다.
+    repository_selection_max_enum_values: LLMInteger = Field(default=900, gt=0)
+    repository_selection_max_enum_characters: LLMInteger = Field(default=14000, gt=0)
     director_prepare_max_entries: LLMInteger = Field(default=512, gt=0, le=4096)
     director_prepare_max_depth: LLMInteger = Field(default=8, gt=0, le=20)
     director_prepare_max_requests: LLMInteger = Field(default=32, gt=0, le=128)
