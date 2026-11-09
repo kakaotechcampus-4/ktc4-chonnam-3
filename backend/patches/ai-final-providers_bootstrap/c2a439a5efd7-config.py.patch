@@ -160,7 +160,7 @@ diff --git a/backend/app/core/config.py b/backend/app/core/config.py
 +    vision_max_polls: LLMInteger = Field(default=12, gt=0)
 +    vision_poll_interval_seconds: LLMTimeout = Field(default=1.0, gt=0)
 +    vision_job_path_template: str = "/v1/jobs/{job_id}"
-+    vision_pdf_layout: bool = True
++    vision_pdf_layout: bool = False
 +    documents_max_source_chars: LLMInteger = Field(default=262144, gt=0)
 +
 +    tts_provider: str | None = None
@@ -192,7 +192,7 @@ diff --git a/backend/app/core/config.py b/backend/app/core/config.py
      stt_max_audio_bytes: LLMInteger = Field(default=10485760, gt=0)
      # 이보다 짧은 오디오는 STT를 호출하지 않고 빈 전사로 본다. webm/opus는 초당 약 4KB(0007)라
      # 기본값은 1초 안팎이며 실측 후 조정한다. 0이면 빈 오디오만 거른다.
-@@ -285,6 +388,10 @@
+@@ -285,11 +388,16 @@
          "proxy_token",
          "chat_proxy_url",
          "openai_model",
@@ -203,7 +203,13 @@ diff --git a/backend/app/core/config.py b/backend/app/core/config.py
          "llm_default_model",
          "llm_timeout_seconds",
          "llm_max_output_tokens",
-@@ -298,6 +405,17 @@
+         "llm_max_input_bytes",
+         "llm_max_response_bytes",
++        "llm_reasoning_effort",
+         mode="before",
+     )
+     @classmethod
+@@ -298,6 +406,17 @@
  
      def require_llm(self) -> LLMSettings:
          """캐시된 설정만 검증하며 비밀키와 네 실행 상한이 준비되지 않으면 실패한다."""
@@ -221,7 +227,7 @@ diff --git a/backend/app/core/config.py b/backend/app/core/config.py
          if (self.proxy_token is None) != (self.chat_proxy_url is None):
              raise ValueError("PROXY_TOKEN and CHAT_PROXY_URL must be configured together")
          values = self.model_dump(include=set(LLMSettings.model_fields))
-@@ -310,7 +428,13 @@
+@@ -310,7 +429,13 @@
          return LLMSettings.model_validate(values)
  
      @field_validator(
@@ -236,7 +242,7 @@ diff --git a/backend/app/core/config.py b/backend/app/core/config.py
      )
      @classmethod
      def _empty_stt_value_is_unset(cls, value: object) -> object:
-@@ -325,11 +449,83 @@
+@@ -325,11 +450,101 @@
  
      def require_stt(self) -> STTSettings:
          """캐시된 설정만 검증하며 주소·키·모델이 준비되지 않으면 실패한다."""
@@ -250,6 +256,24 @@ diff --git a/backend/app/core/config.py b/backend/app/core/config.py
 +                # 공통 키는 MLAPI 호환 주소에만 적용하고 명시한 별도 주소에는 전달하지 않는다.
 +                values["stt_api_key"] = self.proxy_token
 +        return STTSettings.model_validate(values)
++
++    @field_validator(
++        "tts_provider",
++        "tts_api_key",
++        "tts_access_token",
++        "tts_budget_project",
++        "tts_monthly_character_limit",
++        "vision_base_url",
++        "vision_api_key",
++        "helpy_vision_document_proxy_url",
++        "tavily_api_key",
++        mode="before",
++    )
++    @classmethod
++    def _empty_optional_provider_value_is_unset(cls, value: object) -> object:
++        # 명시 전용 주소의 우선순위는 유지하고 빈 선택값만 미설정으로 취급한다.
++        raw = value.get_secret_value() if isinstance(value, SecretStr) else value
++        return None if isinstance(raw, str) and not raw.strip() else value
 +
 +    @field_validator("tts_voice_map", mode="before")
 +    @classmethod

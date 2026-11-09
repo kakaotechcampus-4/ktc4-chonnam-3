@@ -13,6 +13,7 @@ from devon_ai import contracts as c
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import Settings
+from app.llm_tasks.runtime_capabilities import validate_runtime_prompts
 from scripts.seed_prompt_versions import register_prompt_versions
 
 PROMPT_ROOT = Path(__file__).resolve().parents[2] / "ai" / "prompts"
@@ -64,6 +65,8 @@ async def apply_manifest(manifest: dict[str, object], output: Path, database_url
     for entry in entries:
         template = (output.parent / entry["template_path"]).resolve().read_text(encoding="utf-8")
         prompts.append(c.PromptSpec(entry["task_name"], entry["version"], entry["model"], template))
+    # 소비자 전체가 준비된 뒤에만 한 트랜잭션으로 활성화한다.
+    validate_runtime_prompts(prompts)
     engine = create_async_engine(database_url)
     try:
         async with async_sessionmaker(engine).begin() as db:
