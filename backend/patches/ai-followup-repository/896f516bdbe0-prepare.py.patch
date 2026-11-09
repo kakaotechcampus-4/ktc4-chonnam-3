@@ -1,7 +1,7 @@
 diff --git a/backend/app/features/interview/prepare.py b/backend/app/features/interview/prepare.py
 --- a/backend/app/features/interview/prepare.py
 +++ b/backend/app/features/interview/prepare.py
-@@ -489,7 +489,21 @@
+@@ -490,7 +490,21 @@
                  "paths": list(sources.candidate_paths),
                  "limitations": list(sources.limitations),
              }
