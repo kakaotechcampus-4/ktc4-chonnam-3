@@ -1,0 +1,10 @@
+{"case_id": "q-0004", "version": 1,
+ "control": {"kind": "question", "split": "dev", "source_group_id": "sg-r2", "synthetic": true},
+ "payload": {
+  "turn": 3,
+  "allowed_personas": ["tech_lead", "domain_lead"],
+  "persona_left": {"tech_lead": 4, "domain_lead": 2},
+  "history": [{"turn": 1, "persona": "hr_manager", "question": "간단히 자기소개와 이 프로젝트에서 맡은 역할을 말씀해 주세요.", "answer": "프론트엔드와 API 연동을 맡았고 게시글과 과제 화면을 담당했습니다."}, {"turn": 2, "persona": "tech_lead", "question": "과제 수정 API에서 실패는 어떻게 처리하셨나요?", "answer": "updateTask에서 error를 try/catch로 감싸서 호출부에 던지도록 했습니다."}],
+  "latest_analysis": {"evaluation_status": "evaluated", "sufficiency": "partial", "covered_points": ["실패를 호출부에 전달한다는 주장"], "missing_points": [], "claim_checks": [{"claim_text": "error를 try/catch로 감싸 호출부에 던진다", "status": "conflicting", "evidence_refs": ["ev1"], "limitations": ["호출부 코드는 읽지 않음"]}]},
+  "evidence": [{"ref": "ev1", "path": "src/api/task/taskApi.ts", "lines": "26-30", "text": "export const updateTask = async (id: string, patch: TaskPatch) => {\n  const { error } = await db.from(\"tasks\").update(patch).eq(\"id\", id);\n};"}],
+  "task": "다음에 할 일(ask, retrieve, finish)을 정하고, 질문이면 persona와 질문 하나를 쓰세요."}}
