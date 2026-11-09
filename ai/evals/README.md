@@ -13,27 +13,6 @@ loader는 불일치·중복·짝 없는 파일을 거부해야 한다. 입력 �
 제어 정보를 구분한다. 모델에는 실행 payload만 전달한다. 기대값, 검수 정보, 제어 정보는 prompt,
 retrieval query, tool 입력에 들어가면 안 된다.
 
-## 용어
-
-- **평가 사례(case)**: `q-0003` 같은 ID 하나다. 입력 파일(`inputs/`)과 기대 파일(`expectations/`)이 같은
-  `case_id`와 `version`으로 짝을 이룬다. 입력에는 모델이 받는 `payload`와 제어 정보가, 기대에는 모델에게
-  보여 주지 않는 정답 기준과 검수 정보가 있다.
-- **종류(`control.kind`)와 ID 접두어**:
-
-| 접두어 | kind | 평가하는 것 | `payload` 내용 |
-| --- | --- | --- | --- |
-| `e-` | `evidence` | 근거를 찾고 인용하는 능력 | 질문과 자료(`materials`) |
-| `q-` | `question` | Director가 다음에 하는 질문 | 현재 턴, 가능한 Persona, 남은 횟수, 대화 이력, 직전 분석, 근거 |
-| `f-` | `flow` | 면접 흐름의 적절성(계속·종료 등) | `q-`와 같은 구조 |
-| `r-` | `report` | 리포트 생성 결과(서술과 6개 key 점수) | 면접 9턴 전체 대화, 근거, 과제 |
-
-- **split**: `dev`(개발용)와 `holdout`(최종검증용)이다.
-- **source group**: 같은 합성 원천에서 만든 사례 묶음(`sg-r1` 등)이다. `dev`와 `holdout`에 함께 둘 수 없다.
-- **쌍(pair)**: 질문은 같고 답변만 다른 `report` 사례 두 건(`stronger`, `weaker`)이다. 정확한 점수 대신
-  점수의 순서 관계를 검사한다(아래 report 사례).
-- **version**: 같은 ID의 내용을 바꿀 때 올리는 번호다(`q-0003.v1`).
-- **검수 상태(`review.status`)**: `unreviewed`, `approved`, `pending`, `invalid` 중 하나다(아래 사례 검수).
-
 ## 후보 사례 형식
 
 로컬 합성 사례의 후보 형식이다. 파일은 `inputs/{case_id}.v{version}.json`과
@@ -97,7 +76,8 @@ retrieval query, tool 입력에 들어가면 안 된다.
 - 턴마다 `question_contract`가 있어야 한다. 질문을 하기 전에 정한 질문 목적(`purpose`), 요구한 내용
   (`required_points`, key는 질문 안에서 고유), 평가 범위(`evaluation_scope`)이며, 점수 판정이 묻지 않은
   key를 낮게 매기지 않도록 하는 근거다. 실제 Question Contract의 `assumptions`·`basis_refs`는 평가용
-  형식에서 뺐다. loader가 모든 `report` 사례에서 이 형식을 검사한다.
+  형식에서 뺐다. 기본 loader와 서비스 자료는 이 형식을 검사하며, 축약 v1의 명시적 검수 예외는
+  아래 원본 버전 구분을 따른다.
 - 턴의 선택 필드 `follows`는 그 턴이 후속 질문인 이전 턴 번호다. 있으면 더 앞선 실제 턴이어야 한다.
 - 턴의 선택 필드 `evidence_refs`는 그 턴의 질문·평가 근거로 쓴 `evidence`의 `ref` 목록이다. 서술이 인용한
   근거가 인용한 턴에 묶여 있는지 보는 기준이며 없는 ref나 같은 ref를 두 번 쓰면 loader가 거부한다.
@@ -153,20 +133,29 @@ retrieval query, tool 입력에 들어가면 안 된다.
 필드 `source_fact`(예: `F-R1-001`)가 `fact-table.md`의 항목을 가리키고, 시트에는 모델이 받는 것, 원본
 사실, 정답 기준, 채점기 시험용 가짜 답, 판단할 질문 4개가 담긴다. `ai/`에서
 `uv run python evals/review_sheet.py [case_id ...]`로 만들며 결과는 무시되는 `ai/report/review-sheets/`에
-`{case_id}.v{version}.md` 이름으로 저장된다(버전마다 시트가 따로 남는다). 쌍을 이루는 `report` 사례의
-시트에는 쌍 ID, 강한/약한 역할, 비교 key, `min_gap`, 상대 사례와 달라진 답변과 비교 검수 질문이 들어간다.
-쌍이 없는 `report` 사례는 서술 기준 검수 질문만 받는다. 시트에는 정답이 있으므로 모델 입력에 쓰지 않는다.
+저장된다. 시트에는 정답이 있으므로 모델 입력에 쓰지 않는다.
 
-현재 사례는 19건이다: `evidence` 6건(`e-0001`~`e-0006`), `question` 10건(`q-0001`~`q-0010`),
-`flow` 1건(`f-0001`), `report` 2건(`r-0001`, `r-0002`). 검수 상태는 `approved` 6건(`e-` 전부),
-`pending` 4건(`q-0002`, `q-0005`~`q-0007`), `unreviewed` 9건이다. `pending` 사례는 품질 집계에서 뺀다. 자료·근거 사례의 `payload`는 `question`과
+사례의 검수 상태는 각 `expectations/*.json`의 `review`가 원본이다. 실행·검증 현황은
+[단일 구현 기록](../../spec/ai/implementation.md)을 참조한다. 자료·근거 사례의 `payload`는 `question`과
 `materials`(`ref`, `path`, `lines`, `text`)이고, 자료 `text`는 공개 저장소 원문이 아니라
 `fact-table.md`의 사실 구조만 본떠 새로 쓴 합성 내용이다. 질문·흐름 사례의 `payload`는 Director의
 입력을 단순화한 평가용 형식(`turn`, `allowed_personas`, `persona_left`, `history`, `latest_analysis`,
 `evidence`, `task` 등)이며 실제 입력 객체와 필드가 완전히 같지 않다. 실행기를 만들 때 변환이 필요하다.
 질문·흐름 사례의 금지 유형 이름(`topic_jump`, `false_premise` 등)은 작성자가 임시로 붙였고 팀 합의
-코드가 아니다. 실제 채점기와 평가 실행 harness는 없다. 이 디렉터리는 런타임 패키지와 배포물에
-포함되지 않는다.
+코드가 아니다. 실제 서비스 실행에는 명시적인 `service_input`과 해당 task의 타입 검증이 필요하다.
+축약 사례를 임의로 서비스 입력으로 변환하거나 정답 필드를 모델에 전달하지 않는다.
+이 디렉터리는 런타임 패키지와 배포물에 포함되지 않는다.
+
+실행 진입점은 `backend/scripts/run_ai_evaluation.py`다. `--execute --manifest <파일>`은 서비스
+출력을 만들고, `--llm-judge --max-judge-attempts <상한>`은 별도 Judge 예산을 사용한다.
+승인된 기존 control만 확인할 때는 `--calibrate-judge-only --approved-only`를 사용한다.
+이 모드는 서비스 모델을 실행하지 않으며, `service_input`이 없는 사례를 서비스 실행 성공으로 세지 않는다.
+Judge v1은 허용·금지 기준과 출력 하나를 사용한다. v2는 해당 사례에 실제 제공된 원문·위치·
+질문 계약·면접관 역할·조회 상태를 `judge-context.v1` whitelist와 64KiB 상한으로 함께 전달한다.
+control의 정답 종류·검수 메타데이터는 숨기고, 없는 원문은 추정하지 않는다.
+`--rejudge-results <기존 결과>`는 사례·기대값·출력·binding 지문이 맞는 저장 출력만 새 Judge로
+재판정한다. 서비스 모델을 다시 실행하지 않으며 원래 실패와 출력은 보존한다.
+실행 모드·모델·입출력 지문·예산 소진·미실행 상태를 함께 확인하며 release gate의 미확정을 임의로 승인하지 않는다.
 
 같은 원본에서 나온 사례는 같은 source group에 둔다. 개발용과 최종검증용(holdout)은 서로 다른 source
 group을 써야 한다. holdout 사례가 구현이나 정책 변경에 쓰였다면 회귀검사 자료가 되며 사용 이력을
@@ -174,3 +163,49 @@ group을 써야 한다. holdout 사례가 구현이나 정책 변경에 쓰였�
 
 실제 사용자 자료나 공개하지 않은 holdout 정답을 여기에 커밋하지 않는다. 임시 평가 출력은 무시되는
 `ai/report/` 경로에 저장한다.
+
+
+## 현재 검수 원본과 과거 출처의 구분
+
+현재 inputs/expectations의 v1은 최신 develop 원본을 유지한다. 검수 상태를 코호트 실행 성공으로
+approved로 올리지 않는다. 검수 시트는 버전별 파일명을 사용하고 쌍의 비교 정보를 표시한다.
+
+최신 pilot v1의 report에는 축약 history만 있다. 검수 시트와 control 교정은
+load_cases(..., allow_legacy_report_contracts=True)를 명시해서만 이 형식을 읽는다.
+기본 loader와 실제 service_input의 Question Contract 검사는 완화하지 않는다.
+
+source_snapshot_20261108은 기존 service_regression/report_source_binding_cohort/
+component_regression이 참조한 이전 58개 JSON과 사실표의 불변 사본이다. 과거 approved 메타데이터도
+그 당시 출처의 일부이며 현재 품질 분모가 아니다. snapshot은 실행 사례로 직접 로드하지 못한다.
+각 binding-manifest의 source_snapshot이 이 출처를 명시하고 기존 지문을 그대로 검증한다.
+원문·기준·v2/v3 입력을 새 결과에 맞춰 고치지 않는다.
+
+### 출처 경로와 실행 지문
+
+binding의 `original_files`에 있는 `ai/evals/inputs/...`와 `expectations/...`는 당시
+원문의 논리 경로다. `source_snapshot`이 선언된 코호트에서는 이 경로를 현재 canonical로
+읽지 않고 `source_snapshot_20261108/inputs/...`와 `expectations/...`로 해석한다.
+과거 snapshot의 승인 표시도 현재 사례의 승인이 아니다. [원문 비교 색인](source_snapshot_comparison.json)은
+색인에 기록된 develop commit과의 차이를 설명하며 어느 쪽도 덮어쓰지 않는다.
+
+보고서 코호트의 `prior_binding_sha256`, `prior_expectation_sha256`,
+`snapshot_template_sha256`은 형제 `service_regression`의 이전 입력·기대값·template에 대한
+UTF-8 LF 지문이다. 상대 경로 표기를 임의의 상위 디렉터리 접근 권한으로 해석하지 않는다.
+참조 원문이 없거나 선언한 지문과 다르면 사례를 실행하기 전에 거절한다.
+
+현재 서비스 경로 검증은 `service_regression/runtime-manifest.json`을 사용한다.
+이 파일은 Director v8·답변 분석 v6·Report v3·Score v3를 지정하는 입력 검증용 manifest다.
+기존 `manifest.json`은 v4/v2 비교용으로 보존한다. `fixture-model-not-for-provider-execution`은
+실제 호출 모델이 아니며, 실제 평가에는 별도 모델 manifest와 명시적 예산을 사용한다.
+
+새 평가 결과의 dataset 지문은 `format_version: 2`, `file_hash_format: utf8_lf`로 표시한다.
+checkout 줄바꿈만 다른 자료는 같은 portable 지문으로 비교하고 raw 지문도 별도로 남긴다.
+과거 무표시 결과는 기존 raw 의미로만 읽으며 원본 결과를 수정하지 않는다.
+불변 archive의 provenance는 계속 raw 바이트를 검증하므로 LF로 다시 저장하지 않는다.
+
+CLI 출력 경로는 실행 전에 독점 생성하며 모든 모드에서 기존 결과를 덮어쓰지 않는다.
+사례 시작·완료 때 checkpoint를 저장하고 중단 결과는 `run_state: interrupted`로 구분한다.
+이 기록은 자동 재개나 이미 처리한 유료 호출의 재실행 허가가 아니다. 중단 당시 처리 중인
+호출의 사용량은 최종 응답을 받지 못했다면 미확인일 수 있다. 완료 결과만 재판정에 사용한다.
+종료 코드 0은 요청한 기술 검사가 오류 없이 끝났다는 뜻이며 품질 승인이 아니다.
+기술 실행·입력·Judge 오류는 비0으로 알리고 사람 검수 대기는 결과에 따로 남긴다.
