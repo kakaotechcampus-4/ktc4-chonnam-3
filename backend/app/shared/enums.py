@@ -149,9 +149,10 @@ class StepStatus(StrEnum):
 
 
 class AnswerMode(StrEnum):
-    """Sprint 1 은 텍스트 고정. 음성은 Sprint 2."""
+    """새 세션은 voice(0007). text는 기존 세션 호환용이다."""
 
     TEXT = "text"
+    VOICE = "voice"
 
 
 class DocumentExtractStatus(StrEnum):

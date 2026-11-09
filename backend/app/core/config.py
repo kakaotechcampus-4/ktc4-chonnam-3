@@ -104,6 +104,62 @@ class LLMSettings(BaseModel):
         )
 
 
+class STTSettings(BaseModel):
+    """이미 읽은 설정에서 실제 STT 호출에 필요한 값만 검증한다.
+
+    미설정이면 앱은 기동하고 호출 전에 실패한다. 오류에는 입력값(주소·키)을 싣지 않는다.
+    """
+
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    stt_provider: str = Field(min_length=1)
+    stt_base_url: str = Field(repr=False)
+    stt_api_key: SecretStr = Field(min_length=1)
+    stt_model: str = Field(min_length=1)
+    stt_language: str = Field(min_length=1)
+    stt_timeout_seconds: LLMTimeout = Field(gt=0, allow_inf_nan=False)
+    stt_max_audio_bytes: LLMInteger = Field(gt=0)
+    stt_min_audio_bytes: LLMInteger = Field(ge=0)
+    stt_hallucination_phrases: tuple[str, ...]
+    stt_hallucination_max_seconds: LLMTimeout = Field(gt=0, allow_inf_nan=False)
+
+    @field_validator("stt_provider", "stt_model", "stt_language")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("STT setting must not be blank")
+        return value.strip()
+
+    @field_validator("stt_api_key")
+    @classmethod
+    def _api_key_not_blank(cls, value: SecretStr) -> SecretStr:
+        if not value.get_secret_value().strip():
+            raise ValueError("stt_api_key must not be blank")
+        return value
+
+    @field_validator("stt_base_url")
+    @classmethod
+    def _validate_base_url(cls, value: str) -> str:
+        invalid = "STT base URL must be HTTPS without credentials, query, or fragment"
+        if any(char.isspace() or ord(char) < 32 or 127 <= ord(char) <= 159 for char in value):
+            raise ValueError(invalid)
+        if any(char in value for char in ("\\", "?", "#")):
+            raise ValueError(invalid)
+        try:
+            parsed = urlsplit(value)
+            if (
+                parsed.scheme != "https"
+                or not parsed.hostname
+                or parsed.username is not None
+                or parsed.password is not None
+            ):
+                raise ValueError(invalid)
+            _ = parsed.port
+        except ValueError:
+            raise ValueError(invalid) from None
+        return parsed.geturl().rstrip("/")
+
+
 class Settings(BaseSettings):
     """.env 를 읽는 설정 단일 진입점.
 
@@ -159,8 +215,32 @@ class Settings(BaseSettings):
     llm_max_output_tokens: LLMInteger | None = None
     llm_max_input_bytes: LLMInteger | None = None
     llm_max_response_bytes: LLMInteger | None = None
-    # ADR 0010의 자동 재시도 1회(총 시도 2회)를 표시하며 변경 가능한 호출 예산이 아니다.
+    # ADR 0011의 자동 재시도 1회(총 시도 2회)를 표시하며 변경 가능한 호출 예산이 아니다.
     llm_max_retries: LLMInteger = Field(default=1, ge=1, le=1)
+
+    # ── STT (MLAPI Whisper) ──
+    # 비어 있어도 앱은 기동하고, 답변 전사 호출 전에 require_stt()가 검증한다.
+    # 크기·시간 상한은 MLAPI 쪽 한도를 확인하지 못해 잡은 보수적 기본값이며 설정으로 조정한다.
+    stt_provider: str | None = None
+    stt_base_url: str | None = Field(default=None, repr=False)
+    stt_api_key: SecretStr | None = None
+    stt_model: str | None = "whisper-large-v3"
+    # MLAPI는 언어 코드(ko)가 아니라 이름(korean)을 받는다.
+    stt_language: str | None = "korean"
+    stt_timeout_seconds: LLMTimeout = Field(default=30.0, gt=0, allow_inf_nan=False)
+    stt_max_audio_bytes: LLMInteger = Field(default=10485760, gt=0)
+    # 이보다 짧은 오디오는 STT를 호출하지 않고 빈 전사로 본다. webm/opus는 초당 약 4KB(0007)라
+    # 기본값은 1초 안팎이며 실측 후 조정한다. 0이면 빈 오디오만 거른다.
+    stt_min_audio_bytes: LLMInteger = Field(default=4096, ge=0)
+    # 무음에도 200과 함께 오는 환각 문구(실측: "감사합니다."). 전사 전체가 이 문구와 같고 오디오가
+    # 아래 길이 이하일 때만 빈 전사로 본다. 쉼표로 구분하며 빈 값이면 필터를 끈다.
+    stt_hallucination_phrases: Annotated[tuple[str, ...], NoDecode] = ("감사합니다",)
+    stt_hallucination_max_seconds: LLMTimeout = Field(default=15.0, gt=0, allow_inf_nan=False)
+    # 답변 오디오 수신 규칙(0007). 180초는 FE·서버 공통 상한, 여유는 FE 타이머·마지막 조각 지연분.
+    answer_audio_max_seconds: LLMTimeout = Field(default=180.0, gt=0, allow_inf_nan=False)
+    answer_audio_grace_seconds: LLMTimeout = Field(default=5.0, ge=0, allow_inf_nan=False)
+    # 오디오가 이 시간 동안 오지 않으면 미완료 오디오를 버린다(0007 제안 10초).
+    answer_audio_idle_timeout_seconds: LLMTimeout = Field(default=10.0, gt=0, allow_inf_nan=False)
 
     # ── 정책 · 분석 ──
     analysis_run_ttl_seconds: int = 7200
@@ -228,6 +308,24 @@ class Settings(BaseSettings):
         if self.openai_model is not None:
             values["llm_default_model"] = self.openai_model
         return LLMSettings.model_validate(values)
+
+    @field_validator(
+        "stt_provider", "stt_base_url", "stt_api_key", "stt_model", "stt_language", mode="before"
+    )
+    @classmethod
+    def _empty_stt_value_is_unset(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("stt_hallucination_phrases", mode="before")
+    @classmethod
+    def _parse_hallucination_phrases(cls, value: object) -> object:
+        if isinstance(value, str):
+            return tuple(item.strip() for item in value.split(",") if item.strip())
+        return value
+
+    def require_stt(self) -> STTSettings:
+        """캐시된 설정만 검증하며 주소·키·모델이 준비되지 않으면 실패한다."""
+        return STTSettings.model_validate(self.model_dump(include=set(STTSettings.model_fields)))
 
     def call_limits(self) -> CallLimits:
         """LLM 설정을 먼저 검증한 뒤 AI 호출에 전달할 상한을 만든다."""

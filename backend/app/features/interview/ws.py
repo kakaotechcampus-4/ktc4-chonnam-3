@@ -9,7 +9,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from math import ceil
-from typing import cast
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 from anyio import CancelScope
@@ -29,6 +29,17 @@ from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.db.models import InterviewSession, LLMCallRecord, Repository
 from app.features.interview.agent_context import AgentStateError
+from app.features.interview.answer_audio import (
+    AUDIO_TOO_LONG_CAUSE,
+    AnswerAudioBuffer,
+    AnswerAudioLimits,
+    AnswerAudioTooLong,
+    AnswerEnd,
+    AnswerStart,
+    NoActiveAnswer,
+    parse_voice_message,
+    turn_rejection,
+)
 from app.features.interview.director_service import AnswerExecution, log_recovery, process_answer
 from app.features.interview.queries import list_turns
 from app.features.interview.schemas import InterviewLastError
@@ -37,6 +48,8 @@ from app.features.interview.service import (
     realtime_interview_key,
     realtime_session_key,
 )
+from app.features.interview.turn_position import turn_position
+from app.integrations.stt.client import MlapiSttClient, SttError, SttFailureCause
 from app.shared.enums import PrepareStepKey, Reason
 
 router = APIRouter(prefix="/ws/interviews", tags=["interview"])
@@ -108,8 +121,14 @@ async def _script(redis: Redis, script: str, key_count: int, *values: object) ->
     return await execute("EVAL", script, key_count, *values)
 
 
-def _error(reason: str, *, step: str | None = None, recoverable: bool = True) -> dict[str, object]:
-    return {
+def _error(
+    reason: str,
+    *,
+    step: str | None = None,
+    recoverable: bool = True,
+    details: dict[str, object] | None = None,
+) -> dict[str, object]:
+    event: dict[str, object] = {
         "type": "error",
         "reason": reason,
         "recoverable": recoverable,
@@ -117,6 +136,17 @@ def _error(reason: str, *, step: str | None = None, recoverable: bool = True) ->
         "step": step,
         "occurredAt": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
     }
+    # details가 없으면 기존 error JSON과 키까지 같아야 한다.
+    if details is not None:
+        event["details"] = details
+    return event
+
+
+# 다시 답변해도 복구되지 않는 STT 실패(설정 누락·인증 오류). FE가 반복 안내 대신 서비스 불가로 본다.
+_STT_UNAVAILABLE: dict[str, Any] = {
+    "recoverable": False,
+    "details": {"cause": "stt_unavailable"},
+}
 
 
 async def _deny(socket: WebSocket, reason: str, status: int = 409) -> None:
@@ -173,17 +203,23 @@ async def _read_state(socket: WebSocket, user_id: UUID, interview_id: UUID) -> _
         question = None
         if (
             interview.status == "in_progress"
-            and interview.answer_mode == "text"
             and current is not None
             and current.status == "asked"
             and current.answer_text is None
             and pending is None
         ):
+            main_index, follow_up_depth = turn_position(
+                [(turn.turn_no, turn.depth) for turn in turns], current.turn_no
+            )
             question = {
                 "type": "question",
                 "persona": current.persona,
                 "text": current.question_text,
                 "turn": current.turn_no,
+                "mainIndex": main_index,
+                "followUpDepth": follow_up_depth,
+                # 질문 음성(TTS)은 이번 범위 밖이다. FE가 질문 텍스트를 보여 준다(0007).
+                "audioUrl": None,
             }
         snapshot = {
             "status": interview.status,
@@ -227,6 +263,8 @@ class _Connection:
         self.connected = True
         self.closed = asyncio.Event()
         self.outgoing = asyncio.Lock()
+        # 수신 task는 타임아웃·호출 취소로 버리지 않고 다음 receive가 이어받아 프레임을 잃지 않는다.
+        self._incoming: asyncio.Task[object] | None = None
 
     async def acquire(self) -> bool:
         # 프로세스가 달라도 이전 소켓을 먼저 닫는다. 잠금 값을 강제로 덮어쓰지 않는다.
@@ -279,19 +317,44 @@ class _Connection:
                 await _script(self.redis, _RELEASE, 1, self.lock, self.nonce)
             self.closed.set()
 
-    async def receive(self) -> object:
-        receiving = asyncio.create_task(self.socket.receive_json())
+    async def _read_frame(self) -> object:
+        """text 프레임은 JSON으로, binary 프레임은 bytes로 돌려준다."""
+        message = await self.socket.receive()
+        if message["type"] == "websocket.disconnect":
+            raise WebSocketDisconnect(message.get("code", 1000))
+        if message.get("bytes") is not None:
+            return cast(bytes, message["bytes"])
+        text = message.get("text")
+        if text is None:
+            raise ValueError("empty websocket frame")
+        return json.loads(text)
+
+    async def receive(self, wait_seconds: float | None = None) -> object:
+        """다음 프레임을 기다린다. wait_seconds 안에 없으면 TimeoutError이고 프레임은 유지된다."""
+        if self._incoming is None:
+            self._incoming = asyncio.create_task(self._read_frame())
         closing = asyncio.create_task(self.closed.wait())
         try:
-            await asyncio.wait((receiving, closing), return_when=asyncio.FIRST_COMPLETED)
+            await asyncio.wait(
+                (self._incoming, closing), timeout=wait_seconds, return_when=asyncio.FIRST_COMPLETED
+            )
             if closing.done():
                 raise WebSocketDisconnect()
-            return receiving.result()
+            if not self._incoming.done():
+                raise TimeoutError
+            incoming, self._incoming = self._incoming, None
+            return incoming.result()
         finally:
-            for task in (receiving, closing):
-                task.cancel()
+            closing.cancel()
             with CancelScope(shield=True):
-                await asyncio.gather(receiving, closing, return_exceptions=True)
+                await asyncio.gather(closing, return_exceptions=True)
+
+    async def release_receiver(self) -> None:
+        incoming, self._incoming = self._incoming, None
+        if incoming is not None:
+            incoming.cancel()
+            with CancelScope(shield=True):
+                await asyncio.gather(incoming, return_exceptions=True)
 
     async def refresh(self) -> bool:
         return bool(
@@ -445,6 +508,129 @@ def _answer(raw: object) -> tuple[int, str] | str:
     return raw["turn"], raw["text"]
 
 
+def _answer_audio_buffer(socket: WebSocket) -> AnswerAudioBuffer:
+    config = socket.app.state.settings
+    return AnswerAudioBuffer(
+        AnswerAudioLimits(
+            max_bytes=config.stt_max_audio_bytes,
+            max_seconds=config.answer_audio_max_seconds,
+            grace_seconds=config.answer_audio_grace_seconds,
+            idle_timeout_seconds=config.answer_audio_idle_timeout_seconds,
+        )
+    )
+
+
+async def _answer_start(
+    connection: _Connection, user_id: UUID, buffer: AnswerAudioBuffer, start: AnswerStart
+) -> None:
+    """지금 답변할 수 있는 턴일 때만 새 오디오를 받기 시작한다. 거절해도 받던 오디오는 둔다."""
+    state = await _read_state(connection.socket, user_id, connection.interview_id)
+    current_turn = cast(int, state.snapshot["currentTurn"])
+    answerable = cast(int, state.question["turn"]) if state.question is not None else None
+    reason = turn_rejection(start.turn, current_turn, answerable)
+    if reason is not None:
+        await connection.send(_error(reason))
+        return
+    buffer.start(start.turn, start.mime_type)
+
+
+async def _answer_chunk(connection: _Connection, buffer: AnswerAudioBuffer, chunk: bytes) -> None:
+    turn = buffer.active_turn
+    try:
+        buffer.append(chunk)
+    except AnswerAudioTooLong:
+        await _audio_too_long(connection, turn)
+
+
+async def _audio_too_long(connection: _Connection, turn: int | None) -> None:
+    logger.warning("answer_audio_too_long", interview_id=str(connection.interview_id), turn=turn)
+    limit = connection.socket.app.state.settings.answer_audio_max_seconds
+    await connection.send(
+        _error(
+            "answer_too_long",
+            details={"cause": AUDIO_TOO_LONG_CAUSE, "limitSeconds": int(limit)},
+        )
+    )
+
+
+def _stt_client(socket: WebSocket) -> MlapiSttClient:
+    state = socket.app.state
+    # 테스트는 app.state.stt_client로 mock 전사기를 주입한다. 없으면 설정을 호출 시점에 검증한다.
+    injected = getattr(state, "stt_client", None)
+    return injected if injected is not None else MlapiSttClient(state.settings.require_stt())
+
+
+async def _answer_end(
+    connection: _Connection, user_id: UUID, buffer: AnswerAudioBuffer, end: AnswerEnd
+) -> bool:
+    """받은 오디오를 전사해 `transcript`를 보낸 뒤 기존 처리 경로로 저장·진행한다.
+
+    순서는 transcript → answerReceived → thinking 이다(FE mock 기준). transcript는 저장 전에 보낸다.
+    """
+    try:
+        audio = buffer.end(end.turn)
+    except NoActiveAnswer:
+        await connection.send(_error("answer_rejected"))
+        return True
+    except AnswerAudioTooLong:
+        await _audio_too_long(connection, end.turn)
+        return True
+    try:
+        text = await _stt_client(connection.socket).transcribe(audio.data, audio.mime_type)
+    except SttError as exc:
+        # 공급자 원문·상태 코드는 어디에도 싣지 않는다. 빈 전사만 FE가 구분하도록 cause를 보낸다.
+        logger.warning(
+            "interview_ws_stt_failed",
+            interview_id=str(connection.interview_id),
+            turn=end.turn,
+            exception_type=type(exc).__name__,
+        )
+        if exc.cause is SttFailureCause.EMPTY_TRANSCRIPT:
+            await connection.send(_error("stt_failed", details={"cause": "empty_transcript"}))
+        elif exc.cause is SttFailureCause.UNAUTHORIZED:
+            # 키 문제는 다시 답변해도 풀리지 않는다.
+            await connection.send(_error("stt_failed", **_STT_UNAVAILABLE))
+        else:
+            await connection.send(_error("stt_failed"))
+        return True
+    except ValueError as exc:
+        # 설정 누락·오류. 값(주소·키)은 남기지 않는다.
+        logger.error(
+            "interview_ws_stt_configuration_invalid",
+            interview_id=str(connection.interview_id),
+            turn=end.turn,
+            exception_type=type(exc).__name__,
+        )
+        await connection.send(_error("stt_failed", **_STT_UNAVAILABLE))
+        return True
+    await connection.send({"type": "transcript", "turn": end.turn, "text": text})
+    return await _run_answer(connection, user_id, end.turn, text, "answer_rejected")
+
+
+async def _run_answer(
+    connection: _Connection, user_id: UUID, turn: int, text: str, invalid_turn_reason: str
+) -> bool:
+    """저장·분석·다음 질문 복구까지 수행한다. 연결을 더 쓸 수 없으면 False."""
+    try:
+        result = await _execute(connection, user_id, turn, text)
+    except AgentStateError as exc:
+        if exc.reason == "answer_turn_invalid":
+            # 저장되지 않았으므로 answerReceived는 가지 않았다. 텍스트는 stale, 음성은 rejected.
+            await connection.send(_error(invalid_turn_reason))
+            return True
+        # 다른 연결이 작업 중이거나 이 연결이 교체된 경우만 재접속으로 풀린다.
+        recoverable = exc.reason == "connection_replaced_or_busy"
+        await connection.send(_error("question_failed", recoverable=recoverable))
+        await connection.close()
+        return False
+    if result.failure is not None or result.discard_reason is not None:
+        log_recovery(result.failure, "turn")
+        await connection.send(_error("question_failed", recoverable=False))
+        await connection.close()
+        return False
+    return await connection.restore(user_id)
+
+
 async def _execute(connection: _Connection, user_id: UUID, turn: int, text: str) -> AnswerExecution:
     state = connection.socket.app.state
     config = state.settings
@@ -546,6 +732,7 @@ async def interview_socket(socket: WebSocket, session_id: str) -> None:
     nonce = secrets.token_urlsafe(32)
     assert raw is not None
     connection = _Connection(socket, redis, session_id, interview_id, raw, nonce)
+    audio = _answer_audio_buffer(socket)
     heartbeat = watcher = None
     control = redis.pubsub()
     try:
@@ -570,7 +757,11 @@ async def interview_socket(socket: WebSocket, session_id: str) -> None:
             return
         while connection.connected:
             try:
-                raw_answer = await connection.receive()
+                raw_answer = await connection.receive(audio.idle_remaining())
+            except TimeoutError:
+                # 오디오가 오지 않으면 미완료 오디오를 버린다. 클라이언트에는 알리지 않는다(0007).
+                audio.discard_if_idle()
+                continue
             except (ValueError, KeyError):
                 await connection.send(_error("answer_rejected"))
                 continue
@@ -578,28 +769,24 @@ async def interview_socket(socket: WebSocket, session_id: str) -> None:
             if not await connection.refresh():
                 await connection.close(1008)
                 return
+            if isinstance(raw_answer, bytes):
+                await _answer_chunk(connection, audio, raw_answer)
+                continue
+            voice = parse_voice_message(raw_answer)
+            if isinstance(voice, AnswerStart):
+                await _answer_start(connection, user_id, audio, voice)
+                continue
+            if isinstance(voice, AnswerEnd):
+                if not await _answer_end(connection, user_id, audio, voice):
+                    return
+                continue
+            # 텍스트 answer는 5단계(answer_mode → voice)에서 0007에 맞춰 제거한다. 그 전까지 유지.
             parsed = _answer(raw_answer)
             if isinstance(parsed, str):
                 await connection.send(_error(parsed))
                 continue
             turn, text = parsed
-            try:
-                result = await _execute(connection, user_id, turn, text)
-            except AgentStateError as exc:
-                if exc.reason == "answer_turn_invalid":
-                    await connection.send(_error("answer_stale_turn"))
-                    continue
-                # 다른 연결이 작업 중이거나 이 연결이 교체된 경우만 재접속으로 풀린다.
-                recoverable = exc.reason == "connection_replaced_or_busy"
-                await connection.send(_error("question_failed", recoverable=recoverable))
-                await connection.close()
-                return
-            if result.failure is not None or result.discard_reason is not None:
-                log_recovery(result.failure, "turn")
-                await connection.send(_error("question_failed", recoverable=False))
-                await connection.close()
-                return
-            if not await connection.restore(user_id):
+            if not await _run_answer(connection, user_id, turn, text, "answer_stale_turn"):
                 return
     except WebSocketDisconnect:
         connection.connected = False
@@ -608,6 +795,9 @@ async def interview_socket(socket: WebSocket, session_id: str) -> None:
         await connection.send(_error("question_failed"))
         await connection.close(1011)
     finally:
+        # 연결이 끝나면 미완료 오디오를 버린다. 재연결 뒤에는 같은 턴을 다시 답변한다(0007).
+        audio.discard()
+        await connection.release_receiver()
         for task in (heartbeat, watcher):
             if task is not None:
                 task.cancel()

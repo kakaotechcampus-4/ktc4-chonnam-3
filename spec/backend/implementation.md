@@ -2,6 +2,47 @@
 
 구현 범위와 실제 실행 결과를 기록한다. 기능 요구사항은 각 features 문서와 task 문서를 따른다.
 
+## 2026-11-02 — STT(MLAPI Whisper) 연동 (진행 중, 브랜치 `feature/be-stt-mlapi`)
+
+설계 근거는 [0007](../shared/decisions/0007-voice-interview-contract.md)(Proposed)과
+[0011 초안](../shared/decisions/0011-stt-provider-mlapi-whisper.md)이다. 이 절은 구현·검증 현황만 둔다.
+
+### 구현한 것
+
+- `core/config.py`·`.env.example`: `STT_*` 설정(provider·base_url·api_key·model·language·timeout·
+  최대/최소 오디오 바이트·환각 문구·길이)과 답변 오디오 수신 규칙(180초·여유 5초·유휴 10초).
+  미설정이어도 앱은 기동하고 `require_stt()`가 호출 전에 검증한다.
+- `integrations/stt/client.py`: `MlapiSttClient.transcribe(bytes, mime) -> str`. 실패는 `SttError(cause)`.
+  최소 크기 미만·알려진 환각 문구+짧은 오디오는 STT 호출 없이/후에 `empty_transcript`로 본다.
+- `features/interview/answer_audio.py`: 턴별 메모리 버퍼·`answerStart`/`answerEnd` 파싱·턴 거절 판정.
+- `features/interview/ws.py`: text/bytes 프레임 수신, `answerStart`·청크·`answerEnd` 처리, `error.details`,
+  `transcript → answerReceived → thinking` 순서. 기존 텍스트 `answer`는 5단계 전까지 유지한다.
+- `answer_mode`: enum·모델 CHECK에 `voice`를 추가하고 새 세션 기본값을 `voice`로 바꿨다(migration `0006_answer_mode_voice`).
+  기존 `text` 세션은 행을 바꾸지 않고 허용하며 텍스트 `answer`도 병행 유지한다. `_read_state`의 text 전용 질문 조건은 제거했다.
+  `openapi.yaml`의 `AnswerMode`는 `[text, voice]`로 갱신했다.
+- `question`·`GET /interviews/{id}`의 `turns`에 `mainIndex`·`followUpDepth`를 DB `depth`에서 계산해 싣고
+  `question.audioUrl`은 `null`이다(TTS 범위 밖). `depth`를 AI가 아직 채우지 않아 현재 값은 항상 메인(꼬리질문 0)이다.
+
+### 검증 결과
+
+| 검증 | 결과 |
+| --- | --- |
+| 신규·변경 단위 테스트(STT 어댑터·버퍼·WS 음성 처리·turn_position) | 통과 |
+| `ruff check .`·`ruff format --check .`·`mypy app` | 통과 |
+| 전체 `pytest`(격리한 로컬 PostgreSQL·Redis) | analysis 제외 1604 passed·1 skipped(989초), analysis 123 passed(task10_test DB) |
+| 기존 WS 통합 테스트(`test_director_ws*.py`) | 통과. `question` 필드 추가에 맞춰 기대값만 수정함 |
+| migration `0006` upgrade·downgrade | 통과(`tests/test_answer_mode_migration.py`). voice 세션이 있을 때의 downgrade 차단은 미검증 |
+| 기존 `test_agent_merge_migration.py` | 새 head가 합류 revision이 아니게 되어 합류 revision 기준으로 수정함 |
+| 실제 MLAPI 호출(2026-11-03) | 통과. `MlapiSttClient`로 한국어 13초 wav·webm/opus는 전사, 3초 무음 wav는 환각 문구("감사합니다")가 `usage.seconds` 3과 함께 오며 `empty_transcript`로 걸러짐 |
+| `check_contracts.py` | 통과: schema 2개·부분 OpenAPI·fixture 7개(격리 venv에 검사 의존성 설치). 전체 API 호환성 검증은 아님 |
+| `backend/tests/contract` | 54 passed |
+
+### 남은 작업
+
+- 텍스트 `answer` 제거와 CHECK를 `('voice')`로 좁히는 후속 migration(기존 `text` 세션 정리 후). 호환 유지 방침으로 이번에는 하지 않았다.
+- `openapi.yaml` `InterviewTurn`의 `mainIndex`·`followUpDepth` 반영(리포트가 같은 스키마를 참조해 범위 확인 필요).
+- `depth`·`parent_turn_no`를 AI가 채우는 작업(AI 담당)은 이 연동 범위 밖이다.
+
 ## 2026-10-08 — PR #79 리뷰 반영
 
 기준은 #79 `9cd8189`와 develop `4a3187e`다. 원본 브랜치·커밋을 보존하고 별도 게시용 브랜치에서

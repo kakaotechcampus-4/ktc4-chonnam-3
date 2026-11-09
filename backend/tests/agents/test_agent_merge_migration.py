@@ -15,12 +15,16 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
+MERGE = "0005_director_foundation_merge"
 
 
 def migrate(connection, script, target, *, downgrade=False):
     def steps(heads, context):
         if downgrade:
             assert len(heads) == 1
+            if heads[0] != MERGE:
+                # 합류 revision 뒤에 쌓인 revision은 먼저 내려 현재 합류 revision을 head로 만든다.
+                return script._downgrade_revs(MERGE, heads)
             revision = script.get_revision(heads[0])
             assert revision.is_merge_point
             # 부모를 골라 DDL까지 되돌리지 않고 현재 합류 revision만 해제한다.
@@ -65,7 +69,7 @@ async def test_applied_branch_keeps_legacy_postings_through_merge_round_trip(app
             assert await db.run_sync(migrate, script, applied) == (applied,)
             heads = await db.run_sync(migrate, script, "head")
             assert len(heads) == 1 and set(heads) == set(script.get_heads())
-            assert script.get_revision(heads[0]).is_merge_point
+            assert script.get_revision(MERGE).is_merge_point
             assert await db.scalar(text("SELECT to_regclass('llm_call_records')")) is not None
             await db.execute(
                 text(
@@ -73,7 +77,8 @@ async def test_applied_branch_keeps_legacy_postings_through_merge_round_trip(app
                     "VALUES ('legacy-url','new-version','succeeded')"
                 )
             )
-            await db.run_sync(migrate, script, "head", downgrade=True)
+            await db.run_sync(migrate, script, "head", downgrade=True)  # 합류 뒤 revision 해제
+            await db.run_sync(migrate, script, "head", downgrade=True)  # 합류 revision 해제
             assert await db.scalar(text("SELECT count(*) FROM job_postings")) == 2
             assert (
                 await db.scalar(

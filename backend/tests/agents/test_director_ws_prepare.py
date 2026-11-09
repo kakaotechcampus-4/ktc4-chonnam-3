@@ -75,6 +75,9 @@ async def test_preparing_streams_snapshot_changes_then_completion_and_stored_que
                 "persona": "hr_manager",
                 "text": "본인의 역할을 설명해 주세요.",
                 "turn": 1,
+                "mainIndex": 1,
+                "followUpDepth": 0,
+                "audioUrl": None,
             }
 
 

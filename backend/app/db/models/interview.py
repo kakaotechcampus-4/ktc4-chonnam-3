@@ -33,8 +33,8 @@ from app.db.base import Base, CreatedAtMixin, TimestampMixin, UUIDPrimaryKeyMixi
 INTERVIEW_STATUSES = ("preparing", "preparing_failed", "in_progress", "completed", "abandoned")
 # 준비 중이거나 진행 중인 면접. run 당 1개만 허용한다.
 ACTIVE_INTERVIEW_STATUSES = ("preparing", "in_progress")
-# Sprint 1 은 양방향 텍스트 고정. 음성은 Sprint 2.
-ANSWER_MODES = ("text",)
+# 새 세션은 voice(0007). 기존 text 세션은 호환을 위해 허용한다.
+ANSWER_MODES = ("text", "voice")
 PERSONAS = ("tech_lead", "hr_manager", "domain_lead")
 TURN_STATUSES = ("asked", "answered")
 
@@ -78,7 +78,7 @@ class InterviewSession(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="preparing")
-    answer_mode: Mapped[str] = mapped_column(String(10), nullable=False, server_default="text")
+    answer_mode: Mapped[str] = mapped_column(String(10), nullable=False, server_default="voice")
     total_turns: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="9")
     current_turn: Mapped[int] = mapped_column(SmallInteger, nullable=False, server_default="0")
 

@@ -39,6 +39,9 @@ class InterviewTurn(CamelResponse):
     persona: Persona
     question: str
     answer: str | None
+    # 0007(Proposed): 새로고침 뒤 "꼬리질문 k" 표시 복구용. DB depth에서 계산한다.
+    main_index: int
+    follow_up_depth: int
 
 
 class InterviewLastError(CamelResponse):

@@ -106,7 +106,14 @@ async def test_in_progress_turns_and_timer(db, redis, created) -> None:
     detail = await _get(db, redis, run, interview_id)
 
     assert [t.model_dump() for t in detail.turns] == [
-        {"turn": 1, "persona": "hr_manager", "question": "Q1", "answer": None}
+        {
+            "turn": 1,
+            "persona": "hr_manager",
+            "question": "Q1",
+            "answer": None,
+            "mainIndex": 1,
+            "followUpDepth": 0,
+        }
     ]
     total = get_settings().interview_duration_seconds
     assert total - 105 <= detail.remaining_seconds <= total - 100

@@ -523,7 +523,10 @@ components:
         path, distinct from failed. It applies to StepKey only.
     AnswerMode:
       type: string
-      enum: [text]
+      enum: [text, voice]
+      description: >-
+        New interviews are voice. text remains only for interviews created before
+        the voice switch (spec/shared/decisions/0007, Proposed).
     DocumentExtractStatus:
       type: string
       enum: [succeeded, partial, failed]

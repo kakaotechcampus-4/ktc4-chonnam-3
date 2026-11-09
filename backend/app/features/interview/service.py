@@ -1,7 +1,7 @@
 """세션 생성 / 동시 면접 제한 / sessionId 발급.
 ★ job_posting_id 가 NOT NULL 이다 (공고 필수).
 ★ status = preparing / preparing_failed / in_progress / completed / abandoned. paused 없음.
-★ answer_mode = 'text' 고정 (CHECK). 2차에 voice 완화.
+★ answer_mode = 새 세션 voice(기본값), 기존 text 세션은 CHECK로 허용한다 (0007, migration 0006).
 ★ 명시적 이탈·레포 재선택만 status='abandoned' + abandoned_at_turn으로 처리한다.
   WS 끊김은 재연결 대상이며 미답변 턴은 asked로 남는다. 자동 timeout 이탈 판정은 없다.
   실제 상태 저장·연결은 구현 대기다.
@@ -27,6 +27,7 @@ from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.logging import get_logger
 from app.db.models import InterviewSession, SessionRepository
+from app.db.models import InterviewTurn as InterviewTurnRow
 from app.features.interview import queries
 from app.features.interview.queue import enqueue_interview_prep
 from app.features.interview.schemas import (
@@ -34,6 +35,7 @@ from app.features.interview.schemas import (
     InterviewLastError,
     InterviewTurn,
 )
+from app.features.interview.turn_position import turn_position
 from app.shared.enums import Reason
 from app.shared.events import commit_events, record_event
 
@@ -152,14 +154,21 @@ async def get_interview(
         current_turn=interview.current_turn,
         total_turns=interview.total_turns,
         remaining_seconds=_remaining_seconds(interview),
-        turns=[
-            InterviewTurn(
-                turn=t.turn_no, persona=t.persona, question=t.question_text, answer=t.answer_text
-            )
-            for t in turns
-        ],
+        turns=[_detail_turn(t, [(item.turn_no, item.depth) for item in turns]) for t in turns],
         # openapi: preparing_failed 일 때만 내려준다.
         last_error=_last_error(interview) if interview.status == "preparing_failed" else None,
+    )
+
+
+def _detail_turn(turn: InterviewTurnRow, positions: list[tuple[int, int]]) -> InterviewTurn:
+    main_index, follow_up_depth = turn_position(positions, turn.turn_no)
+    return InterviewTurn(
+        turn=turn.turn_no,
+        persona=turn.persona,
+        question=turn.question_text,
+        answer=turn.answer_text,
+        main_index=main_index,
+        follow_up_depth=follow_up_depth,
     )
 
 

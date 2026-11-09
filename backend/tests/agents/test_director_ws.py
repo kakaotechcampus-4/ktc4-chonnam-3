@@ -87,6 +87,9 @@ async def test_reconnect_replays_stored_question_and_rebuilds_snapshot_without_a
                     "persona": "hr_manager",
                     "text": "본인의 역할을 설명해 주세요.",
                     "turn": 1,
+                    "mainIndex": 1,
+                    "followUpDepth": 0,
+                    "audioUrl": None,
                 }
 
         async def cached():
