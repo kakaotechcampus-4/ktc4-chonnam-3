@@ -1,8 +1,9 @@
 """정해진 Git SHA에서 제한된 구조와 검증한 파일 원문만 L2 입력으로 수집한다."""
 
 import asyncio
+import re
 from collections import deque
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from typing import cast
 
 import httpx
@@ -10,6 +11,14 @@ from devon_ai import contracts as c
 
 from app.agents.director.tools import EvidenceScope
 from app.core.config import Settings
+from app.features.interview.repository_candidates import MAX_CANDIDATES, neighbor_candidates
+from app.features.interview.repository_inventory import SourceInventory
+from app.features.interview.repository_source_selection import (
+    selection_window,
+    summarized_limitations,
+)
+from app.features.interview.repository_structure import recursive_files
+from app.features.interview.source_segments import segment_text
 from app.integrations.github.evidence import EvidenceReader, EvidenceReadError
 from app.integrations.llm.client import CallBudget, call_model
 
@@ -37,6 +46,10 @@ class SourceCollection:
     item: c.DeepRepoInput
     attempts: tuple[c.AttemptMetadata, ...]
     limitations: tuple[str, ...]
+    candidate_paths: tuple[str, ...] = ()
+    inventory_paths: tuple[str, ...] = ()
+    selection_paths: tuple[str, ...] = ()
+    inventory_limitations: tuple[str, ...] = ()
 
 
 # 항목 상한에 걸려도 핵심 코드가 먼저 수집되도록 같은 디렉터리 안에서 읽는 순서를 정한다.
@@ -70,7 +83,13 @@ def _priority(raw: object) -> int:
 
 
 async def _structure(
-    reader: EvidenceReader, root: str, scope: EvidenceScope, settings: Settings
+    reader: EvidenceReader,
+    root: str,
+    scope: EvidenceScope,
+    settings: Settings,
+    *,
+    reserve_requests: int = 0,
+    reserve_bytes: int = 0,
 ) -> tuple[tuple[str, ...], list[str]]:
     queue = deque([(root, "", 0)])
     files: list[str] = []
@@ -79,9 +98,14 @@ async def _structure(
     while queue:
         sha, prefix, depth = queue.popleft()
         try:
-            tree = await reader.get(f"/git/trees/{sha}")
+            if reader.requests_left <= reserve_requests or reader.bytes_left <= reserve_bytes:
+                raise EvidenceReadError("evidence_budget_exhausted")
+            tree = await reader.get(
+                f"/git/trees/{sha}",
+                max_bytes=reader.bytes_left - reserve_bytes if reserve_bytes else None,
+            )
         except EvidenceReadError as error:
-            if error.code != "evidence_budget_exhausted" or not files:
+            if error.code not in {"evidence_budget_exhausted", "evidence_byte_limit"} or not files:
                 raise
             limitations.append(
                 "구조 조회 요청 또는 바이트 상한으로 일부 디렉터리는 확인하지 못했습니다."
@@ -128,15 +152,37 @@ async def _structure(
                 else:
                     limitations.append("구조 깊이 상한으로 일부 하위 파일은 확인하지 못했습니다.")
             elif kind == "blob" and mode in {"100644", "100755"}:
-                size = raw.get("size")
-                if type(size) is int and size > settings.director_prepare_max_file_bytes:
-                    limitations.append(f"파일 크기 상한으로 원문을 읽지 않았습니다: {path}")
-                else:
-                    files.append(path)
+                # 큰 파일도 후보에 두고 원문 조회와 구간화를 별도 예산으로 제한한다.
+                files.append(path)
             else:
                 limitations.append(f"일반 파일이 아닌 항목은 읽지 않았습니다: {path}")
-        # regular_blob이 같은 부모 tree를 다시 요청하지 않도록 검증한 목록을 공유한다.
-        reader.trees[sha] = valid
+        # 일부 항목만 확인한 부모를 완전 캐시로 두면 나머지 경로가 없다고 오판한다.
+        # 캐시 밖의 기존 선정 경로는 regular_blob이 전체 부모를 다시 읽게 한다.
+        if len(valid) == len(entries):
+            reader.trees[sha] = valid
+        if (
+            not prefix
+            and queue
+            and observed < settings.director_prepare_max_entries
+            and reader.requests_left - reserve_requests >= 2
+        ):
+            # 재귀 응답도 원문 몫을 침범하지 않는다. 실패 시 기존 순회 몫의 절반을 남긴다.
+            probe_bytes = (reader.bytes_left - reserve_bytes) // 2
+            if probe_bytes > 0:
+                try:
+                    recursive = await recursive_files(
+                        reader, root, scope, settings, max_bytes=probe_bytes
+                    )
+                    if recursive is not None:
+                        candidates, extra = recursive
+                        limitations.extend(extra)
+                        if candidates:
+                            return candidates, list(dict.fromkeys(limitations))
+                except EvidenceReadError as error:
+                    limitations.append(
+                        "재귀 구조 조회를 완료하지 못해 제한된 경로별 순회를 사용합니다: "
+                        f"{error.code}"
+                    )
         if observed >= settings.director_prepare_max_entries:
             if queue:
                 limitations.append("구조 항목 상한으로 일부 디렉터리는 확인하지 못했습니다.")
