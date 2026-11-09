@@ -267,3 +267,51 @@ def test_invalid_judge_does_not_discard_the_model_output_or_assert_a_release_pas
     assert result["cases"][0]["quality"] == "judge_error"
     assert result["grader_controls"]["status"] == "failed"
     assert result["summary"]["release_gate_passed"] is None
+
+
+def test_async_judge_is_awaited_for_service_outputs_and_controls():
+    fixture = case("approved")
+    fixture.expectation["grader_controls"] = [{"kind": "allowed", "output": "control-only"}]
+    seen = []
+
+    async def execute(kind, payload):
+        return Execution({"question": "service-only"})
+
+    async def judge(rubric, output):
+        seen.append((rubric, output))
+        return "accept"
+
+    result = asyncio.run(run_cases([fixture], execute, metadata={}, grader=judge))
+    assert result["cases"][0]["quality"] == "accept"
+    assert len(seen) == 2 and all(set(rubric) == {"allowed", "forbidden"} for rubric, _ in seen)
+    assert result["grader_controls"]["by_kind"]["allowed"]["correct"] == 1
+    assert result["summary"]["release_gate_passed"] is None
+
+
+def test_calibration_only_does_not_execute_or_guess_missing_service_input():
+    fixture = case("approved")
+    fixture.expectation["grader_controls"] = [{"kind": "allowed", "output": "control"}]
+
+    async def unexpected(kind, payload):
+        raise AssertionError("교정 모드에서는 서비스 모델을 실행하지 않는다")
+
+    async def judge(rubric, output):
+        return "accept"
+
+    result = asyncio.run(
+        run_cases(
+            [fixture],
+            unexpected,
+            metadata={},
+            grader=judge,
+            calibration_only=True,
+            bindings={
+                "q-9999.v1": {"status": "invalid", "error_code": "explicit_service_input_required"}
+            },
+        )
+    )
+    assert result["cases"][0]["status"] == "not_executed"
+    assert result["cases"][0]["error_code"] == "explicit_service_input_required"
+    assert result["summary"]["quality_denominator"] == 0
+    assert result["grader_controls"]["evaluated_cases"] == 1
+    assert result["summary"]["release_gate_passed"] is None
