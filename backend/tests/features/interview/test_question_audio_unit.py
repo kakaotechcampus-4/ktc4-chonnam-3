@@ -254,3 +254,28 @@ async def test_anyio_cancellation_after_paid_audio_keeps_cache_and_propagates():
     assert scope.cancel_called and not reached_after_get
     assert (await service.get(source)).data == b"ID3audio"
     assert len(provider.calls) == 1
+
+
+async def test_outer_timeout_cools_down_before_another_paid_synthesis(monkeypatch):
+    from app.features.interview import question_audio
+
+    monkeypatch.setattr(question_audio, "FINALIZATION_TIMEOUT_SECONDS", 0.01)
+    cache = Cache()
+    calls = []
+
+    class Waiting:
+        async def synthesize(self, text, persona):
+            calls.append(text)
+            await asyncio.sleep(100)
+
+    from dataclasses import replace
+
+    settings = replace(config(), timeout_seconds=0.01)
+    service = QuestionAudioService(cache, Waiting(), settings)
+    source = question()
+    with pytest.raises(TtsError, match="timeout"):
+        await service.get(source)
+    with pytest.raises(TtsError, match="temporarily_unavailable"):
+        await service.get(source)
+    assert len(calls) == 1
+    assert not any(key.endswith(":lock") for key in cache.values)
