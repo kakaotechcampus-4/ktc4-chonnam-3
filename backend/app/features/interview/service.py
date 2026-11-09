@@ -34,6 +34,7 @@ from app.features.interview.schemas import (
     InterviewTurn,
 )
 from app.shared.enums import Reason
+from app.shared.events import commit_events, record_event
 
 # rt:{sessionId} TTL (docs/pipeline.md 4.4, docs/redis-keys.md).
 REALTIME_SESSION_TTL_SECONDS = 2 * 60 * 60
@@ -109,6 +110,16 @@ async def create_interview(
             # ponytail: 되돌리기 실패 행은 id 로그만 남긴다. 자동 정리는 준비 job reaper 에서.
             logger.error("interview_create_rollback_failed", interview_id=str(interview_id))
         raise AppError(Reason.INTERNAL_ERROR) from None
+    # 준비 job 까지 접수된 뒤에만 남긴다 — 위 되돌리기 경로에 이벤트가 새지 않게 한다.
+    await record_event(
+        db,
+        "repo_selected",
+        user_id=user_id,
+        analysis_job_id=run_id,
+        interview_session_id=interview_id,
+        payload={"repositoryCount": len(repository_ids)},
+    )
+    await commit_events(db)
     return interview_id, session_id
 
 

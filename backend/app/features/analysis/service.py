@@ -37,6 +37,7 @@ from app.features.analysis.run_schemas import (
 from app.features.analysis.run_status import initial_steps, status_response
 from app.integrations.jd.base import UnsupportedSiteError
 from app.shared.enums import Reason
+from app.shared.events import record_event
 
 
 async def create_run(
@@ -90,6 +91,9 @@ async def create_run(
             .returning(AnalysisJob.id)
         )
         if identity is not None:
+            await record_event(
+                db, "analysis_run_started", user_id=user_id, analysis_job_id=identity
+            )
             await db.commit()
             # DB 접수가 끝났으므로 큐 등록 실패도 202다. queued run은 reaper가 재등록한다.
             await enqueue_analysis(redis, identity)

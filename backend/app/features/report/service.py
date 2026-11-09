@@ -55,6 +55,7 @@ from app.llm_tasks.report import (
     validate_draft,
 )
 from app.shared.enums import Reason
+from app.shared.events import commit_events, record_event
 
 # docs/redis-keys.md: report generation lock. worker 가 끝나기 전에 풀리면 중복 enqueue 가 난다.
 REPORT_LOCK_TTL_SECONDS = 5 * 60
@@ -81,7 +82,10 @@ async def get_report(
 
     report = await queries.get_report(db, interview_id=interview.id)
     if report is not None:
-        return await _build_report(db, interview, posting, report)
+        response = await _build_report(db, interview, posting, report)
+        await record_event(db, "report_viewed", user_id=user_id, interview_session_id=interview.id)
+        await commit_events(db)
+        return response
 
     if interview.status != "completed":
         raise AppError(Reason.REPORT_UNAVAILABLE)

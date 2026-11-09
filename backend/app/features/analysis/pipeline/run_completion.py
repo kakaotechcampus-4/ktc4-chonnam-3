@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.db.models.analysis import AnalysisJob, AnalysisRepoCandidatePage
 from app.features.analysis.pipeline.run_state import elapsed, notify
+from app.shared.events import record_event
 
 
 async def finish_page(ctx: dict[str, Any], run_id: UUID, page: int, error: str | None) -> None:
@@ -39,6 +40,13 @@ async def finish_run(ctx: dict[str, Any], run_id: UUID, status: str, error: str 
         if run is None or run.status != "running":
             return
         run.status, run.error_code = status, error
+        await record_event(
+            db,
+            "analysis_run_completed" if status == "succeeded" else "analysis_run_failed",
+            user_id=run.user_id,
+            analysis_job_id=run_id,
+            payload={"status": status, "errorCode": error} if error else {"status": status},
+        )
         run.completed_at = datetime.now(UTC)
         run.duration_ms = elapsed(run.started_at, run.completed_at)
         # 중단 시 실행 중인 단계와 아직 실행하지 않은 단계를 구분해 남긴다.
