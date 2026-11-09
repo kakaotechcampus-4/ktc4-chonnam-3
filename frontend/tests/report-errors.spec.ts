@@ -23,12 +23,15 @@ test('리포트 조회 네트워크 오류는 흰 화면 대신 오류 문구와
   await expect(page).toHaveURL(/\/home$/);
 });
 
-test('report_unavailable은 원인을 단정하지 않고 홈 이동만 제공한다', async ({ page }) => {
+test('report_unavailable은 원인을 단정하지 않고 홈 이동과 명시적 생성 재시도를 제공한다', async ({
+  page,
+}) => {
   await faults(page, [{ path: '/interviews/*/report', status: 409, reason: 'report_unavailable' }]);
   await page.goto(REPORT_URL);
   await expect(page.getByRole('alert')).toHaveText('이 면접은 리포트를 만들 수 없어요.');
   await expect(page.getByRole('button', { name: '홈으로 가기' })).toBeVisible();
   await expect(page.getByRole('button', { name: '다시 불러오기' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '리포트 생성 다시 시도' })).toBeVisible();
 });
 
 test('재도전 410은 만료 안내와 공고 입력 이동 버튼을 보여준다', async ({ page }) => {
