@@ -60,11 +60,8 @@ async def test_worker_success_enqueues_profile_summary_and_releases_lock(
     assert await _counts(db) == (1, 6)
     assert await app.state.redis.exists(f"report:gen:{interview.id}") == 0
     assert await app.state.redis.exists(f"report:fail:{interview.id}") == 0
-    enqueue.assert_awaited_once_with(
-        "profile_summary",
-        str(interview.user_id),
-        _job_id=f"profile_summary:{interview.user_id}",
-    )
+    # 고정 _job_id 는 ARQ 결과 보존 중 재enqueue 를 버리므로 쓰지 않는다.
+    enqueue.assert_awaited_once_with("profile_summary", str(interview.user_id))
 
 
 async def test_worker_failure_records_history_and_keeps_lock(

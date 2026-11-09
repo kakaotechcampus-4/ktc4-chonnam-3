@@ -45,13 +45,13 @@ async def report_generate(ctx: dict[str, Any], interview_id: str) -> None:
 async def _enqueue_profile_summary(ctx: dict[str, Any], interview_id: uuid.UUID) -> None:
     """성공한 report 를 되돌리지 않도록 enqueue 실패는 로그만 남긴다.
 
-    같은 사용자의 진행 중 job 은 _job_id 로 중복 enqueue 를 막는다.
+    고정 _job_id 는 쓰지 않는다. ARQ 가 결과 보존 기간 동안 같은 id 의 재enqueue 를 조용히
+    버려 두 번째 report 뒤 프로필이 갱신되지 않기 때문이다. 동시 실행은 worker 의
+    profile:gen lock 이 막는다.
     """
     try:
         async with ctx["session_factory"]() as db:
             user_id = await service.get_interview_user_id(db, interview_id)
-        await ctx["redis"].enqueue_job(
-            "profile_summary", str(user_id), _job_id=f"profile_summary:{user_id}"
-        )
+        await ctx["redis"].enqueue_job("profile_summary", str(user_id))
     except Exception:
         logger.error("profile_summary_enqueue_failed", interview_id=str(interview_id))
