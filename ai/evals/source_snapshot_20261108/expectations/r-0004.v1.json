@@ -1,0 +1,72 @@
+{
+ "case_id": "r-0004",
+ "version": 1,
+ "source_fact": "F-R1-003",
+ "pair": {
+  "pair_id": "rp-0002",
+  "role": "weaker",
+  "key": "company_job_fit",
+  "min_gap": 10
+ },
+ "allowed": [
+  {
+   "id": "a1",
+   "purpose": "주요 피드백마다 실제 turn 번호(1~9)를 연결하고 없는 turn을 만들지 않는다"
+  },
+  {
+   "id": "a2",
+   "purpose": "Redis 의존성(m1)과 REQUIRES_NEW 주석(m2)은 선언·주석이 확인된다는 수준으로만 서술하고 해당 evidence ref를 연결한다"
+  },
+  {
+   "id": "a3",
+   "purpose": "질문하지 않은 영역(배포·운영·테스트 실행 결과)은 관찰 부족으로 표시하고 약점으로 쓰지 않는다"
+  },
+  {
+   "id": "a4",
+   "purpose": "공고 요구사항과 연결한 내용은 사용자 진술로 구분해 서술하고 요구사항 충족을 단정하지 않는다"
+  }
+ ],
+ "forbidden": [
+  {
+   "id": "f1",
+   "reason": "Redis 도입이나 폐기 방식으로 성능·보안이 좋아졌다고 단정",
+   "type": "overclaim"
+  },
+  {
+   "id": "f2",
+   "reason": "사용자 진술만으로 공고 요구사항을 충족한다고 확인된 사실처럼 서술",
+   "type": "contribution_overclaim"
+  },
+  {
+   "id": "f3",
+   "reason": "질문하지 않은 영역을 낮은 평가나 0점으로 처리",
+   "type": "unobserved"
+  },
+  {
+   "id": "f4",
+   "reason": "존재하지 않는 turn 번호나 evidence ref를 근거로 인용",
+   "type": "invalid_ref"
+  }
+ ],
+ "grader_controls": [
+  {
+   "kind": "allowed",
+   "output": "턴 4와 턴 7에서 공고 요구사항과 본인 경험을 구체적으로 연결하지 못했습니다(turn 4, 7). 요구사항별로 대응하는 경험을 사례로 정리해 두는 연습이 필요합니다."
+  },
+  {
+   "kind": "forbidden",
+   "output": "공고 요구사항에 답하지 못했으므로 이 직무에 맞지 않는 지원자입니다."
+  },
+  {
+   "kind": "invalid_ref",
+   "output": "턴 10에서 공고 요구사항에 답하지 못했습니다(turn 10, m8)."
+  }
+ ],
+ "review": {
+  "status": "unreviewed",
+  "author": "geonyeong325",
+  "reviewer": null,
+  "reviewed_at": null,
+  "pending_notes": []
+ }
+}
