@@ -26,6 +26,8 @@ export type ScenarioName =
   | 'ws-repo-unreachable'
   | 'ws-stt-failed'
   | 'ws-stt-empty'
+  | 'ws-stt-unavailable'
+  | 'ws-audio-too-long'
   | 'ws-repeat-request'
   | 'ws-answer-rejected'
   | 'ws-no-ack'
@@ -226,6 +228,25 @@ export const scenarios: Record<ScenarioName, Scenario> = {
         times: 1,
       },
     ],
+  },
+
+  'ws-stt-unavailable': {
+    describe: '다음 답변 1회 STT 설정 누락·인증 오류. 다시 답변 대신 서비스 불가 안내를 본다.',
+    rules: [
+      {
+        path: '/ws/interviews/*/stt',
+        reason: 'stt_failed',
+        code: 'ERR_STT_FAILED',
+        recoverable: false,
+        details: { cause: 'stt_unavailable' },
+        times: 1,
+      },
+    ],
+  },
+
+  'ws-audio-too-long': {
+    describe: '다음 답변 1회 오디오가 서버 길이 상한을 넘음. 같은 턴 다시 답변 경로를 본다.',
+    rules: [{ path: '/ws/interviews/*/too-long', times: 1 }],
   },
 
   'ws-repeat-request': {

@@ -14,8 +14,8 @@ export type StepKey =
   | 'match_score';
 export type PrepareStepKey = 'analyze_repo' | 'build_persona' | 'compose_question' | 'set_criteria';
 export type StepStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
-/** Sprint 2부터 음성 면접만 남는다. spec/shared/decisions/0007 (Proposed) */
-export type AnswerMode = 'voice';
+/** 새 면접은 voice, text는 음성 전환 전 면접만. spec/shared/decisions/0007 (Proposed) */
+export type AnswerMode = 'text' | 'voice';
 export type Persona = 'tech_lead' | 'hr_manager' | 'domain_lead';
 export type ScoreKey =
   | 'project_understanding'
@@ -337,7 +337,10 @@ export type WsClientMessage =
  * 새로고침으로 WS 메시지를 놓쳐도 조회로 같은 정보를 복구할 수 있어야 하기 때문이다.
  * `reason` 값 목록과 화면 처리는 api-spec.md #18의 표를 따른다. 계약대로 union으로 고정하지 않는다.
  */
-/** details는 stt_failed의 cause(`empty_transcript`)처럼 원인 구분용이다(0007). */
+/**
+ * details는 원인 구분용이다(0007, backend/docs/error-reasons.md). stt_failed의 `empty_transcript`·
+ * `stt_unavailable`, answer_too_long의 `audio_too_long`(+`limitSeconds`)이 있다.
+ */
 export type WsErrorMessage = { type: 'error' } & InterviewLastError & {
   details?: Record<string, unknown>;
 };

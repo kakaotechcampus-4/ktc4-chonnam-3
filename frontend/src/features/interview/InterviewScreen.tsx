@@ -16,7 +16,10 @@ import { abandonInterview, type ReselectState } from '@/features/interview/aband
 import { RESTART_REASONS, RETRY_ERROR } from '@/features/interview/retryErrors';
 import { isApiError, type InterviewLastError, type MeResponse, type Persona } from '@/types/api';
 
-/** 진행 중 오류 문구. 답변 실패(stt_failed·answer_rejected)는 턴 안에서 따로 안내한다. */
+/**
+ * 진행 중 오류 문구. 다시 답하면 되는 답변 실패(stt_failed·answer_rejected·answer_too_long)는
+ * 턴 안에서 따로 안내한다.
+ */
 const ERROR_MESSAGE: Record<string, string> = {
   question_failed: '다음 질문을 만들지 못했어요. 잠시만 기다려주세요.',
   repo_unreachable: '레포에 접근할 수 없어 면접을 이어갈 수 없어요.',
@@ -29,6 +32,8 @@ const ERROR_MESSAGE: Record<string, string> = {
  */
 const FATAL_ERROR_MESSAGE: Record<string, string> = {
   question_failed: '다음 질문을 만들지 못해 면접을 이어갈 수 없어요.',
+  // details.cause: stt_unavailable. STT 설정 누락·인증 오류라 다시 답해도 풀리지 않는다.
+  stt_failed: '음성 인식을 사용할 수 없어 면접을 이어갈 수 없어요. 잠시 후 다시 시도해주세요.',
 };
 
 /** 30초간 다른 메시지가 없으면 근거 확인 배너를 내린다. */
@@ -61,7 +66,8 @@ type LiveQuestion = {
  * 머문다 — 전사와 저장은 별개이고, 이 사이에 끊기면 실패다(0007 "실패와 복구").
  */
 type AnswerPhase = 'listening' | 'recording' | 'transcribing' | 'submitted' | 'failed';
-type Failure = 'disconnected' | 'stt' | 'empty' | 'rejected' | 'micLost' | 'micUnavailable';
+type Failure =
+  'disconnected' | 'stt' | 'empty' | 'rejected' | 'tooLong' | 'micLost' | 'micUnavailable';
 type AnswerState = {
   turn: number;
   phase: AnswerPhase;
@@ -75,6 +81,7 @@ const FAILURE_MESSAGE: Record<Failure, string> = {
   stt: '음성을 글로 바꾸지 못했어요 · 다시 답변해주세요',
   empty: '목소리가 인식되지 않았어요 · 마이크를 확인하고 다시 답변해주세요',
   rejected: '답변을 저장하지 못했어요 · 다시 답변해주세요',
+  tooLong: '답변이 너무 길어요 · 더 짧게 다시 답변해주세요',
   micLost: '마이크 연결이 끊겼어요 · 확인 후 다시 답변해주세요',
   micUnavailable: '마이크를 사용할 수 없어요 · 브라우저의 마이크 권한과 연결을 확인해주세요',
 };
@@ -262,16 +269,23 @@ export default function InterviewScreen() {
       } else if (message.type === 'error') {
         // WS 오류는 전역 오류 처리를 거치지 않는다.
         refreshMeIfTokenInvalid(message.reason);
-        if (message.reason === 'stt_failed') {
+        // recoverable: false(stt_unavailable)는 다시 답해도 같으므로 아래 치명 오류로 넘긴다.
+        if (message.reason === 'stt_failed' && message.recoverable) {
           fail(message.details?.cause === 'empty_transcript' ? 'empty' : 'stt');
+          return;
+        }
+        // 서버 기준 길이(audio_too_long) 초과. 받던 오디오는 버려졌으니 같은 턴에 다시 답한다.
+        if (message.reason === 'answer_too_long') {
+          fail('tooLong');
           return;
         }
         if (message.reason === 'answer_rejected') {
           fail('rejected');
           return;
         }
-        // 서버가 세션을 닫아 소켓 끊김(onDrop)으로 정리되지 않는다. 녹음·전사 중이던 답변은
-        // 쓸 곳이 없으니 마이크를 닫고 표식과 상태를 지운다. 안내는 아래 오류 하나만 남긴다.
+        // 서버가 세션을 닫거나(stt_unavailable은 연결 유지) 더 답할 수 없는 상태라 소켓 끊김(onDrop)
+        // 으로 정리되지 않는다. 녹음·전사 중이던 답변은 쓸 곳이 없으니 마이크를 닫고 표식과 상태를
+        // 지운다. 안내는 아래 오류 하나만 남긴다.
         if (!message.recoverable) {
           recorderRef.current?.cancel();
           markRecording(id, null);
@@ -408,7 +422,10 @@ export default function InterviewScreen() {
     ? Math.max(0, interview.remainingSeconds - Math.floor((now - dataUpdatedAt) / 1000))
     : null;
 
-  /** recoverable: false면 서버가 세션을 닫는다. 더 보낼 수 없으므로 답변을 막는다. */
+  /**
+   * recoverable: false면 보통 서버가 세션을 닫는다. stt_unavailable은 연결을 유지하지만 다시 답해도
+   * 같은 오류라 똑같이 답변을 막는다.
+   */
   const fatal = !!error && !error.recoverable;
   const canStart = !fatal && !!question && wsStatus === 'open' && current.phase === 'listening';
   const elapsedSeconds = recorder.startedAt

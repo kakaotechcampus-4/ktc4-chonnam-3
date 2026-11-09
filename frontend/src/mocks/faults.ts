@@ -33,7 +33,10 @@ export type FaultRule = {
   details?: Record<string, unknown>;
   /** WebSocket 오류 전용. 오류 식별자(화면에는 노출하지 않음). api-spec.md #18 */
   code?: string;
-  /** WebSocket 오류 전용. `false`면 서버가 세션을 닫는다. 생략하면 `true`. */
+  /**
+   * WebSocket 오류 전용. 생략하면 `true`. 연결 단계 규칙은 `false`면 mock이 세션을 닫는다.
+   * 답변 단계 `stt` 규칙은 실제 서버(`stt_unavailable`)처럼 닫지 않는다.
+   */
   recoverable?: boolean;
   /**
    * WebSocket 준비 단계 오류 전용. 어느 단계에서 실패했는지.
