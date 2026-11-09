@@ -1,15 +1,7 @@
 diff --git a/backend/app/core/config.py b/backend/app/core/config.py
 --- a/backend/app/core/config.py
 +++ b/backend/app/core/config.py
-@@ -230,6 +230,7 @@
-     api_prefix: str = "/api"
-     frontend_origin: str = "http://localhost:5173"
-     log_level: LogLevel = "INFO"
-+    log_json: bool = False
- 
-     # ── DB / Redis ──
-     database_url: str = Field(
-@@ -370,14 +371,20 @@
+@@ -371,14 +371,20 @@
      interview_duration_seconds: int = 1200
      # 원래 enqueue 와 겹치지 않도록 이 시간 이상 preparing 인 면접만 reaper 가 재등록한다.
      interview_prep_reaper_min_age_seconds: int = Field(default=60, gt=0)

@@ -159,6 +159,11 @@ def _body(request: ModelRequest) -> bytes:
     return json.dumps(body, ensure_ascii=False, allow_nan=False).encode("utf-8")
 
 
+def request_size(request: ModelRequest) -> int:
+    """실제 전송과 같은 직렬화로 입력 예산을 측정하며 요청 내용은 반환하지 않는다."""
+    return len(_body(request))
+
+
 def _token(usage: object, name: str) -> int | None:
     """사용량을 알 수 없으면 0회 사용으로 기록하지 않고 None을 유지한다."""
     if isinstance(usage, dict):

@@ -124,6 +124,15 @@ def _redact_server_exception(record: logging.LogRecord) -> bool:
         record.msg = "Application exception (%s)"
         record.args = (details["exception_type"],)
         record.__dict__.update(details)
+    else:
+        arguments = record.args.values() if isinstance(record.args, dict) else record.args or ()
+        if any(
+            isinstance(value, str) and "Traceback (most recent call last)" in value
+            for value in (record.msg, *arguments)
+        ):
+            # 이미 문자열이 된 traceback에서는 메시지·SQL·지역변수를 안전하게 분리할 수 없다.
+            record.msg = "Application exception (preformatted details suppressed)"
+            record.args = ()
     record.exc_info = None
     record.exc_text = None
     record.stack_info = None

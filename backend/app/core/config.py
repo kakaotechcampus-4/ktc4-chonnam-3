@@ -125,6 +125,8 @@ class Settings(BaseSettings):
     api_prefix: str = "/api"
     frontend_origin: str = "http://localhost:5173"
     log_level: LogLevel = "INFO"
+    log_json: bool = False
+    log_json: bool = False
 
     # ── DB / Redis ──
     database_url: str = Field(
