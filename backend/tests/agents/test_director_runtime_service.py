@@ -52,6 +52,207 @@ async def test_answer_loader_keeps_current_turn_outside_history_even_at_nine(
     assert loaded.context.allowed_personas == ("domain_lead",)
 
 
+async def test_coverage_prompt_stores_the_assigned_scope_and_replay_does_not_issue_a_new_question(
+    agent_sessions, agent_seed
+):
+    from app.db.models import PromptVersion
+    from app.features.interview.director_service import start_director
+
+    await seed_turns(agent_sessions, agent_seed, 0)
+    async with agent_sessions.begin() as db:
+        previous = await db.scalar(
+            select(PromptVersion).where(PromptVersion.task_name == "director")
+        )
+        previous.is_active = False
+        await db.flush()
+        db.add(
+            PromptVersion(
+                task_name="director",
+                version="director_v3",
+                model="db-model",
+                template="coverage fixture",
+                is_active=True,
+            )
+        )
+    requests = []
+
+    async def handle(req):
+        payload = json.loads(json.loads(req.content)["input"][0]["content"][0]["text"])
+        requests.append(payload)
+        if payload["operation"] == "review":
+            return response(approved_review())
+        candidate = plan()
+        candidate["question"]["question_contract"]["evaluation_keys"] = [
+            "contribution_clarity",
+            "communication",
+        ]
+        return response(candidate)
+
+    options = dict(
+        user_id=agent_seed["owner"],
+        interview_id=agent_seed["interview_id"],
+        call_id=uuid4(),
+        settings=settings(),
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        created = await start_director(agent_sessions, **options, http_client=http)
+        replayed = await start_director(agent_sessions, **options, http_client=http)
+    assert created.turn_id == replayed.turn_id
+    assert len(requests) == 2
+    async with agent_sessions() as db:
+        turn = await db.get(InterviewTurn, created.turn_id)
+        assert turn.question_contract["evaluation_keys"] == [
+            "contribution_clarity",
+            "communication",
+        ]
+        assert turn.depth == 1 and turn.parent_turn_no is None
+
+
+async def test_follow_up_saves_the_actual_parent_turn_and_depth(agent_sessions, agent_seed):
+    from app.features.interview.director_service import start_director
+
+    await seed_turns(agent_sessions, agent_seed, 3)
+    async with agent_sessions.begin() as db:
+        parent = await db.scalar(select(InterviewTurn).where(InterviewTurn.turn_no == 3))
+        parent.status = "answered"
+        parent.answer_text = "팀원 담당입니다"
+        parent.depth = 2
+        parent.parent_turn_no = 2
+        parent_id = str(parent.id)
+
+    async def handle(req):
+        payload = json.loads(json.loads(req.content)["input"][0]["content"][0]["text"])
+        candidate = plan("tech_lead")
+        candidate["question"]["question_type"] = "follow_up"
+        candidate["question"]["parent_turn_id"] = parent_id
+        return response(candidate if payload["operation"] == "plan" else approved_review())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        result = await start_director(
+            agent_sessions,
+            user_id=agent_seed["owner"],
+            interview_id=agent_seed["interview_id"],
+            call_id=uuid4(),
+            settings=settings(),
+            http_client=http,
+        )
+    assert result.failure is None and result.turn_id is not None
+    async with agent_sessions() as db:
+        turn = await db.get(InterviewTurn, result.turn_id)
+        assert (turn.depth, turn.parent_turn_no) == (3, 3)
+
+
+async def test_verified_external_request_is_stored_and_reloaded_for_the_next_director(
+    agent_sessions, agent_seed, monkeypatch
+):
+    from app.core.config import Settings
+    from app.db.models import PromptVersion
+    from app.features.interview import external_knowledge
+    from app.features.interview.director_service import process_answer
+    from app.integrations.search.tavily import TavilyClient
+
+    await seed_turns(agent_sessions, agent_seed, 1)
+    async with agent_sessions.begin() as db:
+        previous = await db.scalar(
+            select(PromptVersion).where(PromptVersion.task_name == "answer_analysis")
+        )
+        previous.is_active = False
+        await db.flush()
+        db.add(
+            PromptVersion(
+                task_name="answer_analysis",
+                version="answer_analysis_v2",
+                model="fixture-model",
+                template="analysis fixture",
+                is_active=True,
+            )
+        )
+    searches, plans = [], []
+
+    def search_handler(req):
+        searches.append(req.url.path)
+        if req.url.path == "/search":
+            return httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {
+                            "url": "https://elice.io/reference",
+                            "title": "Official guide",
+                            "content": "snippet",
+                        }
+                    ],
+                    "usage": {"credits": 1},
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "url": "https://elice.io/reference",
+                        "raw_content": "Actual official session reference",
+                    }
+                ],
+                "failed_results": [],
+                "usage": {"credits": 0},
+            },
+        )
+
+    monkeypatch.setattr(
+        external_knowledge,
+        "TavilyClient",
+        lambda config: TavilyClient(config, transport=httpx.MockTransport(search_handler)),
+    )
+
+    async def model_handler(req):
+        payload = json.loads(json.loads(req.content)["input"][0]["content"][0]["text"])
+        if "operation" not in payload:
+            return response(
+                asdict(
+                    replace(
+                        analysis(),
+                        needs_verification=True,
+                        external_queries=(
+                            c.ExternalQueryRequest("Redis session architecture", "일반 개념 확인"),
+                        ),
+                    )
+                )
+            )
+        if payload["operation"] == "review":
+            return response(approved_review())
+        plans.append(payload)
+        source = payload["context"]["supplemental_sources"][0]
+        candidate = plan("tech_lead")
+        candidate["question"]["question_contract"]["basis_refs"] = [
+            {"kind": "external_source", "id": source["source_id"]}
+        ]
+        return response(candidate)
+
+    external_settings = Settings(_env_file=None, tavily_api_key="fixture-key")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(model_handler)) as http:
+        result = await process_answer(
+            agent_sessions,
+            user_id=agent_seed["owner"],
+            interview_id=agent_seed["interview_id"],
+            turn_no=1,
+            text="팀원 담당입니다",
+            call_id=uuid4(),
+            settings=settings(),
+            external_settings=external_settings,
+            http_client=http,
+        )
+    assert result.failure is None and result.next_turn_id is not None
+    assert searches == ["/search", "/extract"]
+    assert plans[0]["context"]["external_searches"][0]["status"] == "found"
+    assert plans[0]["context"]["supplemental_sources"][0]["content"] == (
+        "Actual official session reference"
+    )
+    async with agent_sessions() as db:
+        turn = await db.get(InterviewTurn, result.next_turn_id)
+        assert turn.question_contract["basis_refs"][0]["kind"] == "external_source"
+
+
 async def test_last_answer_is_analyzed_before_completion_and_replay_never_calls_again(
     agent_sessions, agent_seed
 ):
@@ -613,6 +814,61 @@ async def test_answer_loader_preserves_authorized_posting_basis_text(agent_sessi
     assert loaded.question.data.question_contract == stored
 
 
+async def test_archived_source_outside_model_budget_still_restores_the_original_question(
+    agent_sessions, agent_seed
+):
+    from datetime import UTC, datetime, timedelta
+
+    from app.db.models import InterviewExternalSource
+    from app.features.interview.answer_context import load_answer_context, reference_texts
+
+    await seed_turns(agent_sessions, agent_seed)
+    old_id = uuid4()
+    new_ids = tuple(uuid4() for _ in range(4))
+    old_ref = c.BasisRef("external_source", str(old_id))
+    stored = replace(contract(), basis_refs=(old_ref,))
+    async with agent_sessions.begin() as db:
+        turn = await db.scalar(select(InterviewTurn))
+        turn.question_contract = json.loads(json.dumps(asdict(stored)))
+        for source_id, content, retrieved_at in (
+            (old_id, "original quoted passage", datetime.now(UTC) - timedelta(days=3)),
+            *((source_id, "new reference " * 2000, datetime.now(UTC)) for source_id in new_ids),
+        ):
+            db.add(
+                InterviewExternalSource(
+                    id=source_id,
+                    user_id=agent_seed["owner"],
+                    interview_session_id=agent_seed["interview_id"],
+                    query_text="reference",
+                    url=f"https://example.org/{source_id}",
+                    content=content,
+                    content_hash="b" * 64,
+                    content_scope="extracted_page",
+                    retrieved_at=retrieved_at,
+                    limitations=[],
+                )
+            )
+    async with agent_sessions() as db:
+        loaded = await load_answer_context(
+            db,
+            user_id=agent_seed["owner"],
+            interview_id=agent_seed["interview_id"],
+            turn_no=1,
+            limits=c.ContextLimits(2, 0, "test"),
+        )
+        bounded_sources = await reference_texts(db, agent_seed["interview_id"])
+    assert old_ref.id not in {source.source_id for source in loaded.context.supplemental_sources}
+    assert (
+        sum(len(source.content.encode()) for source in loaded.context.supplemental_sources) <= 16384
+    )
+    assert old_ref not in bounded_sources
+    assert loaded.question.data.question_contract == stored
+    assert (
+        f"question_basis_outside_model_budget:external_source:{old_ref.id}"
+        in loaded.context.supplemental_limitations
+    )
+
+
 async def test_director_updates_context_snapshot_without_losing_prepare_state(
     agent_sessions, agent_seed
 ):
@@ -745,6 +1001,13 @@ async def test_unexecuted_lookup_scopes_survive_models_storage_and_interruption(
             assert (await db.get(LLMCallRecord, call_id)).discard_reason == "canceled"
         elif outcome == "enrichment_failure":
             assert "보강 분석 미완료" in summary
+        interview = await db.get(InterviewSession, agent_seed["interview_id"])
+        traces = (interview.context_state or {}).get("evidence_tool_results", {})
+        if outcome == "canceled":
+            assert str(turn.id) not in traces
+        else:
+            assert traces[str(turn.id)]["status"] == actual.status
+            assert traces[str(turn.id)]["searched_scope"] == [paths[0]]
     for payload in sent:
         for tool in payload.get("tool_results", []):
             assert tool["status"] == actual.status

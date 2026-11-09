@@ -37,7 +37,7 @@ async def generate_question(
         context,
         question_contract,
         prompt=prompt,
-        limits=settings.call_limits(),
+        limits=settings.call_limits(prompt.task_name),
         model_call=model_call,
         review=review,
         answer_analysis=answer_analysis,

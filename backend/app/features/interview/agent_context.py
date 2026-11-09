@@ -15,6 +15,11 @@ from app.db.models.interview import InterviewSession, InterviewTurn, SessionRepo
 from app.db.models.knowledge import DomainQuestionFrame
 from app.db.models.posting import JdRequirement, JobPosting
 from app.db.models.user import User
+from app.features.interview.evaluation_coverage import plan_evaluation_targets
+from app.features.interview.supplemental_sources import (
+    load_external_searches,
+    load_supplemental_sources,
+)
 
 PERSONAS: tuple[c.PersonaId, ...] = ("tech_lead", "hr_manager", "domain_lead")
 
@@ -85,6 +90,30 @@ def _limitation_texts(values: object) -> tuple[str, ...]:
         if isinstance(values, list)
         else ()
     )
+
+
+def _document_limitations(state: Mapping[str, object]) -> tuple[str, ...]:
+    status = state.get("document_claims_status")
+    if status in (None, "succeeded"):
+        return ()
+    if status not in ("pending", "failed", "not_available"):
+        return ("document_claims:invalid_status:",)
+    error = state.get("document_claims_error_code")
+    code = error if type(error) is str else ""
+    return (f"document_claims:{status}:{code}",)
+
+
+def _domain_limitations(raw_payload: Mapping[str, object]) -> tuple[str, ...]:
+    limitations: list[str] = []
+    classification = raw_payload.get("_domain_classification")
+    if isinstance(classification, dict) and classification.get("status") == "failed":
+        limitations.append("domain_classification_failed:using_general_frame")
+    image = raw_payload.get("_image_extraction")
+    if isinstance(image, dict):
+        limitations.extend(
+            "jd_image:" + value for value in _limitation_texts(image.get("limitations"))
+        )
+    return tuple(dict.fromkeys(limitations))
 
 
 def _analysis_limitations(row: RepoAnalysis) -> tuple[str, ...]:
@@ -238,6 +267,7 @@ async def load_context(
             )
         )
     ).all()
+
     frames = (
         await session.scalars(
             _fresh(
@@ -281,6 +311,9 @@ async def load_context(
             )
         )
     ).all()
+    posting = await session.scalar(
+        _fresh(select(JobPosting).where(JobPosting.id == interview.job_posting_id), lock)
+    )
     # 첫 HR부터 완주 가능한 자료를 요구한다. 도메인 할당을 HR로 대체하지 않는다.
     if counts["domain_lead"] < quota["domain_lead"] and not frames:
         raise AgentStateError("domain_frames_unavailable")
@@ -356,6 +389,24 @@ async def load_context(
                 for row in frames
             ),
             limits=limits,
+            supplemental_sources=await load_supplemental_sources(session, interview_id),
+            external_searches=await load_external_searches(session, interview_id),
+            supplemental_limitations=(
+                _document_limitations(interview.context_state or {})
+                + _domain_limitations(posting.raw_payload or {} if posting is not None else {})
+            ),
+            evaluation_targets=(
+                plan_evaluation_targets(
+                    tuple(
+                        c.decode(c.QuestionContract, turn.question_contract)
+                        for turn in history_turns
+                    ),
+                    permitted,
+                    has_jd=bool(requirements),
+                )
+                if answer_turn_no is None
+                else ()
+            ),
         )
     except c.ContractError:
         raise AgentStateError("context_contract_invalid") from None

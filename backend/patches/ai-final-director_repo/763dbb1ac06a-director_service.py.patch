@@ -1,0 +1,166 @@
+diff --git a/backend/app/features/interview/director_service.py b/backend/app/features/interview/director_service.py
+--- a/backend/app/features/interview/director_service.py
++++ b/backend/app/features/interview/director_service.py
+@@ -18,7 +18,7 @@
+ 
+ from app.agents.director.runtime_adapter import execute_director
+ from app.agents.director.tools import EvidenceLimits, EvidenceScope, read_files
+-from app.core.config import INTERVIEW_MAX_TURNS, LLMSettings, get_settings
++from app.core.config import INTERVIEW_MAX_TURNS, LLMSettings, Settings, get_settings
+ from app.core.errors import DIRECTOR_CANDIDATE_RECOVERY_CODES
+ from app.core.logging import get_logger
+ from app.db.models import (
+@@ -37,6 +37,7 @@
+     prior_analyses,
+     reference_texts,
+ )
++from app.features.interview.question_structure import question_position
+ from app.integrations.llm.client import CallBudget
+ from app.llm_tasks.answer_analysis import analyze_answer
+ from app.llm_tasks.prompt_loader import load_active_prompt
+@@ -72,6 +73,29 @@
+     failure: c.CallFailure | None
+     discard_reason: str | None
+     accepted: bool
++
++
++def _record_final_lookup_limitations(
++    interview: InterviewSession, queries: tuple[c.ExternalQueryRequest, ...]
++) -> None:
++    """마지막 답변 뒤 새 탐색을 시작하지 않고 미실행 사실을 종료 기록에 보존한다."""
++    if not queries:
++        return
++    import json
++
++    state = dict(interview.context_state or {})
++    previous = state.get("external_searches", [])
++    if not isinstance(previous, list):
++        raise AgentStateError("external_search_state_invalid")
++    status = c.ExternalSearchStatus(
++        "insufficient_analysis",
++        (),
++        (),
++        ("external_lookup_not_executed:final_turn",),
++        "final_turn_lookup_not_executed",
++    )
++    state["external_searches"] = [*previous, json.loads(json.dumps(asdict(status)))]
++    interview.context_state = state
+ 
+ 
+ def _save_context_snapshot(
+@@ -231,6 +255,18 @@
+                 record.discard_reason = "question_storage_invalid"
+                 return _outcome(record)
+             metadata = outcome.generation
++            try:
++                parent = (
++                    await db.get(InterviewTurn, UUID(question.parent_turn_id))
++                    if question.parent_turn_id is not None
++                    else None
++                )
++                depth, parent_turn_no = question_position(
++                    question, parent, interview_id=interview_id, turn_no=context.turn_no
++                )
++            except ValueError:
++                record.discard_reason = "question_storage_invalid"
++                return _outcome(record)
+             turn = InterviewTurn(
+                 id=uuid4(),
+                 interview_session_id=interview_id,
+@@ -239,6 +275,8 @@
+                 question_text=question.text,
+                 question_contract=asdict(question.question_contract),
+                 topic_code=question.topic_code,
++                depth=depth,
++                parent_turn_no=parent_turn_no,
+                 jd_requirement_ids=[UUID(value) for value in question.jd_requirement_ids],
+                 model=metadata.model,
+                 prompt_version=metadata.prompt_version,
+@@ -251,7 +289,11 @@
+                 "turn_asked",
+                 user_id=user_id,
+                 interview_session_id=interview_id,
+-                payload={"turnNo": context.turn_no, "persona": question.persona},
++                payload={
++                    "turnNo": context.turn_no,
++                    "depth": turn.depth,
++                    "persona": question.persona,
++                },
+             )
+             db.add_all(
+                 TurnEvidence(turn_id=turn.id, evidence_id=UUID(value), usage="question_basis")
+@@ -378,6 +420,7 @@
+     http_client: httpx.AsyncClient | None = None,
+     limits: c.ContextLimits = DEFAULT_LIMITS,
+     evidence_limits: EvidenceLimits | None = None,
++    external_settings: Settings | None = None,
+     on_answer_saved: Callable[[], Awaitable[None]] | None = None,
+     on_evidence_check: Callable[[tuple[c.Evidence, ...]], Awaitable[None]] | None = None,
+ ) -> AnswerExecution:
+@@ -597,6 +640,11 @@
+                     allowed_locations=locations,
+                 )
+                 turn.decision = c.to_data(decision)
++                from devon_ai.agents.director.runtime import external_verification_queries
++
++                final_queries = external_verification_queries(current.context, selected)
++                if final_queries:
++                    _record_final_lookup_limitations(interview, final_queries)
+                 interview.status, interview.completed_at = "completed", datetime.now(UTC)
+                 await record_event(
+                     db, "interview_completed", user_id=user_id, interview_session_id=interview_id
+@@ -617,6 +665,21 @@
+             record.turn_id = turn.id
+         if turn_no == INTERVIEW_MAX_TURNS:
+             return AnswerExecution(call_id, UUID(loaded.turn_id), None, True, None, None, True)
++        from devon_ai.agents.director.runtime import external_verification_queries
++
++        external_queries = external_verification_queries(loaded.context, selected)
++        if external_queries:
++            from app.features.interview.external_knowledge import retrieve_external_knowledge
++
++            # 검증된 T3의 요청만 단일 Director Tool로 실행하고 다음 Context는 DB에서 다시 읽는다.
++            await retrieve_external_knowledge(
++                sessions,
++                user_id=user_id,
++                interview_id=interview_id,
++                queries=external_queries,
++                settings=external_settings,
++                http_client=http_client,
++            )
+         question = await start_director(
+             sessions,
+             user_id=user_id,
+@@ -673,12 +736,21 @@
+     )
+     unexecuted_summary = "; 한계: " + "; ".join(unexecuted) if unexecuted else ""
+ 
+-    async def remember(summary: str) -> None:
++    async def remember(summary: str, result: c.ToolResult | None = None) -> None:
+         async with sessions.begin() as db:
+-            await _owned(db, user_id, interview_id)
++            interview = await _owned(db, user_id, interview_id)
+             turn = await db.get(InterviewTurn, UUID(context.current_turn_id), with_for_update=True)
+             if turn is not None:
+                 turn.decision = asdict(replace(decision.data, reason_summary=summary))
++                if result is not None:
++                    # 다음 질문이 decision을 교체해도 실제 조회 결과와 한계는 별도로 보존한다.
++                    state = dict(interview.context_state or {})
++                    raw_traces = state.get("evidence_tool_results", {})
++                    if not isinstance(raw_traces, dict):
++                        raise AgentStateError("tool_history_invalid")
++                    traces = dict(raw_traces)
++                    traces[str(turn.id)] = asdict(result)
++                    interview.context_state = {**state, "evidence_tool_results": traces}
+ 
+     await remember("근거 조회 요청; 실제 확인 아직 없음; 요청: " + requested + unexecuted_summary)
+     limits = evidence_limits
+@@ -733,7 +805,7 @@
+         summary += "; 오류: " + result.error_code
+     if result.limitations:
+         summary += "; 한계: " + "; ".join(result.limitations)
+-    await remember(summary)
++    await remember(summary, result)
+     if stored and on_evidence_check is not None:
+         await on_evidence_check(stored)
+     return result, summary

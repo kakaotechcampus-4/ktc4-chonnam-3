@@ -37,6 +37,40 @@ def test_partial_answer_returns_checked_analysis_scoped_to_the_question(kit, run
     assert request.max_attempts == 2
 
 
+def test_same_registered_evidence_may_be_returned_by_a_tool(kit, run):
+    evidence = c.Evidence("ev-1", "repo-1", kit.REF, "file", "a.py", None, "x", "grep")
+    context = kit.make_context(evidence=(evidence,))
+    tool = c.ToolResult("found", (evidence,), ("a.py",), (), None)
+    provider = kit.Provider(kit.analysis_output())
+    assert run(provider, context=context, tool_results=(tool,)).succeeded
+
+
+def test_same_evidence_id_with_changed_content_is_rejected(kit, run):
+    evidence = c.Evidence("ev-1", "repo-1", kit.REF, "file", "a.py", None, "x", "grep")
+    context = kit.make_context(evidence=(evidence,))
+    tool = c.ToolResult("found", (replace(evidence, content="changed"),), ("a.py",), (), None)
+    provider = kit.Provider(kit.analysis_output())
+    assert (
+        run(provider, context=context, tool_results=(tool,)).failure.error_code
+        == "answer_analysis_input_invalid"
+    )
+    assert provider.requests == []
+
+
+def test_t3_receives_source_limitations_and_external_search_status(kit, run):
+    status = c.ExternalSearchStatus(
+        "tool_error", (), ("official domains",), ("unavailable",), "search_failed"
+    )
+    context = kit.make_context(
+        external_searches=(status,), supplemental_limitations=("document_unavailable",)
+    )
+    provider = kit.Provider(kit.analysis_output())
+    run(provider, context=context)
+    payload = provider.requests[0].payload
+    assert payload["external_searches"] == [asdict(status)]
+    assert payload["supplemental_limitations"] == ["document_unavailable"]
+
+
 def test_request_carries_the_question_scope_and_answer_but_no_persona_proxy(kit, run):
     provider = kit.Provider(kit.analysis_output())
     run(provider)
@@ -200,6 +234,42 @@ def test_no_remaining_budget_is_a_budget_failure_without_a_call(kit, run):
     context = kit.make_context(limits=c.ContextLimits(0, 0, "fixture"))
     result = run(provider, context=context)
     assert result.failure.stage == "budget" and provider.requests == []
+
+
+def test_new_model_external_query_is_rejected_without_invalidating_historical_decode(kit, run):
+    raw = kit.analysis_output(
+        needs_verification=True,
+        external_queries=[{"query": "me@example.invalid Redis", "purpose": "fixture"}],
+    )
+    assert c.decode(c.AnswerAnalysis, raw).external_queries[0].query == "me@example.invalid Redis"
+    provider = kit.Provider(raw)
+    result = run(provider, prompt=replace(kit.PROMPT, version="answer_analysis_v2"))
+    assert result.failure is not None and result.failure.stage == "semantic"
+    assert len(provider.requests) == 1
+
+
+def test_query_execution_policy_is_rechecked_when_injected_callable_skips_validator(kit, run):
+    candidate = c.decode(
+        c.AnswerAnalysis,
+        kit.analysis_output(
+            needs_verification=True,
+            external_queries=[{"query": "me@example.invalid Redis", "purpose": "fixture"}],
+        ),
+    )
+    historical = c.validate_analysis(
+        candidate,
+        question=kit.checked_question(),
+        answer_text=kit.ANSWER,
+        evidence_refs=frozenset(),
+        allowed_locations=frozenset(),
+    )
+
+    async def bypasses(request, validator):
+        return c.ModelResult(historical, None, (kit.metadata(),))
+
+    result = run(bypasses, prompt=replace(kit.PROMPT, version="answer_analysis_v2"))
+    assert result.failure.stage == "semantic" and result.data is None
+    assert result.attempts == (kit.metadata(),)
 
 
 def test_a_model_call_that_skips_the_validator_cannot_return_unchecked_analysis(kit, run):

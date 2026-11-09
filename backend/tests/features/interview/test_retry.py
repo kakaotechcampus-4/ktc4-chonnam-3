@@ -3,6 +3,8 @@
 spec/backend/features/interview.md "/interviews/{id}/retry" / task-13
 """
 
+from datetime import UTC, datetime
+
 import pytest
 
 from app.core.errors import AppError
@@ -43,6 +45,11 @@ async def _retry(db, redis, run, interview_id):
 async def test_retry_copies_original(db, redis, finished, status: str) -> None:
     run, repos, original_id = finished
     await _set_status(db, original_id, status)
+    if status == "abandoned":
+        original = await db.get(InterviewSession, original_id)
+        # 공통 0009: 준비 중 버린 면접은 재도전 대상이 아니며 시작된 기록만 허용한다.
+        original.started_at = datetime.now(UTC)
+        await db.commit()
 
     new_id, session_id = await _retry(db, redis, run, original_id)
 

@@ -4,7 +4,6 @@
 ★ answer_mode = 'text' 고정 (CHECK). 2차에 voice 완화.
 ★ 명시적 이탈·레포 재선택만 status='abandoned' + abandoned_at_turn으로 처리한다.
   WS 끊김은 재연결 대상이며 미답변 턴은 asked로 남는다. 자동 timeout 이탈 판정은 없다.
-  실제 상태 저장·연결은 구현 대기다.
 
 생성 검사 기준은 spec/backend/features/interview.md "생성 검사 해석".
 
@@ -14,12 +13,14 @@
 import json
 import secrets
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from typing import cast
 
 from arq.connections import ArqRedis
 from pydantic import ValidationError
 from redis.exceptions import RedisError
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -177,17 +178,14 @@ def _last_error(interview: InterviewSession) -> InterviewLastError | None:
 async def retry_interview(
     db: AsyncSession, redis: ArqRedis, *, user_id: uuid.UUID, interview_id: uuid.UUID
 ) -> tuple[uuid.UUID, str]:
-    """끝난 면접의 run·repo 조합으로 새 면접을 만든다. 생성 검사는 create_interview 그대로.
-
-    허용 상태는 BE 명세대로 completed·abandoned. FE 문서는 '완료 상태가 아님'으로 적어
-    다르다 (spec/frontend/features/report.md 계약 차이, PR 에서 명세 반영 확인).
-    없거나 남의 면접은 존재를 알리지 않도록 404 (계약에 404 없음, PR 에서 확인).
-    """
+    """완료 또는 시작 후 중단한 면접의 run·repo 조합으로 새 면접을 만든다(공통 0009)."""
     row = await queries.get_owned_interview(db, user_id=user_id, interview_id=interview_id)
     if row is None:
         raise AppError(Reason.NOT_FOUND)
     original = row[0]
-    if original.status not in ("completed", "abandoned"):
+    if original.status != "completed" and not (
+        original.status == "abandoned" and original.started_at is not None
+    ):
         raise AppError(Reason.ORIGINAL_NOT_COMPLETED)
     # ponytail: repo 행이 삭제되면 session_repositories 도 CASCADE 로 사라져 일부 삭제는
     # 알 수 없고 남은 repo 로 만든다. 전부 사라지면 아래에서 repository_unavailable.
@@ -206,6 +204,54 @@ async def retry_interview(
         if exc.reason in (Reason.INVALID_REPOSITORY, Reason.NO_REPOSITORY_SELECTED):
             raise AppError(Reason.REPOSITORY_UNAVAILABLE) from None
         raise
+
+
+_ABANDON_REALTIME = """
+local session = redis.call('GET', KEYS[1])
+if session then
+    local owner = redis.call('GET', 'ws:lock:' .. session)
+    if owner then redis.call('PUBLISH', 'ws:replace:' .. session, owner) end
+    redis.call('DEL', 'rt:' .. session, KEYS[1])
+end
+redis.call('DEL', KEYS[2])
+return 1
+"""
+
+
+async def abandon_interview(
+    db: AsyncSession, redis: ArqRedis, *, user_id: uuid.UUID, interview_id: uuid.UUID
+) -> None:
+    """명시 중단을 확정한다. 재호출은 같은 기록을 유지하며 연결 정리만 재시도한다."""
+    interview = await db.scalar(
+        select(InterviewSession)
+        .where(InterviewSession.id == interview_id, InterviewSession.user_id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if interview is None:
+        raise AppError(Reason.NOT_FOUND)
+    if interview.status not in ("in_progress", "preparing_failed", "abandoned"):
+        raise AppError(Reason.ALREADY_COMPLETED)
+    if interview.status != "abandoned":
+        # T2~T4와 같은 세션 잠금으로 순서를 정한다. 답변 대기 중인 현재 질문도 포함한다.
+        interview.status = "abandoned"
+        interview.abandoned_at = datetime.now(UTC)
+        interview.abandoned_at_turn = interview.current_turn
+    # 영구 상태를 먼저 확정하므로 늦은 LLM·Tool 결과는 기존 상태 재검사에서 폐기된다.
+    await db.commit()
+    try:
+        execute = cast(Callable[..., Awaitable[object]], redis.execute_command)
+        await execute(
+            "EVAL",
+            _ABANDON_REALTIME,
+            2,
+            realtime_interview_key(interview_id),
+            f"iv:ctx:{interview_id}",
+        )
+    except RedisError:
+        # Redis 장애가 중단을 되돌리지는 않는다. 응답 실패 후 재호출로 연결 정리를 복구한다.
+        logger.warning("interview_abandon_realtime_cleanup_failed", interview_id=str(interview_id))
+        raise AppError(Reason.INTERNAL_ERROR) from None
 
 
 async def retry_prepare(
@@ -258,7 +304,7 @@ async def retry_prepare(
         try:
             await db.execute(
                 update(InterviewSession)
-                .where(InterviewSession.id == interview_id)
+                .where(InterviewSession.id == interview_id, InterviewSession.status == "preparing")
                 .values(status="preparing_failed")
             )
             await db.commit()

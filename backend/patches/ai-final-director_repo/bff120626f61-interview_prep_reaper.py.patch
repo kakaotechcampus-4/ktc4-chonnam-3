@@ -1,0 +1,89 @@
+diff --git a/backend/app/workers/tasks/interview_prep_reaper.py b/backend/app/workers/tasks/interview_prep_reaper.py
+--- a/backend/app/workers/tasks/interview_prep_reaper.py
++++ b/backend/app/workers/tasks/interview_prep_reaper.py
+@@ -1,5 +1,6 @@
+ """준비 job 없이 preparing 으로 남은 면접을 다시 큐에 등록한다. 실행 중인 준비는 건드리지 않는다."""
+ 
++from contextlib import aclosing
+ from datetime import UTC, datetime, timedelta
+ from typing import Any
+ 
+@@ -10,6 +11,11 @@
+ from app.core.config import get_settings
+ from app.db.models import InterviewSession
+ from app.features.interview.queue import enqueue_interview_prep
++from app.workers.preparation_candidates import (
++    PreparationScanState,
++    preparing_candidates,
++    scan_state,
++)
+ 
+ 
+ async def recover_unqueued_preparations(
+@@ -18,35 +24,43 @@
+     *,
+     min_age_seconds: int,
+     now: datetime | None = None,
++    state: PreparationScanState | None = None,
+ ) -> int:
+     """오래된 미착수 preparing 면접을 재등록하고 등록을 확인한 개수를 돌려준다."""
+     cutoff = (now or datetime.now(UTC)) - timedelta(seconds=min_age_seconds)
+-    async with sessions() as db:
+-        candidates = (
+-            await db.execute(
+-                select(InterviewSession.id, InterviewSession.context_state)
+-                .where(
+-                    InterviewSession.status == "preparing", InterviewSession.updated_at <= cutoff
++    registered = 0
++    async with aclosing(preparing_candidates(sessions, cutoff=cutoff, state=state)) as candidates:
++        async for interview_id, context in candidates:
++            # claim 이 있으면 worker 가 잡았거나 lease 만료 reaper 의 대상이다.
++            if isinstance(context, dict) and context.get("prepare_job_id") is not None:
++                continue
++            async with sessions() as db:
++                row = await db.scalar(
++                    select(InterviewSession).where(
++                        InterviewSession.id == interview_id,
++                        InterviewSession.status == "preparing",
++                        InterviewSession.updated_at <= cutoff,
++                    )
+                 )
+-                .order_by(InterviewSession.updated_at)
+-                .limit(100)
+-            )
+-        ).all()
+-    registered = 0
+-    for interview_id, state in candidates:
+-        # claim 이 있으면 worker 가 잡았거나 lease 만료 reaper 의 대상이다.
+-        if isinstance(state, dict) and state.get("prepare_job_id") is not None:
+-            continue
+-        # 같은 _job_id 가 이미 큐·실행 중이면 새 job 이 생기지 않는다.
+-        if await enqueue_interview_prep(redis, interview_id):
+-            registered += 1
++                # 후보 조회 뒤 claim·상태가 바뀐 행을 다시 등록하지 않는다.
++                if row is None or (row.context_state or {}).get("prepare_job_id") is not None:
++                    continue
++            # DB 잠금 없이 큐에 접근한다. 이후 경쟁은 동일 job ID와 worker claim이 막는다.
++            # 같은 _job_id 가 이미 큐·실행 중이면 새 job 이 생기지 않는다.
++            if await enqueue_interview_prep(redis, interview_id):
++                registered += 1
+     return registered
+ 
+ 
+ async def interview_prep_reaper(ctx: dict[str, Any]) -> None:
+     settings = ctx.get("settings") or get_settings()
+-    await recover_unqueued_preparations(
+-        ctx["session_factory"],
+-        ctx["redis"],
+-        min_age_seconds=settings.interview_prep_reaper_min_age_seconds,
+-    )
++    state = scan_state(ctx, "unqueued")
++    if state.lock.locked():
++        return
++    async with state.lock:
++        await recover_unqueued_preparations(
++            ctx["session_factory"],
++            ctx["redis"],
++            min_age_seconds=settings.interview_prep_reaper_min_age_seconds,
++            state=state,
++        )

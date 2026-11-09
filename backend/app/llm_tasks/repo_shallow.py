@@ -7,7 +7,7 @@ service(pipeline repo_analyze)가 소유한다. 이 모듈은 DB session을 받�
 
 import uuid
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from functools import partial
 from typing import cast
 
@@ -62,7 +62,7 @@ async def analyze_repositories(
         return out
 
     result = await analyze_shallow_batch(
-        inputs, prompt=prompt, limits=settings.call_limits(), model_call=recorded
+        inputs, prompt=prompt, limits=settings.call_limits(prompt.task_name), model_call=recorded
     )
     return ShallowRun(result, tuple(calls))
 
@@ -120,6 +120,17 @@ def to_repo_analysis_rows(
         }
         if found is not None:
             analysis, data = found
+            # 나중에 repository 행의 README가 바뀌어도 이 분석이 읽은 실제 입력은 보존한다.
+            data = {
+                **data,
+                "_source_snapshot": {
+                    **asdict(item),
+                    "metadata_scope": (
+                        "languages/commit counts are collection-time metadata; "
+                        "they do not attest SHA-pinned code or personal contributions"
+                    ),
+                },
+            }
             # 프로젝트 요약의 저장 필드는 BE 합의 전이다(ADR 0006, spec/ai/contracts.md).
             # 합의 전에는 summary를 비우고 result에만 둔다. 개인 role_summary로는 쓰지 않는다.
             row |= {

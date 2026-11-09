@@ -43,7 +43,7 @@ async def execute_director(
     return await runtime.run_director(
         context,
         prompt=prompt,
-        limits=settings.call_limits(),
+        limits=settings.call_limits(prompt.task_name),
         model_call=partial(
             call_model,
             api_key=settings.openai_api_key,

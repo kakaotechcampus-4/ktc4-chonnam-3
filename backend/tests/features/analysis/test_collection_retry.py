@@ -159,13 +159,16 @@ async def test_unconfirmed_sha_does_not_pair_new_counts_with_saved_sha(session_f
 
 
 @pytest.mark.parametrize("status", [429, 503])
-async def test_earlier_readme_absence_does_not_hide_unverified_sha_failure(session_factory, status):
+async def test_sha_failure_never_reads_or_overwrites_unversioned_readme(session_factory, status):
     run_id, _ = await _success(session_factory)
     candidates, _, _ = await _read(session_factory, run_id)
     original_snapshot = candidates[0].ranking_signals["analysis"].copy()
 
+    requested_readmes = []
+
     def blocked_after_readme(request):
         if request.url.path.endswith("/readme"):
+            requested_readmes.append(request)
             return _github_reply(request, missing_readme=True)
         if request.url.path.endswith("/commits/main"):
             return httpx.Response(status, headers={"retry-after": "60"}, json={})
@@ -173,14 +176,14 @@ async def test_earlier_readme_absence_does_not_hide_unverified_sha_failure(sessi
 
     collected = await _collect(session_factory, run_id, blocked_after_readme)
     assert collected.inputs == []
+    assert requested_readmes == []
     assert collected.details["owner/repo0"].errors == [
-        "no_readme",
         "rate_limited" if status == 429 else "repo_unreachable",
     ]
     assert await _bind_without_llm(session_factory, collected) == [original_snapshot]
     _, _, repositories = await _read(session_factory, run_id)
-    # README 부재는 반영하되 확인하지 못한 SHA로 기존 분석·추천까지 실패 처리하지 않는다.
-    assert repositories[0].readme_text is None
+    # SHA를 못 읽으면 README 부재도 확인하지 않은 것이므로 이전 원문과 분석을 보존한다.
+    assert repositories[0].readme_text == "Python service README"
     async with session_factory.begin() as session:
         assert (await get_repository_cards(session, run_id))[0].recommended
 

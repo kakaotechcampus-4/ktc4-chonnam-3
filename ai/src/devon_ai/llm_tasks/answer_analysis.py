@@ -1,8 +1,21 @@
 """제출된 답변의 정성 분석 후보를 만든다. prompt 로드·provider I/O·저장·Tool 실행은 BE 책임이다."""
 
-from dataclasses import asdict, fields
+from dataclasses import MISSING, asdict, fields
 
 from devon_ai import contracts as c
+from devon_ai.llm_tasks import answer_analysis_wire as wire
+
+SUPPORTED_PROMPT_VERSIONS = frozenset(
+    {
+        "answer_analysis_v1",
+        "answer_analysis_v5",
+        "answer_analysis_v2",
+        "answer_analysis_v4",
+        "answer_analysis_v3",
+        "answer_analysis_v6",
+    }
+)
+
 
 SUPPORTED_PROMPT_VERSIONS = frozenset({"answer_analysis_v1"})
 
@@ -19,12 +32,25 @@ def _object(properties: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _output_schema() -> dict[str, object]:
+def _output_schema(
+    *, evidence_refs: frozenset[str], include_external: bool = False, strict_claims: bool = False
+) -> dict[str, object]:
     text = {"type": "string"}
     texts = {"type": "array", "items": text}
+    # 문서 주장·시각 해석의 source_id는 등록된 코드 Evidence ID와 별개다.
+    references: dict[str, object] = {"type": "array", "items": {"type": "string"}}
+    if evidence_refs:
+        references["items"] = {"type": "string", "enum": sorted(evidence_refs)}
+    else:
+        references["maxItems"] = 0
     covered = _object({"key": text, "answer_quotes": texts})
     technical = _object(
-        {"explanation": text, "answer_quotes": texts, "evidence_refs": texts, "limitations": texts}
+        {
+            "explanation": text,
+            "answer_quotes": texts,
+            "evidence_refs": references,
+            "limitations": texts,
+        }
     )
     contribution = _object(
         {"scope": {"enum": ["self", "shared", "teammate", "unknown"]}, "answer_quotes": texts}
@@ -33,10 +59,34 @@ def _output_schema() -> dict[str, object]:
         {
             "claim_text": text,
             "status": {"enum": ["supported", "partially_supported", "unverified", "conflicting"]},
-            "evidence_refs": texts,
+            "evidence_refs": references,
             "limitations": texts,
         }
     )
+    if strict_claims:
+        # 사실 판정과 미확인 주장의 조건을 생성 단계에도 전달한다. 의미 검증은 유지한다.
+        variants = [
+            _object(
+                {
+                    "claim_text": text,
+                    "status": {"enum": ["unverified"]},
+                    "evidence_refs": references,
+                    "limitations": {**texts, "minItems": 1},
+                }
+            )
+        ]
+        if evidence_refs:
+            variants.append(
+                _object(
+                    {
+                        "claim_text": text,
+                        "status": {"enum": ["supported", "partially_supported", "conflicting"]},
+                        "evidence_refs": {**references, "minItems": 1},
+                        "limitations": texts,
+                    }
+                )
+            )
+        claim = {"anyOf": variants}
     verification = _object(
         {
             "claim_text": text,
@@ -46,7 +96,7 @@ def _output_schema() -> dict[str, object]:
             "allowed_paths": texts,
         }
     )
-    return _object(
+    result = _object(
         {
             "evaluation_status": {"enum": ["evaluated", "needs_clarification", "not_evaluable"]},
             "sufficiency": {"enum": ["sufficient", "partial", "insufficient", None]},
@@ -58,8 +108,18 @@ def _output_schema() -> dict[str, object]:
             "needs_verification": {"type": "boolean"},
             "verification_requests": {"type": "array", "items": verification},
             "limitations": texts,
+            "external_queries": {
+                "type": "array",
+                "items": _object({"query": text, "purpose": text}),
+            },
         }
     )
+    if not include_external:
+        properties = result["properties"]
+        assert isinstance(properties, dict)
+        properties.pop("external_queries")
+        result["required"] = list(properties)
+    return result
 
 
 def _evidence_ids(context: c.Context, tool_results: tuple[c.ToolResult, ...]) -> frozenset[str]:
@@ -67,16 +127,22 @@ def _evidence_ids(context: c.Context, tool_results: tuple[c.ToolResult, ...]) ->
     refs = {repo.repository_id: repo.git_ref for repo in context.repositories}
     if len(refs) != len(context.repositories):
         raise c.ContractError("semantic", "duplicate repository")
-    ids: list[str] = []
-    items = context.evidence + tuple(item for result in tool_results for item in result.items)
-    for item in items:
+    registered: dict[str, c.Evidence] = {}
+    for item in context.evidence:
+        if item.evidence_id is not None:
+            if item.evidence_id in registered:
+                raise c.ContractError("semantic", "duplicate evidence")
+            registered[item.evidence_id] = item
+    for item in context.evidence + tuple(item for result in tool_results for item in result.items):
         if item.repository_id is not None and refs.get(item.repository_id) != item.git_ref:
             raise c.ContractError("semantic", "evidence repository ref")
         if item.evidence_id is not None:
-            ids.append(item.evidence_id)
-    if len(set(ids)) != len(ids):
-        raise c.ContractError("semantic", "duplicate evidence")
-    return frozenset(ids)
+            # 기존 원문을 다시 조회하면 저장된 ID를 재사용할 수 있다.
+            previous = registered.get(item.evidence_id)
+            if previous is not None and previous != item:
+                raise c.ContractError("semantic", "conflicting evidence ID")
+            registered[item.evidence_id] = item
+    return frozenset(registered)
 
 
 def _referenced_jd(context: c.Context, question: c.Question) -> tuple[c.JDRequirement, ...]:
@@ -146,6 +212,7 @@ def _payload(
     tool_results: tuple[c.ToolResult, ...],
     allowed_locations: frozenset[Location],
     jd_requirements: tuple[c.JDRequirement, ...],
+    evidence_refs: frozenset[str],
 ) -> dict[str, object]:
     # 평가 기준은 Persona에 따라 달라지지 않으므로 질문·이력에서 Persona를 빼고 전달한다.
     return {
@@ -167,9 +234,33 @@ def _payload(
             for turn in context.history
         ],
         "evidence": [asdict(item) for item in context.evidence],
+        "allowed_evidence_refs": sorted(evidence_refs),
+        "supplemental_sources": [asdict(item) for item in context.supplemental_sources],
+        "external_searches": [asdict(item) for item in context.external_searches],
+        "supplemental_limitations": list(context.supplemental_limitations),
         "tool_results": [asdict(result) for result in tool_results],
         "allowed_locations": sorted(list(item) for item in allowed_locations),
     }
+
+
+def decode_analysis_output(
+    raw: object,
+    *,
+    prompt_version: str | None,
+    answer_text: str,
+    contract: c.QuestionContract,
+    schema_version: str | None = None,
+) -> c.AnswerAnalysis:
+    """감사 원문은 보존하고 해당 버전의 표현으로만 과거 분석을 복원한다."""
+    if prompt_version is not None and prompt_version.partition("@")[0] == "answer_analysis_v6":
+        if schema_version != "6":
+            raise c.ContractError("semantic", "analysis wire version")
+        raw_wire = raw
+        raw = wire.canonical_output(
+            raw, answer=answer_text, keys=tuple(point.key for point in contract.required_points)
+        )
+        wire.validate_wire_constraints(raw_wire)
+    return c.decode_strict(c.AnswerAnalysis, raw)
 
 
 async def analyze_answer(
@@ -212,6 +303,9 @@ async def analyze_answer(
         )
 
     def validate_checked(candidate: c.AnswerAnalysis) -> AnalysisChecked:
+        # 새 모델 출력만 실행 정책으로 확인한다. 과거 저장 분석의 decode는 바꾸지 않는다.
+        for query in candidate.external_queries:
+            query.validate_for_execution()
         return c.validate_analysis(
             candidate,
             question=question,
@@ -220,34 +314,72 @@ async def analyze_answer(
             allowed_locations=allowed_locations,
         )
 
+    base_version = prompt.version.partition("@")[0]
+    include_external = base_version != "answer_analysis_v1"
+    keys = tuple(point.key for point in question.data.question_contract.required_points)
+    units = wire.answer_units(answer_text) if base_version == "answer_analysis_v6" else ()
+    if base_version == "answer_analysis_v6" and (not keys or not units):
+        return c.ModelResult(
+            None,
+            c.CallFailure("semantic", "answer_analysis_input_invalid", "Analysis input rejected."),
+            (),
+        )
+
     def validate(raw: object) -> AnalysisChecked:
+        if base_version == "answer_analysis_v6":
+            return validate_checked(
+                decode_analysis_output(
+                    raw,
+                    prompt_version=prompt.version,
+                    answer_text=answer_text,
+                    contract=question.data.question_contract,
+                    schema_version="6",
+                )
+            )
         # 계약 밖의 최상위 필드(점수 등)를 조용히 버리지 않고 schema 실패로 처리한다.
-        names = {item.name for item in fields(c.AnswerAnalysis)}
-        if (
-            type(raw) is not dict
-            or not names - {"external_queries"} <= set(raw)
-            or not set(raw) <= names
-        ):
+        declared = fields(c.AnswerAnalysis)
+        names = {item.name for item in declared}
+        required = {
+            item.name
+            for item in declared
+            if item.default is MISSING and item.default_factory is MISSING
+        }
+        # 과거 저장 결과에 없던 선택 필드만 기본값으로 읽고 필수 필드·추가 필드 검사는 유지한다.
+        if type(raw) is not dict or not required <= set(raw) or not set(raw) <= names:
             raise c.ContractError("schema", "AnswerAnalysis")
-        # schema1의 생략·빈 기본값만 호환하며 새 외부조회 기능을 backport하지 않는다.
-        if raw.get("external_queries"):
-            raise c.ContractError("schema", "unsupported external query")
+        if not include_external and raw.get("external_queries"):
+            raise c.ContractError("schema", "external query policy")
         return validate_checked(c.decode(c.AnswerAnalysis, raw))
 
+    payload = _payload(
+        context,
+        question.data,
+        turn_id,
+        answer_text,
+        tool_results,
+        allowed_locations,
+        jd_requirements,
+        evidence_refs,
+    )
+    if base_version == "answer_analysis_v6":
+        payload["answer_units"] = wire.units_payload(units)
     request = c.ModelRequest(
         prompt=prompt,
-        payload=_payload(
-            context,
-            question.data,
-            turn_id,
-            answer_text,
-            tool_results,
-            allowed_locations,
-            jd_requirements,
-        ),
+        payload=payload,
         schema_name="AnswerAnalysis",
-        schema_version="1",
-        output_schema=_output_schema(),
+        schema_version={
+            "answer_analysis_v3": "3",
+            "answer_analysis_v4": "4",
+            "answer_analysis_v5": "5",
+            "answer_analysis_v6": "6",
+        }.get(base_version, "2" if include_external else "1"),
+        output_schema=wire.output_schema(keys, units, evidence_refs, allowed_locations)
+        if base_version == "answer_analysis_v6"
+        else _output_schema(
+            evidence_refs=evidence_refs,
+            include_external=include_external,
+            strict_claims=base_version == "answer_analysis_v5",
+        ),
         limits=limits,
         max_attempts=min(2, context.limits.remaining_calls),
     )
