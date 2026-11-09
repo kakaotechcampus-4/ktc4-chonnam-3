@@ -74,7 +74,7 @@ stepKey:          doc_extract | repo_select | repo_detail | jd_fetch
                   | jd_extract | repo_analyze | match_score
 prepareStepKey:   analyze_repo | build_persona | set_criteria | compose_question
 stepStatus:       pending | running | completed | failed | skipped
-answerMode:       text | voice    (신규 voice, 기존 text는 저장된 모드 유지)
+answerMode:       text            (2차에 voice 추가)
 repoStatus:       succeeded | partial | failed
 candidateSource:  rule_filter | portfolio | both
 jdCategory:       required | preferred | responsibility
@@ -170,7 +170,6 @@ Redis 조회 장애는 세션 만료·유실과 구분한다. 정상 인증이�
 | 23 | POST | `/interviews/{id}/prepare/retry` | fetch |
 | 24 | POST | `/interviews/{id}/abandon` | fetch |
 | 18 | GET *(Upgrade)* | `/ws/interviews/{sessionId}` | WebSocket |
-| 25 | GET | `/interviews/{id}/turns/{turn}/question-audio` | Audio |
 | 19 | GET | `/interviews/{id}/report` | fetch |
 | 20 | POST | `/interviews/{id}/retry` | fetch |
 | 21 | POST | `/interviews/{id}/feedback-disagreements` | 계약 잔존, Sprint 1 제공·호출 제외 |
@@ -652,16 +651,15 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 
 ## 11. POST /documents/preview
 
-문서를 먼저 업로드해 `documentId`를 발급받는다. `docType`으로 포트폴리오와 자기소개서를 구분하며, 생략하면 기존 호출과 같이 포트폴리오로 처리한다. 추출한 원문과 미확인 범위는 보존하며 문서 내용만으로 개인 기여를 확정하지 않는다.
+BE `spec/backend/features/documents.md`와 [0010 결정](../../spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md) 기준이다. Sprint 1은 포트폴리오를 `analysis-runs`에 직접 싣지 않고 이 엔드포인트로 먼저 업로드해 `documentId`를 발급받는다. 자소서는 preview 대상이 아니며 claim 추출은 Sprint 2다. 아래 응답 명세와 실제 추출·저장 구현 완료는 구분한다.
 
 **Request** `multipart/form-data`
 
 | 필드 | 타입 | 필수 | 상한 |
 | --- | --- | --- | --- |
-| `file` | file | ✅ | 포트폴리오 20MiB / 자기소개서 10MiB |
-| `docType` | `portfolio` / `cover_letter` | ❌ | 기본값 `portfolio` |
+| `file` | file (.pdf/.docx/.txt/.md) | ✅ | 20MB |
 
-> `.pdf/.docx/.txt/.md`는 기본 추출 대상이다. 설정된 Vision 공급자가 있으면 이미지 PDF와 PDF 레이아웃을 보완하고 `.png/.jpg/.jpeg/.ppt/.pptx`도 처리한다. Vision이 없는 이미지 PDF는 추출 결과가 `failed`일 수 있으며, Vision 전용 확장자가 미설정 상태이거나 형식을 지원하지 않으면 `415 unsupported_document_type`으로 거절한다. 설정된 Vision 연결에 문제가 있으면 원문 한계를 표시한 `partial` 또는 `failed` 결과를 저장한다. 일부만 확인한 결과를 전체로 간주하지 않는다. `.hwp`는 지원하지 않는다.
+> `.pdf`는 텍스트 레이어가 있는 파일만 지원한다(스캔 이미지 PDF는 추출 실패). `.hwp`·이미지·`.ppt/.pptx`는 미지원.
 `Content-Type` 헤더를 직접 지정하지 않는다. 브라우저가 boundary와 함께 자동 생성해야 한다.
 > 
 
@@ -682,7 +680,7 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 
 공고입력 화면에서 파일 선택 즉시(백그라운드) 호출한다. `extractStatus: 'failed'`여도 hard blocker가 아니다 — 사용자가 계속 진행을 선택하면 `POST /analysis-runs`를 `documentId` 없이 호출한다. 이 경우 `doc_extract`는 `skipped`로 응답된다.
 
-포트폴리오 ID는 `POST /analysis-runs.documentId`, 자기소개서 ID는 `coverLetterDocumentId`로 전달한다. 두 문서는 독립적인 선택 입력이며 자기소개서를 포트폴리오 추천 힌트로 대체하지 않는다.
+**확정**: [0010 결정](../../spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md)에 따라 Sprint 1의 preview는 포트폴리오 전용이다. `documentId`는 단일 portfolio preview ID를 유지하며 자소서는 preview POST 대상이 아니다. 화면·호출 코드의 반영 여부는 별도로 검증한다.
 
 **Failure**
 
@@ -703,9 +701,8 @@ Set-Cookie: oauthState=; Max-Age=0; Path=/auth/github
 | --- | --- | --- |
 | `postingUrl` | text | ✅ |
 | `documentId` | string | ❌ |
-| `coverLetterDocumentId` | string (UUID) | ❌ |
 
-`postingUrl`은 Wanted URL만 허용한다. 두 문서 ID는 로그인한 사용자의 성공 또는 부분 추출된 해당 종류 preview ID여야 한다. 둘 다 선택 입력이다. `documentId`를 생략하면 포트폴리오 `doc_extract` 단계는 `skipped`이며, 선택한 자기소개서는 별도 문서 맥락으로 연결한다. 다른 자기소개서 선택은 분석 입력의 식별값에 반영한다.
+`postingUrl`은 Sprint 1에서 Wanted URL만 허용한다. `documentId`는 `POST /documents/preview`에서 발급된 값만 허용한다. 자기소개서·포트폴리오는 선택 입력이므로 `documentId`를 생략할 수 있고, 이때 `doc_extract` 단계는 실행되지 않는다(`skipped`).
 
 **Response**
 
@@ -849,7 +846,7 @@ data: {"type":"failed","reason":"github_token_invalid"}
 `steps[]`는 항상 `stepKey` 7개를 모두 포함한다. 실행하지 않은 단계도 키를 생략하지 않고 `skipped`로 표기한다(공통 규약 "필드 생략 금지"). `skipped`인 스텝은 `progress` 계산에서 제외한다.
 
 > 분석 실패도 HTTP 200이다. `status: "failed"` + `failureReason`으로 판단한다.
-DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장소의 결과는 `GET /analysis-runs/{runId}/result`로 조회할 수 있다([부분 실패 기준](../../spec/backend/features/analysis-run.md#부분-실패)). 개별 저장소의 `status: 'partial'`과는 다른 범위다. 실패 화면에서 성공 결과로 이동하는 경로는 [task-09](task-09-analysis.md)에 제안만 기록했으며 화면 수정은 보류 중이다.
+DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장소의 결과는 `GET /analysis-runs/{runId}/result`로 조회할 수 있다([부분 실패 기준](../../spec/backend/features/analysis-run.md#부분-실패)). 개별 저장소의 `status: 'partial'`과는 다른 범위다. `succeeded` 저장소가 있으면 FE는 실패 화면 대신 저장소 선택 화면으로 이동한다([task-09](task-09-analysis.md#부분-실패-후-성공-결과-이동-경로)).
 > 
 
 **UI states**
@@ -1124,17 +1121,13 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
       "turn": 1,
       "persona": "tech_lead",
       "question": "project-a에서 Redis를 캐시로 도입한 이유를 설명해주세요.",
-      "answer": "상품 조회 성능을 높이기 위해 캐시로 사용했습니다.",
-      "mainIndex": 1,
-      "followUpDepth": 0
+      "answer": "상품 조회 성능을 높이기 위해 캐시로 사용했습니다."
     },
     {
       "turn": 2,
       "persona": "domain_lead",
       "question": "금융권이라 캐시에 개인정보가 담기면 규제 대상이 됩니다. 데이터 민감도를 고려해보신 적 있나요?",
-      "answer": null,
-      "mainIndex": 2,
-      "followUpDepth": 0
+      "answer": null
     }
   ],
   "lastError": null
@@ -1173,8 +1166,6 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 | `turns[].persona` | Persona | ❌ |
 | `turns[].question` | string | ❌ |
 | `turns[].answer` | string | ✅ |
-| `turns[].mainIndex` | number (1부터 시작하는 메인 질문 순번) | ❌ |
-| `turns[].followUpDepth` | number (메인은 0, 꼬리질문은 1부터) | ❌ |
 | `lastError` | object | ✅ |
 | `lastError.reason` | string | ❌ |
 | `lastError.code` | string | ❌ |
@@ -1304,12 +1295,8 @@ Redis 로그인 세션 인증은 핸드셰이크 시 1회 검증한다. 연결 �
 | type | 필드 |
 | --- | --- |
 | `answer` | `turn` (number), `text` (string, 최대 2000자) |
-| `answerStart` | `turn` (number), `mimeType` (string, 예: `audio/webm;codecs=opus`) |
-| `answerEnd` | `turn` (number) |
 
-`GET /interviews/{id}.answerMode`를 따른다. 기존 `text` 면접은 텍스트 입력과 `answer` 전송으로 계속 진행하며 마이크·TTS를 요구하지 않는다. 새 `voice` 면접은 `answerStart` → 오디오 바이너리 조각 → `answerEnd` 순서로 전송한다. 다른 모드의 입력은 STT·모델 호출·답변 저장 전에 recoverable `answer_rejected`로 거절한다. 모드를 임의 전환하거나 기존 면접을 중단시키지 않는다. 음성 재생이 실패해도 질문 텍스트는 표시한다. 준비 실패 재시도는 WS가 아니라 `POST /interviews/{id}/prepare/retry`(#23)로 처리한다.
-
-서버는 현재 답변 가능한 `turn`의 오디오만 받고, 연결이 끊기면 미완료 버퍼를 버린다. 재연결 후에는 같은 질문에 다시 답변한다. 수신 시간·바이트 상한 초과는 `answer_too_long`과 `details.cause: "audio_too_long"`, STT 실패는 `stt_failed`로 알리며 답변을 저장하지 않는다. 빈 전사는 `details.cause: "empty_transcript"`로 구분한다. 원본 오디오는 임시 메모리 버퍼로만 처리한다.
+Sprint 1 클라이언트 메시지는 `answer` 하나다. 준비 실패 재시도는 WS가 아니라 `POST /interviews/{id}/prepare/retry`(#23)로 처리한다 — `spec/ai/decisions/0010:32`.
 
 `answer`는 제출 버튼 클릭 시 1회 전송한다. 초안 저장은 없다. 2000자 초과 시 `answer_too_long`. `turn`은 그 답변이 어느 질문에 대한 것인지 서버가 판별하는 값이다 (`spec/ai/decisions/0010:30`). 서버는 현재 답변 가능한 turn과 다르면 `answer_stale_turn`으로 거절한다.
 
@@ -1325,9 +1312,7 @@ Redis 로그인 세션 인증은 핸드셰이크 시 1회 검증한다. 연결 �
 { "type": "answerReceived" }
 { "type": "thinking" }
 { "type": "evidenceCheck", "repository": "project-a", "file": "CacheConfig.java" }
-{ "type": "question", "persona": "tech_lead", "text": "TTL을 600초로 설정한 근거가 있나요?", "turn": 3,
-  "mainIndex": 2, "followUpDepth": 1, "audioUrl": "/api/interviews/iv_001/turns/3/question-audio" }
-{ "type": "transcript", "turn": 3, "text": "조회 패턴을 확인했습니다." }
+{ "type": "question", "persona": "tech_lead", "text": "TTL을 600초로 설정한 근거가 있나요?", "turn": 3 }
 { "type": "interviewEnd" }
 { "type": "error", "reason": "answer_too_long", "recoverable": true,
   "code": "ERR_ANSWER_TOO_LONG", "step": null,
@@ -1341,19 +1326,15 @@ Redis 로그인 세션 인증은 핸드셰이크 시 1회 검증한다. 연결 �
 | `answerReceived` | — |
 | `thinking` | — |
 | `evidenceCheck` | `repository` (string), `file` (string) |
-| `question` | `persona` (Persona), `text` (string), `turn` (number), `mainIndex` (number), `followUpDepth` (number), `audioUrl` (string 또는 null) |
-| `transcript` | `turn` (number), `text` (string). STT 최종 전사이며 저장 완료 신호는 아님 |
-| `transcriptPartial` | `turn` (number), `text` (string). 스트리밍 전사기를 사용할 때만 오는 표시용 중간 결과 |
+| `question` | `persona` (Persona), `text` (string), `turn` (number) |
 | `interviewEnd` | — |
-| `error` | `reason` (string), `recoverable` (boolean), `code` (string), `step` (PrepareStepKey 또는 null), `occurredAt` (string) |
+| `error` | `reason` (string), `recoverable` (boolean), `code` (string), `step` (PrepareStepKey 또는 null), `occurredAt` (string), `details` (object, 선택) |
+
+`error.details`는 선택적인 부가 정보다. 없거나 모르는 필드가 있어도 `reason`·`code`·`recoverable` 처리는 유지한다. 음성의 빈 전사는 `details.cause: "empty_transcript"`로 구분하며, details 자체를 새 오류 reason으로 해석하지 않는다.
 
 `prepareStep.status`는 `pending`·`running`·`completed`·`failed` 4개만 사용한다. `prepareStepKey` 4단계는 모두 필수 실행이므로 `skipped`가 오지 않는다 — `skipped`는 `stepKey`(#13 · #14) 전용이다.
 
 `answerReceived`는 서버가 답변 수신·저장을 완료했다는 신호다. 수신하면 제출 중 상태는 해제하지만 다음 `question`까지 새 답변 입력은 잠근다. Sprint 1은 `question` 수신 자체가 질문 전달 완료이므로 `questionEnd`를 기다리지 않는다.
-
-질문 텍스트는 TTS를 기다리지 않고 먼저 전달한다. `audioUrl`이 있으면 같은 로그인 쿠키로 #25를 요청해 재생하고, null이거나 요청·자동 재생이 실패하면 질문 텍스트를 유지한다. 재연결하면 서버가 현재 질문과 같은 음성 URL을 다시 전달하며, 재생 여부는 턴 수나 답변 저장에 영향을 주지 않는다.
-
-음성 답변의 순서는 최종 `transcript` → 답변 저장 후 `answerReceived` → `thinking`이다. 현재 MLAPI STT 어댑터는 최종 전사를 반환하며 `transcriptPartial`을 만들지 않는다. "질문을 다시 말씀해 주세요"처럼 전체 발화가 지원되는 명시적 재생 요청이면 같은 `question`만 다시 전달한다. 이 경우 `transcript`가 먼저 올 수 있지만 답변 저장·분석·`answerReceived`·턴 증가는 없다. 일반적인 "모르겠습니다"는 정상 답변으로 처리한다. 인용·기술 설명 안의 표현을 키워드만으로 재생 요청으로 판정하지 않으며, 지원 문법 밖의 자유 발화를 모두 이해한다고 보장하지 않는다.
 
 준비 단계가 실패하면 해당 단계에 `prepareStep`을 `status: "failed"`로 보낸 뒤 `error`를 보낸다. 이후 단계는 `pending`으로 남는다.
 
@@ -1388,7 +1369,6 @@ Redis 로그인 세션 인증은 핸드셰이크 시 1회 검증한다. 연결 �
 | `github_api_rate_limited` | `ERR_GITHUB_RATE_LIMITED` | `true` | 준비 실패 화면 — 대기 후 `POST /interviews/{id}/prepare/retry` |
 | `repo_unreachable` | `ERR_REPO_UNREACHABLE` | `false` | "레포에 접근할 수 없어요" — 레포 재선택 |
 | `github_token_invalid` | `ERR_GITHUB_TOKEN_INVALID` | `false` | GitHub 재연동 유도 |
-| `stt_failed` | `ERR_STT_FAILED` | `true` | 같은 질문에 다시 답변. `details.cause: "empty_transcript"`면 빈 전사 안내 |
 
 [0010 결정](../../spec/ai/decisions/0010-sprint1-interface-runtime-decisions.md)에 따라 LLM의 timeout/provider 오류·parse/schema 실패는 공통 호출 계층에서만 자동 1회 재시도한다(최초 호출 포함 최대 2회). semantic 실패는 재호출하지 않는다. 진행 중 분석·질문 생성이 실패하면 `question_failed`는 `recoverable: false`다([공통 0010](../../spec/shared/decisions/0010-in-progress-question-failed-unrecoverable.md)). 연결 교체·서버 오류의 `recoverable: true`도 FE의 추가 재시도나 재연결을 통한 LLM 재호출을 허용한다는 뜻이 아니다. 허용된 시도 후에도 질문 생성에 실패하면 [기존 면접 실패 정책](../../spec/ai/features/interviewer.md#공개-메시지와-보류-항목)에 따라 오류 안내·기록 보존·명시적 나가기와 새 면접 흐름을 유지하며, 진행 중 면접의 새 수동 이어가기를 추가하지 않는다.
 
@@ -1398,19 +1378,19 @@ Redis 로그인 세션 인증은 핸드셰이크 시 1회 검증한다. 연결 �
 
 `repo_unreachable`의 "레포 재선택"은 `GET /interviews/{id}`의 `runId`로 5a-v2에 진입한다.
 
-### 텍스트·음성 전송 계약
+### 2차 스프린트 — 음성 전환 (지금 구현 대상 아님)
 
-`answerMode`에 따라 클라이언트 입력을 선택하며 서버는 기존 텍스트 메시지와 음성 메시지를 함께 지원한다.
+1차는 텍스트 답변 전용이다 (`answerMode: "text"`). 2차에 음성이 추가되면 다음이 달라진다.
 
-| 항목 | text | voice |
+| 항목 | 1차 (text) | 2차 (voice) |
 | --- | --- | --- |
 | 답변 전송 | `answer` 1회 (JSON) | `answerStart` → 오디오 바이너리 → `answerEnd` |
-| 전사 | 없음 | `transcript`, 전사기 지원 시에만 `transcriptPartial` |
-| 질문 출력 | 텍스트 우선, `audioUrl` 제공 시 재생 가능 | 텍스트 우선, `audioUrl`을 별도 요청해 재생 |
-| 답변 상한 | 2000자 | 설정된 수신 시간·바이트 상한과 전사 길이 상한 |
-| 음성 실패 | 질문 텍스트 유지 | STT는 `stt_failed`, TTS HTTP 실패는 질문 텍스트 유지 |
+| 전사 | 없음 | `transcript` 메시지 추가 |
+| 질문 출력 | `question` 텍스트만 | `question` 뒤 TTS 오디오 + `questionEnd` |
+| 답변 상한 | 2000자 | 초 단위 |
+| 신규 error reason | — | `stt_failed` · `tts_failed` |
 
-`questionEnd`나 `tts_failed` WS 이벤트를 기다리지 않는다. Proposed 문서에 있는 음성 전용 전환과 추가 기능의 승인 상태를 이 계약 정렬로 변경하지 않는다.
+`answerMode`로 분기하므로 1차 구현 시 이 값을 무시하지 않는다.
 
 **Failure**
 
@@ -1423,22 +1403,6 @@ Redis 로그인 세션 인증은 핸드셰이크 시 1회 검증한다. 연결 �
 
 > `already_connected`는 이전 연결이 살아 있는 경우다. 새로고침 재연결을 막지 않도록 서버는 기존 연결을 종료한 뒤 신규 연결을 허용한다.
 > 
-
----
-
-## 25. GET /interviews/{id}/turns/{turn}/question-audio
-
-저장된 본인 질문의 MP3 음성을 로그인 쿠키로 요청한다. `question.audioUrl`로 받은 주소를 사용하며, 페르소나별 음성은 서버 설정에서 정한다. 질문 텍스트를 먼저 표시하고 재생 완료를 기다리지 않는다.
-
-성공은 `200 audio/mpeg` 바이너리이며 `Cache-Control: private, no-store`를 사용한다. 서버 내부에서는 질문·원문 버전·음성 설정이 같은 결과를 재사용한다. 캐시 재생은 새 합성 문자량을 소비하지 않는다.
-
-| 코드 | reason / 처리 |
-| --- | --- |
-| 401 | `unauthenticated` — 로그인 세션 재확인 |
-| 404 | `not_found` — 없는 면접·질문 또는 다른 사용자의 면접 |
-| 409 | `not_ready` — 설정·무료 문자 예산·캐시·합성 실패 또는 처리 중 원본 변경. 질문 텍스트 유지 |
-
-무료 문자 예산은 운영자가 Cloud 실제 잔여량과 진행 중 합성을 확인한 후 초기화해야 한다. 예산이 없거나 소진되거나 Redis 상태를 확인할 수 없으면 새 합성을 호출하지 않는다. 음성 실패로 질문·답변·턴 상태를 바꾸지 않는다.
 
 ---
 
@@ -1509,9 +1473,7 @@ Redis 로그인 세션 인증은 핸드셰이크 시 1회 검증한다. 연결 �
       "turn": 1,
       "persona": "tech_lead",
       "question": "project-a에서 Redis를 캐시로 도입한 이유를 설명해주세요.",
-      "answer": "상품 조회 성능을 높이기 위해 캐시로 사용했습니다.",
-      "mainIndex": 1,
-      "followUpDepth": 0
+      "answer": "상품 조회 성능을 높이기 위해 캐시로 사용했습니다."
     }
   ],
   "repositoryNames": ["project-a", "payment-service"],
@@ -1552,8 +1514,6 @@ Redis 로그인 세션 인증은 핸드셰이크 시 1회 검증한다. 연결 �
 | `turns[].persona` | Persona | ❌ |
 | `turns[].question` | string | ❌ |
 | `turns[].answer` | string | ✅ |
-| `turns[].mainIndex` | number (1부터 시작하는 메인 질문 순번) | ❌ |
-| `turns[].followUpDepth` | number (메인은 0, 꼬리질문은 1부터) | ❌ |
 | `repositoryNames` | string[] | ❌ |
 | `completedAt` | string | ❌ |
 
@@ -1727,9 +1687,8 @@ Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagr
 | 22 | GET | `/analysis-runs/{runId}/candidates` | fetch | `devon_session` |
 | 23 | POST | `/interviews/{id}/prepare/retry` | fetch | `devon_session` |
 | 24 | POST | `/interviews/{id}/abandon` | fetch | `devon_session` |
-| 25 | GET | `/interviews/{id}/turns/{turn}/question-audio` | Audio | `devon_session` |
 
-참조 번호는 총 25개다(기존 22개 + 준비 재시도 #23 + 면접 중단 #24 + 질문 음성 #25). #3은 Sprint 2 예약이고 #21은 계약이 잔존하지만 Sprint 1 제공·호출 대상에서 제외한다. 이 숫자는 실제 제공 API 수나 구현 완료 수가 아니다.
+참조 번호는 총 24개다(기존 22개 + 준비 재시도 #23 + 면접 중단 #24). #3은 Sprint 2 예약이고 #21은 계약이 잔존하지만 Sprint 1 제공·호출 대상에서 제외한다. 이 숫자는 실제 제공 API 수나 구현 완료 수가 아니다.
 
 `shared/api.ts`에 넣지 않는 것: 1, 2, 7, 8(브라우저 이동 또는 프론트 무관). 3은 Sprint 2 예약이므로 Sprint 1에서는 호출하지 않는다.
 
@@ -1786,8 +1745,8 @@ Sprint 2 참고 흐름: 5c-v2 이의 제기 모달 제출 → 성공 시 `disagr
   └─ 새 면접 시작 → 1c
 
 1c      공고·문서 입력 (공고 URL 필수, 문서 선택)
-  ├─ 파일 선택 → POST /documents/preview { file, docType? } → 종류별 documentId
-  └─ POST /analysis-runs { postingUrl, documentId?, coverLetterDocumentId? } → 202 → 4-2-v2
+  ├─ 파일 선택 → POST /documents/preview → documentId
+  └─ POST /analysis-runs { postingUrl, documentId? } → 202 → 4-2-v2
        └─ documentId 생략 시 doc_extract = skipped
 
 4-2-v2  분석 진행
