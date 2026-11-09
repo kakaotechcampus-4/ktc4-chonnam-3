@@ -213,7 +213,7 @@ export default function Report() {
         )}
       </main>
 
-      <Footer />
+      <Footer aiNotice="이 리포트는 AI가 생성한 평가로 실제 면접 결과를 보장하지 않아요. 100% 신뢰하지 말고 참고용으로 활용하세요." />
     </div>
   );
 }
