@@ -1,7 +1,7 @@
 diff --git a/spec/ai/implementation.md b/spec/ai/implementation.md
 --- a/spec/ai/implementation.md
 +++ b/spec/ai/implementation.md
-@@ -2739,6 +2739,576 @@
+@@ -2770,6 +2770,576 @@
  지속되는 결정은 [0041](decisions/0041-published-pr-dependency-order.md)에 남긴다.
  
  

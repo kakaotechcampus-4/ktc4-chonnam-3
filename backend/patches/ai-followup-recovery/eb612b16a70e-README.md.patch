@@ -1,14 +1,22 @@
 diff --git a/spec/ai/decisions/README.md b/spec/ai/decisions/README.md
 --- a/spec/ai/decisions/README.md
 +++ b/spec/ai/decisions/README.md
-@@ -86,5 +86,11 @@
+@@ -64,6 +64,9 @@
+ 
+ - [0030 문서 Claim의 검증 순서와 서비스 연결 경계](0030-document-claims-validation-boundary.md): Accepted, 2026-10-30. 0029의 AI 내부 추출 범위는 유지하되 전체 schema 검사 후 줄 ID 검사를 적용한다. 면접 준비 상태·기존 답변 `claim_checks` 재사용·호출 단위 설명을 정정한다. 서비스 활성화와 BE·Director·사용자 확인 정책의 합의를 대신하지 않는다.
+ 
++
++
++
+ - [0042 실제 계정 로컬 진단](0042-local-user-test-observability.md): Accepted for local operation. 안전 로그·진단 수집의 범위를 정의한다.
+ - [0044 게시 바이트·프롬프트 보존](0044-publication-byte-and-prompt-integrity.md): Accepted for local development. 원문 바이트·프롬프트·개별 패치 검증의 경계를 정의한다.
+ - [0040 Director 입력의 원문 중복 제거](0040-director-single-copy-source-input.md): Accepted for local development. 구현은 PR #223이며 레포 구조 선정 PR #224와 구분한다.
+@@ -91,5 +94,9 @@
  - [0037 확인된 전체 사용 이력에 근거한 최초 TTS 예산](0037-tts-complete-history-budget.md): Accepted, 2026-11-08. 같은 결제계정의 이번 달 전체 사용 이력을 확인한 경우의 최초 예산 산정과 공급자 조회의 차이를 정의한다.
  - [0038 최종 서비스의 기준 초기화·작업 전달·검증 경계](0038-final-service-followups.md): Accepted for local development, 2026-11-08. 개발 초안 활성화와 사람 검수 구분, 프로필 outbox, 고정 SHA 보완 조회와 유한 복구·자동 검증의 경계를 정의한다.
  - [0041 게시 PR의 공통 기반과 통합 검사 순서](0041-published-pr-dependency-order.md): Accepted, 2026-11-08. 기존 PR 번호·원본 보존, 공통 기반 선행 배치와 통합 검사 이동, 미병합 선행 및 19개 후속 패치의 실행 제약을 정의한다.
 +- [0039 실제 자료의 구조 범위와 공식 원문 재사용](0039-real-source-coverage-and-official-snapshots.md): Accepted for local development, 2026-11-08. 준비 구조·모델 후보·원문·후속 조회 예산, 요청 절 검증과 불변 공유 snapshot의 소유권 경계를 정의한다.
-+- [0040 Director 입력의 원문 중복 제거](0040-director-single-copy-source-input.md): Accepted for local development, 2026-11-08. 전체 서버 참조·원문·이력을 보존하고 모델에 Context 원문을 한 번 전달하는 경계를 정의한다.
 +- [0043 Director의 턴 상태와 실제 참조 식별자 제약](0043-director-turn-state-and-reference-constraints.md): Accepted for local development, 2026-11-09. 질문 번호와 답변 완료 수의 구분, 실제 자료 ID의 선택 범위와 기존 검증·호출 예산, Luna 개발 연결과 DB 프롬프트의 모델 일치를 정의한다.
-+- [0042 실제 계정의 로컬 이용과 진단 수집 경계](0042-local-user-test-observability.md): Accepted for local operation, 2026-11-09. 별도 통합 환경, 사용자의 직접 로그인, 허용 메타데이터 관측과 AI 상주 판단의 차이를 정의한다.
 +
 +- [0044. 게시 시 평가 원본 바이트와 프롬프트 문자 보존](0044-publication-byte-and-prompt-integrity.md)
  

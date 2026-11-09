@@ -8,10 +8,17 @@
 | 패치 | 대상 | 적용 전 SHA256 | 적용 후 SHA256 | patch SHA256 |
 | --- | --- | --- | --- | --- |
 | `d3cce1cfc381-router.py.patch` | `backend/app/features/interview/router.py` | `5e52ad30e3aa1fb5936d923996be7f5ea250272fc0ee731c4b7889fd73198e48` | `3dac43512b0b0b579c551b1777f3f2428d4c43787c9e73266f594e5e1b977af4` | `2ad7d0143b543c8db325649183e7b2b5498ecc6b8d48cdb002b17ec342e5dba3` |
-| `eb612b16a70e-README.md.patch` | `spec/ai/decisions/README.md` | `29e7c086217f4d0bd233b1e825998c07d5f24198becd4d177fee9b53ed07ee14` | `30fa32d84d8d475b32ebb2cf5bc1d5f4787a6851e6e70ad86111045ae45b6554` | `12eccc62e0574f1a02a84e571d012511dc1d05463d31addc6d7cb3db09515c54` |
-| `ed5a46a04864-implementation.md.patch` | `spec/ai/implementation.md` | `73f11f4480999e2f12b3d6357dcbf6dc282c5d9038546596e8b40747f47b1008` | `1cc79f279ae8b1bbbbb52de322078e100c8ce8146ba557b48d0ae6cd4bddcd99` | `bdfb249894a8455255349e212c7e44bf7f4a018b555cced8e71cc0638c881e9b` |
+| `eb612b16a70e-README.md.patch` | `spec/ai/decisions/README.md` | `771487d9f51eeccec550483523be3c8e1fe45ce682dc0c2ce35f63662da680de` | `a30de18cec721dacc20cc6e8b88a7b706e5fb2a6ae5aa1816deb5d883e8eed6a` | `7349eb0e7c54338a8dbacc933d92123efe1716f1e0f4c1eeb596633d17dadeaa` |
+| `ed5a46a04864-implementation.md.patch` | `spec/ai/implementation.md` | `2a41c9bd9157619eff8f5b3b990c9a70b931b2273d4e6a5b0284cbbfc4d7a018` | `79157ba861293f07b8d5fec6bfb42f44ed834cf402c2012bd47be3e37dd659bf` | `390294213351325dee9973c0ac3fc7d85bb6a0336fb27bfe32bc02f03b0bead2` |
+| `review-director-service.py.patch` | `backend/app/features/interview/director_service.py` | `f817f12a2e8a546b177e9eaf0d0ef3db4e058410743e52e8f886609f49241f1b` | `b6965de3df3a2e28fbc8c3441741192481abdf020a5dc147b45261835de038a2` | `b9f678c62d32ff0b3bd0bf8c68aec9cb4671f0ffa76b99a10088be97f8cad1c0` |
+| `review-interview-service.py.patch` | `backend/app/features/interview/service.py` | `52945b5051ed2ffc77864d89e76502b2c06a0382fae54063fab62b088ceaf09e` | `851288185dd79311e9759d671e4f0fde2d5861168c0670bc916c62b4e9ddb4ce` | `cd057253c7fcf389c06a4bb5d5c2df99bbceea0213933dc9fc639f43586aaca5` |
+| `review-test_question_retry.py.patch` | `backend/tests/agents/test_question_retry.py` | `없음` | `5d6c7cf66842ba44e22ff6ce7b765e25d01026d7e1a1145905644872923ef72a` | `571b0c53e045bd6759015aa0c060ce2a83af5577479aae77667126cfa2a36e26` |
+| `review-test_question_retry_prompt_version.py.patch` | `backend/tests/agents/test_question_retry_prompt_version.py` | `없음` | `e1eec6f28043cc239d7d1df3666bac8b6abcc76631a9d6f8340790fbffa8b834` | `6462aed64bb4b2b71b7eacf04a303498282074484eea2a2674d80f613264ecc4` |
+| `review-test_question_retry_router.py.patch` | `backend/tests/features/interview/test_question_retry_router.py` | `없음` | `9f40c138db460369c6e6ff0ffa84a5fabc368f78e3d2f61cd0812e751adbf12b` | `e742cb1ab9dff10d8074d309e3732f6a4d9a8ec76994f97b11a1be567857eac8` |
 
 선행의 실제 병합 커밋으로 재기준한 뒤 적용한다. 적용 커밋·지문·통합 회귀를 spec/ai/implementation.md에 기록한 뒤에만 대기 패치를 제거한다.
+
+#213·#216·#223 패치가 실제 코드에 적용될 때까지 director_service·GET availability 호출·라우트와 해당 통합 회귀를 같은 비활성 묶음으로 보존합니다. PR 병합만으로 활성화되지 않습니다. 복구 모듈·선택 응답형·독립 경계 검사는 직접 게시합니다. 원문·T3 재실행 없이 최초 조회 요약과 Tool 결과를 복원하며 과거 성공이 현재 연결을 바꾸지 않습니다. 공통 0011은 #228 소유입니다.
 
 <details>
 <summary>이전 안내·과거 기준 지문(현재 적용 지문으로 사용 금지)</summary>
@@ -54,3 +61,5 @@
 적용 전 `git apply --check`와 실제 적용 후 검증을 모두 수행한다. 부분 활성화하지 않으며, 전체 소비자·모델·마이그레이션과 해당 테스트가 활성 소스에 반영되고 후속 패치의 preimage를 갱신해 재검증한 뒤에만 사용을 마친 패치를 제거한다. Draft·후속 패치 존재는 단독 실행 완료를 뜻하지 않는다.
 
 </details>
+
+공통 0042·0044 색인과 이 재리뷰의 구현 기록은 #222에서 먼저 반영한다. 0040은 #223, 0046은 #225 소유다. 문서 패치는 이 색인 반영 후 적용하며 코드의 실행 의존성과 문서 적용 순서를 구분한다.
