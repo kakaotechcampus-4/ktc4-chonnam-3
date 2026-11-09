@@ -5,6 +5,9 @@ task-16
 
 import pytest
 from redis.exceptions import RedisError
+from sqlalchemy import select
+
+from app.db.models.report import ReportGenerationRequest
 
 from ..interview.factories import make_interview, make_repo, make_run, make_turn, make_user
 from .factories import make_report
@@ -14,14 +17,20 @@ def url(interview_id) -> str:
     return f"/api/interviews/{interview_id}/report"
 
 
-async def test_202_enqueues_once_with_interview_id_only(client, ctx, enqueue, redis) -> None:
+async def test_202_enqueues_once_with_durable_generation_identity(
+    client, db, ctx, enqueue, redis
+) -> None:
     interview, _ = ctx
 
     response = await client.get(url(interview.id))
 
     assert response.status_code == 202
     assert response.json() == {"status": "generating", "retryAfter": 3}
-    enqueue.assert_awaited_once_with("report_generate", str(interview.id))
+    request = (await db.scalars(select(ReportGenerationRequest))).one()
+    assert (
+        request.status == "queued" and request.mode == "initial" and request.expected_revision == 0
+    )
+    enqueue.assert_awaited_once_with("report_generate", str(interview.id), str(request.id))
     ttl = await redis.ttl(f"report:gen:{interview.id}")
     assert 0 < ttl <= 300
 
