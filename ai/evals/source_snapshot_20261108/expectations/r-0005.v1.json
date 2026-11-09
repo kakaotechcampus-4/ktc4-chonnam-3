@@ -1,0 +1,72 @@
+{
+ "case_id": "r-0005",
+ "version": 1,
+ "source_fact": "F-R1-003",
+ "pair": {
+  "pair_id": "rp-0003",
+  "role": "stronger",
+  "key": "contribution_clarity",
+  "min_gap": 10
+ },
+ "allowed": [
+  {
+   "id": "a1",
+   "purpose": "주요 피드백마다 실제 turn 번호(1~9)를 연결하고 없는 turn을 만들지 않는다"
+  },
+  {
+   "id": "a2",
+   "purpose": "Redis 의존성(m1)과 REQUIRES_NEW 주석(m2)은 선언·주석이 확인된다는 수준으로만 서술하고 해당 evidence ref를 연결한다"
+  },
+  {
+   "id": "a3",
+   "purpose": "질문하지 않은 영역(배포·운영·테스트 실행 결과)은 관찰 부족으로 표시하고 약점으로 쓰지 않는다"
+  },
+  {
+   "id": "a4",
+   "purpose": "본인 역할·기여는 사용자 진술로 구분해 서술하고 코드나 주석만으로 단독 기여를 확인된 사실처럼 쓰지 않는다"
+  }
+ ],
+ "forbidden": [
+  {
+   "id": "f1",
+   "reason": "Redis 도입이나 폐기 방식으로 성능·보안이 좋아졌다고 단정",
+   "type": "overclaim"
+  },
+  {
+   "id": "f2",
+   "reason": "코드나 주석이 있다는 사실만으로 개인 기여를 확인된 사실처럼 서술(사용자 진술은 진술로 구분해야 한다)",
+   "type": "contribution_overclaim"
+  },
+  {
+   "id": "f3",
+   "reason": "질문하지 않은 영역을 낮은 평가나 0점으로 처리",
+   "type": "unobserved"
+  },
+  {
+   "id": "f4",
+   "reason": "존재하지 않는 turn 번호나 evidence ref를 근거로 인용",
+   "type": "invalid_ref"
+  }
+ ],
+ "grader_controls": [
+  {
+   "kind": "allowed",
+   "output": "턴 1에서 로그인·토큰 재발급을 맡은 범위와 팀원이 만든 공통 예외 처리를 구분해 말했습니다(turn 1). 이는 사용자 진술이며 실제 작성자와 분담은 확인하지 못했습니다."
+  },
+  {
+   "kind": "forbidden",
+   "output": "이 코드는 작성자가 단독으로 설계·구현했음이 확인됩니다."
+  },
+  {
+   "kind": "invalid_ref",
+   "output": "턴 11에서 본인 기여를 구분해 설명했습니다(turn 11, m9)."
+  }
+ ],
+ "review": {
+  "status": "unreviewed",
+  "author": "geonyeong325",
+  "reviewer": null,
+  "reviewed_at": null,
+  "pending_notes": []
+ }
+}
