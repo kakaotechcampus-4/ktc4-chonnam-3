@@ -1,21 +1,104 @@
 diff --git a/backend/app/features/interview/prepare.py b/backend/app/features/interview/prepare.py
 --- a/backend/app/features/interview/prepare.py
 +++ b/backend/app/features/interview/prepare.py
-@@ -490,7 +490,21 @@
+@@ -38,6 +38,7 @@
+ from app.features.interview.answer_context import load_answer_context
+ from app.features.interview.director_service import log_recovery, start_director
+ from app.features.interview.repository_candidates import STATE_KEY
++from app.features.interview.repository_inventory import SourceInventory, stored_inventory
+ from app.features.interview.repository_sources import (
+     SourceCollection,
+     SourcePreparationError,
+@@ -65,6 +66,7 @@
+     cached: c.DeepRepoAnalysis | None
+     invalid_cache: tuple[UUID, dict[str, object] | None, list[dict[str, object]] | None] | None
+     cached_sources: tuple[c.SourceDocument, ...] = ()
++    cached_inventory: SourceInventory | None = None
+ 
+ 
+ def _steps(completed: int, failed: bool = False) -> list[dict[str, object]]:
+@@ -241,6 +243,7 @@
+             if index >= 2:
+                 continue
+             cached: c.DeepRepoAnalysis | None = None
++            cached_inventory: SourceInventory | None = None
+             cached_sources: tuple[c.SourceDocument, ...] = ()
+             invalid_cache = None
+             for row in analyses:
+@@ -290,6 +293,13 @@
+                                         str(repo.id), l1.head_sha, shallow, cached_sources
+                                     ),
+                                 )
++                            cached_inventory = stored_inventory(
++                                (row.result or {}).get("_source_inventory"), head_sha=l1.head_sha
++                            )
++                            if cached_inventory is not None and not {
++                                area.path for area in value.notable_areas
++                            } <= set(cached_inventory.paths):
++                                raise c.ContractError("semantic", "cache source inventory")
+                             cached = value
+                     except c.ContractError:
+                         pass
+@@ -304,6 +314,7 @@
+                     cached,
+                     invalid_cache,
+                     cached_sources if cached is not None else (),
++                    cached_inventory if cached is not None else None,
+                 )
+             )
+         if await load_active_prompt(db, "repo_deep") != prompt:
+@@ -468,6 +479,7 @@
+     failures: list[str],
+     repository_limitations: dict[str, list[str]],
+     step: str,
++    prompt_version: str,
+ ) -> bool | None:
+     async with sessions.begin() as db:
+         row = await _unchanged(db, user_id, interview_id, job_id, snapshot)
+@@ -490,7 +502,50 @@
                  "paths": list(sources.candidate_paths),
                  "limitations": list(sources.limitations),
              }
 -            row.context_state = {**state, STATE_KEY: candidates}
-+            # 전체 구조 목록은 선정 입력·조회 권한·읽은 원문 Evidence와 분리한다.
++            # 전체 목록은 분석 행에 한 번만 두고 자주 갱신하는 세션에는 작은 참조만 둔다.
 +            previous_inventory = state.get("repository_source_inventories", {})
-+            inventory = dict(previous_inventory) if isinstance(previous_inventory, dict) else {}
-+            if sources.inventory_paths:
-+                inventory[repo.scope.repository_id] = {
-+                    "head_sha": repo.scope.git_ref,
-+                    "paths": list(sources.inventory_paths),
-+                    "model_candidate_paths": list(sources.selection_paths),
-+                    "limitations": list(sources.inventory_limitations),
++            inventory = (
++                {
++                    key: value
++                    for key, value in previous_inventory.items()
++                    if isinstance(value, dict) and "sha256" in value and "paths" not in value
 +                }
++                if isinstance(previous_inventory, dict)
++                else {}
++            )
++            if sources.inventory_paths:
++                observed = SourceInventory(
++                    repo.scope.git_ref,
++                    sources.inventory_paths,
++                    sources.selection_paths,
++                    sources.inventory_limitations,
++                )
++                stored = await db.scalar(
++                    select(RepoAnalysis)
++                    .where(
++                        RepoAnalysis.repository_id == UUID(repo.scope.repository_id),
++                        RepoAnalysis.analysis_level == "l2",
++                        RepoAnalysis.head_sha == repo.scope.git_ref,
++                        RepoAnalysis.prompt_version == prompt_version,
++                    )
++                    .with_for_update()
++                )
++                if stored is None or not isinstance(stored.result, dict):
++                    raise SourcePreparationError("repository_inventory_unavailable")
++                original = stored_inventory(
++                    stored.result.get("_source_inventory"), head_sha=repo.scope.git_ref
++                )
++                if original is not None and original != observed:
++                    # 같은 키의 다른 관찰을 조용히 덮거나 기록하지 않은 후보를 게시하지 않는다.
++                    raise SourcePreparationError("repository_inventory_changed")
++                if original is None:
++                    stored.result = {**stored.result, "_source_inventory": observed.payload()}
++                inventory[repo.scope.repository_id] = observed.reference(stored.prompt_version)
 +            row.context_state = {
 +                **state,
 +                STATE_KEY: candidates,
@@ -24,3 +107,19 @@ diff --git a/backend/app/features/interview/prepare.py b/backend/app/features/in
              by_scope = {(item.path, item.read_scope): item for item in sources.item.sources}
              for area in analysis.notable_areas:
                  source = by_scope.get((area.path, area.scope))
+@@ -650,6 +705,7 @@
+                     read_scopes=None
+                     if repo.cached is None
+                     else tuple((area.path, area.scope) for area in repo.cached.notable_areas),
++                    inventory=repo.cached_inventory,
+                 )
+                 repository_limitations[repo.scope.repository_id] = list(sources.limitations)
+                 if repo.cached is None:
+@@ -752,6 +808,7 @@
+                 failures,
+                 repository_limitations,
+                 step,
++                prompt.version,
+             )
+             if saved is None:
+                 return False
