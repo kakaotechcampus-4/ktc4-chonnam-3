@@ -857,7 +857,10 @@ function Shell({
       <main className="flex flex-1 flex-col items-center justify-center px-7 py-6">
         <div className="flex w-full max-w-3xl flex-col gap-5">{children}</div>
       </main>
-      <Footer note="면접 중에는 페이지를 벗어나지 마세요" />
+      <Footer
+        aiNotice="AI가 진행하는 면접이에요. 질문과 전사 결과가 부정확할 수 있으니 100% 신뢰하지 마세요."
+        note="면접 중에는 페이지를 벗어나지 마세요"
+      />
     </div>
   );
 }
