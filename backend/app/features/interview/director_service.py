@@ -13,6 +13,7 @@ from uuid import UUID, uuid4, uuid5
 
 import httpx
 from devon_ai import contracts as c
+from devon_ai.agents.director.runtime import RecoveryFeedback
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -150,6 +151,7 @@ async def start_director(
     lookup_summary: str = "",
     tool_results: tuple[c.ToolResult, ...] = (),
     preparation_guard: Callable[[AsyncSession, InterviewSession], Awaitable[bool]] | None = None,
+    recovery_feedback: RecoveryFeedback | None = None,
 ) -> QuestionExecution:
     """DB에서 확정한 입력으로 질문을 만들고 저장한다. 공개 전송·준비 완료는 호출자 책임이다.
 
@@ -194,13 +196,18 @@ async def start_director(
             tool_results=tool_results,
             http_client=http_client,
             attempt_sink=attempts,
+            recovery_feedback=recovery_feedback,
         )
         async with sessions.begin() as db:
+            # 복구 기한 처리와 같은 세션→호출 순서를 지켜 결과 확정의 교착을 막는다.
+            await _owned(db, user_id, interview_id)
             record = await db.get(LLMCallRecord, call_id, with_for_update=True)
             if record is None:
                 raise AgentStateError("call_unavailable")
             record.attempts = [asdict(attempt) for attempt in result.attempts]
             record.failure = asdict(result.failure) if result.failure else None
+            if record.discard_reason is not None:
+                return _outcome(record)
             if result.failure is not None:
                 return _outcome(record)
             try:
@@ -301,6 +308,17 @@ async def _replay(
     )
     outcome = _outcome(record) if record is not None else None
     director_record = await db.get(LLMCallRecord, uuid5(call_id, "director"))
+    if following is not None:
+        # 명시 복구로 확정된 다음 질문이 있으면 과거 반려를 현재 실패로 다시 전송하지 않는다.
+        return AnswerExecution(
+            call_id,
+            current.id if current else None,
+            following,
+            interview.status == "completed",
+            None,
+            None,
+            accepted,
+        )
     if director_record is not None:
         if (
             director_record.interview_session_id != interview.id
@@ -629,6 +647,19 @@ async def process_answer(
             lookup_summary=summary,
             tool_results=() if tool_result is None else (tool_result,),
         )
+        if question.failure is not None:
+            from app.features.interview.question_retry import auto_retry_question
+
+            recovered = await auto_retry_question(
+                sessions,
+                user_id=user_id,
+                interview_id=interview_id,
+                failed=question,
+                settings=settings,
+                http_client=http_client,
+            )
+            if recovered is not None:
+                question = recovered
         return AnswerExecution(
             call_id,
             UUID(loaded.turn_id),

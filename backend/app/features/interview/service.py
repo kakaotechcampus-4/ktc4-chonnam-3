@@ -140,6 +140,9 @@ async def get_interview(
     except RedisError:
         raise AppError(Reason.INTERNAL_ERROR) from None
     turns = await queries.list_turns(db, interview_id=interview.id)
+    from app.features.interview.question_retry import availability
+
+    can_retry, retry_count = await availability(db, interview)
     return InterviewDetailResponse(
         id=interview.id,
         session_id=session_id,
@@ -160,6 +163,8 @@ async def get_interview(
         ],
         # openapi: preparing_failed 일 때만 내려준다.
         last_error=_last_error(interview) if interview.status == "preparing_failed" else None,
+        can_retry_question=can_retry,
+        question_retry_count=retry_count,
     )
 
 
