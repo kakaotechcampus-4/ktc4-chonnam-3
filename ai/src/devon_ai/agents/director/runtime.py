@@ -202,6 +202,10 @@ def _input_payload(
         raise c.ContractError("schema", "Director context")
     if type(prompt) is not c.PromptSpec or prompt.task_name != "director":
         raise c.ContractError("schema", "Director prompt")
+    if prompt.version.partition("@")[0] not in SUPPORTED_PROMPT_VERSIONS:
+        raise c.ContractError("schema", "unsupported Director prompt version")
+    if prompt.version.partition("@")[0] not in SUPPORTED_PROMPT_VERSIONS:
+        raise c.ContractError("schema", "unsupported Director prompt version")
     if type(limits) is not c.CallLimits:
         raise c.ContractError("schema", "Director limits")
     if type(tool_results) is not tuple or any(
