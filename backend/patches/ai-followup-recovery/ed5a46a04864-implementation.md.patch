@@ -238,3 +238,243 @@ diff --git a/spec/ai/implementation.md b/spec/ai/implementation.md
 +재검증은 첫 회차와 조건이 다르므로 최초 비교의 실패를 없애거나 같은 조건의 승리로 바꾸지 않는다.
 +
 +재검증의 목표는 새 L1→자체 파일 선정·실원문→새 L2→9턴 T3/Director→실제 report ARQ→profile outbox worker다.
++모델별 새 DB·Redis·deployment, 총 60회 호출·2400초 상한과 동일한 후보 응답 정책을 적용한다.
++
++### 실제 전체 연쇄 결과와 복구 경로
++
++| 실행 | 실제 결과 | 분리해서 해석할 사항 |
++| --- | --- | --- |
++| `luna-full-02` | 자체 새 L1/L2와 7답변·7분석 저장 후 다음 질문의 독립 Review가 `replan`으로 반려 | 질문이 `identify`의 조건부 identity 갱신을 무조건으로 표현했다. 원문 기반 안전 반려이며 schema 오류와 다르다. |
++| `sol-full-02` | 자체 새 L1/L2→9답변·9분석→6점수·리포트 저장 | burst 검증기가 report 완료 중 추가된 profile job을 다시 poll하지 않아 중단했다. 제품 report 생성 실패로 분류하지 않는다. |
++| `sol-profile-continue-01` | 실제 만료 delivery 소비→공식 reaper 재전달→profile worker 성공 | 기존 9문답·리포트·점수·원 호출 행 전체 불변, outbox `succeeded`, 캐시 GET 추가 모델 0회. 새 모델 1회. |
++| `luna-public-retry-01` | 공개 abandon→retry로 새 면접을 시작해 9답변·9분석 완료 | 원래 7문답은 보존하고 자기 유효 L1/L2를 재사용한 warm 복구다. 리포트 입력 복원 오류로 당시 report/profile은 생성되지 않았다. |
++| `luna-report-retry-01` | 아래 제품 수정 후 같은 9문답에서 공개 report retry→report worker→profile worker 완료 | 원 실패 요청 불변·새 retry 요청 1개 성공·6점수·report/profile/outbox 저장·캐시 GET 2회의 추가 모델 0회. 새 모델 3회. |
++
++두 최종 면접 모두 HR 1·기술 6·도메인 2의 9문답이며 마지막 답변까지 저장·분석한 뒤 종료됐다.
++Luna의 단일 cold 실행 완주나 Sol의 최초 burst 실행 완주로 기록하지 않는다.
++위 복구는 현재 공개 정책과 공식 큐 재전달 경로를 사용했고, 내부 질문 재생성 우회나 DB 상태 강제 변경은 없다.
++각 실패의 `campaign-result.json`은 실패 상태 그대로 보존했다.
++
++기본 연쇄 안에서도 실제 보완 조회가 발생했다.
++Luna cold 2회차의 첫 답변은 `route.test.ts:1–925` 1개 원문을 조회했고, public retry의 8번 답변은
++`getEventData.ts:1–150`·`getEventDataEvents.ts:1–157` 2개 원문을 조회했다.
++GitHub blob·원문·좌표·wire 지문과 후속 T3/Plan/Review 입력의 동일 원문을 대조했다.
++두 회차에서 바로 다음 질문이 새 source ID를 직접 인용한 것은 아니므로, 입력 반영과 직접 인용을 구분한다.
++앞의 독립 자연 발생 Tool 사례에서는 두 모델 모두 새 코드 근거를 다음 질문에서 직접 참조했다.
++
++### 실제 검증에서 발견한 리포트 복원 오류와 수정
++
++[report history](../../backend/app/features/report/history.py)는 기존 Evidence와 L2 경로만으로
++과거 T3의 `verification_requests`를 재검증해, 면접 당시 허용한 주변 후보 경로를 누락했다.
++실제 실패 요청의 6경로는 모두 저장한 16개 후보와 고정 SHA에 포함됐지만 `verification scope`에서 거절됐다.
++report 모델 호출 전의 제품 입력 구성 오류이며, 모델의 잘못된 출력으로 분류하지 않는다.
++
++공통 `repository_candidates.STATE_KEY`·`snapshot_paths`를 재사용해 소유한 선택 레포의 같은 SHA 후보만 복원했다.
++후보는 조회 권한으로만 사용하고 Evidence·Tool item·원문을 만들지 않는다.
++프롬프트·ID·schema·semantic 검증과 저장된 분석·원응답은 유지했다.
++새 독립 PostgreSQL DB에서 정상 후보 실패를 RED로 재현하고, 같은 SHA 정상·다른 SHA·손상 후보·미선택 레포·
++snapshot 누락·다른 소유자의 6개 회귀를 GREEN으로 확인했다.
++이어서 report/profile·AI facade·answer wire history 관련 **201개**가 단일 실행에서 통과했다.
++Ruff·format 2파일과 mypy 1소스도 통과했다. 앞의 AI 840·BE 56과 겹치는 범위가 있어 수치를 합산하지 않는다.
++실제 실패 DB에서는 read-only transaction으로 입력 구성 3단계를 다시 검증했고 모델 호출·DB 쓰기는 0회였다.
++
++### 사용량·참고 비용과 비교의 범위
++
++2026-11-09 KST 최종 감사는 이번 15개 campaign의 실제 HTTP 원응답·SSE usage·요청 지문을 대조했다.
++이전 고정 입력 36회 비교는 포함하지 않는다. 같은 입력으로 실제 재호출한 요청은 중복으로 삭제하지 않았다.
++
++| 실제 호출 모델 | 시도 | 확인된 사용량의 참고액 |
++| --- | ---: | ---: |
++| Luna | 110 | 732.585043원 |
++| Sol | 47 | 5,975.973231원 + usage 미상 1건 |
++| 합계 | 157 | **6,708.558274원 + 미상 비용** |
++
++156회는 usage를 확인했고 초기 Sol L2 timeout 1회는 확인하지 못했다.
++서비스 호출 129회의 참고액은 6,552.035143원, 검증용 합성 지원자 생성 28회는 156.523131원이다.
++독립 task·Tool·실패·복구 비용까지 포함한 실험 합계이며 서비스 면접 1회의 평균 비용은 아니다.
++2026-11-08 Elice에 표시된 100만 토큰당 원화 단가(Luna 입력141/캐시14/출력708,
++Sol 입력2835/캐시141/출력14175)로 계산했다. 추론 토큰은 출력에 이미 포함돼 중복 가산하지 않았다.
++실제 청구액·VAT·별도 캐시 쓰기 단가·비LLM API 비용은 이 계산으로 확정하지 않는다.
++Luna의 안전 반려와 복구·자기 캐시 재사용, 모델별로 달라진 질문·출력을 고려해야 하므로
++이 한 사례로 모델 품질의 동등성이나 운영 평균 지연·완주율을 확정하지 않는다.
++
++### 로컬 Luna 활성화와 새 프로세스 검증
++
++원본 환경 파일을 private 영역에 보존한 뒤 원본·검증 작업본의 `backend/.env`를 같은 설정으로 맞췄다.
++`LLM_CONNECTION_SLOT=1`, Luna 연결, L1 180초·L2 160초를 적용하고 Sol slot 3·다른 공급자 설정은 보존했다.
++기존 로컬 DB 주소 55432/devon_local과 Redis 56379를 유지했다.
++이전에 연결할 DB가 없어 새 전용 PostgreSQL container·volume을 만들고 migration 0014까지 적용했다.
++검증 면접을 이 서비스 DB로 복사하지 않았으며 초기 사용자 fixture는 0명이다.
++이 개발 DB에 새 deployment `luna-local-v6-20261109`의 **11개 활성 task 프롬프트**를 등록했다.
++개발 지식은 `unreviewed`로 보존하며 사람 승인으로 바꾸지 않았다.
++
++새 작업본 소스로 Uvicorn 프로세스를 띄워 실제 HTTP health·OpenAPI·미로그인 `/api/me`의 401을 확인했다.
++DB SELECT 1·migration·Redis PING, 설정과 11개 task/model/version의 정확한 일치 및 준비 시간 예산도 통과했다.
++스모크 검사의 외부 공급자 호출·DB/Redis 쓰기는 0회이며 생성한 API 프로세스는 검사 후 종료했다.
++실행 대상은 이 통합 작업본이며 원본 `develop`에 구현을 병합·게시한 상태를 뜻하지 않는다.
++
++### 판정과 근거 산출물
++
++실제 공급자·PostgreSQL·Redis·ARQ를 사용한 위 AI 기능 연쇄와 독립 task·Tool 경로는
++명시한 입력·복구 경로·설정 범위에서 **자동 검증 완료**다.
++이번 회차에서 STT·Vision·TTS 공급자를 새로 호출하거나 음성 9턴·실제 로그인·FE 브라우저 전체 흐름을 검사하지 않았다.
++이미지 JD 독립 task는 이전 실제 공개 이미지에서 추출·보존한 블록을 사용했다.
++이번 모델 비교의 주 레포는 고정 Umami 1개이며, 이 결과를 모든 언어·규모의 레포와 부하/SLO로 확대하지 않는다.
++사람의 질문·평가 품질 검수, 기존 `r-0008.v3` reject, 운영 배포·원격 PR/CI 상태는 별도 범위다.
++
++산출물은 작업본의 `.claude/scratch/full-validation/`에 보존했다.
++전체 감사 `campaign-usage-audit-04.json/.md`, 독립 scope `privatefinal-scope-audit.json/.md`,
++보완 회귀 `report-scope-fix-result.json`, 원인 재현 `luna-public-retry-report-readonly-diagnosis-{01,03}.json`,
++각 campaign의 원입출력·usage·DB export, 활성화 `runtime-activation/{activation-result,smoke-result}.json`이 근거다.
++공통 계약 검사는 기존 전용 venv를 재사용해 schema 2개·positive/negative fixture 7개·부분 OpenAPI가 통과했다.
++backend venv에 해당 검사 패키지가 없어 첫 시도는 미실행(exit 2)이었으며 새 패키지는 설치하지 않았다.
++초기 설계·testing 원본은 보존했고 구현 결과는 이 절로 통일했다. 커밋·push·PR은 수행하지 않았다.
++
++<a id="jd-heading-fix-20261109"></a>
++
++## 2026-11-09 JD 소제목 추출 오류와 기존 캐시 보완
++
++병합된 [#15](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/15)의 추출 경로를 확인한 결과,
++독립된 `필수 역량`, `주요 역할`이 요구사항으로 저장되고 20개 상한을 소모했다.
++당시 리뷰에서 수정한 URL·에러·카테고리 문제와 별개로 발견한 후속 오류다.
++최신 develop `18f4105b2e7e9885df118d283badbf59692ec5b4`에서 별도 로컬 브랜치
++`fix/jd-requirement-headings`로 수정했다. 기존 AI 통합 작업과 보존된 실행 결과는 옮기거나 덮어쓰지 않았다.
++
++### 변경과 저장 경계
++
++- [`build_requirement_drafts`](../../backend/app/llm_tasks/jd_extract.py)는 공통 판별기
++  `is_requirement_heading`으로 알려진 한국어 제목만 개수 배분 전에 제외한다.
++  목록·강조·번호·괄호·콜론 장식은 비교용 사본에서 처리한다. 실제 요구 문장과 그룹·순서·태그는 유지한다.
++  제목만 남으면 기존 `jd_extraction_failed` 오류를 반환하며 모델을 호출하지 않는다.
++- [`fetch_posting`·`complete_posting`](../../backend/app/features/analysis/posting_service.py)은
++  `_reusable_success`에서 저장된 제목 행을 확인한다. 해당 캐시만 원문을 재수집하고 URL 잠금 안에서
++  다시 확인한다. 정상 캐시는 기존 ID를 HTTP 없이 재사용한다.
++- 정제된 요구사항은 기존 버전 저장 경로로 새 공고·요구사항 ID에 저장한다. 과거 원문·요구행과
++  분석 실행·면접·턴의 참조 ID는 그대로 둔다. 실패·동시 갱신의 기존 보존 경계를 유지한다.
++  공개 계약·스키마·마이그레이션 변경은 없다.
++- 정책과 대안은 [BE 결정 0013](../backend/decisions/0013-jd-requirement-headings-and-cache-repair.md)에 기록했다.
++  초기 설계·testing 문서와 이전 ADR은 수정하지 않았다.
++
++### 이번 실행 결과
++
++| 확인 범위 | 결과와 한계 |
++| --- | --- |
++| 추출기 신규 회귀 | 수정 전 27개 중 18 실패·9 통과. 수정 후 관련 추출·Wanted 검사에 포함해 통과 |
++| 추출·Wanted 관련 검사 | 88 passed. 소제목·장식·실질 문장 보존·분류·순서·태그·20개 배분·오류 경계 |
++| 캐시 신규 회귀 | 수정 전 7 실패·1 통과, 수정 후 8 통과 |
++| PostgreSQL 공고 관련 검사 | 6개 파일 55 passed, 실패·skip 없음. 신규 8개를 포함하므로 별도 합산하지 않음 |
++| 보존된 실제 공고 독립 검사 | Wanted 361487의 원문 22문단에서 제목 2개만 제외. 실질 문장 20개 전부와 required 7·preferred 6·responsibility 7의 원래 분류·순서·태그를 확인. 원문 불변을 포함한 9개 검사 통과 |
++| 정적 검사 | 변경 Python 파일의 Ruff·format과 제품 코드 mypy 통과. `git diff --check` 통과 |
++| 게시 전 AI 전체 게이트 | 새 실행에서 557 passed. 전체 Ruff·format 76파일·mypy 18소스 통과 |
++| 게시 전 부분 계약 검사 | 2스키마·부분 OpenAPI·7 fixture 통과. 전체 API 런타임 호환 검증은 아님 |
++
++DB 검사는 별도 로컬 PostgreSQL 테스트 DB `task11_test_jd_heading_cache_20261109_test`에서 실행했다.
++Wanted HTTP는 모의 응답을 사용했고 기존·운영 DB는 수정하지 않았다.
++실제 공고 검사는 과거에 수집해 보관한 입력을 다시 읽은 것으로 이번 실시간 수집 검증은 아니다.
++실제 공고 원문과 임시 검사 로그는 Git 제외 로컬 scratch에 두었다.
++88개·55개·독립 검사 9개는 서로 다른 범위이며 서비스 전체 테스트 수로 합산하지 않는다.
++
++### 남은 검증과 적용 범위
++
++이번 실행에는 외부 모델·유료 API 호출, 배포, 브라우저 E2E가 없다. 서비스 모델·추론 강도·환경 파일은 변경하지 않았다.
++등록한 한국어 제목과 장식 범위의 수정이며 모든 언어·사이트·임의 제목을 의미 분석하는 기능은 아니다.
++이미 ID가 고정된 면접은 옛 자료를 계속 참조하고 새 조회부터 정제 버전을 사용한다.
++새 공고와 면접을 연결한 실제 모델 재검증·배포는 별도다. 기존 PR 리뷰 게시는 이 로컬 수정의 배포를 뜻하지 않는다.
++
++사용자의 후속 PR 게시·조건부 병합 요청에 따라 원본 브랜치를 보존하고 최신 develop 기반
++`fix/jd-heading-cache-repair` 게시용 브랜치에 이번 변경만 분리한다. 게시 후 CI와 병합 결과는
++해당 후속 PR의 실행·검증 기록에서 확인한다. 기존 통합본과 미병합 선행 코드는 포함하지 않는다.
++
++## 2026-11-09 — 실제 계정의 로컬 이용 환경과 최소 진단
++
++사용자가 서비스만 이용하고 실행·확인은 에이전트가 맡도록 별도 로컬 worktree
++`work/manual-ai-service-20261109`를 구성했다. 기존 전체 작업의 원본 1,127파일은
++SHA256 비교에서 변경 0이며, 원본 HEAD/작업 파일을 덮어쓰지 않았다.
++통합 환경은 기존 전체 구현과 develop `31a18d28`을 결합한 로컬 실행본이다.
++커밋·push·PR 게시를 수행한 변경은 아니다.
++
++### 실행과 진단
++
++- 같은 소스의 API·`analysis_app.WorkerSettings` 단일 worker·MSW 비활성 FE를 실행했다.
++  로컬 PostgreSQL/Redis와 기존 프롬프트·루브릭·도메인 프레임·TTS 예산 원장을 재사용했다.
++- 활성 프롬프트 11개는 task 목록·본문이 현재 소스와 일치하고 모델은 모두 `gpt-6-luna`다.
++  비활성 v1 프롬프트의 upstream 본문을 기존 활성 버전에 덮어쓰지 않았다.
++- `backend/app/core/logging.py`에 API/worker 공통 안전 예외 출력과 HTTP 결과 관측을 연결했다.
++  예외는 종류·파일/함수/줄만, HTTP는 고정 라우트·메서드·상태·시간·request ID만 기록한다.
++  `LOG_JSON`은 config/main/worker startup에 연결했다.
++- Git 제외 `manual-ai-runtime-20261109/supervisor.py`가 소유 프로세스·health·worker heartbeat와
++  시작 후 업무 상태를 약 5초마다 확인한다. 업무 DB 관측은 읽기 전용이다.
++  자식 stdout도 허용된 필드·enum·UUID만 별도 JSONL로 저장한다.
++- 같은 위치의 `vite.manual.config.mjs`는 원본 Vite 설정·프록시를 재사용하고
++  localhost:5173의 dev 실행에만 HTTP/JS 진단 스크립트를 주입한다.
++  원래 fetch Promise/응답/오류는 유지하고, 메타데이터는 exact Origin·loopback·8KiB 상한으로 검증한다.
++  동적 경로는 템플릿으로 바꾸며 사건별 기록과 중복 억제한 alert를 구분한다.
++  진단 로그 상한은 32MiB다. 원격 브라우저 진단 포트를 사용하지 않는다.
++- 브라우저 자동 실행 명령은 도구의 자동 정책에서 차단됐다. 사용자에게 로컬 로그인 링크를 안내했다.
++  실제 로그인·OAuth 동의·마이크 허용은 사용자가 직접 수행한다.
++
++### 최신 변경 통합과 평가 자료 보존
++
++#197의 JD 참조 검증은 기존 v2 보고서/채점 타입·Narrative·evaluation_keys를 유지한 채 결합했다.
++#175 canonical 19쌍과 검수 상태는 최신 develop을 유지했다.
++과거 코호트가 참조하는 58JSON+사실표는 동결 snapshot으로 보존하고 출처 resolver를 분리했다.
++이 snapshot은 현재 승인된 평가자료로 직접 로드할 수 없으며, 과거 코호트의 지문을
++새 자료에 맞춰 변경하거나 과거 검수 상태를 현재 품질 승인으로 승격하지 않았다.
++
++### 이번 검증과 범위
++
++| 범위 | 이번 실행 결과 |
++| --- | --- |
++| AI 전체 | 864 passed, Ruff/format 124파일·mypy 29소스 통과 |
++| BE AI import·평가 연결/출처 | 35 passed |
++| 안전 로그·HTTP 결과·기존 관련 회귀 | 최종 53 passed, 관련 Ruff/format/mypy 통과 |
++| JD 추출 순수 회귀 | 42 passed, 실제 DB·Wanted·모델 호출 없음 |
++| supervisor 개인정보·정리 경계 | 최종 9 passed, 모의 프로세스·임시 파일·라우트 prefix 검증 |
++| 로컬 화면 진단 | 10개 mock 회귀·문법·원본 Vite config 로드 통과 |
++| FE | TypeScript 검사와 실제 API 설정의 production build 통과 |
++| 실행 확인 | API/proxy health 200, 로그인 HTML 200, 인증 전 profile 401(정상), worker heartbeat·큐 정상 |
++| 진단 실제 저장 | 스크립트 주입/JS 제공 확인, 실제 health의 request ID 메타데이터 POST 204 및 JSONL 저장 확인 |
++| 기존 원본 보존 | 원본 1,127파일 변경 0, 과거 코호트 입력/기대 82파일과 기존 지문 보존 |
++
++범위가 겹치는 검사 수를 전체 서비스 테스트 수로 합산하지 않는다.
++이번 준비 과정에서 공급자 호출은 0이며 설정 유효성과 기존 DB의 일치를 확인했다.
++실제 사용자 계정의 전체 이용, 브라우저 DOM/클라이언트 스크립트 실행은 사용자 테스트 전까지 미실행이다.
++기동 중 일시적인 health 실패와 사전 확인 중 Windows 연결 reset 기록은 보존했고,
++최종 실행의 health 정상과 구분한다. 이를 실제 면접 성공으로 해석하지 않는다.
++
++현재 실행 상태·PID·준비 검증은 Git 제외 runtime의 `status.json`·`services.json`·`readiness.json`,
++검사 근거는 `agent-A/`·통합본의 `.claude/scratch/logging-verification/`·runtime의 TAP에 있다.
++운영 확인 순서는 runtime의 `OPERATIONS.md`에 둔다. 수집기가 계속 실행돼도 대화 에이전트가
++턴 종료 후 상주하며 자동 판단·수정하는 것은 아니다. 의미상 질문 오류는 사용자 관찰과 업무 원본을 검토한다.
++관련 결정은 [0042](decisions/0042-local-user-test-observability.md)에 기록한다.
++
++실제 FastAPI `include_router`가 `scope.route.path`에 prefix 전 고정 template을 보관하는 것도
++mock DB/API 없이 실제 ASGI 앱으로 재현했다. supervisor 소비 계층에서 알려진 router의 고정
++template에 `/api`를 복원하고 공식 Reason enum 값만 수용하도록 보완했다.
++서비스 기능은 변경하지 않았으며, 현재 진행 작업·큐가 없는 상태에서 수집기를 재시작했다.
++최종 준비 검사에서 실제 401 요청의 canonical route·상태·request ID가 함께 저장되는 것도 확인했다.
++
++## 2026-11-09 — 저장 답변 보존과 다음 질문의 자동 복구
++
++실제 계정 면접에서 네 답변을 저장한 뒤 5번 후보가 독립 Review에서 반려됐다.
++질문에는 원인·재발 방지·검증을 물었지만 QuestionContract에는 불일치의 회복까지 요구했다.
++원 실패를 보존하고, 사용자가 요청한 자동 재생성과 같은 면접 이어가기를 별도 로컬 worktree
++`work/manual-ai-recovery-20261109`에 구현했다. 원 실행본과 기존 전체 작업본은 보존한다.
++정책·공개 계약의 후속 결정은 [공통 0011](../shared/decisions/0011-bounded-question-recovery.md)에 둔다.
++
++### 변경 경계
++
++- `director_service.process_answer`는 안전한 `director_candidate_rewrite` 반려에 자동 1라운드를
++  허용한다. 최초·자동·명시 수동을 합쳐 대상 질문당 Plan/Review 최대 6회다.
++  독립 Review와 원문·허용 ID·질문 계약 검증을 생략하지 않는다.
++- `question_retry.py`는 기존 `context_state`의 유한 원장으로 요청 UUID·대상 턴·소유권·실패 호출·
++  기한·결과를 연결한다. PostgreSQL row lock, 입력 지문, 늦은 결과 폐기, 동일 요청 재생과
++  새 realtime 세션 발급을 처리한다. STT·답변 분석·레포 분석은 재실행하지 않는다.
++- Director v7은 v6 원문을 보존한 후속 프롬프트다. 검증된 이전 후보와 반려 사유는 새 Plan에만
++  참고자료로 주며 새 독립 Review·원문 사실·허용 근거에는 섞지 않는다.
++- `POST /api/interviews/{id}/question/retry`와 GET의 선택 필드 `canRetryQuestion`·
++  `questionRetryCount`를 추가했다. FE는 저장된 답변으로 이어가기, 요청 중 중복 행동 차단,
++  응답을 확인하지 못했을 때 같은 UUID로 결과 확인, 새 세션 재접속을 제공한다.
++- 신규 업무 테이블·마이그레이션은 없다. 기존 질문/답변/분석/근거/선택 SHA와 실패 기록을
++  보존한다. 정상 진행에 필요한 직전 턴의 decision·현재 턴·context 갱신은 허용한다.
++
