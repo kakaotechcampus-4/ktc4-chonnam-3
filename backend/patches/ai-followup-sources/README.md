@@ -12,7 +12,7 @@
 | `5e608d2d5224-external_source.py.patch` | `backend/app/db/models/external_source.py` | `cef09ee82e98e468dff487ed4db89a2971b013709f6645ab2a721cba22e7136b` | `8dc258b0a63da2534be96925c67317b7492bd2540b7e5f23276fbd6cdd9242b3` | `5bbc8432c3223477b1d1ddf7bd1cd534ef428a5ac8c102ebdd57246957e34a9a` |
 | `6f3e3f41beed-test_director_runtime_service.py.patch` | `backend/tests/agents/test_director_runtime_service.py` | `56a4e452a9651a786ab0b65b44e73dcb40f0ecfa8163948a65288453cc6369c3` | `faaf1c8b89e074d0c9cadbf3a47a19137dc65347ca4cfaf46184dfa4527119df` | `d3f2a2d5f84d5f4e699838ed0123572141eeb2a87d33d4fb388abe79d451825d` |
 | `750223191335-test_external_knowledge.py.patch` | `backend/tests/features/interview/test_external_knowledge.py` | `6b9b52575178d9580315ad91e48f03686cc043a0e6eec71979bc3eb413d0ef0a` | `093739713c0b98cc25879cb95a329eec34a73c9c5a8249674185cfe123e20edf` | `4a4dd3298818755f8ba920468a582dd41134bc8b290cf7a2105da88b047c1d88` |
-| `ae1ce2ad5773-external_knowledge.py.patch` | `backend/app/features/interview/external_knowledge.py` | `4e15c7a5880c135aab1cce8bb79be8dcf9e111d54f0fdc1e3a3746f6d9f987b0` | `b55366249246f7209960c4087353539bccc7be8d5ee990c86d8649a01580555d` | `35395304faf739d1637369afcd34ec38e37adc0a338958fa8ff6240b7921e674` |
+| `ae1ce2ad5773-external_knowledge.py.patch` | `backend/app/features/interview/external_knowledge.py` | `7b9e97b5976dd159331f890d1131bdeeef18ff6e9bc9ce1b2107866e720ae878` | `b55366249246f7209960c4087353539bccc7be8d5ee990c86d8649a01580555d` | `3a591af6560a3f472206fcc0bd2fc2bac7538e49b23ef9764b5cd291ff46d947` |
 
 선행의 실제 병합 커밋으로 재기준한 뒤 적용한다. 적용 커밋·지문·통합 회귀를 spec/ai/implementation.md에 기록한 뒤에만 대기 패치를 제거한다.
 
