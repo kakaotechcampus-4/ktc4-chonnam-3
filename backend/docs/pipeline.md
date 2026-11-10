@@ -257,7 +257,7 @@ Sprint 1에는 하트비트/timeout 기반 자동 abandoned 판정 배치를 두
 
 | 대상                 | 판정                                          | reaper |
 | -------------------- | --------------------------------------------- | ------ |
-| `analysis_jobs`      | `analysis_run`이 `queued` → 재등록 (2절 reaper). 성공·partial run의 `pending` 후보 페이지 → 재등록 | `analysis_reaper` |
+| `analysis_jobs`      | `job_type='analysis_run'`이고 `status='queued'` → 재등록 (2절 reaper). 성공·partial run의 `pending` 후보 페이지 → 재등록 | `analysis_reaper` |
 | `interview_sessions` | `preparing`이고 `updated_at`이 `interview_prep_reaper_min_age_seconds`(기본 60초)보다 오래됐으며 준비 claim(`prepare_job_id`)이 없음 → `interview_prep` 재등록. `_job_id=interview_prep:{id}`로 중복 실행을 막는다 (#118) | `interview_prep_reaper` |
 | `interview_sessions` | `preparing`이고 준비 lease 만료 → `preparing_failed`(`code=preparation_lease_expired`, 재시도 가능) | `interview_preparation_reaper` |
 | 프로필 갱신 outbox   | 보고서 성공 뒤 남은 프로필 전달 → 유한 페이지·횟수로 재등록 | `profile_refresh_reaper` |
