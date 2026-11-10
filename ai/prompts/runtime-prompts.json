@@ -8,6 +8,6 @@
   "jd_extract_image": {"version": "jd_extract_image_v1", "template": "jd-extract-image-v1.md"},
   "answer_analysis": {"version": "answer_analysis_v6", "template": "answer-analysis-runtime-v6.md"},
   "report_score": {"version": "report_score_v3", "template": "report-score-v3.md"},
-  "report": {"version": "report_v3", "template": "report-runtime-v3.md"},
+  "report": {"version": "report_v4", "template": "report-runtime-v4.md"},
   "profile_summary": {"version": "profile_summary_v2", "template": "profile-summary-v2.md"}
 }

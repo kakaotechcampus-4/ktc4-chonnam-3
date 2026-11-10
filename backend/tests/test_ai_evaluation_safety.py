@@ -169,7 +169,7 @@ async def test_current_runtime_manifest_validates_typed_cases_without_provider_s
     assert {task: prompts[task].version for task in prompts} == {
         "director": "director_v8",
         "answer_analysis": "answer_analysis_v6",
-        "report": "report_v3",
+        "report": "report_v4",
         "report_score": "report_score_v3",
     }
     result = await cli.execute(

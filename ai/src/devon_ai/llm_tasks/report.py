@@ -14,7 +14,7 @@ from devon_ai.llm_tasks import report_score
 from devon_ai.report_scores import compute_scores
 
 type NarrativeChecked = c.ContractChecked[c.ReportNarrative]
-SUPPORTED_PROMPT_VERSIONS = frozenset({"report_v1", "report_v2", "report_v3"})
+SUPPORTED_PROMPT_VERSIONS = frozenset({"report_v1", "report_v2", "report_v3", "report_v4"})
 
 
 def _object(properties: dict[str, object]) -> dict[str, object]:
@@ -32,7 +32,13 @@ def _output_schema() -> dict[str, object]:
     claim = _object({"text": text, "turn_refs": texts, "evidence_refs": texts})
     claims = {"type": "array", "items": claim}
     summary = _object(
-        {"strengths": claims, "gaps": claims, "follow_ups": claims, "practice_actions": claims}
+        {
+            "overview": claim,
+            "strengths": claims,
+            "gaps": claims,
+            "follow_ups": claims,
+            "practice_actions": claims,
+        }
     )
     persona = _object(
         {
@@ -341,6 +347,8 @@ def _summary(narrative: c.ReportNarrative) -> str:
     limits = [text for item in narrative.persona_feedbacks for text in item.limitations]
     if limits:
         parts.append(f"관찰 한계\n{_bullets(limits)}")
+    if narrative.summary.overview is not None:
+        parts.insert(0, narrative.summary.overview.text)  # FE는 첫 문단을 요약으로 보인다.
     return "\n\n".join(parts)
 
 

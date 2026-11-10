@@ -44,7 +44,7 @@ def test_current_score_prompt_receives_only_each_turns_referenced_sources(run):
     from dataclasses import replace
 
     prompts = {
-        "report": replace(PROMPTS["report"], version="report_v3"),
+        "report": replace(PROMPTS["report"], version="report_v4"),
         "report_score": replace(PROMPTS["report_score"], version="report_score_v3"),
     }
     _, (score, narrative) = run(prompts=prompts)
@@ -333,6 +333,21 @@ def test_both_report_tasks_receive_the_actual_referenced_supplemental_text_witho
 def test_only_limitations_still_gives_a_non_empty_summary(run):
     raw, _ = run(narrative=narrative_output(limitations_only=True))
     assert raw["summary"] == "관찰 한계\n" + "\n".join(["- 근거를 조회하지 못했다"] * 3)
+
+
+def test_overview_becomes_the_first_paragraph_of_the_summary(run):
+    narrative = narrative_output()
+    narrative["summary"]["overview"] = claim("Redis 근거는 설명했다")
+    raw, _ = run(narrative=narrative)
+    assert raw["summary"].startswith("Redis 근거는 설명했다\n\n강점\n- 요약")
+
+
+@pytest.mark.parametrize("text", ["두 줄\n입니다", " ", "가" * (c.OVERVIEW_MAX_CHARS + 1)])
+def test_an_overview_that_is_not_one_short_paragraph_is_rejected(run, text):
+    narrative = narrative_output()
+    narrative["summary"]["overview"] = claim(text)
+    with pytest.raises(c.ContractError):
+        run(narrative=narrative)
 
 
 def test_a_failed_score_judgment_fails_the_report_even_though_the_narrative_ran(run):
