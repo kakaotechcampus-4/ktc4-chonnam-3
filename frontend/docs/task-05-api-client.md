@@ -4,7 +4,7 @@
 
 ## 목표
 
-일반 HTTP API가 경유할 래퍼와 API 함수를 구성한다. 함수 범위는 [OpenAPI](../../spec/shared/contracts/openapi.yaml)와 [이관·보류 현황](../../spec/shared/contracts/migration.md)을 따르며, WS·SSE·브라우저 이동은 [원본 예외](../../spec/shared/contracts/README.md)에 따라 별도로 처리한다.
+일반 HTTP API가 경유할 래퍼와 API 함수를 구성한다. 함수 범위는 [OpenAPI](../../spec/shared/contracts/openapi.yaml)와 [계약 이관 현황](../../spec/shared/contracts/migration.md)을 따르며, WS·SSE·브라우저 이동은 [원본 예외](../../spec/shared/contracts/README.md)에 따라 별도로 처리한다.
 
 ## 규칙
 
@@ -42,7 +42,7 @@ JSON 요청은 `Content-Type: application/json` 헤더를 붙이고, multipart�
 
 ## 함수 목록
 
-Sprint 1 대상 REST 엔드포인트를 `api` 객체에 정의한다. `/auth/refresh`는 Sprint 2로 보류됐으므로 현재 남은 함수를 정리할 대상이며, 이의 제기 등 계약·범위가 어긋난 항목을 일괄 구현하지 않는다.
+Sprint 1 대상 REST 엔드포인트를 `api` 객체에 정의한다. `/auth/refresh`는 Sprint 1 범위 밖(Sprint 2)이므로 현재 남은 함수를 정리할 대상이며, 이의 제기 등 계약·범위가 어긋난 항목을 일괄 구현하지 않는다.
 
 ```ts
 export const api = {

@@ -99,7 +99,7 @@ service -> 현재 권한·상태 검증 -> DB 저장 -> 알림
 | `devon_ai.agents.director.agent` | 질문·행동 후보를 생성하는 단일 Director | 모듈과 책임 안내만 생성 |
 | `devon_ai.agents.director.tools` | 주입된 제한 도구의 사용 요청과 결과 해석 | 실제 조회·Protocol·budget 미구현 |
 | `devon_ai.llm_tasks` | L1/L2, 답변 분석, 리포트 서술 후보 | 네 모듈만 생성, 모델 호출 없음 |
-| `devon_ai.contracts` | 향후 승인된 내부 입력·출력 타입 | AI-L02를 명시하고 타입 채택 보류 |
+| `devon_ai.contracts` | 향후 승인된 내부 입력·출력 타입 | AI-L02를 명시하고 타입 채택 미구현 |
 | BE service/Controller | 권한·현재 Turn·상태·중복·트랜잭션·commit | 기존 소유권 유지, 기능 수정 없음 |
 | BE integrations | GitHub·Wanted·LLM 등 구체 외부 I/O | API key·model 설정·transport는 BE에 유지 |
 | BE prompt loader/queries | DB 조회와 운영 prompt·설정 로드 | `AsyncSession`을 AI 패키지에 넘기지 않음 |

@@ -26,7 +26,7 @@ FE 정적 파일과 API를 제공하며 공개 `/auth/github/*`에는 내부 `/a
 
 API는 `app.main:app --no-access-log`, worker는 `arq app.workers.analysis_app.WorkerSettings`로 실행한다.
 이 설정은 기존 `initial_sync`를 유지하고 `analysis_run`, `candidate_page_analyze`와 시작 시·30초 주기의
-`analysis_reaper`를 등록한다. 면접 준비 작업은 후속 구현·통합 범위이며 여기서 완료를 보장하지 않는다.
+`analysis_reaper`를 등록한다. 면접 준비 작업(`interview_prep`)·리포트 생성·프로필 요약과 각 reaper는 상속한 `arq_app.WorkerSettings`가 함께 등록하며, 실제 큐 소비는 배포 시 확인한다.
 분석 접수는 DB commit 후 202를 반환한다. 일시적인 큐 등록 실패는 queued run을 reaper가 재등록하지만,
 worker 미실행이나 Redis 장애가 지속되는 동안에는 복구되지 않으므로 API health만으로 실행을 판단하지 않는다.
 
@@ -277,6 +277,6 @@ GitHub 토큰은 `BYTEA` + AES-GCM 으로 암호화해 저장한다 (`app/core/c
 | 항목 | 내용 |
 |---|---|
 | 인증 앱 운영 검증 | 저장소 compose는 `app.main:app`을 실행한다. 운영 환경값·migration·OAuth·재연동·로그아웃 실검증은 배포 시 확인 |
-| Worker 운영 검증 | `initial_sync`·`analysis_run`·`candidate_page_analyze`·`analysis_reaper`의 실제 큐 소비와 실패 복구는 배포 시 확인하며 면접 작업 등록은 후속 구현·통합 범위 |
+| Worker 운영 검증 | `initial_sync`·`analysis_run`·`candidate_page_analyze`·`analysis_reaper`의 실제 큐 소비와 실패 복구는 배포 시 확인하며 면접 준비·리포트·프로필 요약 작업과 reaper의 실제 큐 소비도 같이 확인 |
 | CDN·로드밸런서 | CloudFront·ALB·ECS 검토안은 현재 Caddy compose의 구현 완료 범위가 아님 |
 | 배포 완료 기준 | deploy workflow·health 점검과 실제 서비스 기능 검증을 구분하며 운영 환경의 실행 결과를 별도 확인 |

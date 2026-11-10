@@ -140,7 +140,7 @@ Contract까지 planner가 생성하는 별도 `run_director`는 [후속 Proposed
 
 ## AnswerAnalysis
 
-과거 스켈레톤의 `specificity`, `verified_claims`, `unverified_claims` 표기는 아래 0014의 채택 필드를 대체하지 않는다. `specificity`를 충분성·정확성·기여의 통합 점수로 사용하지 않는다. 순수 계약·검증은 구현되어 있으며 실제 답변 분석 생성·저장 service 연결은 후속 task다.
+과거 스켈레톤의 `specificity`, `verified_claims`, `unverified_claims` 표기는 아래 0014의 채택 필드를 대체하지 않는다. `specificity`를 충분성·정확성·기여의 통합 점수로 사용하지 않는다. 순수 계약·검증은 구현되어 있으며 실제 답변 분석 생성·저장 service 연결은 별도 task에서 구현됐다. 적용 범위는 [구현 기록](implementation.md)을 따른다.
 
 [0014 결정](decisions/0014-minimal-change-revision.md)에 따라 기존 최상위 필드와 아래 명시한 값은 유지·채택한다. 목록 항목·근거 참조·판단 객체의 상세 형식은 AI-L02에서 기존 자료 표현에 맞춰 정한다.
 
@@ -276,7 +276,7 @@ raw output·model·prompt_version·schema_version·input/output tokens·latency�
 [면접 준비·답변·전송 실행 설계](designs/2026-10-25-interview-execution.md)는 Proposed 후속 설계다.
 준비 claim, 답변 commit 이후 전송, 분석 후 상태 전이와 WS 인계의 Controller 책임을 정의한다.
 기존 내부 입력 계약과 공개 wire를 대체하지 않으며, 선행 구현의 병합이나 전체 실행 완료를 뜻하지 않는다.
-준비 이벤트·실패 단계 재개·명시적 이탈 통지의 기존 요구와 보류 상태는 해당 설계의 한계를 함께 따른다.
+준비 이벤트·실패 단계 재개·명시적 이탈 통지의 기존 요구와 미구현 상태는 해당 설계의 한계를 함께 따른다.
 
 ## public 변환과 합의 경계
 

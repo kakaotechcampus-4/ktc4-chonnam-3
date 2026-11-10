@@ -8,7 +8,7 @@
 ## 맥락
 
 후보 선택에는 이미 `pushed_at` 순서와 첫 배치 3+5+2 규칙이 있다. 숫자 JD 적합도는
-[AI 0017](../../ai/decisions/0017-recommendation-score-deferral.md)에서 보류했고,
+[AI 0017](../../ai/decisions/0017-recommendation-score-deferral.md)에서 범위 밖으로 두었고,
 [AI 0018](../../ai/decisions/0018-existing-baseline-bulk-resolution.md)은 기존 후보 순서를 유지한다.
 `repo_analyses`는 저장소·분석 단계·SHA·프롬프트 버전으로 유일하며 run FK가 없다.
 실패한 캐시를 재시도하더라도 과거 run의 실패를 다른 run의 성공으로 바꾸면 안 된다.

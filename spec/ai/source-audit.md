@@ -31,7 +31,7 @@
 | 원본 | 확인 위치 | 적용 방식 |
 | --- | --- | --- |
 | 루트·팀 지침 | `CLAUDE.md`, `ai/CLAUDE.md`, `backend/CLAUDE.md` | 문서 라우팅과 구현 경계 |
-| 공통 명세 | `spec/README.md`, `spec/shared/glossary.md`, `spec/shared/contracts/*` | 용어, API, 상태, 보류 항목 |
+| 공통 명세 | `spec/README.md`, `spec/shared/glossary.md`, `spec/shared/contracts/*` | 용어, API, 상태, 합의 필요 항목 |
 | 고정 기능 명세 | `spec/backend/architecture.md`, `features/interview.md`, `features/report.md`, `features/analysis-run.md`, `features/documents.md` | Sprint 1 동작 기준 |
 | AI 기존 명세 | `spec/ai/architecture.md`, `features/interviewer.md`, `verification.md` | 보완 대상인 기존 초안 |
 | 확정·검토 기록 | `report.md`, `ForAI.md` | 최신 확정과 AI 결정 대기 항목 |

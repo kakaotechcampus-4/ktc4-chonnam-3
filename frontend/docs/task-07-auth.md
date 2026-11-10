@@ -5,7 +5,7 @@
 
 ## 목표
 
-GitHub OAuth 로그인 화면, 서버 세션 인증과 공통 401 처리, 재연동 배너, 로그아웃을 구현한다. [0003 결정](../../spec/shared/decisions/0003-sprint1-session-auth.md)에 따라 Sprint 1은 기존 Redis·`devon_session`이며 JWT·refresh는 Sprint 2로 보류한다.
+GitHub OAuth 로그인 화면, 서버 세션 인증과 공통 401 처리, 재연동 배너, 로그아웃을 구현한다. [0003 결정](../../spec/shared/decisions/0003-sprint1-session-auth.md)에 따라 Sprint 1은 기존 Redis·`devon_session`이며 JWT·refresh는 Sprint 1 범위 밖(Sprint 2)이다.
 
 FE는 `/me` 라우트 가드와 Query·Mutation 공통 인증 오류 처리를 사용한다. 세션 종료 시 조회를 취소하고 캐시를 비우며 이후 요청을 차단한 뒤 로그인 화면으로 이동한다. refresh 호출은 제거했고, MSW의 로그아웃은 모의 세션을 만료시킨다. `tests/auth.spec.ts`는 이 화면 흐름을 검증하며 실제 GitHub·Redis·쿠키 검증은 서버 통합 테스트와 구분한다.
 

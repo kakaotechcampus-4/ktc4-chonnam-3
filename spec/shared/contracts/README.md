@@ -6,7 +6,7 @@
 
 - API surface: `openapi.yaml`
 - 공통 오류 envelope: `api-error.schema.json`
-- 변경/보류 추적: `migration.md`
+- 변경/합의 필요 추적: `migration.md`
 
 OpenAPI로 표현할 수 없는 세 가지는 `frontend/docs/api-spec.md`가 원본이다(`openapi.yaml`의 `info.description` 참고).
 
@@ -37,7 +37,7 @@ OpenAPI로 표현할 수 없는 세 가지는 `frontend/docs/api-spec.md`가 원
 - `reason`은 FE 분기용 stable string이다.
 - 내부 job/LLM 실패는 DB `error_code`에 남기고 API 표면에서는 flow별 reason으로 매핑한다. 예외: 분석 run의 `failureReason`은 [공통 0006](../decisions/0006-task11-analysis-result-contract.md)에 따라 `analysis_jobs.error_code`를 변환 없이 노출한다(값 목록은 `openapi.yaml`, #91 A3).
 
-## 보류 표시
+## 합의 필요 표시
 
 - `PENDING_FE`: FE 라우팅, 상태머신, UX와 함께 결정해야 한다.
 - `PENDING_AI`: AI 리드가 모델/검색/프롬프트 구조를 확정해야 한다.

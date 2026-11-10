@@ -2,7 +2,7 @@
 
 상태: 초안 — frontend/md/features/auth.md에서 이관.
 
-현재 인증 기준은 [0003 서버 세션 결정](../../shared/decisions/0003-sprint1-session-auth.md)이다. Sprint 1은 기존 Redis와 `devon_session` 쿠키를 사용하며 JWT·refresh는 Sprint 2로 보류한다. 아래 요구사항의 정리는 실제 인증 구현 완료를 뜻하지 않는다.
+현재 인증 기준은 [0003 서버 세션 결정](../../shared/decisions/0003-sprint1-session-auth.md)이다. Sprint 1은 기존 Redis와 `devon_session` 쿠키를 사용하며 JWT·refresh는 Sprint 1 범위 밖(Sprint 2)이다. 아래 요구사항의 정리는 실제 인증 구현 완료를 뜻하지 않는다.
 
 ## 목표 + 화면 구성
 

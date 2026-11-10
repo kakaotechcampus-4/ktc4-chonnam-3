@@ -2,7 +2,7 @@
 
 작성일: 2026-09-10
 
-이 문서는 기존 FE 문서, backend docs, context 기록에서 Sprint 1 FIX 계약으로 옮긴 항목과 보류 항목을 추적한다.
+이 문서는 기존 FE 문서, backend docs, context 기록에서 Sprint 1 FIX 계약으로 옮긴 항목과 합의 필요 항목을 추적한다.
 
 | 항목 | 결정 | 상태 |
 | --- | --- | --- |

@@ -25,6 +25,6 @@
 
 ## 영향과 이전 결정
 
-[0035](0035-final-runtime-budgets-and-report-revisions.md)의 TTS 보류 이후 사용자 선택을 기록한다.
+[0035](0035-final-runtime-budgets-and-report-revisions.md)의 TTS 미실행 이후 사용자 선택을 기록한다.
 실제 실행 결과와 미확인 범위는 [통합 구현 기록](../implementation.md)에서 관리한다.
 API 계약·DB 모델·Director 모델은 이 결정으로 변경하지 않는다.

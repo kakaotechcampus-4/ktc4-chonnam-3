@@ -2,7 +2,7 @@
 
 상태: 초안 — frontend/md/features/analysis.md에서 이관.
 
-아래는 구현·검수 기준이다. 업로드 형식·자소서 처리는 [task-09](../../../frontend/docs/task-09-analysis.md)에 기록한 수정 보류를 유지한다. 문서와 실제 화면이 모두 일치한다는 뜻은 아니다.
+아래는 구현·검수 기준이다. 업로드 형식·자소서 처리는 [task-09](../../../frontend/docs/task-09-analysis.md)에 기록한 수정 미구현을 유지한다. 문서와 실제 화면이 모두 일치한다는 뜻은 아니다.
 
 ## 목표 + 화면 구성
 
@@ -46,7 +46,7 @@ Sprint 1에서 preview는 포트폴리오 전용이다. 자소서는 `/documents
 
 파일명·크기·추출 내용 등의 기존 DB 저장 설계는 [BE 문서 Preview 명세](../../backend/features/documents.md)를 유지하며, 이를 추가 응답 필드로 노출하지 않는다.
 
-공통 OpenAPI의 요청은 `file`만 받는다. Preview의 축약 기준은 추출된 본문의 GitHub URL 주변과 프로젝트 섹션이며, 공고를 별도로 수집하지 않는다. [BE 저장 경계](../../backend/decisions/0002-task09-persistence.md)를 따른다. 이 계약 설명 정리는 위의 화면 수정 보류를 해제하거나 BE·FE 전체 연결 완료를 뜻하지 않는다.
+공통 OpenAPI의 요청은 `file`만 받는다. Preview의 축약 기준은 추출된 본문의 GitHub URL 주변과 프로젝트 섹션이며, 공고를 별도로 수집하지 않는다. [BE 저장 경계](../../backend/decisions/0002-task09-persistence.md)를 따른다. 이 계약 설명 정리는 위의 화면 수정 미구현 상태를 해소하거나 BE·FE 전체 연결 완료를 뜻하지 않는다.
 
 `extractStatus === 'failed'`는 hard blocker가 아니다 — "문서 없이 계속 진행" 선택 시 `documentId`를 `analysis-runs` 요청에서 뺀다.
 
@@ -257,7 +257,7 @@ SSE 스트림 상태는 TanStack Query로 관리하지 않는다. 컴포넌트 �
 
 | 상태 | 용도 |
 | --- | --- |
-| `selectedRepoIds` | 체크된 레포 (초기값 = 선택 가능한 `succeeded` 중 `recommended: true`). 상한 5개. 로컬 반영은 보류 |
+| `selectedRepoIds` | 체크된 레포 (초기값 = 선택 가능한 `succeeded` 중 `recommended: true`). 상한 5개. 로컬 반영은 미구현 |
 | `isMoreExpanded` | `내 레포 더 보기` 확장 여부 |
 | `morePage` | 더 보기 목록 페이지 |
 | `morePageStatus` | 페이지별 `idle` / `analyzing`(202 대기 중) |

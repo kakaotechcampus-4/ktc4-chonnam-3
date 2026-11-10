@@ -7,7 +7,7 @@
 
 ## 후속 결정과 현재 적용 기준
 
-2026-09-23에 `develop`의 `483fc74`를 대조했다. 아래 1~10절의 Proposed 표기·AI-L 보류·승인 전 구현 금지·실행 결과는 **2026-09-21 당시 검토 기록**이다. 현재 작업의 승인 대기 조건으로 사용하지 않는다. 후속 결정과 [현행 내부 계약][current-contracts]이 우선하며, 이번 정리는 당시 제안을 일괄 승인하거나 구현 완료로 바꾸는 작업이 아니다.
+2026-09-23에 `develop`의 `483fc74`를 대조했다. 아래 1~10절의 Proposed 표기·AI-L 항목의 당시 합의 필요 표기·승인 전 구현 금지·실행 결과는 **2026-09-21 당시 검토 기록**이다. 현재 작업의 승인 대기 조건으로 사용하지 않는다. 후속 결정과 [현행 내부 계약][current-contracts]이 우선하며, 이번 정리는 당시 제안을 일괄 승인하거나 구현 완료로 바꾸는 작업이 아니다.
 
 [0014][adr-0014]·[0015][adr-0015]에서 명시한 기본 필드·값·저장 위치는 Accepted다. AI-L02의 상세 작업이 남아 있어도 채택된 범위의 fixture·타입 구현은 진행한다. 미채택 상세 타입·참조·공개 변환은 기존 규칙에 맞춰 구체화하며 필드별 사용자 재승인을 요구하지 않는다. 서비스 동작·지원 범위·운영 조건이 달라지는 선택은 해당 경계에서 검토한다.
 
@@ -167,7 +167,7 @@ BE가 주입·회수할 식별 문맥은 다음과 같다. 모델이 이 값을 
 | `replan` | 거짓·stale 전제, 잘못된 목적, 이미 확인한 목적 반복 | 목적·근거를 다시 세울 필요 반환; invalid 질문 발행 금지 |
 | `no_valid_candidate` | 공급된 Persona·맥락·근거·범위에서 안전한 후보 없음 또는 허용 budget 내 유효 후보 확보 실패 | 질문 없는 실패 반환; fallback·정상 finish로 위장 금지 |
 
-분류는 실행 권한이 아니다. R10에 따라 timeout/provider/parse/schema 실패는 공통 호출 계층에서 자동 1회 재호출하여 총 2회까지이며 semantic 실패는 재호출 없이 fail-closed다. semantic 오류를 rewrite/replan으로 이름만 바꿔 자동 재호출하지 않는다. R8 복구 후보를 실제 실행하는 loop·상한·상태 매핑은 AI-L04·09 합의 전 보류한다. SDK/provider 중복 retry는 차단하고 ARQ `max_tries=1`은 BE가 소유한다.
+분류는 실행 권한이 아니다. R10에 따라 timeout/provider/parse/schema 실패는 공통 호출 계층에서 자동 1회 재호출하여 총 2회까지이며 semantic 실패는 재호출 없이 fail-closed다. semantic 오류를 rewrite/replan으로 이름만 바꿔 자동 재호출하지 않는다. R8 복구 후보를 실제 실행하는 loop·상한·상태 매핑은 AI-L04·09에서 미구현이다. SDK/provider 중복 retry는 차단하고 ARQ `max_tries=1`은 BE가 소유한다.
 
 ## 7. Python 표현 선택과 의존성 영향
 
@@ -200,25 +200,25 @@ dataclass 안은 불변 결과와 불변 컬렉션을 사용하고, 모델 raw �
 | A의 대조 8 | 후속 보완을 이후 질문·최종 피드백에 연결하고 최초 답변·최초 분석 보존 |
 | 후보 실패/복구 | parse/schema/semantic 및 세 복구 의미 대조; fake 호출 수 총 2회 제한·semantic 재호출 0회 |
 | 턴·Persona | 첫 HR, 9번째 답변 후 종료, quota 불가능 후보 제외, 10번째 질문 없음; 질문·답변 완료 수 구분 |
-| 경계·보류 | BE 종료 후 결과 차단은 통합 검사 대상; 사용자 정정에 따른 입력 복구·재평가는 AI-L09 보류로 기록 |
+| 경계·미구현 | BE 종료 후 결과 차단은 통합 검사 대상; 사용자 정정에 따른 입력 복구·재평가는 AI-L09 미구현으로 기록 |
 
 quota 검사 시 후보를 현재 Persona 횟수에 1회 더한 뒤, 남은 질문 수보다 기술 최소 5회까지 부족분과 HR+domain 합산 최소 3회까지 부족분의 합이 크면 제외한다. 가능한 후보에서 기술 목표 6회와 답변 맥락을 고려한다. 계산식은 I의 실행 제안을 따르며 새 개별 quota를 만들지 않는다.
 
-## 9. 차이 기록과 보류
+## 9. 차이 기록과 미구현 항목
 
 - **제안: 근거 정정.** 전달된 구현 규칙은 재시도를 ADR 0004 확정사항으로 표현하지만 실제 승인 출처는 R10 「LLM attempt와 worker retry」 및 C·task-03이다. 동작 요구는 일치하며 R4를 재시도 승인 근거로 인용하지 않는다.
 - **제안: 구현 근거 구분.** 기준 `develop`에는 `frontend/src/shared/persona.ts`가 없고 `backend/app/db/models/interview.py`의 Persona CHECK는 주석 골격이다. FIX enum의 근거는 S/I로 유지하며 FE 라벨·아바타나 실제 DB 제약 실행을 검증했다고 보고하지 않는다.
-- **보류: 공유 문서 정렬.** OpenAPI의 `x-pending`·점수 설명에는 R10/이관표와 다른 과거 보류 표현이 남아 있다. 이번 문서는 명시적인 후속 결정 범위만 참조하고 공유 계약·FE·BE 파일을 자동 변경하지 않는다. 점수 구현은 이번 범위 밖이다.
+- **미구현: 공유 문서 정렬.** OpenAPI의 `x-pending`·점수 설명에는 R10/이관표와 다른 과거 표현이 남아 있다. 이번 문서는 명시적인 후속 결정 범위만 참조하고 공유 계약·FE·BE 파일을 자동 변경하지 않는다. 점수 구현은 이번 범위 밖이다.
 
 | 항목 | 상태·남은 결정 | 이번 문서의 경계 |
 | --- | --- | --- |
-| AI-L01 provider | 보류: 실제 공급자·API model ID·인증·기능 검증 | 주입 Protocol과 fake 방향만, 구체 SDK 없음 |
-| AI-L02 계약 채택 | 보류: 표의 필드·null·참조·결과 union·Protocol·schema version·호환 정책·JSONB 위치 | 검토자는 AI·BE, 공개 영향 시 FE; 이 문서 승인을 전체 저장·API 승인으로 확대하지 않음 |
-| AI-L04 실행 상한 | 보류: timeout·입력/token·Context·동시성·Tool·재작성·재계획 budget·소진 처리 | R10의 총 2회·semantic 재호출 금지는 확정, 운영 상한을 임의 생성하지 않음 |
-| AI-L09 사용자 입력 복구·턴 배분 | 보류: 재입력·재평가·복구 상태와 반환 매핑, HR/domain 개별 최소·교대 | 기존 9턴·기술 최소·비기술 합산 quota와 R8 의미만 유지 |
-| AI-L10 운영 설정 | 보류: Persona/prompt/frame 운영 문구·검수·활성 version·저장 연결 | BE 원본 주입, 개발용 후보를 운영 seed로 채택하지 않음 |
-| AI-L18 원문 운영 | 보류: raw output·답변·최초 분석·정정·metadata 위치·권한·보존 | 일반 로그 출력·새 이력 테이블로 대체하지 않음 |
-| AI-L21 음성 | 보류: Sprint 2 음성 전체 | Persona voice 키, 컬럼·설정·WS 이벤트·모듈 선행 생성 없음 |
+| AI-L01 provider | 미구현: 실제 공급자·API model ID·인증·기능 검증 | 주입 Protocol과 fake 방향만, 구체 SDK 없음 |
+| AI-L02 계약 채택 | 미구현: 표의 필드·null·참조·결과 union·Protocol·schema version·호환 정책·JSONB 위치 | 검토자는 AI·BE, 공개 영향 시 FE; 이 문서 승인을 전체 저장·API 승인으로 확대하지 않음 |
+| AI-L04 실행 상한 | 미구현: timeout·입력/token·Context·동시성·Tool·재작성·재계획 budget·소진 처리 | R10의 총 2회·semantic 재호출 금지는 확정, 운영 상한을 임의 생성하지 않음 |
+| AI-L09 사용자 입력 복구·턴 배분 | 미구현: 재입력·재평가·복구 상태와 반환 매핑, HR/domain 개별 최소·교대 | 기존 9턴·기술 최소·비기술 합산 quota와 R8 의미만 유지 |
+| AI-L10 운영 설정 | 미구현: Persona/prompt/frame 운영 문구·검수·활성 version·저장 연결 | BE 원본 주입, 개발용 후보를 운영 seed로 채택하지 않음 |
+| AI-L18 원문 운영 | 미구현: raw output·답변·최초 분석·정정·metadata 위치·권한·보존 | 일반 로그 출력·새 이력 테이블로 대체하지 않음 |
+| AI-L21 음성 | 범위 밖: Sprint 2 음성 전체 | Persona voice 키, 컬럼·설정·WS 이벤트·모듈 선행 생성 없음 |
 
 문서 검토 후 승인된 정확한 범위를 기록하고 해당 항목에서 멈춘다. 커밋은 사용자 확인 후에만 하며 1번 내부 계약 구현, push, PR 생성은 현재 승인 범위에 포함하지 않는다.
 
@@ -238,7 +238,7 @@ quota 검사 시 후보를 현재 Persona 횟수에 1회 더한 뒤, 남은 질�
 | 문서 정적 검사·`git diff --check` | 통과: Persona 표 원문 일치, 상대 링크 28개 존재, 표 열 수·후행 공백, 300줄 이내 |
 | `git diff --exit-code develop -- ai frontend backend CLAUDE.md CODEOWNERS .github/workflows` | 통과: 코드·테스트·의존성·보호 파일 변경 없음 |
 | 이번 계약·기능의 새 테스트, 실제 모델·DB·WS 통합 | 미실행. 위 pytest는 기존 패키지 구조·import 경계 검사에 한정 |
-| AI-L02 채택, AI-L01·04·09·10·18·21 잔여 항목 | 보류. FE/BE 구현·음성·점수 구현·배포는 범위 밖 |
+| AI-L02 채택, AI-L01·04·09·10·18·21 잔여 항목 | 미구현. FE/BE 구현·음성·점수 구현·배포는 범위 밖 |
 
 [current-contracts]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/483fc74de5d1c9c710303aa4598910392a7dfaa7/spec/ai/contracts.md
 [current-task-02]: https://github.com/kakaotechcampus-4/ktc4-chonnam-3/blob/483fc74de5d1c9c710303aa4598910392a7dfaa7/ai/docs/task-02-contracts.md
@@ -287,7 +287,7 @@ QuestionReview는 raw 모델 응답에서 디코드하는 DTO가 아니다. 호�
 
 Director는 ask에 검증된 질문·동일 Persona·목적을, retrieve에 허용 위치의 요청을, finish에 Controller 허용과 null Persona/target을 요구한다. 복구 문자열은 next_step에 들어갈 수 없다. 재작성·재계획·조회·모델 호출을 실행하지 않는다.
 
-BE 식별 문맥(`interview_id`, `current_turn_id`, `turn_no`, `depth`, `parent_turn_no`)의 결과 포장·저장 연결은 계속 보류다. 모델 Question payload에 `question_id`, `turn_id`, `turn_no`, `status` 등을 넣는 경로는 여분 필드로 거절한다. BE가 호출·반환과 현재 질문을 연결하는 책임은 유지하며 stale 결과 차단 완료를 주장하지 않는다.
+BE 식별 문맥(`interview_id`, `current_turn_id`, `turn_no`, `depth`, `parent_turn_no`)의 결과 포장·저장 연결은 계속 미구현이다. 모델 Question payload에 `question_id`, `turn_id`, `turn_no`, `status` 등을 넣는 경로는 여분 필드로 거절한다. BE가 호출·반환과 현재 질문을 연결하는 책임은 유지하며 stale 결과 차단 완료를 주장하지 않는다.
 
 ### 1번 구현 검증 기록
 
@@ -300,7 +300,7 @@ BE 식별 문맥(`interview_id`, `current_turn_id`, `turn_no`, `depth`, `parent_
 | `uv --directory ai run --locked pytest` | 통과, 전체 99개(신규 계약 73개·기존 경계 26개). Windows 임시 폴더 권한 때문에 샌드박스 밖 실행 |
 | 계약 검사 | 통과, 스키마 2개·부분 OpenAPI·정상/실패 fixture 7개. `uv run --offline --no-project --python 3.12 --with-requirements .claude/scripts/requirements-checks.txt python .claude/scripts/check_contracts.py`로 실행. 최초 온라인 의존성 조회는 네트워크 제한으로 실패했고 기존 캐시로 재실행 |
 | 독립 코드 리뷰 | 허용 위치 registry 타입 누락·충분성/항목 조합 모순·기여 미확인 사유 누락을 재현 테스트 후 수정. 수정 전 실패 10건 확인, 수정 후 전체 통과 |
-| 300줄 변경 단위 | 코드·테스트 변경량 194/172/243/190/95줄로 나눠 로컬 스냅샷 보존. 문서 변경은 마지막 단위에 포함 가능하며 커밋은 사용자 확인 전 보류 |
+| 300줄 변경 단위 | 코드·테스트 변경량 194/172/243/190/95줄로 나눠 로컬 스냅샷 보존. 문서 변경은 마지막 단위에 포함 가능하며 커밋은 사용자 확인 전 미실행 |
 | 실제 모델·질문/평가 생성·DB·WS 통합 | 미실행. 2~5번 구현, 운영 설정·provider 선택·BE/FE 변경·음성·점수 구현은 이번 범위 밖 |
 
 충분성 검사 보완: `partial`은 확인한 항목과 미확인 항목을 모두 요구하며 `insufficient`에도 미확인 항목이 있어야 한다. 기여 진술과 인용이 모두 없는 `unknown`에는 limitations가 필요하다. 이 검사는 반환값 사이의 모순을 차단하며 실제 답변의 평가를 대신하지 않는다.

@@ -31,7 +31,7 @@
 ## BE 전달사항과 반영 상태
 
 - 전달할 내용: Sprint 1 pgvector extension·vector 전용 column/index·embedding job·별도 vector store를 선행 요구사항으로 추가하지 않는다.
-- 영향 문서: `ForAI.md` 1장, `spec/shared/contracts/migration.md`, `spec/backend/architecture.md`, `backend/docs/db-schema.md`의 pgvector 보류 항목.
+- 영향 문서: `ForAI.md` 1장, `spec/shared/contracts/migration.md`, `spec/backend/architecture.md`, `backend/docs/db-schema.md`의 pgvector 합의 필요 항목.
 - 상태: AI 결정 기록 완료. BE 담당자 전달·확인, 공유/BE 문서 갱신과 실제 migration 검토는 대기다. 실제 담당자의 승인이나 전달 완료를 추정하지 않는다.
 - 기존 문서의 `PENDING_AI`는 이 결정 이전의 검토 요청 기록이다. 현재 AI 구현의 Sprint 1 검색 전략은 이 결정을 따르되, BE·공유 계약의 상태를 자동으로 `FIX` 처리하지 않는다.
 - 이미 존재하는 DB extension·데이터·인덱스를 자동 삭제하거나 rollback하라는 지시는 아니다. 실제 환경과 migration은 BE가 확인한다.
@@ -53,4 +53,4 @@
 
 ## 대체 관계
 
-[0001 AI 구현 기준선](0001-ai-baseline.md)의 pgvector 관련 보류 중 Sprint 1 도입 여부만 후속 결정으로 대체한다(부분 Superseded). 0001의 다른 기준과 과거 기록은 유지한다. Sprint 2 검색 세부는 작성 당시 `later.md`에서 추적했으며, 현재 [Sprint 2 착수 시 검토할 사항](../features/extensions.md#sprint-2-착수-시-검토할-사항)에 보존한다.
+[0001 AI 구현 기준선](0001-ai-baseline.md)의 pgvector 관련 당시 합의가 필요했던 사항 중 Sprint 1 도입 여부만 후속 결정으로 대체한다(부분 Superseded). 0001의 다른 기준과 과거 기록은 유지한다. Sprint 2 검색 세부는 작성 당시 `later.md`에서 추적했으며, 현재 [Sprint 2 착수 시 검토할 사항](../features/extensions.md#sprint-2-착수-시-검토할-사항)에 보존한다.

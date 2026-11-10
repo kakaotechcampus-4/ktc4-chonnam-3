@@ -24,9 +24,9 @@ spec/ai는 서비스 AI 기능의 명세다. 코딩 AI용 규칙 폴더가 아�
 | --- | --- | --- |
 | frontend/docs/api-spec.md | spec/shared/contracts/ | 일반 API는 OpenAPI 기준. WebSocket·SSE·브라우저 이동 경로는 기존 FE 문서가 원본 |
 | frontend/src/types/api.ts | 공통 API 계약을 사용하는 FE 구현 타입 | 별도 계약 원본이 아니며 현행 공통 계약에 맞춰 검증 |
-| backend/docs/api-spec.md, error-reasons.md | spec/shared/contracts/ | 공통 계약과 다른 부분은 현행 원본을 우선하며 개별 충돌·보류는 migration.md에서 추적 |
+| backend/docs/api-spec.md, error-reasons.md | spec/shared/contracts/ | 공통 계약과 다른 부분은 현행 원본을 우선하며 개별 충돌·합의 필요 항목은 migration.md에서 추적 |
 | backend/docs/layer-rules.md, db-schema.md, pipeline.md | spec/backend/ | 현 원본 유지, architecture·기능 문서에서 참조 |
 | backend/docs/testing.md, deploy.md 등 | 검수 후 관련 팀 spec 또는 실행 가이드 | 이번에 이동하지 않음 |
 
 아직 원본으로 유지하는 DB·pipeline·운영 등의 문서는 범위·명칭·프로토콜이 일치하고 팀 검수를 마친 뒤 이관한다. 이관 완료 시 기존 위치는 링크 안내로 대체한다.
-API 기준 문서가 정해진 것과 전체 문서 이관·기능 구현·검증 완료는 구분한다. 개별 보류와 구현 상태는 [계약 이관 현황](shared/contracts/migration.md) 및 관련 기능·검증 문서에서 확인한다. 과거의 `/me`·공통 오류만 이관하는 초안은 [결정 이력](shared/decisions/0001-contract-migration.md)으로 보존한다.
+API 기준 문서가 정해진 것과 전체 문서 이관·기능 구현·검증 완료는 구분한다. 개별 합의 필요 항목과 구현 상태는 [계약 이관 현황](shared/contracts/migration.md) 및 관련 기능·검증 문서에서 확인한다. 과거의 `/me`·공통 오류만 이관하는 초안은 [결정 이력](shared/decisions/0001-contract-migration.md)으로 보존한다.

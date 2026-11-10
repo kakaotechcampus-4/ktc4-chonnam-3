@@ -47,8 +47,6 @@ uv run uvicorn app.main:app --reload --port 8000 --no-access-log
 
 Task 11은 [공통 구현 #81](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/81), [명세·설계 #100](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/100), [명세 대응 구현 #108](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/108)으로 나눈다. #81은 상태·알림·큐 복구·실행 공통 처리, #108는 API·최종 워커 연결·마이그레이션·통합 테스트를 담는다. 세 PR과 선행 구현·SSE 후속 보완을 반영한 환경은 `uv run arq app.workers.analysis_app.WorkerSettings`를 사용한다. #81만으로는 새 API·워커가 추가되지 않으며 #100에는 실행 코드가 없다. 적용 조건은 [Task 11 구현 기록](../spec/backend/implementation-task-11.md)의 마지막 절을 따른다.
 
-Task 11은 [공통 구현 #81](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/81), [명세·설계 #100](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/100), [명세 대응 구현 #108](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/108)으로 나눈다. #81은 상태·알림·큐 복구·실행 공통 처리, #108는 API·최종 워커 연결·마이그레이션·통합 테스트를 담는다. 세 PR과 선행 구현·SSE 후속 보완을 반영한 환경은 `uv run arq app.workers.analysis_app.WorkerSettings`를 사용한다. #81만으로는 새 API·워커가 추가되지 않으며 #100에는 실행 코드가 없다. 적용 조건은 [Task 11 구현 기록](../spec/backend/implementation-task-11.md)의 마지막 절을 따른다.
-
 로그인·재연동 요청 scope는 `read:user`뿐이다. OAuth App의 **Expire user access tokens는 OFF**로 유지하고 `offline_access`를 요청하지 않는다. DEVON 세션은 Redis에 14일 sliding으로 저장하고 GitHub 장기 토큰은 별도로 AES-GCM 암호화해 PostgreSQL에 저장한다.
 
 ## 스크립트

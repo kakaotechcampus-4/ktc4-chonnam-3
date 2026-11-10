@@ -71,7 +71,7 @@ AI source를 BE에 복사하지 않는다.
 - [ ] Wanted 구조화 필드 변환은 기존 규칙으로 수행하고 누락을 LLM 추측으로 채우지 않는다.
 - [ ] `profile_summary`는 report 성공 뒤 실행하며 통계는 기존 자료로 집계하고 개인 역할만 LLM으로 요약한다. job·저장·갱신과 실패 분리는 유지한다.
 - [ ] 프로필은 [0016 결정](../../spec/ai/decisions/0016-profile-language-aggregation.md)에 따라 같은 저장소를 한 번만 세고 언어 비율을 저장소별 동일 비중으로 평균낸다. 기존 저장 자료 연결·누락 처리와 공개 필드 유지를 확인한다.
-- [ ] Sprint 1 roleSummary에 0019의 역할 요약을 기존 문자열로 전달하고, 모델 결과가 입력 근거를 넘는 개인 기여를 만들지 않는지 확인한다. 일괄 기능 보류 안내를 정상 응답 기준으로 사용하지 않는다.
+- [ ] Sprint 1 roleSummary에 0019의 역할 요약을 기존 문자열로 전달하고, 모델 결과가 입력 근거를 넘는 개인 기여를 만들지 않는지 확인한다. 일괄 기능 범위 밖 안내를 정상 응답 기준으로 사용하지 않는다.
 - [ ] 추천은 [0017](../../spec/ai/decisions/0017-recommendation-score-deferral.md)·[0018](../../spec/ai/decisions/0018-existing-baseline-bulk-resolution.md)에 따라 matchScore=null과 직접 기술 비교를 사용한다. 관련 근거가 있는 후보를 기존 run 후보 순서에서 run 전체 최대 5개 추천하고, 태그 겹침을 개별 요구사항 충족으로 단정하지 않는다.
 - [ ] 현재 FIX job은 `initial_sync`, `analysis_run`, `candidate_page_analyze`, `interview_prep`,
   `report_generate`, `profile_summary` 여섯 개임을 기준으로 등록과 enqueue를 검사한다.

@@ -78,7 +78,7 @@ Controller는 확정·제시한 Persona별 질문 수와 남은 할당을 확인
 
 DB 변경의 정확한 transaction 분리와 row lock/CAS 방식은 BE와 맞춘다. 외부 LLM이 응답할 때까지 긴 DB transaction을 유지하지 않는다. 질문 저장 후 알림만 실패하면 같은 질문을 재전달하며, 모델을 다시 호출해 다른 질문을 만들지 않는다.
 
-## 공개 메시지와 보류 항목
+## 공개 메시지와 미구현 항목
 
 확정 입력은 `{ "type": "answer", "turn": 3, "text": "답변 내용" }`다. 서버는 `turn`이 현재 답변 가능한 turn과 일치할 때만 저장한다. 서버 메시지 이름은 `answerReceived`, `thinking`, `evidenceCheck`, `question`, `interviewEnd`, `error`다. `question`은 `persona`, `text`, `turn`을 포함하며 질문 전달 완료를 의미한다. 예전 타입의 `role`, `answerStart`, `answerEnd`, `transcript`, `questionEnd`를 Sprint 1 기준으로 쓰지 않는다.
 

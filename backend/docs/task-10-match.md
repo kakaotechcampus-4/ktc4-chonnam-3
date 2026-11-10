@@ -5,7 +5,7 @@
 
 ## 목표
 
-`analysis_repo_candidates`, 첫 batch 혼합 전략, JD·L1 근거에 따른 추천 카드 연결을 구현한다. Sprint 1 숫자 점수 보류는 [0017 결정](../../spec/ai/decisions/0017-recommendation-score-deferral.md), 기존 태그 비교와 추천 대상 선정은 [0018 결정](../../spec/ai/decisions/0018-existing-baseline-bulk-resolution.md)을 따른다.
+`analysis_repo_candidates`, 첫 batch 혼합 전략, JD·L1 근거에 따른 추천 카드 연결을 구현한다. Sprint 1 숫자 점수 범위 밖 결정은 [0017 결정](../../spec/ai/decisions/0017-recommendation-score-deferral.md), 기존 태그 비교와 추천 대상 선정은 [0018 결정](../../spec/ai/decisions/0018-existing-baseline-bulk-resolution.md)을 따른다.
 
 ## 작업
 

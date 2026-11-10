@@ -23,4 +23,4 @@ Pydantic schema와 공통 계약 테스트를 만든다.
 ## 완료 조건
 
 - OpenAPI와 Pydantic schema의 required/nullable/enum이 일치한다.
-- FE 보류 항목은 `PENDING_FE` 설명으로 남기고 임의 제거하지 않는다.
+- FE 합의 필요 항목은 `PENDING_FE` 설명으로 남기고 임의 제거하지 않는다.

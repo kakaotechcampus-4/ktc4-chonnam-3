@@ -21,7 +21,7 @@
 
 `syncing`·`no_repository`·`no_interview`면 `analysis`는 `null`, `recentInterviews`는 `[]`다.
 
-[0019 프로필 역할 요약 복원](../../ai/decisions/0019-sprint1-profile-role-summary-restoration.md)에 따라 Sprint 1에서 기존 `analysis.roleSummary` 문자열의 역할 요약을 같은 문단에 표시한다. 일괄 기능 보류 안내로 대체하지 않으며 언어 그래프·프로젝트 유형·패널 상태는 유지한다. 기존 mock 문장은 실제 생성·검증 결과가 아니며 README·커밋만으로 개인 역할을 단정하는 예시는 구현 검증에서 근거 기준에 맞춰 확인한다. 이번 결정은 실제 생성·저장·화면 연결 완료를 뜻하지 않는다.
+[0019 프로필 역할 요약 복원](../../ai/decisions/0019-sprint1-profile-role-summary-restoration.md)에 따라 Sprint 1에서 기존 `analysis.roleSummary` 문자열의 역할 요약을 같은 문단에 표시한다. 일괄 기능 범위 밖 안내로 대체하지 않으며 언어 그래프·프로젝트 유형·패널 상태는 유지한다. 기존 mock 문장은 실제 생성·검증 결과가 아니며 README·커밋만으로 개인 역할을 단정하는 예시는 구현 검증에서 근거 기준에 맞춰 확인한다. 이번 결정은 실제 생성·저장·화면 연결 완료를 뜻하지 않는다.
 
 ## 화면 이동 순서
 

@@ -10,7 +10,7 @@
 | frontend/src/routes.tsx, providers.tsx | 라우팅·전역 Provider |
 
 현재 기술 기반: React·TypeScript·Vite. 상세 실행법은 frontend/README.md.
-API 타입은 [공통 계약의 원본·예외 범위](../shared/contracts/README.md)를 따른다. 개별 이관·보류 상태는 [계약 이관 현황](../shared/contracts/migration.md)에서 확인한다.
+API 타입은 [공통 계약의 원본·예외 범위](../shared/contracts/README.md)를 따른다. 개별 이관·합의 필요 상태는 [계약 이관 현황](../shared/contracts/migration.md)에서 확인한다.
 
 ## 폴더 구조 / 배치 기준
 

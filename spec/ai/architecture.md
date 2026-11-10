@@ -33,7 +33,7 @@
 - 기본 9턴을 완료하면 종료한다. Director의 자율 조기 종료는 Sprint 1에 없다.
 - Sprint 1 LLM 모델은 [0011 결정](decisions/0011-sprint1-model-selection.md)에 따라 OpenAI `gpt-5.6-luna`다. 인증·SDK/client·호출 경로와 실제 모델 버전 기록은 기존 BE 소유권 안에서 구현한다. [0018](decisions/0018-existing-baseline-bulk-resolution.md)에 따라 상세 연결을 별도 사용자 질문으로 만들지 않으며 실제 계정 접근과 task별 품질은 검증한다.
 - Sprint 1 embedding/vector 검색과 pgvector extension 선설치는 [0002 결정](decisions/0002-sprint1-vector-search.md)에 따라 미도입이다. BE 반영은 구현·검증에서 확인하고, Sprint 2 도입 여부·세부 설계는 해당 기능 착수 시 검토한다. 공개 리포트 점수는 0~100 score 6개와 단순 평균 `totalScore`를 사용하며, 항목별 세부 기준 seed는 자료 보강에 따라 갱신할 수 있다.
-- 선택 문서 preview와 GitHub URL 추출은 Sprint 1에 있다. 문서 Claim·STT/TTS·이미지 공고 판독은 후속이다.
+- 선택 문서 preview와 GitHub URL 추출은 Sprint 1에 있다. 문서 Claim·STT/TTS·이미지 공고 판독은 후속 범위로 분류했으나 현재 develop에 구현돼 있다. 적용 범위와 검증 현황은 [구현 기록](implementation.md)을 따른다.
 
 수정 중인 `context/AI.md`의 세 역할 재구성, HTTPS/SSE 면접, 조기 종료, 별도 면접 Worker는 [검토 기록](source-audit.md)의 변경 제안으로 남긴다. 이를 기존 API와 혼합하지 않는다.
 
@@ -45,7 +45,7 @@
 
 확인 기준 커밋은 `8dabd55`이며, 확인 당시 `backend/app/`의 AI 관련 모듈·주요 BE 모듈은 비어 있거나 모듈 주석만 있었다. `agents/contracts.py`에도 실제 계약 클래스는 없다. worker 등록, ORM, migration, seed, 테스트 fixture가 동작한다고 가정하지 않는다.
 
-이후 설치 가능한 `devon_ai` 패키지와 task-02~03의 내부 계약·순수 검증·주입 호출 경계를 구현했다. BE에는 설정·OpenAI transport·prompt 로딩/seed를 연결했다. [구현 인계](designs/2026-09-23-ai-foundation.md)에 범위를 기록하며 분석 task·서비스 실행 통합은 후속 작업이다. 현재 검사 기준은 [검증 기록](verification.md)을 따른다.
+이후 설치 가능한 `devon_ai` 패키지와 task-02~03의 내부 계약·순수 검증·주입 호출 경계를 구현했다. BE에는 설정·OpenAI transport·prompt 로딩/seed를 연결했다. [구현 인계](designs/2026-09-23-ai-foundation.md)에 범위를 기록하며 분석 task·서비스 실행 통합은 이 인계 이후 별도 task에서 구현됐다. 현재 검사 기준은 [검증 기록](verification.md)을 따른다.
 
 추가로 [Director 기본 질문 경로](designs/2026-09-23-director-question-path.md)를 구현했다.
 호출자가 준비한 목적의 질문 생성·참조 검사·독립 검토·성공/실패 반환을 제공하며,

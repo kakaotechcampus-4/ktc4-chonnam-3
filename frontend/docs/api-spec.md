@@ -5,7 +5,7 @@
 
 각 엔드포인트는 **Endpoint / Request / Response / UI states / Failure** 5단 구조로 기술한다. `UI states`는 이 API가 어느 화면에서 어떻게 쓰이는지(분기·배지·버튼 노출), `Failure`는 실패 응답 코드·reason만 담는다.
 
-일반 HTTP API의 요청·응답 원본은 [OpenAPI](../../spec/shared/contracts/openapi.yaml)다. 이 문서는 [공통 계약 안내](../../spec/shared/contracts/README.md)에 따라 WebSocket(#18), SSE(#13), 브라우저 이동(#1·#2·#7·#8)의 원본이며 나머지는 FE용 설명이다. 차이가 있으면 OpenAPI와 [이관·보류 현황](../../spec/shared/contracts/migration.md)을 먼저 확인한다. 문서의 확정 기준과 로컬 구현·mock의 반영 상태는 구분하며 과거 변경 이력은 당시 기록으로 보존한다.
+일반 HTTP API의 요청·응답 원본은 [OpenAPI](../../spec/shared/contracts/openapi.yaml)다. 이 문서는 [공통 계약 안내](../../spec/shared/contracts/README.md)에 따라 WebSocket(#18), SSE(#13), 브라우저 이동(#1·#2·#7·#8)의 원본이며 나머지는 FE용 설명이다. 차이가 있으면 OpenAPI와 [계약 이관 현황](../../spec/shared/contracts/migration.md)을 먼저 확인한다. 문서의 확정 기준과 로컬 구현·mock의 반영 상태는 구분하며 과거 변경 이력은 당시 기록으로 보존한다.
 
 리포트 revision·이의 제기(#21)·실패한 생성의 명시 재시도(#26)는 [ADR 0035](../../spec/ai/decisions/0035-final-runtime-budgets-and-report-revisions.md)의 최종 서비스 추가 계약을 설명한다. 로컬 구현을 기준으로 공통 계약 PR에서 검토 중이며, Sprint 1의 이의 제기 비활성 기준이나 공유 계약·운영 승인을 소급 변경하지 않는다.
 
@@ -23,7 +23,7 @@
 
 ### 인증 구조
 
-[0003 결정](../../spec/shared/decisions/0003-sprint1-session-auth.md)에 따라 Sprint 1은 Redis의 `auth:sess:{sid}`에 로그인 세션을 저장하고 브라우저에는 식별자만 전달한다. JWT·refresh는 Sprint 2로 보류한다. 서버 세션과 FE 가드·로그아웃·401 처리를 구현했으며, 자동 검증 범위는 [FE 실행 안내](../README.md)와 [BE 인증 작업](../../backend/docs/task-06-auth.md)을 따른다. 실제 GitHub 계정의 동의와 운영 배포 검증은 별도다.
+[0003 결정](../../spec/shared/decisions/0003-sprint1-session-auth.md)에 따라 Sprint 1은 Redis의 `auth:sess:{sid}`에 로그인 세션을 저장하고 브라우저에는 식별자만 전달한다. JWT·refresh는 Sprint 1 범위 밖(Sprint 2)이다. 서버 세션과 FE 가드·로그아웃·401 처리를 구현했으며, 자동 검증 범위는 [FE 실행 안내](../README.md)와 [BE 인증 작업](../../backend/docs/task-06-auth.md)을 따른다. 실제 GitHub 계정의 동의와 운영 배포 검증은 별도다.
 
 | 용도 | 쿠키명 | 만료 | Path |
 | --- | --- | --- | --- |
@@ -990,18 +990,18 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 
 `doc_extract`가 `skipped`인 run에서는 `candidateSource`가 `portfolio`·`both`인 레포가 없고, `mentionedRepoCount`·`matchedRepoCount`는 `0`이다.
 
-[0017 결정](../../spec/ai/decisions/0017-recommendation-score-deferral.md)에 따라 Sprint 1은 `matchScore` 필드를 생략하지 않고 null을 반환한다. 숫자 계산·표시·점수 정렬은 보류하며 null만으로 실패나 추천 제외를 판단하지 않는다. 기존 mock의 숫자 예시는 후속 반영 대상이다.
+[0017 결정](../../spec/ai/decisions/0017-recommendation-score-deferral.md)에 따라 Sprint 1은 `matchScore` 필드를 생략하지 않고 null을 반환한다. 숫자 계산·표시·점수 정렬은 Sprint 1 범위 밖이며 null만으로 실패나 추천 제외를 판단하지 않는다. 기존 mock의 숫자 예시는 후속 반영 대상이다.
 
 **UI states**
 
 5a-v2 레포 확정 화면.
 
 - `jdRequirements[]`는 `category`로 그룹핑해 `displayOrder` 순으로 우측에 표시(읽기 전용). 상한 20개.
-- 선택 가능한 `succeeded` 레포 중 `recommended: true`(최대 5개)인 레포는 기본 체크 상태. 로컬 화면의 선택 조건 보완은 task-09에서 보류 중이다.
+- 선택 가능한 `succeeded` 레포 중 `recommended: true`(최대 5개)인 레포는 기본 체크 상태. 로컬 화면의 선택 조건 보완은 task-09에서 미구현이다.
 - `candidateSource` 배지: `rule_filter` 없음 / `portfolio`·`both` → 📎 포트폴리오.
 - `mentionedRepoCount ≠ matchedRepoCount`면 "포트폴리오에 언급된 3개 중 2개를 찾았어요" 안내. 매칭 실패는 정상 상황이며 오류로 처리하지 않는다. 두 값이 모두 `0`이면(미첨부) 이 안내를 표시하지 않는다.
 - `repositories[].status === 'failed'`면 카드를 회색 처리하고 `errorCode`별 문구를 띄운다. `matchScore`·`recommendReason`은 `null`이다.
-- `status: 'partial'`은 카드를 표시하되 기존 서버 기준상 선택 대상은 아니다. 낮은 숫자 점수로 표현하지 않는다. 선택 조건·안내의 화면 반영은 task-09의 보류 상태를 유지한다.
+- `status: 'partial'`은 카드를 표시하되 기존 서버 기준상 선택 대상은 아니다. 낮은 숫자 점수로 표현하지 않는다. 선택 조건·안내의 화면 반영은 task-09의 미구현 상태를 유지한다.
 
 | `errorCode` | 문구 | 재시도 |
 | --- | --- | --- |
