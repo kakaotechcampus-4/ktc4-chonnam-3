@@ -574,7 +574,19 @@ async def _run(
     scope: _Scope,
     settings: LLMSettings,
     http_client: httpx.AsyncClient | None,
+    shield_cancellation: bool = True,
 ) -> QuestionExecution:
+    if not shield_cancellation:
+        # WS 답변 작업이 수명을 소유하므로 취소 시 ledger·pending 정리까지 직접 기다린다.
+        return await _execute(
+            sessions,
+            user_id=user_id,
+            interview_id=interview_id,
+            entry=entry,
+            scope=scope,
+            settings=settings,
+            http_client=http_client,
+        )
     # HTTP 응답 취소가 이미 시작한 생성 작업을 취소하거나 같은 requestId를 다시 실행하지 않는다.
     task = asyncio.create_task(
         _execute(
@@ -698,6 +710,7 @@ async def auto_retry_question(
     failed: QuestionExecution,
     settings: LLMSettings,
     http_client: httpx.AsyncClient | None = None,
+    shield_cancellation: bool = True,
 ) -> QuestionExecution | None:
     """정확히 복원한 안전 rewrite 한 번만 자동 실행한다. 일반 실패는 수동 경로로 둔다."""
     if failed.failure is None or failed.failure.error_code != "director_candidate_rewrite":
@@ -744,4 +757,5 @@ async def auto_retry_question(
         scope=scope,
         settings=settings,
         http_client=http_client,
+        shield_cancellation=shield_cancellation,
     )

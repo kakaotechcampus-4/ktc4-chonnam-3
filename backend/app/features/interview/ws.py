@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from math import ceil
+from math import isfinite
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -23,7 +23,7 @@ from sqlalchemy import select
 from starlette.responses import JSONResponse
 
 from app.agents.director.tools import EvidenceLimits
-from app.core.config import INTERVIEW_MAX_TURNS
+from app.core.config import INTERVIEW_MAX_TURNS, LLMSettings, Settings
 from app.core.deps import current_user
 from app.core.errors import AppError
 from app.core.logging import get_logger
@@ -58,6 +58,10 @@ router = APIRouter(prefix="/ws/interviews", tags=["interview"])
 logger = get_logger(__name__)
 _SESSION_ID = re.compile(r"[A-Za-z0-9_-]{43}")
 _LEASE_SECONDS = 30
+_WORK_HEARTBEAT_SECONDS = _LEASE_SECONDS / 3
+_WORK_LOCAL_SECONDS = 30
+_WORK_CLEANUP_SECONDS = 30
+_WORK_TASKS: set[asyncio.Task[AnswerExecution]] = set()
 _PREPARE_POLL_SECONDS = 1.0
 _REFRESH = """
 if redis.call('GET', KEYS[1]) ~= ARGV[1]
@@ -85,6 +89,34 @@ or redis.call('GET', KEYS[4]) ~= ARGV[3] then return 0 end
 if redis.call('SET', KEYS[2], ARGV[1], 'NX', 'EX', ARGV[4]) then return 1 end
 return 0
 """
+_REFRESH_WORK = """
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+return redis.call('EXPIRE', KEYS[1], ARGV[2])
+"""
+
+
+def _answer_work_seconds(config: Settings, llm: LLMSettings) -> float:
+    # T3는 두 시도와 최대 한 번의 Retry-After 대기, T4는 최초·자동 rewrite 각각
+    # plan/review 두 호출이다. 외부 조회는 실제 설정된 전체 호출 상한을 공유한다.
+    # DB·콜백 등 로컬 작업에는 전체 실행 deadline 안에서 별도 30초만 허용한다.
+    external_calls = min(config.tavily_max_calls, config.external_max_calls_per_interview)
+    seconds = (
+        3 * llm.call_limits("answer_analysis").timeout_seconds
+        + 4 * llm.call_limits("director").timeout_seconds
+        + config.director_evidence_timeout_seconds
+        + external_calls * config.tavily_timeout_seconds
+        + _WORK_LOCAL_SECONDS
+    )
+    if not isfinite(seconds):
+        raise AgentStateError("answer_work_budget_invalid")
+    return seconds
+
+
+def _work_finished(task: asyncio.Task[AnswerExecution]) -> None:
+    # DB 정리가 기한을 넘겨도 작업을 보존하고 뒤늦은 예외를 반드시 회수한다.
+    _WORK_TASKS.discard(task)
+    if not task.cancelled():
+        task.exception()
 
 
 @dataclass(frozen=True)
@@ -391,6 +423,19 @@ class _Connection:
                 valid = False
             if not valid:
                 await self.close(1011)
+
+    async def work_heartbeat(self) -> None:
+        # 소켓·로그인 세션이 교체돼도 이미 접수한 작업은 자기 nonce로만 갱신한다.
+        while True:
+            await asyncio.sleep(_WORK_HEARTBEAT_SECONDS)
+            try:
+                valid = await _script(
+                    self.redis, _REFRESH_WORK, 1, self.work, self.nonce, _LEASE_SECONDS
+                )
+            except RedisError:
+                valid = False
+            if not valid:
+                raise AgentStateError("answer_work_ownership_lost")
 
     async def preparation(self, state: _State, user_id: UUID) -> _State:
         """DB 스냅샷과 변경분을 복원하며 재연결로 준비 작업을 재실행하지 않는다."""
@@ -709,17 +754,8 @@ async def _execute(
         )
         raise
     # WS 전송 수명 취소가 이미 시작한 DB·모델 처리를 중단하지 않게 한다.
+    lifetime = _answer_work_seconds(config, llm)
     with CancelScope(shield=True):
-        # 연결 인계용 유한 표식이다. 호출·재시도 대기·근거 조회 예산과 정리 여유를 포함한다.
-        lifetime = ceil(
-            6
-            * max(
-                llm.call_limits("answer_analysis").timeout_seconds,
-                llm.call_limits("director").timeout_seconds,
-            )
-            + config.director_evidence_timeout_seconds
-            + 120
-        )
         claimed = await _script(
             connection.redis,
             _BEGIN_WORK,
@@ -731,12 +767,12 @@ async def _execute(
             connection.nonce,
             connection.raw_session,
             connection.session_id,
-            lifetime,
+            _LEASE_SECONDS,
         )
         if not claimed:
             raise AgentStateError("connection_replaced_or_busy")
-        try:
-            result = await process_answer(
+        processing = asyncio.create_task(
+            process_answer(
                 state.session_factory,
                 user_id=user_id,
                 interview_id=connection.interview_id,
@@ -756,9 +792,50 @@ async def _execute(
                 on_answer_saved=connection.answer_saved,
                 on_evidence_check=connection.evidence_checked,
             )
+        )
+        _WORK_TASKS.add(processing)
+        processing.add_done_callback(_work_finished)
+        heartbeat = asyncio.create_task(connection.work_heartbeat())
+        try:
+            async with asyncio.timeout(lifetime):
+                done, _ = await asyncio.wait(
+                    (processing, heartbeat), return_when=asyncio.FIRST_COMPLETED
+                )
+                if heartbeat in done:
+                    heartbeat.result()
+                result = await processing
+        except TimeoutError:
+            raise AgentStateError("answer_execution_timeout") from None
         finally:
-            with suppress(RedisError):
-                await _script(connection.redis, _RELEASE, 1, connection.work, connection.nonce)
+            # 취소된 모델·자동 rewrite의 DB claim과 외부 조회 예약 정리를 먼저 합류한다.
+            # 정리 중에도 heartbeat를 유지하고, 새 작업 소유자의 표식은 건드리지 않는다.
+            async def finish() -> None:
+                processing.cancel()
+                try:
+                    done, _ = await asyncio.wait((processing,), timeout=_WORK_CLEANUP_SECONDS)
+                    if not done:
+                        processing.cancel()
+                        # DB 정리가 끝났다고 간주하지 않는다. 갱신을 멈추고 유한 lease로 만료한다.
+                        raise AgentStateError("answer_work_cleanup_timeout")
+                finally:
+                    heartbeat.cancel()
+                    await asyncio.gather(heartbeat, return_exceptions=True)
+                with suppress(RedisError):
+                    await _script(connection.redis, _RELEASE, 1, connection.work, connection.nonce)
+
+            cleanup = asyncio.create_task(finish())
+            canceled = False
+            while True:
+                try:
+                    # asyncio의 반복 취소도 정리 작업에는 전달하지 않고 완료 뒤 전파한다.
+                    await asyncio.shield(cleanup)
+                    break
+                except asyncio.CancelledError:
+                    if cleanup.cancelled():
+                        raise
+                    canceled = True
+            if canceled:
+                raise asyncio.CancelledError
     return result
 
 

@@ -754,6 +754,7 @@ async def process_answer(
                 failed=question,
                 settings=settings,
                 http_client=http_client,
+                shield_cancellation=False,
             )
             if recovered is not None:
                 question = recovered
