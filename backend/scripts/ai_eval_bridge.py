@@ -335,6 +335,8 @@ def _narrative_artifacts(narrative: c.ReportNarrative) -> dict[str, object]:
             for index, item in enumerate(entries)
         )
 
+    if narrative.summary.overview is not None:
+        append("summary.overview", None, (narrative.summary.overview,))
     for name in ("strengths", "gaps", "follow_ups", "practice_actions"):
         append(f"summary.{name}", None, getattr(narrative.summary, name))
     for item in narrative.persona_feedbacks:

@@ -14,7 +14,9 @@ from devon_ai.llm_tasks import report_score
 from devon_ai.report_scores import compute_scores
 
 type NarrativeChecked = c.ContractChecked[c.ReportNarrative]
-SUPPORTED_PROMPT_VERSIONS = frozenset({"report_v1", "report_v2", "report_v3"})
+SUPPORTED_PROMPT_VERSIONS = frozenset({"report_v1", "report_v2", "report_v3", "report_v4"})
+# overview 지침이 없는 과거 프롬프트다. 이 버전의 출력 스키마에는 overview를 요구하지 않는다.
+_WITHOUT_OVERVIEW = frozenset({"report_v1", "report_v2", "report_v3"})
 
 
 def _object(properties: dict[str, object]) -> dict[str, object]:
@@ -26,13 +28,19 @@ def _object(properties: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _output_schema() -> dict[str, object]:
+def _output_schema(*, overview: bool) -> dict[str, object]:
     text = {"type": "string"}
     texts = {"type": "array", "items": text}
     claim = _object({"text": text, "turn_refs": texts, "evidence_refs": texts})
     claims = {"type": "array", "items": claim}
     summary = _object(
-        {"strengths": claims, "gaps": claims, "follow_ups": claims, "practice_actions": claims}
+        {
+            **({"overview": claim} if overview else {}),
+            "strengths": claims,
+            "gaps": claims,
+            "follow_ups": claims,
+            "practice_actions": claims,
+        }
     )
     persona = _object(
         {
@@ -104,7 +112,7 @@ async def write_narrative(
             payload=_payload(report_input),
             schema_name="ReportNarrative",
             schema_version="1",
-            output_schema=_output_schema(),
+            output_schema=_output_schema(overview=prompt.version not in _WITHOUT_OVERVIEW),
             limits=limits,
             max_attempts=max_attempts,
         )
@@ -341,6 +349,8 @@ def _summary(narrative: c.ReportNarrative) -> str:
     limits = [text for item in narrative.persona_feedbacks for text in item.limitations]
     if limits:
         parts.append(f"관찰 한계\n{_bullets(limits)}")
+    if narrative.summary.overview is not None:
+        parts.insert(0, narrative.summary.overview.text)  # FE는 첫 문단을 요약으로 보인다.
     return "\n\n".join(parts)
 
 

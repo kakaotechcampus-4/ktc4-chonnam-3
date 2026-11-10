@@ -34,7 +34,7 @@ def test_score_prompt_names_every_output_and_input_field_the_code_uses():
 
 
 def test_narrative_prompt_names_every_output_and_input_field_the_code_uses():
-    text = read("report-v1.md")
+    text = read("report-runtime-v4.md")  # 현재 runtime prompt. v1은 기준선으로 보존한다.
     required = ["ReportNarrative", "headline", "summary", "persona_feedbacks"]
     required += names(c.SummaryNarrative) + names(c.PersonaNarrative) + names(c.NarrativeClaim)
     required += ["turn_id", "follows", "evidence_refs", "tool_results", "analysis", "evidence_id"]

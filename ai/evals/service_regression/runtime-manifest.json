@@ -14,9 +14,9 @@
     },
     {
       "task_name": "report",
-      "version": "report_v3",
+      "version": "report_v4",
       "model": "fixture-model-not-for-provider-execution",
-      "template_path": "../../prompts/report-runtime-v3.md"
+      "template_path": "../../prompts/report-runtime-v4.md"
     },
     {
       "task_name": "report_score",

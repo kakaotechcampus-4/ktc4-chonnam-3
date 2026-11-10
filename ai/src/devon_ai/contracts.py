@@ -1567,6 +1567,7 @@ def validate_score_judgments(
 NARRATIVE_PERSONAS: tuple[PersonaId, ...] = ("hr_manager", "tech_lead", "domain_lead")
 HEADLINE_MAX_CHARS = 100  # 임의값. FE 표시 한도 확인 뒤 조정한다.
 TAG_MAX_CHARS = 20  # 임의값. FE 태그 용도 확인 뒤 조정한다.
+OVERVIEW_MAX_CHARS = 200  # 임의값. prompt는 120자 안쪽을 요구한다. FE 표시 확인 뒤 조정한다.
 
 
 @dataclass(frozen=True)
@@ -1652,6 +1653,8 @@ class SummaryNarrative(_Contract):
     gaps: tuple[NarrativeClaim, ...]
     follow_ups: tuple[NarrativeClaim, ...]
     practice_actions: tuple[NarrativeClaim, ...]
+    # 종합 화면 첫머리에 보이는 1~2문장 요약. 없던 시기의 서술도 읽을 수 있게 기본값을 둔다.
+    overview: NarrativeClaim | None = None
 
 
 @dataclass(frozen=True)
@@ -1739,6 +1742,14 @@ def validate_narrative(
     linked_anywhere = frozenset().union(*linked.values())
     summary = candidate.summary
     claims = [*summary.strengths, *summary.gaps, *summary.follow_ups, *summary.practice_actions]
+    if summary.overview is not None:
+        # FE는 summary를 빈 줄로 나누어 첫 문단을 요약으로 보이므로 한 문단이어야 한다.
+        # \r·유니코드 줄 구분자도 거른다. FE는 \n 두 개 이상으로만 문단을 나눈다.
+        if len(summary.overview.text.splitlines()) != 1 or not summary.overview.text.strip():
+            raise ContractError("semantic", "overview")
+        if len(summary.overview.text) > OVERVIEW_MAX_CHARS:
+            raise ContractError("semantic", "overview")
+        claims.append(summary.overview)
     for item in candidate.persona_feedbacks:
         if not 1 <= len(item.tags) <= 3 or any(len(tag) > TAG_MAX_CHARS for tag in item.tags):
             raise ContractError("semantic", "tags")

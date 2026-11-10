@@ -1,5 +1,30 @@
 # AI 구현·검증 기록
 
+<a id="report-overview-summary-20261111"></a>
+## 2026-11-11 종합 리포트 요약문(`summary.overview`) 추가
+
+종합 리포트의 `summary` 문자열이 강점·부족한 점·확인할 점·연습할 점·관찰 한계를 모두 이어 붙여
+점수 옆에 수십 줄이 보였다. 모델이 쓴 1~2문장 요약을 첫 문단으로 두고 FE는 첫 문단만 먼저 보인다.
+이슈 댓글 대신 PR에서 AI 팀원이 함께 확인한다. 기존 API 필드·DB 스키마와 이전 프롬프트(v1~v3)는 보존한다.
+
+| 항목 | 현재 구현과 검증 경계 |
+| --- | --- |
+| 서술 계약 | `SummaryNarrative.overview`는 `NarrativeClaim \| None`이며 기본값은 `None`이라 이 필드가 없는 기존 서술도 읽는다. 다른 서술처럼 턴·근거 인용이 필요하고 한 문단·200자 이하여야 한다. 위반은 semantic 거절이다. |
+| 출력 스키마 | `report.py`의 모델 출력 스키마에 `summary.overview`를 필수로 추가했다. |
+| 프롬프트 | `report-runtime-v4.md`, 버전 `report_v4`. 가장 중요한 강점 하나와 보완점 하나만 120자 안쪽으로 쓰게 하고 새 사실·점수는 금지한다. `runtime-prompts.json`과 서비스 회귀 `runtime-manifest.json`이 v4를 가리킨다. |
+| BE 전달 | `_summary()`가 `overview`를 맨 앞 문단으로 붙인다. BE의 `summary: str`·응답 형태는 바뀌지 않는다. 평가 브리지는 `summary.overview` 근거를 검증 대상에 포함한다. |
+| FE | `Report.tsx`가 `summary`를 빈 줄로 나누어 첫 문단을 보이고 "자세히 보기"로 나머지를 펼친다. 이미 생성된 리포트는 `overview`가 없어 첫 섹션(강점)이 첫 문단으로 보인다. |
+
+### 이번 검증과 남은 범위
+
+- AI ruff·format·mypy와 pytest 1003개, BE 관련 25개(2개 건너뜀), FE lint가 통과했다.
+  FE build는 `msw` 미설치로 `src/mocks`에서 실패하며 이번 변경 파일의 오류는 아니다. FE Playwright는 실행하지 않았다.
+- 실제 모델로 v4를 호출하지 않았다. `overview`가 강점·부족한 점과 어긋나지 않는지, 120자 안쪽을 지키는지는
+  모델 평가(데이터셋·모델 버전·비용·지표 지정 후)로 확인해야 한다. 화면도 브라우저로 직접 확인하지 않았다.
+- `spec/ai/features/report-profile.md`의 서술 스키마와 FE 명세의 `summary` 설명은 이 PR에서 고치지 않았다.
+  PR에서 AI 팀원의 확인을 받은 뒤 별도로 반영한다.
+- `summary`의 "첫 빈 줄까지가 요약" 규약은 문자열 형식에 의존한다. 상세를 구조화해 분리하려면 계약 변경이 필요하다.
+
 <a id="independent-review-fixes-20261110"></a>
 ## 2026-11-10 #233 추가 재검토 7건 대응
 
