@@ -51,7 +51,7 @@ Linux 실행은 WSL 미설치 및 Docker 엔진 미기동으로 미실행이다.
 | [07 도메인](task-07-domain-frames.md) | `ai/tests/agents/director/test_domain_frames.py` | 주입 frame·fallback·목적·가정형 표현 |
 | [08 Evidence](task-08-evidence-tools.md) | `ai/tests/agents/director/test_evidence_tools.py` | 조회 조건·실행 상태·범위·원문 연결 |
 | [09 답변](task-09-answer-analysis.md) | `ai/tests/llm_tasks/test_answer_analysis.py` | 세 축·평가 가능 여부·보완·원문 보존 |
-| [10 Director](task-10-director.md) | `ai/tests/agents/director/test_director.py`, `backend/tests/integrations/test_director_boundary.py` | 준비된 목적의 생성·참조·독립 검토·실패·상한; 턴 정책·서비스 연결은 후속 |
+| [10 Director](task-10-director.md) | `ai/tests/agents/director/test_director.py`, `backend/tests/integrations/test_director_boundary.py` | 준비된 목적의 생성·참조·독립 검토·실패·상한; 턴 정책·서비스 연결은 `backend/tests/features/interview/test_turn_loop.py` |
 | [11 리포트](task-11-report.md) | `ai/tests/llm_tasks/test_report.py` | 서술·Persona 관찰·Turn/Evidence 연결·점수 분리 |
 | [12 평가](task-12-evaluation.md) | `ai/tests/test_eval_data_boundaries.py` | source group·입력/정답 분리·결과 기록·채점기 대조 |
 | [13 BE 연결](task-13-backend-integration.md) | `backend/tests/agents/test_ai_integration.py`, 해당 `backend/tests/features/` | AI 결과 수용·저장·큐·전송·복구; 설치 smoke와 별도 |

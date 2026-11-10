@@ -69,7 +69,7 @@ PowerShell에서는 `export NAME=value` 대신 `$env:NAME='value'`를 사용한�
 
 API 요청은 `src/shared/api.ts`에서 `/api` prefix로 호출한다. 일반 HTTP API의 원본은 [OpenAPI](../spec/shared/contracts/openapi.yaml)이며, WebSocket·SSE·브라우저 이동 경로는 [`docs/api-spec.md`](docs/api-spec.md)를 따른다. 원본의 적용 범위와 미합의 항목은 [공통 계약 안내](../spec/shared/contracts/README.md)와 [이관 현황](../spec/shared/contracts/migration.md), FE용 타입은 `src/types/api.ts`에서 확인한다.
 
-문서의 요구사항과 로컬 구현 상태는 구분한다. 면접 준비·진행 화면은 현재 골격이며 보류된 화면 보완은 `docs/task-*.md`의 후속 작업이다. lint/build와 MSW 기반 화면 테스트는 실제 GitHub·Redis·배포 환경 검증을 대신하지 않는다.
+문서의 요구사항과 로컬 구현 상태는 구분한다. 면접 준비·진행 화면(`InterviewPrepare`, `InterviewScreen`)은 구현돼 있으며 화면 보완 범위는 `docs/task-*.md`를 따른다. lint/build와 MSW 기반 화면 테스트는 실제 GitHub·Redis·배포 환경 검증을 대신하지 않는다.
 
 ## 브랜치 / PR
 
