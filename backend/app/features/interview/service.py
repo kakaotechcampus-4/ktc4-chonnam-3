@@ -21,7 +21,7 @@ from typing import cast
 from arq.connections import ArqRedis
 from pydantic import ValidationError
 from redis.exceptions import RedisError
-from sqlalchemy import select, update
+from sqlalchemy import exists, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -139,6 +139,7 @@ async def get_interview(
     if row is None:
         raise AppError(Reason.NOT_FOUND)
     interview, posting = row
+    await expire_if_due(db, interview)  # 시간이 다 됐으면 completed 로 바뀐 상태를 돌려준다
     try:
         session_id = await _current_session_id(redis, interview_id=interview.id, user_id=user_id)
     except RedisError:
@@ -356,6 +357,51 @@ def _remaining_seconds(interview: InterviewSession, turns: Sequence[InterviewTur
             resume = min(following.asked_at, end)
         paused += max(0.0, (resume - max(turn.answered_at, started)).total_seconds())
     return max(0, total - int((end - started).total_seconds() - paused))
+
+
+async def expire_if_due(db: AsyncSession, interview: InterviewSession) -> bool:
+    """답변 대기 중 잔여 시간이 0이면 completed 로 바꾸고 commit 한다 (#246).
+
+    질문 생성·답변 분석 중에는 시간이 멈춰 있으므로 마지막 턴이 asked 일 때만 만료시킨다.
+    출력: 바꿨으면 True(interview 는 새로 읽는다). 만료 후보일 때만 면접 행을 잠그고 조건부
+    UPDATE 하므로 동시 제출·완료와는 한쪽만 이긴다.
+    ponytail: Director 의 context_state 스냅샷은 갱신하지 않는다. 끝난 면접은 복원하지 않는다.
+    """
+    if interview.status != "in_progress":
+        return False
+    turns = await queries.list_turns(db, interview_id=interview.id)
+    if not turns or turns[-1].status != "asked" or _remaining_seconds(interview, turns) > 0:
+        return False
+    # 답변 처리(FOR UPDATE)와 직렬화한다. 이 잠금 뒤의 UPDATE 는 새 스냅샷으로 판정한다.
+    await db.refresh(interview, with_for_update=True)
+    last_asked = exists().where(
+        InterviewTurnRow.interview_session_id == InterviewSession.id,
+        InterviewTurnRow.turn_no == InterviewSession.current_turn,
+        InterviewTurnRow.status == "asked",
+    )
+    done = await db.scalar(
+        update(InterviewSession)
+        .where(
+            InterviewSession.id == interview.id,
+            InterviewSession.status == "in_progress",
+            last_asked,
+        )
+        .values(status="completed", completed_at=datetime.now(UTC))
+        .returning(InterviewSession.id)
+        .execution_options(synchronize_session=False)
+    )
+    if done is None:  # 쓴 게 없어 rollback 하지 않는다 (turn_service.save_question 참고)
+        return False
+    await record_event(
+        db,
+        "interview_completed",
+        user_id=interview.user_id,
+        interview_session_id=interview.id,
+        payload={"reason": "time_expired"},
+    )
+    await db.commit()
+    await db.refresh(interview)
+    return True
 
 
 # ★ rt:{sessionId} 와 rt:interview:{interviewId} 는 한 쌍이다. 같이 쓰고, TTL 연장·삭제도

@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, replace
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -319,6 +320,50 @@ async def test_stale_and_invalid_answers_never_overwrite_the_current_turn(
     async with agent_sessions() as db:
         assert (await db.scalar(select(InterviewTurn))).answer_text is None
         assert await db.scalar(select(LLMCallRecord.id)) is None
+
+
+async def test_answer_after_the_time_limit_ends_the_interview_without_saving_it(
+    agent_sessions, agent_seed, connect_ws
+):
+    await seed_turns(agent_sessions, agent_seed)
+    async with agent_sessions.begin() as db:
+        interview = await db.get(InterviewSession, agent_seed["interview_id"])
+        interview.started_at = datetime.now(UTC) - timedelta(seconds=100)
+    with connect_ws() as (client, app, path, _, _):
+        with client.websocket_connect(path, headers={"origin": "http://localhost:5173"}) as socket:
+            assert socket.receive_json()["turn"] == 1
+
+            async def run_out_of_time():
+                async with app.state.session_factory.begin() as db:
+                    row = await db.get(InterviewSession, agent_seed["interview_id"])
+                    row.started_at = datetime.now(UTC) - timedelta(seconds=5000)
+
+            client.portal.call(run_out_of_time)
+            socket.send_json({"type": "answer", "turn": 1, "text": "늦은 답변"})
+            assert socket.receive_json() == {"type": "interviewEnd"}
+            with pytest.raises(WebSocketDisconnect):
+                socket.receive_json()
+    async with agent_sessions() as db:
+        turn = await db.scalar(select(InterviewTurn))
+        assert (turn.status, turn.answer_text) == ("asked", None)
+        assert (await db.get(InterviewSession, agent_seed["interview_id"])).status == "completed"
+        assert await db.scalar(select(LLMCallRecord.id)) is None  # 모델도 부르지 않았다
+
+
+async def test_connecting_after_the_time_limit_completes_and_denies(
+    agent_sessions, agent_seed, connect_ws
+):
+    await seed_turns(agent_sessions, agent_seed)
+    async with agent_sessions.begin() as db:
+        interview = await db.get(InterviewSession, agent_seed["interview_id"])
+        interview.started_at = datetime.now(UTC) - timedelta(seconds=5000)
+    with connect_ws() as (client, _, path, _, _):
+        with pytest.raises(WebSocketDenialResponse) as caught:
+            with client.websocket_connect(path, headers={"origin": "http://localhost:5173"}):
+                pytest.fail("시간이 다 된 면접 연결을 수락했다")
+        assert caught.value.status_code == 409
+    async with agent_sessions() as db:
+        assert (await db.get(InterviewSession, agent_seed["interview_id"])).status == "completed"
 
 
 @pytest.mark.parametrize("status", ["completed", "abandoned"])
