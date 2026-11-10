@@ -15,6 +15,7 @@ from typing import Any
 
 from anyio import CancelScope
 from redis.exceptions import RedisError
+from sqlalchemy.exc import DBAPIError
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
@@ -135,18 +136,26 @@ async def profile_summary(
             )
         logger.warning("profile_summary_infrastructure_unavailable", user_id=user_id)
     except Exception as error:
+        retry = _retryable_database_error(error)
+        code = "profile_database_unavailable" if retry else service.failure_code(error)
         if identity is not None and token is not None:
-            # 모델 semantic 오류는 새 전달로 우회 재실행하지 않는다.
-            await outbox.finish(
-                ctx["session_factory"],
-                identity,
-                token,
-                success=False,
-                error=service.failure_code(error),
-            )
-        logger.warning(
-            "profile_summary_failed", user_id=user_id, error_code=service.failure_code(error)
-        )
+            try:
+                # 일시적 DB 오류만 기존 전달 상한 안에서 확정 생성 결과를 보존한다.
+                # 모델 semantic 오류는 새 전달로 우회 재실행하지 않는다.
+                await outbox.finish(
+                    ctx["session_factory"],
+                    identity,
+                    token,
+                    success=False,
+                    retry=retry,
+                    error=code,
+                )
+            except DBAPIError:
+                if not retry:
+                    raise
+                # 재예약 저장도 실패하면 실행권 만료 후 reaper가 같은 결과로 복구한다.
+                logger.warning("profile_summary_database_defer_failed", user_id=user_id)
+        logger.warning("profile_summary_failed", user_id=user_id, error_code=code)
     finally:
         with CancelScope(shield=True):
             if heartbeat is not None:
@@ -167,6 +176,35 @@ async def profile_summary(
                 except Exception:
                     # 보고서·기존 요약은 보존한다. LLM 실패만으로는 이 경로에 들어오지 않는다.
                     logger.error("profile_summary_followup_enqueue_failed", user_id=user_id)
+
+
+def _retryable_database_error(error: Exception) -> bool:
+    if not isinstance(error, DBAPIError):
+        return False
+    if error.connection_invalidated:
+        return True
+    cause: BaseException | None = error.orig
+    visited: set[int] = set()
+    while cause is not None and id(cause) not in visited:
+        visited.add(id(cause))
+        state = getattr(cause, "sqlstate", None) or getattr(cause, "pgcode", None)
+        # 프로토콜 위반(08P01)은 요청·프로그램 결함일 수 있어 재시도하지 않는다.
+        if isinstance(state, str) and state in {
+            "40001",
+            "40P01",
+            "08000",
+            "08001",
+            "08003",
+            "08004",
+            "08006",
+            "08007",
+            "57P01",
+            "57P02",
+            "57P03",
+        }:
+            return True
+        cause = cause.__cause__
+    return False
 
 
 async def _heartbeat(
