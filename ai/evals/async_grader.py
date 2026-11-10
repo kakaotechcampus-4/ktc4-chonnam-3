@@ -11,6 +11,8 @@ from typing import Any
 
 from judge_context import validate_judge_context
 
+VERDICTS = frozenset({"accept", "reject", "ambiguous"})
+
 
 @dataclass(frozen=True)
 class Judgment:
@@ -69,7 +71,22 @@ async def call_grader(
         )
     hashes["latency_ms"] = round((time.perf_counter() - started) * 1000)
     if isinstance(result, Judgment):
-        return replace(result, metadata={**hashes, **result.metadata})
-    if type(result) is not str:
-        raise ValueError("grader returned an invalid result type")
-    return Judgment(result, metadata=hashes)
+        judgment = replace(result, metadata={**hashes, **result.metadata})
+    elif type(result) is str:
+        judgment = Judgment(result, metadata=hashes)
+    else:
+        return Judgment(
+            None,
+            failure={"stage": "judge", "error_code": "invalid_grader_result_type"},
+            metadata=hashes,
+        )
+    # 잘못된 판정도 호출 이력·출력·지문을 보존해 모든 실행 모드에서 같은 실패로 처리한다.
+    if judgment.failure is None and (
+        type(judgment.verdict) is not str or judgment.verdict not in VERDICTS
+    ):
+        return replace(
+            judgment,
+            verdict=None,
+            failure={"stage": "judge", "error_code": "invalid_grader_verdict"},
+        )
+    return judgment

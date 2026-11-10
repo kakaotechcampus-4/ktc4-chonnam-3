@@ -11,10 +11,10 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from typing import Any, cast
 
-from async_grader import GraderLike, call_grader
+from async_grader import VERDICTS, GraderLike, call_grader
 from eval_artifacts import validate_artifacts
 from eval_cases import Case
-from grader_check import VERDICTS, check_grader_async
+from grader_check import check_grader_async
 from judge_context import build_judge_context
 from report_check import check_form, grade_reports
 

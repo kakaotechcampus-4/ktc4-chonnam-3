@@ -13,6 +13,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict
 from typing import Any
 
+from async_grader import VERDICTS
 from eval_cases import CONTROL_KINDS, Case
 from judge_context import build_judge_context
 
@@ -24,7 +25,6 @@ EXPECTED = {
     "tool_failure": "reject",
     "ambiguous": "ambiguous",
 }
-VERDICTS = set(EXPECTED.values())
 _WRONG = {"accept": "false_accept", "reject": "false_reject", "ambiguous": "abstained"}
 OUTCOMES = ("correct", "false_accept", "false_reject", "abstained", "error")
 

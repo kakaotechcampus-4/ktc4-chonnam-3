@@ -265,7 +265,8 @@ def test_invalid_judge_does_not_discard_the_model_output_or_assert_a_release_pas
     )
     assert result["cases"][0]["output"] == {"question": "actual candidate"}
     assert result["cases"][0]["quality"] == "judge_error"
-    assert result["grader_controls"]["status"] == "failed"
+    assert result["grader_controls"]["by_kind"]["allowed"]["error"] == 1
+    assert result["summary"]["automatic_checks"]["judge_controls"]["failed"] == 1
     assert result["summary"]["release_gate_passed"] is None
 
 

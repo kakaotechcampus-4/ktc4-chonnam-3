@@ -61,6 +61,8 @@ def technical_exit_code(result: dict[str, Any]) -> int:
     if isinstance(controls, dict) and controls.get("status") == "failed":
         return 1
     for row in result.get("cases", []):
+        if row.get("quality") == "judge_error":
+            return 1
         for field in ("judge", "diagnostic_judge"):
             judgment = row.get(field)
             if isinstance(judgment, dict) and judgment.get("failure"):
