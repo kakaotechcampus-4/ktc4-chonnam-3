@@ -87,9 +87,9 @@
 | --- | --- | --- |
 | 200 | 리포트 본문 | 렌더 |
 | 202 | `{ status: "generating", retryAfter: 3 }` | `retryAfter` 간격으로 폴링 |
-| 409 | `report_unavailable` | 리포트 생성 대상 아님, 답변 완료 turn 0개, 또는 Sprint 1에서 재생성하지 않는 생성 실패. 리포트 없이 안내 |
+| 409 | `report_unavailable` | 리포트 생성 대상 아님, 답변 완료 turn 0개, 또는 Sprint 1에서 재생성하지 않는 생성 실패. 원인을 구분하지 않으므로 원인을 단정하지 않는 공통 문구로 리포트 없이 안내(#91 B1) |
 
-`retryAfter`는 optional이므로 값이 없을 때의 기본 간격을 정해둔다.
+`retryAfter`는 계약상 필수이며 BE는 항상 초 단위 값(현재 3)을 보낸다. 값이 빠지거나 0이어도 폴링이 멈추지 않도록 FE는 기본 간격(3초)으로 방어한다(#91 A5).
 
 ### POST /interviews/{id}/retry
 

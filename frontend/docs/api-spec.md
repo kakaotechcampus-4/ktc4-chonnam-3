@@ -738,6 +738,9 @@ Location: /analysis-runs/run_abc123
 | --- | --- | --- |
 | 400 | `posting_url_required` | 입력창 에러 |
 | 400 | `unsupported_site` | "지원하지 않는 사이트예요" |
+| 400 | `invalid_request` | 첨부 문서(포트폴리오·자기소개서)를 찾지 못함 — 다시 올리도록 안내 |
+| 403 | `github_token_invalid` | GitHub 재연동 안내 (전역 로그인 이동 대상 아님) |
+| 409 | `document_extract_failed` | 첨부 문서(포트폴리오·자기소개서) 추출 실패 — 다시 올리거나 빼고 진행하도록 안내 |
 | 409 | `run_in_progress` | `error.details.runId`로 기존 분석 진행 화면(4-2-v2) 이동 |
 
 > 공고 수집·추출 실패는 잡 생성 후 발생하므로 `202`로 응답하고 `failureReason`으로 전달한다(`GET /analysis-runs/{runId}` 참고). `unsupported_site`만 잡 생성 전에 판별 가능하므로 `400`이다.
@@ -871,7 +874,7 @@ DB run의 `partial`은 FE `status: "failed"`로 매핑한다. 성공한 저장�
 | 값 | 화면 처리 | 재시도 |
 | --- | --- | --- |
 | `no_public_repo` | 안내만 — 재시도 버튼 숨김 | ❌ |
-| `rate_limited` | 대기 시간 안내 (`retryAfter`) | 시간 후 |
+| `rate_limited` | 대기 후 재시도 고정 안내. 남은 대기 시간은 노출하지 않음(#91 A2) | 잠시 후 |
 | `token_invalid` | GitHub 재연동 강조 | 재연동 후 |
 | `jd_fetch_failed` | 공고 URL 입력창 강조 | ✅ |
 | `jd_extraction_failed` | 공고 URL 입력창 강조 | ✅ |

@@ -128,7 +128,7 @@ FE 상태 매핑:
 - 후보 page 실행 지표는 별도 job 행 대신 `analysis_repo_candidate_pages`의 `started_at`, `duration_ms`,
   `queue_wait_ms`에 저장한다. 실행 시간은 시작·종료 차이, 큐 대기는 요청·시작 차이의 밀리초이며 음수를 허용하지 않는다.
 - run 조회 TTL은 `created_at`부터 계산한다. 기본 7200초는 유지하며 영구 분석 자료를 삭제하지 않는다.
-  만료·타인 소유·미존재 run은 같은 `410 run_expired`로 응답한다.
+  만료·타인 소유·미존재 run은 같은 `410 run_expired`로 응답한다. 이 TTL은 분석 조회에만 적용하며 `POST /interviews`는 시간 기준 없이 current run 조건만 본다([면접](interview.md), #91 B2).
 - 결과 조회는 succeeded/partial에서 허용한다. 집계는 run의 배정된 L1 snapshot을 기준으로 하며,
   카드에서 나중에 제외된 저장소도 포함한다. 필수 요약 필드·실패 원소 형태는 공통 OpenAPI를 따른다.
 - 후보 page는 필수 양의 정수다. 범위 밖은 `200` 빈 배열, 실패한 page는 `409 candidate_page_failed`이며
