@@ -139,40 +139,9 @@ Wanted 공고 URL을 입력하고 필요하면 자기소개서와 포트폴리�
 
 ## 아키텍처
 
-```mermaid
-flowchart TB
-    Browser["브라우저<br/>React SPA"]
-    Caddy["Caddy<br/>정적 파일 + /api 프록시"]
-
-    subgraph App["애플리케이션"]
-        API["FastAPI<br/>REST · SSE · WebSocket"]
-        Worker["ARQ Worker<br/>수집 · 분석 · 준비 · 리포트"]
-        AI["devon_ai<br/>Director · LLM 작업"]
-    end
-
-    PG[("PostgreSQL<br/>업무 데이터 원본")]
-    Redis[("Redis<br/>세션 · 큐 · 실시간 상태")]
-
-    subgraph External["외부 서비스"]
-        GitHub["GitHub API"]
-        Wanted["Wanted"]
-        LLM["LLM"]
-        Speech["STT · TTS"]
-    end
-
-    Browser --> Caddy --> API
-    API --> PG
-    API --> Redis
-    Worker --> PG
-    Redis -->|작업 전달| Worker
-    API --> AI
-    Worker --> AI
-    AI --> LLM
-    API --> Speech
-    API --> GitHub
-    Worker --> GitHub
-    Worker --> Wanted
-```
+<p align="center">
+  <img src="docs/assets/architecture.png" alt="DEVON 전체 아키텍처: CI/CD, AWS EC2의 Caddy·API 서버·Worker·Redis·PostgreSQL, 외부 API" width="100%" />
+</p>
 
 AI 기능은 별도 서버가 아니라 API와 Worker가 불러 쓰는 패키지입니다. 권한 확인, 상태 변경, 저장은 Backend가 맡고, AI는 주입받은 데이터로 판단만 합니다.
 
@@ -349,6 +318,10 @@ npm run dev
    ```
 
 배포 구성은 [`compose.deploy.yaml`](compose.deploy.yaml)과 [배포 안내](backend/docs/deploy.md)를 참고하세요.
+
+<p align="center">
+  <img src="docs/assets/deployment.png" alt="DEVON 배포 구성: DuckDNS, AWS EC2의 Docker Compose(Caddy, FastAPI, PostgreSQL, Redis, ARQ Worker), S3 백업" width="100%" />
+</p>
 
 ## 개발
 
