@@ -40,6 +40,8 @@ def _target_identity(database_url: str, target: KnowledgeTarget) -> str:
         url = make_url(database_url)
         if (
             url.drivername != "postgresql+asyncpg"
+            # asyncpg의 query 대상 재정의를 포함해 선언한 접속 정보의 우회를 막는다.
+            or bool(url.query)
             or not target.host.strip()
             or type(target.port) is not int
             or not 1 <= target.port <= 65535

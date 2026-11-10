@@ -63,6 +63,13 @@ def test_target_guard_rejects_implicit_wrong_or_production_targets(config, chang
     assert "private-fixture" not in str(error.value)
 
 
+@pytest.mark.parametrize("query", ["host=127.0.0.1", "database=other", "ssl=disable"])
+def test_target_guard_rejects_all_connection_query_options(query):
+    config = settings(settings().database_url + "?" + query)
+    with pytest.raises(module().KnowledgeConfigurationError):
+        module().validate_target(config, target(), allow_unreviewed=True)
+
+
 def test_cli_requires_an_audit_destination_before_any_database_activation(tmp_path, monkeypatch):
     command = module()
     monkeypatch.setattr(command, "Settings", lambda **kwargs: settings())
@@ -187,6 +194,45 @@ async def test_apply_registers_exact_drafts_and_is_idempotent_without_human_appr
             .select_from(DomainQuestionFrame)
             .where(DomainQuestionFrame.is_active)
         ) == len(DOMAIN_QUESTION_FRAMES)
+
+
+@pytest.mark.parametrize("query_location", ["settings", "engine"])
+async def test_query_target_override_is_rejected_before_connection_or_writes(
+    knowledge_database, query_location
+):
+    from sqlalchemy.engine import make_url
+
+    sessions, config, selected = knowledge_database
+    url = make_url(config.database_url)
+    unsafe_url = url.set(query={"host": url.host})
+    if query_location == "settings":
+        unsafe_url = unsafe_url.set(host="declared-target.invalid")
+        config = settings(unsafe_url.render_as_string(hide_password=False))
+        selected = target(
+            profile="test",
+            host="declared-target.invalid",
+            port=selected.port,
+            database=selected.database,
+        )
+    engine = create_async_engine(unsafe_url)
+    connected = []
+    event.listen(engine.sync_engine, "connect", lambda *args: connected.append(True))
+    try:
+        with pytest.raises(module().KnowledgeConfigurationError):
+            await module().configure_knowledge(
+                async_sessionmaker(engine),
+                config,
+                selected,
+                allow_unreviewed=True,
+                actor="functional-test",
+                apply=True,
+            )
+        assert connected == []
+        async with sessions() as db:
+            assert await db.scalar(select(func.count()).select_from(ScoreCriterion)) == 0
+            assert await db.scalar(select(func.count()).select_from(DomainQuestionFrame)) == 0
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.parametrize("active", [True, False])
