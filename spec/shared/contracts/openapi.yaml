@@ -73,6 +73,12 @@ paths:
                 $ref: '#/components/schemas/HomeResponse'
         '401':
           $ref: '#/components/responses/Error'
+        '403':
+          description: github_token_invalid — the linked GitHub token is no longer valid; re-link GitHub.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /me/interviews:
     get:
       operationId: listInterviews
@@ -188,8 +194,22 @@ paths:
           $ref: '#/components/responses/Error'
         '401':
           $ref: '#/components/responses/Error'
+        '403':
+          description: github_token_invalid — the linked GitHub token is no longer valid; re-link GitHub.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
         '409':
-          $ref: '#/components/responses/Error'
+          description: >-
+            run_in_progress when a queued or running run already exists for the same
+            user, normalized postingUrl, documentId and coverLetterDocumentId
+            (error.details.runId holds the existing run ID); document_extract_failed
+            when an attached portfolio or cover letter document failed extraction.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
   /analysis-runs/{runId}:
     get:
       operationId: getAnalysisRun
@@ -961,6 +981,16 @@ components:
             Internal analysis_jobs.error_code, such as token_invalid or
             llm_parse_failed. This is not the HTTP error.reason namespace;
             github_token_invalid remains the HTTP authentication error reason.
+            Known values (backend ANALYSIS_JOB_ERROR_CODES): internal_error,
+            run_expired, repo_unreachable, no_readme, input_too_large,
+            not_a_job_posting, no_public_repo, rate_limited, token_invalid,
+            jd_fetch_failed, jd_extraction_failed, unsupported_site,
+            doc_extract_failed, llm_timeout, llm_parse_failed, llm_failed.
+            Repository error codes reported by a partial run
+            (REPO_ANALYSIS_ERROR_CODES) are a subset of this list. The list is not
+            enforced at runtime, so clients must treat unknown values as a generic
+            retry case.
+            No remaining wait time is exposed for rate_limited.
         estimatedSeconds:
           type: integer
           nullable: true
@@ -1137,7 +1167,9 @@ components:
           enum: [analyzing]
         retryAfter:
           type: integer
-          description: Top-level field. Distinct from error.retryAfter.
+          description: >-
+            Seconds to wait before polling again. Top-level field. Distinct from
+            error.retryAfter.
 
     CreateInterviewRequest:
       type: object
@@ -1433,6 +1465,7 @@ components:
           enum: [generating]
         retryAfter:
           type: integer
+          description: Seconds to wait before polling the report again. Always present.
 
     FeedbackDisagreementRequest:
       type: object

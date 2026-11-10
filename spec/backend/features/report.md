@@ -11,7 +11,7 @@
 - 이미 생성된 리포트가 있으면 `200`.
 - 없고 생성 가능하면 `report_generate` ARQ job을 enqueue하고 `202 { "status": "generating", "retryAfter": 3 }`.
 - 이미 생성 중이면 중복 enqueue 없이 `202`.
-- 생성 불가면 `409 report_unavailable`.
+- 생성 불가면 `409 report_unavailable`. 원인(생성 대상 아님·답변 완료 turn 없음·기록된 생성 실패)은 reason이나 `details`로 구분하지 않는다(#91 B1).
 
 생성 가능 조건:
 

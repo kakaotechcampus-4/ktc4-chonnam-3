@@ -162,9 +162,9 @@ Sprint 1에서 preview는 포트폴리오 전용이다. 자소서는 `/documents
 | --- | --- | --- |
 | 400 | `posting_url_required` | 입력창 에러 |
 | 400 | `unsupported_site` | "지원하지 않는 사이트예요" |
-| 400 | `invalid_request` | 첨부 포트폴리오를 찾지 못함 — 다시 올리도록 안내 |
+| 400 | `invalid_request` | 첨부 문서(포트폴리오·자기소개서)를 찾지 못함 — 다시 올리도록 안내 |
 | 403 | `github_token_invalid` | GitHub 재연동 안내 (전역 로그인 이동 대상 아님) |
-| 409 | `document_extract_failed` | 첨부 포트폴리오 추출 실패 — 다시 올리거나 빼고 진행하도록 안내 |
+| 409 | `document_extract_failed` | 첨부 문서(포트폴리오·자기소개서) 추출 실패 — 다시 올리거나 빼고 진행하도록 안내 |
 | 409 | `run_in_progress` | `error.details.runId`로 기존 분석 진행 화면(4-2-v2) 이동 |
 
 ### SSE 구독
@@ -196,7 +196,7 @@ GitHub 토큰 무효는 HTTP reason과 같은 `github_token_invalid`다([`api-sp
 | `no_public_repo` | 안내만 | ❌ 버튼 숨김 |
 | `unsupported_site` · `jd_fetch_failed` · `jd_extraction_failed` · `not_a_job_posting` | 공고 URL 확인 안내 | ✅ 공고 입력으로 |
 | `doc_extract_failed` | 첨부 파일 안내 | ✅ 공고 입력으로 |
-| `rate_limited` | 대기 후 재시도 안내 (대기 시간은 BE 계약 확정 후) | 시간 후 공고 입력으로 |
+| `rate_limited` | 대기 후 재시도 안내. 남은 대기 시간은 API로 받지 않아 고정 문구로 안내한다(#91 A2) | 잠시 후 공고 입력으로 |
 | `llm_timeout` · `llm_parse_failed` · `llm_failed` · `repo_unreachable` · `no_readme` · `input_too_large` · `internal_error` · 목록에 없는 값 | 일반 재시도 안내 | ✅ |
 
 재시도는 공고 입력 화면에 이전 공고 URL을 채워 보낸다. 첨부 파일은 다시 올린다.

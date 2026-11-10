@@ -119,7 +119,7 @@ GitHub가 만료·refresh 필드를 가진 유효한 토큰을 발급하면 `502
 - `llm_parse_failed`
 - `llm_failed`
 
-현재 `initial_sync`는 위 내부 코드 중 `rate_limited`·`token_invalid`를 사용하며 provider 통신 실패는 `provider_unavailable`, enqueue/예상 밖 실패는 `internal_error`로 기록한다. job의 내부 `error_code`와 API reason은 별도 경계다.
+현재 `initial_sync`는 위 내부 코드 중 `GithubApiError.error_code`인 `rate_limited`·`token_invalid`·`repo_unreachable`을 그대로 기록한다. 네트워크 오류·5xx·응답 형식 오류도 `repo_unreachable`이며(아래 GitHub 목록 수집 표), 그 밖의 예상 밖 실패는 `internal_error`다(#91 댓글 A안). job의 내부 `error_code`와 API reason은 별도 경계다.
 
 `repo_analyses.error_code`:
 
