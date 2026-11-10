@@ -108,3 +108,207 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("github.event_name == 'workflow_dispatch'", diagnostic)
         self.assertIn("github.ref == 'refs/heads/develop'", diagnostic)
         self.assertIn("id-token: write", diagnostic)
+
+
+class RunnerTests(unittest.TestCase):
+    def test_missing_or_multiple_api_containers_return_safe_failure_json(self):
+        bash = shutil.which("bash")
+        windows = Path("C:/Program Files/Git/bin/bash.exe")
+        if windows.exists():
+            bash = str(windows)
+        if bash is None:
+            self.skipTest("bash is required")
+        command, _ = runner().build_command(b"raise RuntimeError('must not execute')\n")
+        script = shlex.split(command)[-1]
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "docker"
+            executable.write_text(
+                '#!/bin/sh\nif [ "$MOCK_CONTAINER_COUNT" = 2 ]; then '
+                'printf "%s\\n%s\\n" "$MOCK_CONTAINER" "$MOCK_OTHER"; fi\n',
+                encoding="utf-8",
+            )
+            executable.chmod(0o755)
+            for count in (0, 2):
+                with self.subTest(count=count):
+                    env = dict(
+                        os.environ,
+                        PATH=directory + os.pathsep + os.environ["PATH"],
+                        MOCK_CONTAINER_COUNT=str(count),
+                        MOCK_CONTAINER=CONTAINER,
+                        MOCK_OTHER="e" * 64,
+                    )
+                    completed = subprocess.run(
+                        [bash, "-c", script],
+                        env=env,
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        check=False,
+                    )
+                    self.assertNotEqual(completed.returncode, 0)
+                    value = json.loads(completed.stdout)
+                    self.assertEqual(value["code"], "api_container_unavailable")
+                    self.assertEqual(value["containerId"], "")
+
+    def test_actual_successful_probe_report_passes_transport_verification(self):
+        settings = SimpleNamespace(
+            tts_provider="google_cloud",
+            tts_access_token=None,
+            tts_api_key=SimpleNamespace(get_secret_value=lambda: "private-key"),
+            tts_voice_map={
+                name: "ko-KR-Chirp3-HD-" + voice
+                for name, voice in (
+                    ("tech_lead", "Charon"),
+                    ("domain_lead", "Kore"),
+                    ("hr_manager", "Aoede"),
+                )
+            },
+            tts_language_code="ko-KR",
+            tts_monthly_character_limit=1000,
+            tts_budget_project="unit",
+            redis_url="redis://unit/15",
+            require_tts=lambda: object(),
+        )
+
+        class Redis:
+            @classmethod
+            def from_url(cls, *_args, **_kwargs):
+                return cls()
+
+            async def ping(self):
+                return True
+
+            async def info(self, _section):
+                return {"run_id": "epoch"}
+
+            async def hmget(self, *_args):
+                return [b"epoch", b"1000", b"10", b"0", b"0"]
+
+            async def aclose(self):
+                return None
+
+        modules = {}
+        for name in (
+            "httpx",
+            "redis",
+            "redis.asyncio",
+            "app",
+            "app.core",
+            "app.core.config",
+            "app.features",
+            "app.features.interview",
+            "app.features.interview.tts_budget",
+        ):
+            modules[name] = ModuleType(name)
+            modules[name].__path__ = []
+        modules["redis.asyncio"].Redis = Redis
+        modules["app.core.config"].get_settings = lambda: settings
+        modules["app.features.interview.tts_budget"].RedisCharacterBudget = (
+            lambda *_args, **_kwargs: SimpleNamespace(period="2026-11", key="unit-budget")
+        )
+        with patch.dict(sys.modules, modules):
+            spec = importlib.util.spec_from_file_location(
+                "tts_probe_contract", ROOT / ".github/scripts/tts_probe.py"
+            )
+            probe = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(probe)
+
+            async def catalog(_settings):
+                probe._catalog_attempted = True
+                return {
+                    "name": "google_voice_catalog",
+                    "status": "ready",
+                    "code": "voice_catalog_available",
+                    "details": {"httpStatus": 200},
+                }
+
+            probe.catalog_check = catalog
+            result = asyncio.run(probe.inspect_tts())
+        self.assertTrue(result["ok"])
+        self.assertNotIn("tts", {check["name"] for check in result["checks"]})
+        safe = runner().sanitize(json.dumps(result) + "\n" + output().splitlines()[1], "")
+        self.assertTrue(runner().verified(safe, DIGEST))
+
+    def test_payload_uses_current_container_without_install_or_deploy(self):
+        payload = b"print('trusted probe')\n"
+        command, digest = runner().build_command(payload)
+        self.assertRegex(digest, r"^[0-9a-f]{64}$")
+        self.assertIn(base64.b64encode(payload).decode(), command)
+        self.assertIn('docker exec -i "$container" python -B -', command)
+        self.assertIn(".State.StartedAt", command)
+        self.assertIn("before", command)
+        self.assertIn("after", command)
+        for forbidden in (
+            "git checkout",
+            "git fetch",
+            "docker compose",
+            "docker run",
+            "seed_all",
+            "initialize_tts_budget",
+            "ops/diagnose.sh",
+            "pip install",
+        ):
+            self.assertNotIn(forbidden, command)
+
+    def test_generated_remote_shell_has_valid_syntax(self):
+        bash = shutil.which("bash")
+        windows = Path("C:/Program Files/Git/bin/bash.exe")
+        if windows.exists():
+            bash = str(windows)
+        if bash is None:
+            self.skipTest("bash is required")
+        command, _ = runner().build_command(b"print('probe')\n")
+        script = shlex.split(command)[-1]
+        result = subprocess.run(
+            [bash, "-n"],
+            input=script,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_raw_secrets_and_unknown_fields_are_never_returned(self):
+        secret = "private-secret"
+        value = json.loads(output().splitlines()[0])
+        value["checks"].append(
+            {
+                "name": secret,
+                "status": "error",
+                "code": secret,
+                "details": {"key": secret},
+            }
+        )
+        value["checks"][0]["details"] = {"remaining": 5, "key": secret}
+        value["raw"] = secret
+        safe = runner().sanitize(json.dumps(value) + "\n" + secret, secret)
+        self.assertNotIn(secret, json.dumps(safe))
+        self.assertFalse(safe["report"]["ok"])
+
+    def test_success_requires_matching_payload_and_stable_container(self):
+        module = runner()
+        safe = module.sanitize(output(), "")
+        self.assertTrue(module.verified(safe, DIGEST))
+        self.assertFalse(module.verified(safe, "e" * 64))
+        changed = json.loads(output().splitlines()[1])
+        changed.update(status="failed", code="runtime_changed_during_check")
+        safe = module.sanitize(output().splitlines()[0] + "\n" + json.dumps(changed), "")
+        self.assertFalse(module.verified(safe, DIGEST))
+
+    def test_probe_has_no_new_operations_or_write_dependency(self):
+        source = (ROOT / ".github/scripts/tts_probe.py").read_text("utf-8")
+        ast.parse(source)
+        self.assertNotIn("app.operations", source)
+        self.assertNotIn("synthesize(", source)
+        self.assertNotIn(".reserve(", source)
+        self.assertNotIn("initialize_budget(", source)
+        self.assertNotIn('stream("POST"', source)
+        requests = [
+            node
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "stream"
+        ]
+        self.assertEqual([node.args[0].value for node in requests], ["GET"])
