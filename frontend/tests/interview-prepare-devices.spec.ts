@@ -221,6 +221,13 @@ test('마이크가 정상이면 준비가 끝난 뒤 면접을 시작할 수 있
   await expect(page.getByText(/마이크를 확인해야 면접을 시작할 수 있어요/)).toHaveCount(0);
 });
 
+test('준비가 끝나면 로더 대신 완료 표시와 시작 안내를 보여 준다', async ({ page }) => {
+  await openReadyInterview(page, 'ok');
+  await expect(page.getByRole('heading', { name: '첫 질문이 준비됐어요' })).toBeVisible();
+  await expect(page.getByText('마이크와 스피커를 확인하고 면접을 시작하세요.')).toBeVisible();
+  await expect(page.locator('.animate-spin')).toHaveCount(0);
+});
+
 test('마이크를 쓸 수 없으면 준비가 끝나도 면접 시작을 막고, 해결하면 풀린다', async ({ page }) => {
   await openReadyInterview(page, 'NotAllowedError');
   await expect(page.getByRole('button', { name: '면접 시작하기' })).toBeDisabled();
