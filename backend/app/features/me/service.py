@@ -17,7 +17,7 @@ from app.features.me.schemas import (
     MeResponse,
     RecentInterview,
 )
-from app.shared.enums import Reason
+from app.shared.enums import REPORT_REQUIRED_PERSONAS, Reason
 
 
 async def get_me(db: AsyncSession, user: User) -> MeResponse:
@@ -110,7 +110,7 @@ async def get_interviews(
     rows = await queries.history_interviews(db, user.id, limit=size, offset=(page - 1) * size)
     ids = [row[0].id for row in rows]
     names = await queries.repository_names(db, user.id, ids)
-    answered = await queries.answered_turn_counts(db, ids)
+    stats = await queries.answered_turn_stats(db, ids)
     return InterviewListResponse(
         interviews=[
             InterviewSummary(
@@ -120,7 +120,13 @@ async def get_interviews(
                 repository_names=names.get(row[0].id, []),
                 status=row[0].status,
                 started_at=row[0].started_at,
-                answered_turns=answered.get(row[0].id, 0),
+                answered_turns=sum(stats.get(row[0].id, {}).values()),
+                # 리포트는 completed 면접만 만든다. 중단된 면접은 답한 턴이 있어도 만들 수 없다.
+                report_available=row[0].status == "completed"
+                and (
+                    row[2] is not None
+                    or REPORT_REQUIRED_PERSONAS <= stats.get(row[0].id, {}).keys()
+                ),
             )
             for row in rows
         ],

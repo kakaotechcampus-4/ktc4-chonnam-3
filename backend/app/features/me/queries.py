@@ -130,19 +130,24 @@ async def history_interviews(
     return [(interview, posting, report) for interview, posting, report in rows]
 
 
-async def answered_turn_counts(db: AsyncSession, interview_ids: list[UUID]) -> dict[UUID, int]:
-    """면접별 답변 완료 턴 수. 답한 턴이 없으면 키가 없다."""
+async def answered_turn_stats(
+    db: AsyncSession, interview_ids: list[UUID]
+) -> dict[UUID, dict[str, int]]:
+    """면접별·면접관별 답변 완료 턴 수. 답한 턴이 없는 면접은 키가 없다."""
     if not interview_ids:
         return {}
     rows = await db.execute(
-        select(InterviewTurn.interview_session_id, func.count())
+        select(InterviewTurn.interview_session_id, InterviewTurn.persona, func.count())
         .where(
             InterviewTurn.interview_session_id.in_(interview_ids),
             InterviewTurn.status == "answered",
         )
-        .group_by(InterviewTurn.interview_session_id)
+        .group_by(InterviewTurn.interview_session_id, InterviewTurn.persona)
     )
-    return {interview_id: count for interview_id, count in rows}
+    stats: dict[UUID, dict[str, int]] = {}
+    for interview_id, persona, count in rows:
+        stats.setdefault(interview_id, {})[persona] = count
+    return stats
 
 
 async def completed_interviews(

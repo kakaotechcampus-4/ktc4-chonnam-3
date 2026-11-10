@@ -204,6 +204,11 @@ class Persona(StrEnum):
     DOMAIN_LEAD = "domain_lead"
 
 
+# 시간 종료로 일찍 끝난 면접의 리포트 최소 진행 조건. 이 면접관들의 질문에 각각 한 번은
+# 답해야 점수 key 6개를 낼 수 있다(#246). 9턴 정상 완료는 6/2/1 배분이라 항상 충족한다.
+REPORT_REQUIRED_PERSONAS = frozenset({Persona.TECH_LEAD, Persona.DOMAIN_LEAD})
+
+
 class ScoreKey(StrEnum):
     """리포트 점수 항목 6종. totalScore 는 이 6개의 단순 평균이다."""
 

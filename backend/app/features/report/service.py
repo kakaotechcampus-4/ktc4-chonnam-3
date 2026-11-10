@@ -62,7 +62,7 @@ from app.llm_tasks.report import (
     total_score,
     validate_draft,
 )
-from app.shared.enums import Reason
+from app.shared.enums import REPORT_REQUIRED_PERSONAS, Reason
 from app.shared.events import commit_events, record_event
 
 # docs/redis-keys.md: report generation lock. worker 가 끝나기 전에 풀리면 중복 enqueue 가 난다.
@@ -72,7 +72,6 @@ REPORT_FAIL_KEY = "report:fail:{interview_id}"
 # AI 모듈이 서술(report)과 점수 판정(report_score) 두 task 를 쓴다. 둘 다 활성이어야 한다.
 REPORT_PROMPT_TASKS = ("report", "report_score")
 RETRY_AFTER_SECONDS = 3
-REQUIRED_PERSONAS = frozenset({"tech_lead", "domain_lead"})
 logger = get_logger(__name__)
 
 
@@ -190,12 +189,8 @@ type GenerateOutcome = Literal["created", "revised", "exists", "skipped"]
 
 
 def enough_answers(answered: Sequence[InterviewTurn]) -> bool:
-    """점수 key 6개를 낼 수 있는 최소 진행 조건이다.
-
-    시간 종료로 일찍 끝난 면접은 tech_lead·domain_lead 질문에 각각 한 번은 답해야 한다(#246).
-    9턴 정상 완료는 6/2/1 배분이라 항상 충족한다.
-    """
-    return REQUIRED_PERSONAS <= {turn.persona for turn in answered}
+    """점수 key 6개를 낼 수 있는 최소 진행 조건이다(REPORT_REQUIRED_PERSONAS, #246)."""
+    return REPORT_REQUIRED_PERSONAS <= {turn.persona for turn in answered}
 
 
 async def _read_generation_input(
