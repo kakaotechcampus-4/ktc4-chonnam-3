@@ -207,11 +207,13 @@ Location: https://github.com/login/oauth/authorize
             &state=<random>
             &code_challenge=<S256 challenge>
             &code_challenge_method=S256
+            &prompt=select_account
 Set-Cookie: oauthState=<random>; HttpOnly; Secure; SameSite=Lax; Path=/auth/github; Max-Age=600
 ```
 
 | 항목 | 값 |
 | --- | --- |
+| `prompt` | 로그인(`/auth/github/login`)에만 `select_account`. 로그아웃은 GitHub 브라우저 세션을 끊지 못해 이미 승인한 앱은 같은 계정으로 즉시 통과하므로, 계정 선택 화면을 거쳐 다른 계정으로 로그인할 수 있게 한다. 연동(`/auth/github/link`)에는 보내지 않는다 |
 | `scope` | 로그인·연동 모두 `read:user`. 기존 BE 설정을 따르며 public 저장소 읽기에 `repo`·`public_repo` 권한은 요청하지 않음 |
 | `state` | 서버 생성 랜덤값 — `oauthState` 쿠키와 Redis 일회용 레코드 대조, TTL 600초 |
 | PKCE | S256 challenge를 보내고 서버에 보관한 verifier로 code 교환 |

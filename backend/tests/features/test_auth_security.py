@@ -146,6 +146,8 @@ async def test_oauth_uses_pkce_and_public_callback_and_validates_profile(app_set
         assert params["code_challenge_method"] == ["S256"]
         assert params["code_challenge"] == ["E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"]
         assert params["scope"] == ["read:user"]
+        # 로그아웃 뒤 다른 계정으로 로그인할 수 있도록 로그인에서만 계정 선택을 강제한다.
+        assert params.get("prompt") == (["select_account"] if purpose == "login" else None)
         token = await oauth.exchange_code("code", verifier, purpose)
         profile = await oauth.fetch_profile(token.access_token)
         assert profile.github_user_id == 1234
