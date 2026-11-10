@@ -212,7 +212,7 @@ async def _read_state(socket: WebSocket, user_id: UUID, interview_id: UUID) -> _
             and pending is None
         ):
             main_index, follow_up_depth = turn_position(
-                [(turn.turn_no, turn.depth) for turn in turns], current.turn_no
+                [(turn.turn_no, turn.depth, turn.parent_turn_no) for turn in turns], current.turn_no
             )
             question = {
                 "type": "question",

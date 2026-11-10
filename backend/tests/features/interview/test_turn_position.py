@@ -28,3 +28,16 @@ def test_non_positive_depth_is_treated_as_a_main_question(depth):
 
 def test_unknown_turn_defaults_without_inventing_a_follow_up():
     assert turn_position([(1, 1)], 2) == (1, 0)
+
+
+def test_nonadjacent_follow_up_uses_its_parent_root_and_chain_depth():
+    turns = [(1, 1, None), (2, 1, None), (3, 1, None), (4, 2, 2), (5, 1, None), (6, 3, 4)]
+
+    assert turn_position(turns, 4) == (2, 1)
+    assert turn_position(iter(turns), 6) == (2, 2)
+
+
+def test_legacy_follow_up_without_parent_retains_stored_depth_and_nearest_main():
+    turns = [(1, 1, None), (2, 1, None), (3, 2, None), (4, 3, None)]
+
+    assert turn_position(turns, 4) == (2, 2)

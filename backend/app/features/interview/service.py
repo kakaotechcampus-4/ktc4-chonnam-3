@@ -37,7 +37,7 @@ from app.features.interview.schemas import (
     InterviewLastError,
     InterviewTurn,
 )
-from app.features.interview.turn_position import turn_position
+from app.features.interview.turn_position import TurnPosition, turn_position
 from app.shared.enums import Reason
 from app.shared.events import commit_events, record_event
 
@@ -159,7 +159,10 @@ async def get_interview(
         current_turn=interview.current_turn,
         total_turns=interview.total_turns,
         remaining_seconds=_remaining_seconds(interview),
-        turns=[_detail_turn(t, [(item.turn_no, item.depth) for item in turns]) for t in turns],
+        turns=[
+            _detail_turn(t, [(item.turn_no, item.depth, item.parent_turn_no) for item in turns])
+            for t in turns
+        ],
         # openapi: preparing_failed 일 때만 내려준다.
         last_error=_last_error(interview) if interview.status == "preparing_failed" else None,
         can_retry_question=can_retry,
@@ -168,7 +171,7 @@ async def get_interview(
     )
 
 
-def _detail_turn(turn: InterviewTurnRow, positions: list[tuple[int, int]]) -> InterviewTurn:
+def _detail_turn(turn: InterviewTurnRow, positions: list[TurnPosition]) -> InterviewTurn:
     main_index, follow_up_depth = turn_position(positions, turn.turn_no)
     return InterviewTurn(
         turn=turn.turn_no,
