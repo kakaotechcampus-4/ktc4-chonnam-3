@@ -290,7 +290,7 @@ Sprint 1에서는 FE 문서와 맞춰 WS를 `sessionId`로 유지한다.
 | `completed`                      | `completed`          |
 | `abandoned`                      | `abandoned`          |
 
-준비 단계면 `currentTurn: 0`, `turns: []`를 반환한다. `preparing_failed`일 때는 `lastError`와 `prepareSteps`로 실패 화면을 복구한다.
+준비 단계면 `currentTurn: 0`, `turns: []`를 반환한다. `preparing_failed`일 때는 `lastError`(실패 단계 `step`)로 실패 화면을 복구한다. 준비 단계 목록은 GET에 넣지 않고 WS `prepareStep`으로 받는다(#121 1-3).
 
 ## 5. Report
 
