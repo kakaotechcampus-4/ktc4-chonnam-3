@@ -1,7 +1,7 @@
 """Login landing reads real user-owned records, never provider credentials."""
 
 import importlib
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from pydantic import ValidationError
@@ -183,3 +183,65 @@ async def test_landing_requires_session_and_revoked_github_is_separate(client, m
     client.cookies.clear()
     for path in ("/api/me", "/api/me/home", "/api/me/profile", "/api/me/interviews"):
         assert (await client.get(path)).status_code == 401
+
+
+async def test_history_lists_started_abandoned_with_completed_total_and_order(client, member, db):
+    posting = JobPosting(
+        normalized_url="https://wanted.co.kr/wd/21",
+        raw_url="https://wanted.co.kr/wd/21",
+        position="Backend engineer",
+        company_name="Example",
+        parse_status="succeeded",
+    )
+    db.add(posting)
+    await db.flush()
+    job = AnalysisJob(user_id=member.id, job_type="analysis_run", status="succeeded")
+    db.add(job)
+    await db.flush()
+    now = datetime.now(UTC)
+    completed = InterviewSession(
+        user_id=member.id,
+        analysis_job_id=job.id,
+        job_posting_id=posting.id,
+        status="completed",
+        started_at=now - timedelta(hours=3),
+        completed_at=now - timedelta(hours=2),
+    )
+    # 첫 질문 뒤 중단: 이력에 포함되고 정렬 기준은 started_at 이다.
+    started_abandoned = InterviewSession(
+        user_id=member.id,
+        analysis_job_id=job.id,
+        job_posting_id=posting.id,
+        status="abandoned",
+        started_at=now - timedelta(hours=1),
+        abandoned_at=now - timedelta(minutes=50),
+    )
+    # 첫 질문 전 중단: 이력에 넣지 않는다.
+    unstarted_abandoned = InterviewSession(
+        user_id=member.id,
+        analysis_job_id=job.id,
+        job_posting_id=posting.id,
+        status="abandoned",
+        abandoned_at=now,
+    )
+    db.add_all([completed, started_abandoned, unstarted_abandoned])
+    await db.flush()
+    db.add(
+        InterviewReport(
+            interview_session_id=completed.id, headline="Report", summary="Summary", total_score=70
+        )
+    )
+    await db.commit()
+
+    history = (await client.get("/api/me/interviews")).json()
+    assert history["total"] == 2
+    assert history["averageScore"] == 70
+    assert [(row["id"], row["status"]) for row in history["interviews"]] == [
+        (str(started_abandoned.id), "abandoned"),
+        (str(completed.id), "completed"),
+    ]
+    assert history["interviews"][0]["totalScore"] is None
+    assert history["interviews"][0]["completedAt"] is None
+    # 프로필 횟수·홈 최근 면접은 지금처럼 완료 면접만 센다.
+    profile = (await client.get("/api/me/profile")).json()
+    assert profile["interviewSummary"] == {"totalCount": 1, "averageScore": 70}
