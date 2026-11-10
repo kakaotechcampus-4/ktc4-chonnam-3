@@ -1744,7 +1744,8 @@ def validate_narrative(
     claims = [*summary.strengths, *summary.gaps, *summary.follow_ups, *summary.practice_actions]
     if summary.overview is not None:
         # FE는 summary를 빈 줄로 나누어 첫 문단을 요약으로 보이므로 한 문단이어야 한다.
-        if not summary.overview.text.strip() or "\n" in summary.overview.text:
+        # \r·유니코드 줄 구분자도 거른다. FE는 \n 두 개 이상으로만 문단을 나눈다.
+        if len(summary.overview.text.splitlines()) != 1 or not summary.overview.text.strip():
             raise ContractError("semantic", "overview")
         if len(summary.overview.text) > OVERVIEW_MAX_CHARS:
             raise ContractError("semantic", "overview")

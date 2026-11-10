@@ -342,7 +342,27 @@ def test_overview_becomes_the_first_paragraph_of_the_summary(run):
     assert raw["summary"].startswith("Redis 근거는 설명했다\n\n강점\n- 요약")
 
 
-@pytest.mark.parametrize("text", ["두 줄\n입니다", " ", "가" * (c.OVERVIEW_MAX_CHARS + 1)])
+@pytest.mark.parametrize("version", ["report_v1", "report_v3", "report_v4"])
+def test_only_prompts_with_overview_guidance_require_it_in_the_output_schema(run, version):
+    from dataclasses import replace
+
+    prompts = {**PROMPTS, "report": replace(PROMPTS["report"], version=version)}
+    _, (_, narrative) = run(prompts=prompts)
+    required = narrative.requests[0].output_schema["properties"]["summary"]["required"]
+    assert ("overview" in required) == (version == "report_v4")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "두 줄\n입니다",
+        "두 줄\r입니다",
+        "두 줄\r\n입니다",
+        "두 줄 입니다",
+        " ",
+        "가" * (c.OVERVIEW_MAX_CHARS + 1),
+    ],
+)
 def test_an_overview_that_is_not_one_short_paragraph_is_rejected(run, text):
     narrative = narrative_output()
     narrative["summary"]["overview"] = claim(text)

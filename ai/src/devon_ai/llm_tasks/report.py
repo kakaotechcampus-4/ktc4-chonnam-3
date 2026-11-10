@@ -15,6 +15,8 @@ from devon_ai.report_scores import compute_scores
 
 type NarrativeChecked = c.ContractChecked[c.ReportNarrative]
 SUPPORTED_PROMPT_VERSIONS = frozenset({"report_v1", "report_v2", "report_v3", "report_v4"})
+# overview 지침이 없는 과거 프롬프트다. 이 버전의 출력 스키마에는 overview를 요구하지 않는다.
+_WITHOUT_OVERVIEW = frozenset({"report_v1", "report_v2", "report_v3"})
 
 
 def _object(properties: dict[str, object]) -> dict[str, object]:
@@ -26,14 +28,14 @@ def _object(properties: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _output_schema() -> dict[str, object]:
+def _output_schema(*, overview: bool) -> dict[str, object]:
     text = {"type": "string"}
     texts = {"type": "array", "items": text}
     claim = _object({"text": text, "turn_refs": texts, "evidence_refs": texts})
     claims = {"type": "array", "items": claim}
     summary = _object(
         {
-            "overview": claim,
+            **({"overview": claim} if overview else {}),
             "strengths": claims,
             "gaps": claims,
             "follow_ups": claims,
@@ -110,7 +112,7 @@ async def write_narrative(
             payload=_payload(report_input),
             schema_name="ReportNarrative",
             schema_version="1",
-            output_schema=_output_schema(),
+            output_schema=_output_schema(overview=prompt.version not in _WITHOUT_OVERVIEW),
             limits=limits,
             max_attempts=max_attempts,
         )
