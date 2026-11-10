@@ -319,6 +319,9 @@ async def _snapshot(
             )
         if await load_active_prompt(db, "repo_deep") != prompt:
             raise SourcePreparationError("preparation_inputs_changed")
+        # checkpoint 재조회가 populate_existing으로 덮어쓰기 전에 선택 스냅샷을 반영한다.
+        # 앱 세션은 autoflush=False이므로 아직 저장하지 않은 SHA·primary 값이 사라질 수 있다.
+        await db.flush()
         prepare_checkpoint.store(interview, await prepare_checkpoint.checked(db, interview))
         return prompt, tuple(repositories), tuple(snapshot)
 
