@@ -14,9 +14,9 @@
 
 <p align="center">
   <a href="https://devon-chonnam-3.duckdns.org">서비스</a> &nbsp;·&nbsp;
-  <a href="#아키텍처">아키텍처</a> &nbsp;·&nbsp;
-  <a href="#시작하기">시작하기</a> &nbsp;·&nbsp;
-  <a href="#문서">문서</a>
+  <a href="#5-아키텍처">아키텍처</a> &nbsp;·&nbsp;
+  <a href="#9-시작하기">시작하기</a> &nbsp;·&nbsp;
+  <a href="#11-문서">문서</a>
 </p>
 
 <p align="center">
@@ -36,7 +36,9 @@
 
 ---
 
-## 주요 기능
+<br/>
+
+## 1. 주요 기능
 
 | 기능 | 설명 |
 |------|------|
@@ -49,11 +51,15 @@
 | **면접 리포트** | 0~100점 항목 6개와 면접관 관점별 강점, 개선점을 제공합니다. |
 | **면접 이력과 재도전** | 지난 리포트를 다시 보고, 같은 조건으로 다시 도전할 수 있습니다. |
 
-## 서비스 둘러보기
+<br/>
+
+## 2. 서비스 둘러보기
 
 > 아래 화면은 개발용 Mock 데이터로 촬영했습니다. 사용자와 면접 내용은 예시입니다.
 
-### 1. 로그인과 저장소 수집
+<br/>
+
+### 2.1 로그인과 저장소 수집
 
 GitHub 계정으로 로그인합니다. GitHub 토큰은 서버에서 암호화해 보관하며 브라우저로 전달하지 않습니다.
 
@@ -62,7 +68,9 @@ GitHub 계정으로 로그인합니다. GitHub 토큰은 서버에서 암호화�
   <img src="docs/assets/screenshots/home.png" alt="GitHub 분석 요약이 있는 홈 화면" width="49%" />
 </p>
 
-### 2. 공고 입력과 분석
+<br/>
+
+### 2.2 공고 입력과 분석
 
 Wanted 공고 URL을 입력하고 필요하면 자기소개서와 포트폴리오를 올립니다. 분석 진행 상황은 단계별로 실시간 표시됩니다.
 
@@ -71,7 +79,9 @@ Wanted 공고 URL을 입력하고 필요하면 자기소개서와 포트폴리�
   <img src="docs/assets/screenshots/analyzing.png" alt="분석 진행 화면" width="49%" />
 </p>
 
-### 3. 면접 저장소 선택
+<br/>
+
+### 2.3 면접 저장소 선택
 
 공고에 맞게 정렬된 후보에서 1~5개를 고릅니다. 원하는 저장소가 없으면 더 보기로 다음 후보를 추가로 분석합니다.
 
@@ -79,7 +89,9 @@ Wanted 공고 URL을 입력하고 필요하면 자기소개서와 포트폴리�
   <img src="docs/assets/screenshots/repo-select.png" alt="AI 추천 저장소 선택 화면" width="820" />
 </p>
 
-### 4. 면접 준비
+<br/>
+
+### 2.4 면접 준비
 
 마이크를 점검하는 동안, 서버가 선택한 저장소를 깊게 분석해 첫 질문까지 준비합니다.
 
@@ -87,7 +99,9 @@ Wanted 공고 URL을 입력하고 필요하면 자기소개서와 포트폴리�
   <img src="docs/assets/screenshots/prepare.png" alt="면접 준비와 장치 점검 화면" width="820" />
 </p>
 
-### 5. 면접 진행
+<br/>
+
+### 2.5 면접 진행
 
 9턴 동안 음성으로 답변합니다. 첫 질문은 긴장을 풀기 위한 인사 관점 질문이고, 답변을 마치면 전사된 텍스트가 표시됩니다. 답변을 제출하면 필요할 때 코드 근거를 확인하고, 그 결과에 따라 다음 질문을 이어갑니다.
 
@@ -100,7 +114,9 @@ Wanted 공고 URL을 입력하고 필요하면 자기소개서와 포트폴리�
   <img src="docs/assets/screenshots/followup.png" alt="이전 답변 기반 꼬리질문 화면" width="49%" />
 </p>
 
-### 6. 리포트와 마이페이지
+<br/>
+
+### 2.6 리포트와 마이페이지
 
 리포트는 처음 열 때 생성되며, 항목별 점수와 관점별 강점·개선점을 보여줍니다. 생성이 끝나면 프로필 요약도 함께 갱신되고, 마이페이지에서 지난 면접을 다시 보거나 재도전할 수 있습니다.
 
@@ -111,7 +127,9 @@ Wanted 공고 URL을 입력하고 필요하면 자기소개서와 포트폴리�
   <img src="docs/assets/screenshots/mypage.png" alt="면접 이력이 있는 마이페이지" width="820" />
 </p>
 
-## 지원 범위
+<br/>
+
+## 3. 지원 범위
 
 | 항목 | 범위 |
 |------|-----------|
@@ -122,7 +140,9 @@ Wanted 공고 URL을 입력하고 필요하면 자기소개서와 포트폴리�
 | 동시 진행 | 분석 실행 하나당 진행 중인 면접은 하나입니다. |
 | 중단 | 면접은 사용자가 직접 나가거나 저장소를 다시 선택할 때만 중단 처리됩니다. |
 
-## 기술 스택
+<br/>
+
+## 4. 기술 스택
 
 | 영역 | 기술 |
 |------|------|
@@ -137,13 +157,17 @@ Wanted 공고 URL을 입력하고 필요하면 자기소개서와 포트폴리�
 | 테스트 | pytest, Playwright, MSW |
 | 코드 품질 | uv, ruff, mypy, ESLint, Prettier |
 
-## 아키텍처
+<br/>
+
+## 5. 아키텍처
 
 <p align="center">
   <img src="docs/assets/architecture.png" alt="DEVON 전체 아키텍처: CI/CD, AWS EC2의 Caddy·API 서버·Worker·Redis·PostgreSQL, 외부 API" width="100%" />
 </p>
 
 AI 기능은 별도 서버가 아니라 API와 Worker가 불러 쓰는 패키지입니다. 권한 확인, 상태 변경, 저장은 Backend가 맡고, AI는 주입받은 데이터로 판단만 합니다.
+
+<br/>
 
 ### 주요 모듈
 
@@ -156,6 +180,8 @@ AI 기능은 별도 서버가 아니라 API와 Worker가 불러 쓰는 패키지
 | **외부 연동** | `backend/app/integrations/` | GitHub, Wanted, 문서 추출, LLM 클라이언트 |
 | **AI 원본** | `ai/src/devon_ai/` | Director, LLM 작업, 입출력 계약과 검증 |
 | **AI 평가** | `ai/evals/` | 프롬프트와 모델 품질 평가 |
+
+<br/>
 
 ### 분석 파이프라인
 
@@ -170,6 +196,8 @@ AI 기능은 별도 서버가 아니라 API와 Worker가 불러 쓰는 패키지
 | `jd_extract` | 공고에서 요구사항 추출 |
 | `repo_analyze` | 후보 저장소 분석 |
 | `match_score` | 공고 요구 기술과 저장소의 관련성 판단 |
+
+<br/>
 
 ### 면접 한 턴의 흐름
 
@@ -199,7 +227,9 @@ sequenceDiagram
     Note over WS,U: 9번째 답변을 처리하면 interviewEnd로 종료
 ```
 
-## AI 면접 설계
+<br/>
+
+## 6. AI 면접 설계
 
 면접을 제어하는 Agent는 **Director 하나**입니다. 아래 관점은 별도 Agent가 아니라 Director가 질문할 때 선택하는 역할입니다.
 
@@ -208,6 +238,8 @@ sequenceDiagram
 | `tech_lead` | 코드, 아키텍처, 기술 판단, 답변과 코드의 일치 여부 |
 | `hr_manager` | 긴장 완화, 협업, 기여도, 의사결정, 이전 답변 기반 꼬리질문 |
 | `domain_lead` | 금융, 게임, 여행, 쇼핑, 의료, 모빌리티 등 산업과 서비스 관점 |
+
+<br/>
 
 ### LLM 사용처
 
@@ -223,9 +255,13 @@ sequenceDiagram
 
 모델 이름은 코드에 고정하지 않고 설정에서 읽습니다. 실제 사용한 모델과 프롬프트 버전을 DB에 기록하고, 저장소 분석과 면접 중 LLM 호출은 시도별 토큰과 지연 시간도 남깁니다.
 
+<br/>
+
 ### 리포트 점수
 
 프로젝트 이해도, 기술적 근거, 문제 해결 능력, 의사소통 명확성, 기여도 명확성, 직무 적합성의 6개 항목을 0~100점으로 평가합니다. 총점은 6개 항목의 단순 평균이며 가중치는 두지 않습니다.
+
+<br/>
 
 ### AI 품질 원칙
 
@@ -234,7 +270,9 @@ sequenceDiagram
 - 질문, 답변, 원문 인용, 모델 요약, 개인 기여 주장을 구분해 저장합니다.
 - 근거를 찾지 못한 것을 사용자의 거짓이나 낮은 역량으로 해석하지 않습니다.
 
-## 안정성
+<br/>
+
+## 7. 안정성
 
 PostgreSQL을 업무 데이터의 원본으로 둡니다. 대기 중인 분석과 면접 준비 작업은 Redis 큐에서 사라져도 DB 상태를 기준으로 다시 등록하고, 결정적인 job ID로 중복 실행을 막습니다.
 
@@ -247,7 +285,9 @@ PostgreSQL을 업무 데이터의 원본으로 둡니다. 대기 중인 분석�
 
 실행 중인 작업을 자동으로 다시 시작하거나 면접을 자동으로 중단 처리하지는 않습니다.
 
-## API
+<br/>
+
+## 8. API
 
 | 방식 | 경로 | 용도 |
 |------|------|------|
@@ -262,7 +302,9 @@ PostgreSQL을 업무 데이터의 원본으로 둡니다. 대기 중인 분석�
 
 REST 경로는 배포 환경에서 `/api` 아래에 있습니다. 요청·응답 형식은 [OpenAPI 명세](spec/shared/contracts/openapi.yaml), WebSocket과 SSE 메시지는 [FE API 명세](frontend/docs/api-spec.md)를 기준으로 합니다.
 
-## 시작하기
+<br/>
+
+## 9. 시작하기
 
 ### 화면만 실행하기
 
@@ -275,6 +317,8 @@ npm run dev
 ```
 
 `http://localhost:5173`에 접속합니다.
+
+<br/>
 
 ### 전체 서비스 실행하기
 
@@ -323,7 +367,9 @@ npm run dev
   <img src="docs/assets/deployment.png" alt="DEVON 배포 구성: DuckDNS, AWS EC2의 Docker Compose(Caddy, FastAPI, PostgreSQL, Redis, ARQ Worker), S3 백업" width="100%" />
 </p>
 
-## 개발
+<br/>
+
+## 10. 개발
 
 ### 검증 명령
 
@@ -335,6 +381,8 @@ npm run dev
 | 저장소 루트 | `python3 .claude/scripts/check_contracts.py` (공통 계약 형식 검사) |
 
 Backend 테스트에는 격리된 PostgreSQL과 Redis가 필요합니다. `TEST_DATABASE_URL`의 DB 이름은 `task10_test`로 시작해야 하고, `TEST_REDIS_URL`은 13~15번 DB를 지정해야 합니다.
+
+<br/>
 
 ### 저장소 구조
 
@@ -348,11 +396,15 @@ Backend 테스트에는 격리된 PostgreSQL과 Redis가 필요합니다. `TEST_
 └── compose.deploy.yaml
 ```
 
+<br/>
+
 ### 협업 방식
 
 작업 브랜치는 `develop`으로 PR을 올립니다. 요구사항과 설계를 바꿀 때는 `spec/`을 먼저 확인하고, API를 바꿀 때는 공통 계약과 이를 사용하는 팀의 코드를 함께 검토합니다.
 
-## 문서
+<br/>
+
+## 11. 문서
 
 결정 기록과 설계 문서에 남은 Sprint 표기는 작성 당시의 개발 단계입니다. 현재 동작은 이 README와 아래 문서를 기준으로 합니다.
 
