@@ -141,6 +141,8 @@ test('저장된 네 답변을 보존하고 중복 요청 없이 새 소켓에서
   await expect(continueButton).toBeEnabled();
   await continueButton.dblclick();
   await expect(page.getByRole('button', { name: '다음 질문을 준비하는 중…' })).toBeDisabled();
+  // 오류 배너가 남아 있어도 질문을 다시 만드는 중이라 질문 칸은 생성 중으로 보인다.
+  await expect(page.getByText('질문 생성 중')).toBeVisible();
   await expect(page.getByRole('button', { name: '나가기', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: '같은 레포로 다시 시작' })).toBeDisabled();
   await expect(page.getByText('질문 5 / 9 · 개발팀')).toBeVisible();
