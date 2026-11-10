@@ -104,3 +104,4 @@ Director 후속 게시의 코어 경계는 [0023](0023-director-runtime.md), 별
 - [0047 단일 통합 PR 게시와 미병합 음성 입력의 제외](0047-integrated-publication-without-voice-input.md): Accepted for publication scope, 2026-11-10. 기존 17개 PR을 보존한 통합 게시, #185의 제외와 자체 마이그레이션·대기 보완의 경계를 기록한다.
 
 - [0049 통합 리뷰의 최신 기반·실행 복구·배포 일치](0049-integrated-review-runtime-consistency.md): Accepted for local implementation and publication scope, 2026-11-10. 최신 음성 기반, 계약·마이그레이션 정렬, 유한 복구·프로필 재사용 및 배포 순서를 정의한다.
+- [0050 면접 작업 수명과 리뷰 결과의 제한적 복구](0050-review-work-lifetime-and-scoped-recovery.md): Accepted for implementation and publication scope, 2026-11-10. 작업 기한·소유권, 결과 보존 및 대상·감사를 제한한 복구를 정의한다.
