@@ -14,6 +14,7 @@
 
 ## 현재 결정
 
+- [0014 현행 설명 문서를 현재 코드 기준으로 유지](0014-current-state-docs.md) — Proposed, 2026-11-11. 용어집·계약 안내·BE/AI 아키텍처·pipeline·db-schema에서 Sprint 구분을 없애고 현재 코드 기준으로 작성.
 - [0012 저장한 답변을 보존하는 유한 질문 복구](0012-bounded-question-recovery.md) — Accepted for local implementation, 2026-11-09. 0010을 로컬 구현 범위에서 부분 대체한다. 안전한 후보 반려의 자동 1회와 명시 수동 1회, 진행 상태 조회·동일 요청 재확인과 기존 면접 이어가기를 정의한다. 팀 공통 적용 승인은 PR #228의 FE·BE 검토와 구분한다.
 
 - [0006 Task 11 분석 결과의 부분 실패 계약](0006-task11-analysis-result-contract.md) — Accepted, 2026-09-28. 현재 사용자 승인 범위의 구현 선택으로 결과 집계·실패 원소 형태와 기존 오류 코드를 연결한다. 팀 의결·FE 런타임 완료를 뜻하지 않는다.
