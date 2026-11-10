@@ -261,7 +261,8 @@ async def test_cached_l2_reads_real_fixed_source_and_starts_actual_director(agen
         selected = await db.scalar(select(SessionRepository))
         evidence = await db.scalar(select(Evidence))
         turn = await db.scalar(select(InterviewTurn))
-        assert interview.status == "in_progress" and interview.started_at is not None
+        # 준비 완료는 타이머를 시작하지 않는다. started_at 은 시작 클릭이 기록한다(#259).
+        assert interview.status == "in_progress" and interview.started_at is None
         assert interview.last_error is None and interview.current_turn == 1
         assert [step["status"] for step in interview.prepare_steps] == ["completed"] * 4
         assert selected.snapshot_head_sha == ready["sha"] and selected.is_primary

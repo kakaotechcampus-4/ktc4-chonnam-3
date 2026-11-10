@@ -122,6 +122,14 @@ async def get_question_audio(
     )
 
 
+@router.post("/{interview_id}/start", status_code=status.HTTP_204_NO_CONTENT)
+async def start_interview(interview_id: str, db: Database, user: CurrentUser) -> None:
+    """[면접 시작하기] 클릭. 이 시각부터 제한 시간이 흐른다 (#259)."""
+    await service.start_interview(
+        db, user_id=user.id, interview_id=_parse_id(interview_id, Reason.NOT_FOUND)
+    )
+
+
 @router.post("/{interview_id}/prepare/retry", status_code=status.HTTP_204_NO_CONTENT)
 async def retry_prepare(
     interview_id: str, request: Request, db: Database, user: CurrentUser

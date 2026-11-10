@@ -274,6 +274,27 @@ async def abandon_interview(
         raise AppError(Reason.INTERNAL_ERROR) from None
 
 
+async def start_interview(db: AsyncSession, *, user_id: uuid.UUID, interview_id: uuid.UUID) -> None:
+    """[면접 시작하기] 클릭 — 제한 시간 타이머를 시작한다 (#259).
+
+    멱등이다. 이미 시작했으면 처음 시각을 유지한다(재클릭·재시도·새로고침).
+    in_progress 가 아니면 not_ready 409 — 준비 중·실패·종료·중단된 면접은 시작할 수 없다.
+    """
+    interview = await db.scalar(
+        select(InterviewSession)
+        .where(InterviewSession.id == interview_id, InterviewSession.user_id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if interview is None:
+        raise AppError(Reason.NOT_FOUND)
+    if interview.status != "in_progress":
+        raise AppError(Reason.NOT_READY, message="면접을 시작할 수 없는 상태입니다.")
+    if interview.started_at is None:
+        interview.started_at = datetime.now(UTC)
+    await db.commit()
+
+
 async def retry_prepare(
     db: AsyncSession, redis: ArqRedis, *, user_id: uuid.UUID, interview_id: uuid.UUID
 ) -> None:

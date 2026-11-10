@@ -145,8 +145,8 @@ async def _claim(
                 prepare_lease.clear(row)
                 return None
             # 질문 commit 후 상태 전이 전에 중단된 작업은 같은 질문으로 복구한다.
+            # started_at 은 [면접 시작하기] 클릭(start_interview)이 기록한다 (#259).
             row.status, row.prepare_steps, row.last_error = "in_progress", _steps(4), None
-            row.started_at = row.started_at or datetime.now(UTC)
             prepare_lease.clear(row)
             await record_event(
                 db, "interview_started", user_id=user_id, interview_session_id=interview_id
@@ -867,7 +867,7 @@ async def _prepare_interview(
             if row is None:
                 await _release_stale(db, user_id, interview_id, job_id, step)
                 return False
-            row.status, row.started_at = "in_progress", datetime.now(UTC)
+            row.status = "in_progress"  # started_at 은 시작 클릭이 기록한다 (#259)
             row.prepare_steps, row.last_error = _steps(4), None
             prepare_lease.clear(row)
             await record_event(
