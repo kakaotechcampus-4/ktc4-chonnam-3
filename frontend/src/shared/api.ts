@@ -114,6 +114,8 @@ export const api = {
     requestJson<RetryQuestionResponse>(`/interviews/${id}/question/retry`, 'POST', body),
   /** 나가기·레포 재선택의 면접 중단. 이미 abandoned면 다시 불러도 204다. api-spec.md #24. */
   abandonInterview: (id: string) => request<void>(`/interviews/${id}/abandon`, { method: 'POST' }),
+  /** [면접 시작하기] 클릭. 이 시각부터 제한 시간이 흐른다. 멱등이다. */
+  startInterview: (id: string) => request<void>(`/interviews/${id}/start`, { method: 'POST' }),
   submitFeedbackDisagreement: (id: string, body: FeedbackDisagreementRequest) =>
     requestJson<void>(`/interviews/${id}/feedback-disagreements`, 'POST', body),
   analysisRunEventsUrl: (runId: string) => `${BASE}/analysis-runs/${runId}/events`,

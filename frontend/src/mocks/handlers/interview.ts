@@ -20,6 +20,7 @@ import {
   interviewCurrentTurn,
   interviewLastError,
   interviewRemainingSeconds,
+  startInterview,
   interviewRepositoryNames,
   interviewStatus,
   interviewTurns,
@@ -318,6 +319,18 @@ export const interviewHandlers = [
       return new HttpResponse(null, { status: 202 });
     },
   ),
+
+  /** [면접 시작하기] 클릭. 이 시각부터 제한 시간이 흐른다. 멱등이다. */
+  http.post<IdParams, never, Res<undefined>>(path('/interviews/:id/start'), async ({ params }) => {
+    const record = getInterview(String(params.id));
+    if (!record) {
+      return errorResponse(404, 'not_found', '면접을 찾을 수 없어요.');
+    }
+    if (!startInterview(record)) {
+      return errorResponse(409, 'not_ready', '면접을 시작할 수 없는 상태예요.');
+    }
+    return new HttpResponse(null, { status: 204 });
+  }),
 
   /** 나가기·레포 재선택의 중단. api-spec.md #24, 공통 0009. */
   http.post<IdParams, never, Res<undefined>>(

@@ -39,7 +39,7 @@ export type InterviewRecord = {
   fixedStatus?: InterviewStatus;
   /** status 가 preparing_failed 일 때만 값이 있다. */
   fixedLastError?: InterviewLastError;
-  /** 첫 질문 시각. 시작 전에 중단한 면접은 없다. 재도전 허용 기준이다(공통 0009). */
+  /** [면접 시작하기] 클릭 시각. 클릭 전 면접은 없다. 타이머 시작이자 재도전 허용 기준이다(공통 0009). */
   startedAt?: number;
   /** 리포트 lazy generation 시작 시각. 최초 조회 때 기록한다. */
   reportRequestedAt?: number;
@@ -203,6 +203,8 @@ export function recordAnswer(record: InterviewRecord, turn: number, text: string
   if (index === -1) return null;
   if (turns[index].answer !== null) return null;
 
+  // 시작 신호 없이 답이 오면 첫 질문 시각부터 센다. BE의 save_answer 보정과 같다(#259).
+  record.startedAt ??= record.createdAt + PREPARE_DURATION_MS;
   const answered = { ...turns[index], answer: text };
   record.liveTurns = [...turns.slice(0, index), answered, ...turns.slice(index + 1)];
   persistLiveTurns(record);
@@ -236,14 +238,18 @@ export function clearPrepareFailure(record: InterviewRecord, createdAt: number) 
   return record;
 }
 
+/** [면접 시작하기] 클릭. 처음 시각만 남긴다(멱등). 진행 중이 아니면 false. */
+export function startInterview(record: InterviewRecord, now = Date.now()) {
+  if (interviewStatus(record, now) !== 'in_progress') return false;
+  record.startedAt ??= now;
+  return true;
+}
+
 /**
- * 나가기·레포 재선택의 중단(공통 0009). 진행 중이었으면 시작 시각을 남겨
- * 마이페이지 표시·재도전 대상으로 둔다. 준비 실패 면접은 시작 전이라 남기지 않는다.
+ * 나가기·레포 재선택의 중단(공통 0009). 클릭해서 시작한 면접만 startedAt이 있어
+ * 마이페이지 표시·재도전 대상이 된다. 클릭 전·준비 실패 면접은 남기지 않는다.
  */
-export function abandonInterview(record: InterviewRecord, now = Date.now()) {
-  if (interviewStatus(record, now) === 'in_progress') {
-    record.startedAt = record.createdAt + PREPARE_DURATION_MS;
-  }
+export function abandonInterview(record: InterviewRecord) {
   record.fixedStatus = 'abandoned';
   record.fixedLastError = undefined;
   return record;
@@ -260,8 +266,9 @@ export function finishInterview(record: InterviewRecord) {
 export function interviewRemainingSeconds(record: InterviewRecord, now = Date.now()) {
   const status = interviewStatus(record, now);
   if (status !== 'in_progress') return status === 'completed' ? 0 : INTERVIEW_LIMIT_SECONDS;
-  const startedAt = record.createdAt + PREPARE_DURATION_MS;
-  return Math.max(0, INTERVIEW_LIMIT_SECONDS - Math.floor((now - startedAt) / 1000));
+  // 클릭 전에는 제한 시간 그대로다. 타이머는 startInterview가 시작한다.
+  if (record.startedAt === undefined) return INTERVIEW_LIMIT_SECONDS;
+  return Math.max(0, INTERVIEW_LIMIT_SECONDS - Math.floor((now - record.startedAt) / 1000));
 }
 
 /**
@@ -331,8 +338,9 @@ function seedInterviews() {
     sessionId: 'sess_0000000000000005',
     runId: SEED_IN_PROGRESS_RUN_ID,
     repositoryIds: SEED_REPOSITORY_IDS,
-    // 준비가 막 끝난 시각으로 둔다. 남은 시간이 제한 시간 그대로 보인다.
+    // 준비가 막 끝난 시각으로 둔다. 진행 화면을 바로 열 수 있게 시작도 방금 한 것으로 둔다.
     createdAt: Date.now() - PREPARE_DURATION_MS,
+    startedAt: Date.now(),
     position: jdPosition,
     companyName: jdCompanyName,
     fixedStatus: 'in_progress',

@@ -271,15 +271,23 @@ export default function InterviewPrepare() {
    * prepareCompleted는 WS로만 오므로 React Query 캐시의 status는 아직 preparing이다.
    * 진행 화면이 같은 쿼리키를 읽으면 낡은 값을 보고 준비 화면으로 되돌린다.
    * 이동 전에 다시 조회해 in_progress를 확인한다.
+   *
+   * 제한 시간은 이 클릭 시각부터 흐른다. 서버가 start에서 started_at을 기록한다(멱등, #259).
+   * 재조회는 진행 화면의 남은 시간 기준(dataUpdatedAt)을 클릭 직후로 맞추는 역할도 한다.
    */
   const handleStart = async () => {
     setStarting(true);
     setStartFailed(false);
 
-    const { data } = await refetchInterview();
-    if (data?.status === 'in_progress') {
-      navigate(`/interview/${id}/session`);
-      return;
+    try {
+      await api.startInterview(id);
+      const { data } = await refetchInterview();
+      if (data?.status === 'in_progress') {
+        navigate(`/interview/${id}/session`);
+        return;
+      }
+    } catch {
+      // 시작 호출 실패(409 포함)는 아래 실패 안내로 처리한다. 다시 누르면 재시도다.
     }
 
     setStarting(false);
