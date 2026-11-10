@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { api } from '@/shared/api';
@@ -145,7 +146,7 @@ export default function Report() {
 
             <section className="flex flex-col gap-4">
               <SectionTitle>종합리포트</SectionTitle>
-              <div className="flex items-center gap-6">
+              <div className="flex items-start gap-6">
                 <div
                   className="relative h-32 w-32 shrink-0 rounded-full"
                   style={{
@@ -156,7 +157,7 @@ export default function Report() {
                     <span className="text-3xl font-bold">{report.totalScore}</span>
                   </div>
                 </div>
-                <p className="flex-1 text-xs">{report.summary}</p>
+                <Summary text={report.summary} />
               </div>
               <div className="flex flex-col gap-2">
                 {report.scores.map((score) => (
@@ -273,6 +274,50 @@ export default function Report() {
       </main>
 
       <Footer aiNotice="이 리포트는 AI가 생성한 평가로 실제 면접 결과를 보장하지 않아요. 100% 신뢰하지 말고 참고용으로 활용하세요." />
+    </div>
+  );
+}
+
+// summary는 빈 줄로 나뉜 블록이다. 첫 블록만 먼저 보이고 나머지는 펼쳐서 본다.
+// 블록은 `제목\n- 항목` 꼴이거나 제목 없는 문단이다.
+function Summary({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const blocks = text.trim().split(/\n{2,}/);
+  return (
+    <div className="flex flex-1 flex-col gap-2.5 text-xs">
+      {(open ? blocks : blocks.slice(0, 1)).map((block, i) => (
+        <SummaryBlock key={i} block={block} />
+      ))}
+      {blocks.length > 1 && (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+          className="self-start font-bold text-accent"
+        >
+          {open ? '접기' : '자세히 보기'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SummaryBlock({ block }: { block: string }) {
+  const lines = block.split('\n');
+  const hasTitle = lines.length > 1 && !lines[0].startsWith('- ');
+  return (
+    <div className="flex flex-col gap-1">
+      {hasTitle && <p className="font-bold">{lines[0]}</p>}
+      {lines.slice(hasTitle ? 1 : 0).map((line, i) =>
+        line.startsWith('- ') ? (
+          <p key={i} className="flex gap-1.5">
+            <span aria-hidden>·</span>
+            <span>{line.slice(2)}</span>
+          </p>
+        ) : (
+          <p key={i}>{line}</p>
+        ),
+      )}
     </div>
   );
 }
