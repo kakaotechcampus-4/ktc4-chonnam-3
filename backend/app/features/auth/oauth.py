@@ -117,18 +117,21 @@ class GitHubOAuth:
             .rstrip(b"=")
             .decode()
         )
-        return "https://github.com/login/oauth/authorize?" + urlencode(
-            {
-                "client_id": self.settings.github_client_id,
-                "redirect_uri": self.settings.github_redirect_uri,
-                "scope": self.settings.github_login_scope
-                if purpose == "login"
-                else self.settings.github_link_scope,
-                "state": state,
-                "code_challenge": challenge,
-                "code_challenge_method": "S256",
-            }
-        )
+        params = {
+            "client_id": self.settings.github_client_id,
+            "redirect_uri": self.settings.github_redirect_uri,
+            "scope": self.settings.github_login_scope
+            if purpose == "login"
+            else self.settings.github_link_scope,
+            "state": state,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+        }
+        if purpose == "login":
+            # 로그아웃은 GitHub 브라우저 세션을 끊지 못한다. 계정 선택을 강제하지 않으면
+            # 이미 승인한 앱은 같은 계정으로 즉시 통과해 다른 계정으로 로그인할 수 없다.
+            params["prompt"] = "select_account"
+        return "https://github.com/login/oauth/authorize?" + urlencode(params)
 
     async def exchange_code(self, code: str, verifier: str, purpose: Purpose) -> OAuthToken:
         try:
