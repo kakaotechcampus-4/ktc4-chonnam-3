@@ -7,7 +7,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,19 +52,6 @@ async def get_report(db: AsyncSession, *, interview_id: uuid.UUID) -> InterviewR
     return report
 
 
-async def count_answered_turns(db: AsyncSession, *, interview_id: uuid.UUID) -> int:
-    """답변 완료(status='answered') 턴 수. 리포트 생성 가능 조건에 쓴다."""
-    count = await db.scalar(
-        select(func.count())
-        .select_from(InterviewTurn)
-        .where(
-            InterviewTurn.interview_session_id == interview_id,
-            InterviewTurn.status == "answered",
-        )
-    )
-    return int(count or 0)
-
-
 async def list_scores(db: AsyncSession, *, report_id: uuid.UUID) -> list[tuple[str, str, float]]:
     """항목별 점수. 출력: (score_key, label_ko, score) 를 score_criteria.display_order 순으로."""
     rows = await db.execute(
@@ -89,16 +76,6 @@ async def list_disagreed_personas(
     return set(rows)
 
 
-async def list_turns(db: AsyncSession, *, interview_id: uuid.UUID) -> list[InterviewTurn]:
-    """면접의 턴을 turn_no 순으로. 입력: interviewId. 출력: 턴 목록."""
-    rows = await db.scalars(
-        select(InterviewTurn)
-        .where(InterviewTurn.interview_session_id == interview_id)
-        .order_by(InterviewTurn.turn_no)
-    )
-    return list(rows)
-
-
 async def list_repository_names(db: AsyncSession, *, interview_id: uuid.UUID) -> list[str]:
     """선택 repo 이름. 출력 순서 = 선택 순서(display_order)."""
     rows = await db.scalars(
@@ -111,23 +88,16 @@ async def list_repository_names(db: AsyncSession, *, interview_id: uuid.UUID) ->
 
 
 async def list_answered_turns(db: AsyncSession, *, interview_id: uuid.UUID) -> list[InterviewTurn]:
-    """답변 완료 턴을 turn_no 순으로. 리포트 입력의 문답 원본이다."""
+    """답변 완료 턴을 turn_no 순으로. 리포트 입력·응답의 문답 원본이다.
+
+    시간 종료로 답하지 못한 마지막 턴은 지원자가 답할 기회가 없었으므로 넣지 않는다(#246).
+    """
     rows = await db.scalars(
         select(InterviewTurn)
         .where(
             InterviewTurn.interview_session_id == interview_id,
             InterviewTurn.status == "answered",
         )
-        .order_by(InterviewTurn.turn_no)
-    )
-    return list(rows)
-
-
-async def list_report_turns(db: AsyncSession, *, interview_id: uuid.UUID) -> list[InterviewTurn]:
-    """답변하지 못한 턴을 포함한 전체 턴을 turn_no 순으로. 점수 판정은 미답변 턴도 본다."""
-    rows = await db.scalars(
-        select(InterviewTurn)
-        .where(InterviewTurn.interview_session_id == interview_id)
         .order_by(InterviewTurn.turn_no)
     )
     return list(rows)

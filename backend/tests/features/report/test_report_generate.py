@@ -90,7 +90,7 @@ async def test_payload_has_only_fixed_score_keys_and_turns(app, ctx, prompt):
     await _generate(app, ctx, generator)
     payload = generator.calls[0]
     assert payload["score_keys"] == list(SCORE_KEYS)
-    assert [t["turn_no"] for t in payload["turns"]] == [1]
+    assert [t["turn_no"] for t in payload["turns"]] == [1, 2]
     assert "score_criteria" not in payload
 
 
@@ -207,7 +207,7 @@ async def test_coverage_counts_requirements_asked(app, db, ctx, prompt):
     ]
     db.add_all(reqs)
     await db.flush()
-    turn = await make_turn(db, interview, 2, answered=True, jd_requirement_ids=[reqs[1].id])
+    turn = await make_turn(db, interview, 3, answered=True, jd_requirement_ids=[reqs[1].id])
     assert turn.status == "answered"
     await db.commit()
     await _generate(app, ctx, FakeGenerator())
@@ -282,14 +282,28 @@ async def test_invalid_output_saves_nothing(app, db, ctx, prompt, mutate):
     assert await _counts(db) == (0, 0)
 
 
-async def test_payload_includes_unanswered_turn_as_null(app, db, ctx, prompt):
+async def test_payload_leaves_out_the_turn_left_unanswered_when_time_ran_out(app, db, ctx, prompt):
     interview, _ = ctx
-    await make_turn(db, interview, 2, persona="domain_lead")
+    await make_turn(db, interview, 3, persona="tech_lead")
     await db.commit()
     generator = FakeGenerator()
     await _generate(app, ctx, generator)
     turns = generator.calls[0]["turns"]
-    assert [(t["turn_no"], t["answer"]) for t in turns] == [(1, "답변 1"), (2, None)]
+    assert [(t["turn_no"], t["answer"]) for t in turns] == [(1, "답변 1"), (2, "답변 2")]
+
+
+@pytest.mark.parametrize("missing", ["tech_lead", "domain_lead"])
+async def test_skips_when_a_required_persona_has_no_answered_turn(app, db, ctx, prompt, missing):
+    interview, _ = ctx
+    await db.execute(
+        update(InterviewTurn)
+        .where(InterviewTurn.interview_session_id == interview.id, InterviewTurn.persona == missing)
+        .values(status="asked", answer_text=None)
+    )
+    await db.commit()
+    generator = FakeGenerator()
+    assert await _generate(app, ctx, generator) == "skipped"
+    assert generator.calls == []
 
 
 async def test_payload_evidence_carries_repository_and_location_fields(app, db, ctx, prompt):
