@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import replace
 from urllib.parse import urljoin
 
@@ -23,56 +24,70 @@ class _ImageError(Exception):
 
 
 async def _image(
-    http: httpx.AsyncClient, url: str, limit: int, request_timeout_seconds: float
+    http: httpx.AsyncClient,
+    url: str,
+    limit: int,
+    request_timeout_seconds: float,
+    *,
+    on_bytes_read: Callable[[int], None] | None = None,
 ) -> tuple[bytes, str]:
     if limit <= 0:
         raise _ImageError("image_byte_budget")
     body = bytearray()
+    consumed = 0
     try:
-        for _ in range(3):
-            url = checked_source_url(url, WANTED_IMAGE_DOMAINS)
-            # 주입 client의 사용자 인증·쿠키를 CDN이나 redirect 대상으로 전달하지 않는다.
-            request = httpx.Request(
-                "GET",
-                url,
-                headers={"User-Agent": "DEVON", "Accept-Encoding": "identity"},
-                extensions={"timeout": httpx.Timeout(request_timeout_seconds).as_dict()},
-            )
-            response = await http.send(request, auth=None, stream=True, follow_redirects=False)
-            try:
-                if response.status_code in {301, 302, 303, 307, 308}:
-                    url = checked_source_url(
-                        urljoin(url, response.headers.get("Location", "")), WANTED_IMAGE_DOMAINS
-                    )
-                    continue
-                if (
-                    response.status_code != 200
-                    or response.headers.get("Content-Encoding", "identity").lower() != "identity"
-                ):
-                    raise _ImageError("image_fetch_failed")
-                declared = response.headers.get("Content-Length", "")
-                if declared.isdecimal() and int(declared) >= limit:
-                    raise _ImageError("image_byte_budget")
-                async for chunk in response.aiter_bytes(chunk_size=limit):
-                    body.extend(chunk)
-                    # 경계에서 중단하므로 실패 이미지도 공유 바이트 예산 밖으로 더 읽지 않는다.
-                    if len(body) >= limit:
-                        raise _ImageError("image_byte_budget", len(body))
-                raw = bytes(body)
-                mime = response.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
-                if not (
-                    (mime == "image/png" and raw.startswith(b"\x89PNG\r\n\x1a\n"))
-                    or (mime == "image/jpeg" and raw.startswith(b"\xff\xd8\xff"))
-                ):
-                    raise _ImageError("image_format_unsupported", len(body))
-                return raw, mime
-            finally:
-                await response.aclose()
-        raise _ImageError("image_redirect_limit")
+        # redirect를 포함한 다운로드 전체에 HTTPX idle timeout과 별도 기한을 둔다.
+        async with asyncio.timeout(request_timeout_seconds):
+            for _ in range(3):
+                url = checked_source_url(url, WANTED_IMAGE_DOMAINS)
+                # 주입 client의 사용자 인증·쿠키를 CDN이나 redirect 대상으로 전달하지 않는다.
+                request = httpx.Request(
+                    "GET",
+                    url,
+                    headers={"User-Agent": "DEVON", "Accept-Encoding": "identity"},
+                    extensions={"timeout": httpx.Timeout(request_timeout_seconds).as_dict()},
+                )
+                response = await http.send(request, auth=None, stream=True, follow_redirects=False)
+                try:
+                    if response.status_code in {301, 302, 303, 307, 308}:
+                        url = checked_source_url(
+                            urljoin(url, response.headers.get("Location", "")), WANTED_IMAGE_DOMAINS
+                        )
+                        continue
+                    if (
+                        response.status_code != 200
+                        or response.headers.get("Content-Encoding", "identity").lower()
+                        != "identity"
+                    ):
+                        raise _ImageError("image_fetch_failed")
+                    declared = response.headers.get("Content-Length", "")
+                    if declared.isdecimal() and int(declared) >= limit:
+                        raise _ImageError("image_byte_budget")
+                    # 고정 크기 재버퍼링 없이 받은 조각을 즉시 세어 취소 전 소비량도 보존한다.
+                    async for chunk in response.aiter_bytes():
+                        consumed += len(chunk)
+                        if consumed >= limit:
+                            raise _ImageError("image_byte_budget", consumed)
+                        body.extend(chunk)
+                    raw = bytes(body)
+                    mime = response.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+                    if not (
+                        (mime == "image/png" and raw.startswith(b"\x89PNG\r\n\x1a\n"))
+                        or (mime == "image/jpeg" and raw.startswith(b"\xff\xd8\xff"))
+                    ):
+                        raise _ImageError("image_format_unsupported", len(body))
+                    return raw, mime
+                finally:
+                    await response.aclose()
+            raise _ImageError("image_redirect_limit")
     except SearchError:
-        raise _ImageError("untrusted_body_image_url", len(body)) from None
-    except httpx.HTTPError:
-        raise _ImageError("image_fetch_failed", len(body)) from None
+        raise _ImageError("untrusted_body_image_url", consumed) from None
+    except (httpx.HTTPError, TimeoutError):
+        raise _ImageError("image_fetch_failed", consumed) from None
+    finally:
+        # 성공·실패·개별 기한·전체 취소 모두 실제 소비량을 한 번만 차감한다.
+        if on_bytes_read is not None:
+            on_bytes_read(consumed)
 
 
 async def collect_posting_images(
@@ -97,6 +112,10 @@ async def collect_posting_images(
     remaining = settings.jd_max_total_image_bytes
     chars_left = settings.documents_max_source_chars
 
+    def consume_bytes(count: int) -> None:
+        nonlocal remaining
+        remaining -= count
+
     async def process(http: httpx.AsyncClient) -> None:
         nonlocal remaining, chars_left
         for index, url in enumerate(urls[: settings.jd_max_images]):
@@ -109,8 +128,8 @@ async def collect_posting_images(
                     url,
                     min(remaining, vision.settings.max_file_bytes),
                     settings.jd_image_timeout_seconds,
+                    on_bytes_read=consume_bytes,
                 )
-                remaining -= len(data)
                 image_hash = hashlib.sha256(data).hexdigest()
                 result = await vision.extract(
                     data,
@@ -152,7 +171,6 @@ async def collect_posting_images(
                         }
                     )
             except _ImageError as error:
-                remaining -= error.consumed
                 limitations.append(error.reason)
             except VisionError as error:
                 limitations.append("jd_vision_" + error.reason)
