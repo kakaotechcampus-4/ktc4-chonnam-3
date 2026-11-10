@@ -94,6 +94,7 @@ WS path는 realtime `sessionId` 기준 `/api/ws/interviews/{sessionId}`다. REST
 - Controller는 확정·제시한 질문 수와 남은 할당을 확인해, 역할별 할당 초과 또는 최종 6/2/1 달성이 불가능한 Persona를 제외한다. Director는 허용된 기술·도메인 후보 중에서 선택한다.
 - Tool 호출·질문 재생성·중복 요청은 질문 수를 늘리지 않으며, 이미 제시한 질문의 Persona를 소급 변경하지 않는다.
 - 9번째 답변 처리 완료 후 정상 종료하며 10번째 질문은 생성하지 않는다. 사용자 이탈·실패로 중단된 면접에는 정상 완료 배분을 강제하지 않는다.
+- 제한 시간이 다 돼도 면접을 끝낸다([공통 0013](../../shared/decisions/0013-interview-time-limit-and-early-end-report.md)). 잔여 시간은 질문 생성 대기(답변 저장~다음 질문 저장)를 뺀 값이고, 답변 대기 중(마지막 턴 `asked`) 0 이하이면 `GET /interviews/{id}`·WS 연결·WS 답변 수신 시점에 `completed`와 `completed_at`을 기록한다. 질문 생성·분석 중에는 만료되지 않고, 만료 뒤 답변은 저장하지 않는다. 이벤트는 `interview_completed`에 payload `{"reason": "time_expired"}`를 더한다.
 
 [고정 배분 결정](../../shared/decisions/0008-fixed-persona-allocation.md)에 따른 승인 정책이다. 이번에는 문서만 반영하며, 실제 제어와 기존 구현의 정합성·검증 상태는 [AI 구현 기록](../../ai/implementation.md)을 따른다.
 

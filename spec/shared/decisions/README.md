@@ -22,6 +22,7 @@ API 원본 구분은 [공통 계약 안내](../contracts/README.md)와 병합된
 
 - [0010 진행 중 질문 생성 실패의 question_failed는 recoverable false](0010-in-progress-question-failed-unrecoverable.md) — Partially Superseded by 0012 for local implementation. `recoverable: false`와 WS 재접속을 통한 모델 재실행 금지는 유지한다. T4 실패의 복구 API 미제공 범위는 0012로 부분 대체하며 T3·영구 오류의 중단 경계는 유지한다. 원문·기존 팀 승인 이력은 보존한다.
 - [0011 STT 공급자(MLAPI Whisper)와 무음 환각 대응](0011-stt-provider-mlapi-whisper.md) — Proposed, 2026-11-02. MLAPI Whisper를 STT로 쓰고 무음 환각은 최소 크기 검사와 문구 필터로 `empty_transcript` 처리한다. 팀 확인 대기.
+- [0013 면접 제한 시간 — 질문 생성 중 정지와 시간 종료 면접의 완료·리포트](0013-interview-time-limit-and-early-end-report.md) — Accepted, 2026-11-10. 질문 생성 대기(`thinking`)를 잔여 시간에서 빼고, 답변 대기 중 0이 되면 서버가 `completed`로 끝낸다. 시간 종료 면접은 tech·domain 답변이 각각 1개 이상이면 리포트를 만들고 평균 점수에서는 뺀다. 계약은 `openapi.yaml`에 반영했다.
 - [0007 음성 전용 면접 전환 — WS·REST 계약 변경](0007-voice-interview-contract.md) — Proposed, 2026-10-05. Sprint 2부터 답변은 음성만 받고 질문 음성은 `question-audio` URL로 전달한다. 꼬리질문 포함 9턴과 `totalTurns` 기존 의미를 유지하며 BE·AI 검토 대기.
 - [0005 JD 분류 category 통일](0005-jd-category-unification.md) — Proposed, 2026-09-27. DB·AI·API 모두 `category`(`required`/`preferred`/`responsibility`)로 통일하고 `requirement_type`·`unknown`과 변환 레이어를 폐기한다. 구동한 검토 대기.
 - [0003 Sprint 1 세션 인증 유지와 JWT의 Sprint 2 이관](0003-sprint1-session-auth.md) — Accepted, 2026-09-22. 기존 Redis·`devon_session`·14일 sliding 세션을 채택한다. JWT·갱신은 Sprint 2로 이관하며 실제 인증 구현·검증은 남는다.

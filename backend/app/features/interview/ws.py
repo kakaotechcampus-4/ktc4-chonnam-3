@@ -128,6 +128,8 @@ class _State:
     last_error: dict[str, object] | None
     prepare_steps: tuple[tuple[str, str], ...]
     answer_mode: str = "voice"
+    # 이 조회에서 제한 시간이 다 돼 면접이 completed 로 끝났다(#246).
+    expired: bool = False
 
 
 def _preparation_steps(raw: object) -> tuple[tuple[str, str], ...]:
@@ -214,6 +216,8 @@ async def _read_state(socket: WebSocket, user_id: UUID, interview_id: UUID) -> _
         interview = await db.get(InterviewSession, interview_id)
         if interview is None or interview.user_id != user_id:
             raise AppError(Reason.NOT_FOUND)
+        # 답변 대기 중 제한 시간이 다 됐으면 여기서 끝낸다. 아래는 끝난 상태를 읽는다(#246).
+        expired = await expire_if_due(db, interview)
         # 준비 중 폴링은 세션 한 행만 읽는다. 질문·pending 조회는 준비 완료 뒤에 한다.
         turns = (
             []
@@ -284,16 +288,8 @@ async def _read_state(socket: WebSocket, user_id: UUID, interview_id: UUID) -> _
             interview.last_error,
             _preparation_steps(interview.prepare_steps),
             interview.answer_mode,
+            expired,
         )
-
-
-async def _expire(socket: WebSocket, user_id: UUID, interview_id: UUID) -> bool:
-    """답변 대기 중 제한 시간이 다 됐으면 면접을 completed 로 끝낸다 (#246)."""
-    async with socket.app.state.session_factory() as db:
-        interview = await db.get(InterviewSession, interview_id)
-        if interview is None or interview.user_id != user_id:
-            return False
-        return await expire_if_due(db, interview)
 
 
 class _Connection:
@@ -738,11 +734,11 @@ async def _run_answer(
 async def _execute(
     connection: _Connection, user_id: UUID, turn: int, text: str, *, answer_mode: str
 ) -> AnswerExecution:
-    if await _expire(connection.socket, user_id, connection.interview_id):
-        raise AgentStateError("time_up")
     state = connection.socket.app.state
     config = state.settings
     current = await _read_state(connection.socket, user_id, connection.interview_id)
+    if current.expired:
+        raise AgentStateError("time_up")
     if (
         current.status != "in_progress"
         or current.answer_mode != answer_mode
@@ -913,7 +909,6 @@ async def interview_socket(socket: WebSocket, session_id: str) -> None:
     except (ValueError, TypeError, UnicodeDecodeError):
         await _deny(socket, "session_expired")
         return
-    await _expire(socket, user_id, interview_id)
     initial = await _read_state(socket, user_id, interview_id)
     if initial.status in {"completed", "abandoned"}:
         await _deny(socket, "session_expired")
