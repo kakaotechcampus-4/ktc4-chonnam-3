@@ -62,3 +62,37 @@ test('로그아웃 실패 후 모달을 다시 열면 이전 오류 문구가 �
   await page.getByRole('button', { name: '로그아웃', exact: true }).click();
   await expect(page.getByRole('dialog').getByRole('alert')).toHaveCount(0);
 });
+
+test('직무명이 빈 면접은 직무 정보 없음으로 보여준다', async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch;
+    window.fetch = async (input, options) => {
+      if (!String(input).includes('/api/me/interviews')) return originalFetch(input, options);
+      return new Response(
+        JSON.stringify({
+          interviews: [
+            {
+              id: 'iv-empty-position',
+              position: '  ',
+              companyName: '데브온',
+              techStack: ['Java'],
+              careerLevel: '신입',
+              repositoryNames: ['payment-service'],
+              status: 'completed',
+              totalScore: 70,
+              startedAt: '2026-11-01T00:00:00Z',
+              completedAt: '2026-11-01T00:20:00Z',
+            },
+          ],
+          total: 1,
+          page: 1,
+          size: 10,
+          averageScore: 70,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    };
+  });
+  await page.goto('/mypage');
+  await expect(page.getByText('데브온 · 직무 정보 없음')).toBeVisible();
+});
