@@ -228,7 +228,7 @@ Postgres 를 주기적으로 재확인하는 폴백을 둔다. 이벤트 보관�
 | `evidenceCheck`        | S→C  | **`INSERT evidences(retrieved_for_turn=n, git_ref, snippet, tool_name)`**                                                                                                               |
 | (답변과 코드 불일치 발견) | —  | Sprint 1 `evidence_conflicts(source='answer_vs_code')` 저장, 후속 질문 후보로 사용                                                                                                       |
 | `interviewEnd`         | S→C  | `status='completed'`, `events(interview_completed)`                                                                                                                                       |
-| 명시적 이탈·레포 재선택 | —    | `status='abandoned'`, `abandoned_at_turn=turn_count`. Sprint 1 고정 10개 외 별도 이탈 이벤트는 추가하지 않음                                                                              |
+| 명시적 이탈·레포 재선택 | —    | `status='abandoned'`, `abandoned_at`, `abandoned_at_turn=current_turn`(질문이 나간 턴 수, 답변 대기 중인 현재 질문 포함. [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md), #143). Sprint 1 고정 10개 외 별도 이탈 이벤트는 추가하지 않음                                                                              |
 
 `evidenceCheck` 가 화면에 뜬 순간 `evidences` 에 행이 있어야 한다. 화면에는 떴는데 행이 없으면
 그건 연출이고, 서비스가 주장하는 "근거 기반" 이 데이터로 증명되지 않는다.
