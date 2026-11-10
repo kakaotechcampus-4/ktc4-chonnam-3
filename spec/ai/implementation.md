@@ -1,5 +1,114 @@
 # AI 구현·검증 기록
 
+<a id="issue210-image-lineage-20261110"></a>
+## 2026-11-10 #210 이미지 JD → 면접 → 리포트 연결 검증
+
+develop `c59891ce2d25dd34cac7345b9d4ed66dbb4e55eb`에서 만든 별도 worktree의
+`feature/ai-210-image-jd-lineage`에서 최초 구현·검증했다. 아래 최초 실행 결과는 커밋·게시 전 로컬 작업을 기준으로 한다.
+최신 develop 기반 게시본 검증은 이 절 끝에 별도로 기록한다. 초기 설계·과거 실행 결과는 보존하고,
+결정 이유는 [0051](decisions/0051-image-jd-lineage-and-preparation-snapshot.md)에 기록한다.
+
+### 발견한 준비 오류와 최소 수정
+
+실제 `POST /api/interviews`로 새 면접을 만들면 선택 레포의 SHA·primary는 아직 미설정이다.
+앱 세션의 `autoflush=False` 상태에서 준비 `_snapshot()`이 값을 설정한 뒤 checkpoint를
+조회하면, `populate_existing=True`가 미저장 변경을 덮어썼다. 이후 입력 불변 검사에서
+`preparation_changed`가 발생했다. 별도 세션의 DB 조회로 SHA가 사라지는 실패를 먼저 재현했다.
+
+`backend/app/features/interview/prepare.py`에서 checkpoint 조회 직전에 `await db.flush()`를
+추가했다. 기존 transaction·입력 잠금·고정 SHA 검사를 유지하고, 이후 실패 시 함께 rollback한다.
+전역 autoflush·API·DB 스키마·프롬프트·9턴 정책은 바꾸지 않았다. 선택 값을 fixture에 미리
+채우거나 면접 상태를 완료로 직접 변경해 실패를 우회하지 않았다.
+
+### 자동 통합 회귀
+
+`backend/tests/features/interview/test_image_jd_lineage.py`와 같은 디렉터리의
+`image_jd_lineage_provider.py`·`image_jd_lineage_scenario.py`를 추가했다. 이 회귀의 공고·이미지·
+외부 모델 응답은 작은 합성 입력이며, 실제 PostgreSQL/Redis와 서비스 함수를 사용한다.
+
+- 공고 저장·캐시 → 공개 면접 생성 → 준비 → 실제 Context/Director 요청 → 9회 답변 처리 →
+  리포트 GET 202 → 실제 report task 함수 → GET 200을 연결한다. 실제 큐 consumer 실행 검증은 아니다.
+- 같은 공고·요구사항 ID, 이미지/텍스트 해시·블록 위치, 질문 `basis_refs`를 확인한다.
+  실제 질문한 JD 원문만 저장 snapshot과 점수·서술 모델 요청에 전달하며 코드 Evidence와 구분한다.
+- 원문 부재·텍스트 변조·prefix 구간·미질문 요구사항·캐시 재사용·새 공고 버전·다른 소유자를
+  검사한다. 기존 면접은 원래 공고·원문·출처 참조를 유지하며, 다른 사용자의 리포트 GET은 404다.
+- 정상 원문을 강제로 전달하지 않는 메모리 내 변이에서는 회귀가 실패했다. 검사가 실제 출처 손실을
+  탐지함을 확인한 뒤, 변이를 적용하지 않은 별도 실행에서 전체 관련 회귀가 통과했다.
+
+| 이번 실행 | 결과 | 로컬 실행 근거 |
+| --- | --- | --- |
+| BE 이미지 저장·새 면접 연결·JD 리포트 출처 | 13개 통과. 신규 5개를 포함하며 중복 합산하지 않음 | `validation/final-source-lineage-regressions-02/` |
+| 기존 준비·복구·경계·동시성 회귀 | 48개 통과 | `validation/tests-lineage-existing-preparation/` |
+| AI 리포트 생성·채점 출처 회귀 | 69개 통과 | `validation/ai-report-source-regressions/` |
+| Ruff / format | 변경 Python 4파일 통과 | `validation/final-ruff/`, `validation/final-format/` |
+| BE app Mypy | 223파일 통과 | `validation/prepare-mypy/` |
+| 출처 전달 제거 변이 | 예상한 회귀 실패를 탐지함. 정상 제품 코드의 미해결 실패가 아님 | `validation/missing-source-mutation/` |
+| 준비 스냅샷 오류 재현·수정 | 수정 전 실패, 수정 후 통과 | `validation/tests-lineage-snapshot-red/`, `validation/tests-lineage-snapshot-green/` |
+
+위 경로의 기준은 저장소 루트 `.claude/scratch/issue210-image-lineage-20261110/`다.
+격리 DB만 사용했고 자동 회귀의 외부 공급자 호출은 0회다. 초기 대역 설정·쿠키 fixture·import 정리
+실패와 기존 Task10의 테스트 DB 이름 제한으로 발생한 중간 오류는 원본 로그로 보존했다.
+DB 이름 제한을 완화하지 않고 맞는 격리 DB로 최종 13개를 재실행했다. 과거 #233의 전체 테스트
+수치는 이번 결과에 합산하지 않았으며 이번에는 BE/FE 전체 테스트를 다시 실행하지 않았다.
+
+### 실제 자료와 Luna 대표 실행
+
+실제 원본은 `https://jasoseol.com/recruit/6160`의 2015년 공고 캡처다.
+현재 모집 중인 공고라는 뜻은 아니다. 기존 PNG(800×1377, 295,982바이트)의 SHA-256은
+`cadd9dfb8beb8f4be0d3e90487d7771f585665abdcf19f1e0b6819eb46f11f72`이며,
+원본 33파일의 지문과 원래 Sol 추출 응답을 보존했다. 새 Vision/추출 모델 호출 없이 당시 전사
+31블록과 저장 응답을 현재 parser로 재생해 업무 2개·우대 4개·필수 0개를 채택했다.
+설명뿐인 footer 1영역은 원문으로 쓰지 않았다. 당시 채택 0개 결과도 덮어쓰지 않았다.
+
+DB source와 다운로드 allowlist는 그대로다. 현재 지원하는 Wanted 형식의 **합성 수집 경계** 안에서
+수집 이후 캡처를 재생했고, 실제 자소설 원본 URL·CDN·블록 ID·좌표·해시와 시험용 주소의 대응을
+manifest에 남겼다. 이 실행을 자소설 URL 어댑터 지원이나 Wanted 실제 이미지 수집으로 보지 않는다.
+
+격리 DB에서 신규 면접 생성·준비·9회 답변·정상 종료·리포트 작업을 실행했다. 지원자 답변과
+재사용 레포 분석 캐시는 합성이며, 실제 Director·답변 분석·채점·리포트 생성은 slot 1의
+`gpt-6-luna`로 호출했다. 후보 답변을 생성하는 별도 LLM 호출은 없었다.
+
+| 관찰 항목 | 실제 결과 |
+| --- | --- |
+| 완료된 면접 | 9턴, HR 1·기술 6·도메인 2, 모든 답변·분석 저장 후 completed |
+| 이미지 JD 질문 | 저장 6개 중 2개를 모델이 실제 선택. 사후 ID 삽입이나 강제 선택 없음 |
+| 리포트 출처 | 두 요구사항의 원문 참조 4개. 공통 제목을 재사용하므로 서로 다른 블록은 3개 |
+| 점수 입력 | `ScoreJudgments` 1회. 해당 JD를 질문한 4번 턴에만 출처 4개, 다른 8턴에는 0개 |
+| 서술 입력·저장 | `ReportNarrative` 1회. 실제 요청의 출처와 영속 input snapshot이 일치 |
+| 최종 리포트 | revision 1, 9턴, 점수 6개. 정상 조회 확인 |
+| 실제 공급자 요청 | Luna 29회, HTTP 200 및 응답 모델 29/29 확인 |
+| 사용량 | 입력 535,749·출력 59,050토큰. 캐시 입력 37,291은 입력에, 추론 45,188은 출력에 포함 |
+| 원본 보존 | 실행 전후 제품 소스 324파일·로컬 환경 지문 일치, 원래 캡처도 보존 |
+
+`live/run-01/`의 실제 HTTP 요청·SSE 응답, `report-generation-request.json`,
+`report-final-get.json`, `source-mapping.json`, `independent-audit.json`을 대조했다.
+JD 문장·요구사항 ID·이미지/텍스트 해시·CDN URL·페이지·블록·좌표·미확인 한계가 일치했다.
+공개 ReportResponse에 내부 `source_notes`가 있다고 가정하거나 새 필드를 추가하지 않았다.
+
+이번에 남아 있던 이미지 JD → 면접 → 리포트의 대표 전달 검증은 위 로컬 고정 자료 범위에서
+**자동 검증 완료**다. 새 Vision 인식·실제 타 사이트 URL 수집·새 레포 분석·STT/TTS·브라우저 E2E·
+사람의 내용 품질 승인·운영 배포 검증은 이번 결과에 포함하지 않는다. 기존 사용자 DB와 `.env`는
+변경하지 않았다. 다른 이슈 전체나 서비스의 모든 품질 문제가 해결됐다는 의미로 확대하지 않는다.
+
+### 최신 develop 기반 게시본 검증
+
+게시 준비 시 확인한 develop `86467d623ae86be2788e52ff191502fa511d4143`에서
+`fix/ai-210-image-jd-lineage`를 별도로 구성했다. 원본 `feature/ai-210-image-jd-lineage`의
+5개 커밋은 보존했다. 최초 변경 7파일을 Git blob으로 대조해 모두 옮겼으며,
+이후 게시본에 이 검증 기록만 추가했다. 최신 FE·로그인 변경은 기존 develop 내용으로 유지한다.
+
+게시본에서 관련 BE 61개, AI 리포트 69개, 공유 계약 테스트 63개가 통과했다.
+BE 61개에는 앞선 연결 13개와 준비 48개가 포함되므로 앞선 수치를 다시 합산하지 않는다.
+Ruff·format 4파일과 BE app Mypy 223파일도 통과했다.
+계약 형식 검사는 2스키마·부분 OpenAPI·예시 7개를 통과했으며 전체 API 일치 검증은 아니다.
+기본 backend Python의 계약 검사 의존성 부족은 로그로 보존하고, 기존 계약 검증용 환경에서
+추가 설치 없이 재실행했다. 근거는 `publication-validation/`의 각 명령·출력·result.json이다.
+
+이번 게시본 재검증의 실제 공급자 호출은 0회다. 위 Luna 29회는 최초 원본 작업의 실행이며,
+게시본의 새 실호출 결과로 바꾸어 표시하지 않는다. 제품 Python 4파일은 원본과 동일하다.
+열린 #245·#247은 FE 화면 변경이며 이번 파일과 겹치지 않는다. #247과 준비 흐름을 공유하지만
+REST·WS 계약 변경은 없다. 이 게시로 #242의 다른 기능 문제를 완료 처리하지 않는다.
+
 <a id="independent-review-fixes-20261110"></a>
 ## 2026-11-10 #233 추가 재검토 7건 대응
 
