@@ -1,0 +1,88 @@
+name: Initialize TTS allowance on EC2
+
+on:
+  pull_request:
+    paths: ['.github/**']
+  workflow_dispatch:
+    inputs:
+      characters:
+        description: '사용자가 지정한 문자 수 (1~1000000, Cloud 확인값으로 간주하지 않음)'
+        required: true
+        type: string
+      period:
+        description: '현재 UTC 연월 (YYYY-MM)'
+        required: true
+        type: string
+      authorization:
+        description: 'APPLY_OPERATOR_ALLOWANCE 입력 시 비어 있는 장부에만 등록'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m compileall -q .github/scripts
+      - run: python -m unittest discover -s .github/tests -v
+
+  initialize:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    concurrency:
+      group: devon-production-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::263051787000:role/DevonGitHubDeployRole
+          aws-region: ap-northeast-2
+          allowed-account-ids: "263051787000"
+          mask-aws-account-id: true
+      - name: Initialize only an empty current-month TTS ledger
+        env:
+          INSTANCE_ID: i-0c374fc2186ceacec
+          REQUESTED_CHARACTERS: ${{ inputs.characters }}
+          EXPECTED_PERIOD: ${{ inputs.period }}
+          OPERATOR_AUTHORIZATION: ${{ inputs.authorization }}
+        run: >-
+          python .github/scripts/initialize_tts_allowance.py
+          --instance-id "$INSTANCE_ID" --revision "$GITHUB_SHA"
+          --characters "$REQUESTED_CHARACTERS" --period "$EXPECTED_PERIOD"
+          --authorization "$OPERATOR_AUTHORIZATION"
+      - name: Recheck TTS configuration and initialized budget
+        env:
+          INSTANCE_ID: i-0c374fc2186ceacec
+        run: python .github/scripts/diagnose_tts.py --instance-id "$INSTANCE_ID" --revision "$GITHUB_SHA"
+      - name: Verify one short synthesis through the production budget
+        env:
+          INSTANCE_ID: i-0c374fc2186ceacec
+          REQUESTED_CHARACTERS: ${{ inputs.characters }}
+          EXPECTED_PERIOD: ${{ inputs.period }}
+          OPERATOR_AUTHORIZATION: ${{ inputs.authorization }}
+        run: >-
+          python .github/scripts/initialize_tts_allowance.py --smoke
+          --instance-id "$INSTANCE_ID" --revision "$GITHUB_SHA"
+          --characters "$REQUESTED_CHARACTERS" --period "$EXPECTED_PERIOD"
+          --authorization "$OPERATOR_AUTHORIZATION"
