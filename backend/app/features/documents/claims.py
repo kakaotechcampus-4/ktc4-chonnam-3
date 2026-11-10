@@ -265,13 +265,21 @@ async def _prepare_document_once(
                 return
             active_claims = []
             for item, location in zip(result.claims, locations, strict=True):
+                # 재분류·태그·원문 위치가 달라지면 과거 대조가 참조하는 행을 바꾸지 않는다.
                 existing = await db.scalar(
-                    select(DocumentClaim).where(
+                    select(DocumentClaim)
+                    .where(
                         DocumentClaim.document_id == document_id,
                         DocumentClaim.source_version == source_version,
                         DocumentClaim.paragraph_no == item.paragraph_no,
                         DocumentClaim.claim_text == item.claim_text,
+                        DocumentClaim.claim_type == item.claim_type,
+                        DocumentClaim.tech_tags == list(item.tech_tags),
+                        DocumentClaim.source_text == item.source_line,
+                        DocumentClaim.source_location == location,
                     )
+                    .order_by(DocumentClaim.created_at, DocumentClaim.id)
+                    .limit(1)
                 )
                 if existing is None:
                     existing = DocumentClaim(
