@@ -99,9 +99,11 @@ CONTAINER_CODES = frozenset(
 STAMP = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]{8,24}Z")
 
 
-def build_command(payload):
+def build_command(payload, *, timeout_seconds=60):
     if not isinstance(payload, bytes) or not 0 < len(payload) <= 30000:
         raise ValueError("invalid_probe")
+    if type(timeout_seconds) is not int or not 1 <= timeout_seconds <= 120:
+        raise ValueError("invalid_timeout")
     encoded = base64.b64encode(payload).decode("ascii")
     digest = hashlib.sha256(payload).hexdigest()
     select = (
@@ -133,7 +135,7 @@ def build_command(payload):
         "[[ $probe_status == 0 ]] || fail tts_not_ready; emit passed ready"
     )
     return (
-        "sudo -u ubuntu -H timeout --signal=TERM --kill-after=5s 60s bash -c "
+        f"sudo -u ubuntu -H timeout --signal=TERM --kill-after=5s {timeout_seconds}s bash -c "
         + shlex.quote(script),
         digest,
     )
