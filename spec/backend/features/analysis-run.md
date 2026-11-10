@@ -55,7 +55,7 @@ API `category`와 DB `jd_requirements.category`는 같은 값이다(팀 결정 2
 - 첫 batch 10개는 단순 상위 10개가 아니라 혼합 전략으로 구성한다.
 - 첫 batch는 JD 수집·추출보다 먼저 확정되므로 JD signal을 사용하지 않는다.
 - 첫 batch는 포트폴리오 GitHub URL 언급 repo 최대 3개, base rank top 최대 5개, high contribution 최대 2개를 중복 제거해 최대 10개로 만든다.
-- JD 기반 추천 이유는 `match_score` 단계와 후속 candidate page/ranking에서만 사용한다. [0017 결정](../../ai/decisions/0017-recommendation-score-deferral.md)에 따라 Sprint 1 숫자 match score는 보류한다.
+- JD 기반 추천 이유는 `match_score` 단계와 후속 candidate page/ranking에서만 사용한다. [0017 결정](../../ai/decisions/0017-recommendation-score-deferral.md)에 따라 Sprint 1 숫자 match score는 범위 밖이다.
 - 제외 repo도 `filter_status='excluded'`, `filter_reason`으로 저장한다. 기본 응답에는 `eligible`만 노출한다.
 
 주요 필드:

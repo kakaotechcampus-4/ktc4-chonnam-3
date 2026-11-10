@@ -116,7 +116,7 @@ Sprint 1에서는 `running` 으로 남은 행이 worker lost로 의심되더라�
 ### 일부 repo 실패와 전체 run 상태
 
 후보 중 일부가 성공하고 일부가 실패하면 `analysis_jobs.status='partial'`, 전부 실패하면 `failed`다. 개별 `repo_analyses`의 성공·실패 기록도 유지한다.
-[error-reasons.md](error-reasons.md)에 따라 DB `partial`은 FE `RunStatus.failed`로 매핑한다. `partial`이어도 `/analysis-runs/{runId}/result`는 조회할 수 있고 `analyzedCount`, `failedCount`, `failedRepositories[]`를 반환한다. 부분 실패 안내 후 화면 이동과 저장소 선택 UI는 별도 보류 사항이며 이 설명으로 완료 처리하지 않는다.
+[error-reasons.md](error-reasons.md)에 따라 DB `partial`은 FE `RunStatus.failed`로 매핑한다. `partial`이어도 `/analysis-runs/{runId}/result`는 조회할 수 있고 `analyzedCount`, `failedCount`, `failedRepositories[]`를 반환한다. 부분 실패 안내 후 화면 이동과 저장소 선택 UI는 별도 미구현 사항이며 이 설명으로 완료 처리하지 않는다.
 
 ## 2.1 Candidate Page
 

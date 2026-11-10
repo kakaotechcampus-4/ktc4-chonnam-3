@@ -52,7 +52,7 @@ initial_sync의 사용자/account 식별자 선택은 기존 인증 관계와 �
 
 프로필은 report_generate 성공 뒤 profile_summary(user_id)를 실행하고 완료 면접에 사용된 repo만 집계한다. 기존 user_profile_summaries와 공개 응답 필드는 유지한다. 같은 repo·다른 ref의 집계 단위, 언어 비율 계산, 개인 역할을 나타내는 roleSummary의 내용은 기존 확정 기준이 없어 별도 의미 결정이 필요하다. 개인 기여를 추정하거나 프로젝트 요약으로 바꾸지 않으며, Sprint 1 LLM 비호출 원칙도 유지한다.
 
-후속 결정: [0016](0016-profile-language-aggregation.md)에서 저장소 중복 제거·언어 비율의 저장소별 동일 비중 평균을 확정했다. 당시 역할 요약 보류·안내 표시는 후속 [0019](0019-sprint1-profile-role-summary-restoration.md)에서 철회하고 기존 LLM 역할 요약을 구현 대상으로 복원했다. 위 미정 목록과 비호출 설명은 0015 작성 당시 기록이며 기존 저장·공개 구조는 유지한다.
+후속 결정: [0016](0016-profile-language-aggregation.md)에서 저장소 중복 제거·언어 비율의 저장소별 동일 비중 평균을 확정했다. 당시 역할 요약 제공을 미루기로 한 결정·안내 표시는 후속 [0019](0019-sprint1-profile-role-summary-restoration.md)에서 철회하고 기존 LLM 역할 요약을 구현 대상으로 복원했다. 위 미정 목록과 비호출 설명은 0015 작성 당시 기록이며 기존 저장·공개 구조는 유지한다.
 
 ## 확인과 남은 범위
 

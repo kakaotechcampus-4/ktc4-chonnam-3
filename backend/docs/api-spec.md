@@ -27,7 +27,7 @@
 | `GET /interviews/{id}/report` | lazy report generation 및 조회 |
 | `POST /interviews/{id}/retry` | 원본 입력 복사 재면접 |
 
-## 보류
+## 범위 밖
 
 - unmatched portfolio GitHub URL 사용자 노출.
 - feedback disagreement API는 Sprint 2.

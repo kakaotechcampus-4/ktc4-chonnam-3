@@ -1,6 +1,6 @@
 # 작업 04 — API 타입 정의
 
-> 기준: [공통 계약의 원본·예외 범위](../../spec/shared/contracts/README.md), [이관·보류 현황](../../spec/shared/contracts/migration.md)
+> 기준: [공통 계약의 원본·예외 범위](../../spec/shared/contracts/README.md), [계약 이관 현황](../../spec/shared/contracts/migration.md)
 > 산출물: `src/types/api.ts`
 
 ## 목표

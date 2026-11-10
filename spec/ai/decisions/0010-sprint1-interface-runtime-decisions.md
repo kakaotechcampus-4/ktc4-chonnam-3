@@ -1,4 +1,4 @@
-# 0010 Sprint 1 인터페이스와 런타임 보류 해소
+# 0010 Sprint 1 인터페이스와 런타임 합의 필요 사항 해소
 
 > 후속 안내(2026-09-22): 아래 `accessToken` 인증 부분은 [공통 0003](../../shared/decisions/0003-sprint1-session-auth.md)의 Redis·`devon_session` 세션으로 대체됐다. JWT는 Sprint 2로 이관하며 나머지 인터페이스·런타임 결정은 유지한다. 본문은 당시 결정 이력으로 보존한다.
 
@@ -9,7 +9,7 @@
 
 ## 맥락
 
-작성 당시 `later.md`에 남아 있던 Sprint 1 구현 전 보류 중 일부가 FE·BE·AI 계약을 막고 있었다. 주요 대상은 리포트 점수, WebSocket 식별자와 메시지, 준비 실패 retry, 문서 preview, JD 신호와 분석 단계, L2 partial success, LLM attempt, ARQ retry, lazy report, profile summary, worker 분리 정책이다.
+작성 당시 `later.md`에 남아 있던 Sprint 1 구현 전 합의가 필요했던 사항 중 일부가 FE·BE·AI 계약을 막고 있었다. 주요 대상은 리포트 점수, WebSocket 식별자와 메시지, 준비 실패 retry, 문서 preview, JD 신호와 분석 단계, L2 partial success, LLM attempt, ARQ retry, lazy report, profile summary, worker 분리 정책이다.
 
 ## 결정
 
@@ -100,5 +100,5 @@
 
 ## 대체 관계
 
-- AI-L04, AI-L05, AI-L06, AI-L11, AI-L13, AI-L14, AI-L15, AI-L16, AI-L17의 일부 보류를 해소한다.
+- AI-L04, AI-L05, AI-L06, AI-L11, AI-L13, AI-L14, AI-L15, AI-L16, AI-L17의 합의가 필요했던 사항 일부를 해소한다.
 - AI-L01, AI-L02, AI-L07, AI-L08, AI-L09, AI-L10, AI-L18 이후 항목은 당시 `later.md`에서 후속 관리하기로 했다. 현재 후속 결정은 [결정 목록](README.md), 미완료 작업은 [구현·검수 인계표](../../../ai/docs/pipeline.md#기존-id별-구현검수-인계), Sprint 2 항목은 [착수 시 검토할 사항](../features/extensions.md#sprint-2-착수-시-검토할-사항)에서 확인한다.

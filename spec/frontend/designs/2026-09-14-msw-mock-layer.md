@@ -162,7 +162,7 @@ id가 아니라 요구사항 `text`를 담는다.
 ### D. 해소됨 — 이관되지 않았던 엔드포인트
 
 `GET /me/home`, `GET /me/interviews`, `POST /auth/logout`은 모두 `openapi.yaml`에 있다.
-당시 `GET /me/profile`과 `POST /auth/refresh` 핸들러를 새로 만들었다. 이후 [0003 결정](../../shared/decisions/0003-sprint1-session-auth.md)으로 JWT·refresh는 Sprint 2로 보류됐다. 현재 코드의 refresh 핸들러는 기존 구현 잔재이며 Sprint 1 동작에서 정리할 대상이다.
+당시 `GET /me/profile`과 `POST /auth/refresh` 핸들러를 새로 만들었다. 이후 [0003 결정](../../shared/decisions/0003-sprint1-session-auth.md)으로 JWT·refresh는 Sprint 1 범위 밖(Sprint 2)으로 정해졌다. 현재 코드의 refresh 핸들러는 기존 구현 잔재이며 Sprint 1 동작에서 정리할 대상이다.
 **`/me/profile`은 핸들러가 없어 마이페이지가 catch-all 501에 걸려 깨져 있었다.**
 
 `GET /me/interviews`의 `status` 쿼리 파라미터는 팀에 제안만 된 상태다(리뷰 `4050406821`).

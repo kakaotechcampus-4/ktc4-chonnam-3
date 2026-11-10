@@ -22,14 +22,14 @@
 Director 후속 게시의 코어 경계는 [0023](0023-director-runtime.md), 별도 연결 기반 PR의
 게시 경계는 [0025](0025-director-bridge-publication.md)를 따른다. 두 문서는 Proposed다.
 
-각 결정의 승인 범위는 후속 결정까지 함께 적용한다. 0010·0014~0019에서 채택한 정책을 이전 기록의 보류 문구만으로 다시 미정 처리하지 않는다. 남은 상세 구현·저장 연결·실측·검수는 아래 구현 인계에서 관리한다.
+각 결정의 승인 범위는 후속 결정까지 함께 적용한다. 0010·0014~0019에서 채택한 정책을 이전 기록에 남은 당시 합의 필요 표기만으로 다시 미정 처리하지 않는다. 남은 상세 구현·저장 연결·실측·검수는 아래 구현 인계에서 관리한다.
 
 - [공통 0003 Sprint 1 세션 인증 유지](../../shared/decisions/0003-sprint1-session-auth.md): Accepted, 2026-09-22. 0010의 `accessToken` 인증 부분을 Redis·`devon_session`으로 대체한다. 면접 `sessionId`와 로그인 세션 ID는 별개이며 JWT·갱신은 Sprint 2로 이관한다.
 - [공통 0002 로컬 정책 기준 채택](../../shared/decisions/0002-local-policy-baseline.md): Partially Superseded, 2026-09-22. 포트폴리오 20MB와 공고 재사용 7일은 유지하며 면접 배분은 공통 0004를 거쳐 0008을 따른다.
 - [공통 0008 정상 면접의 Persona 배분을 6/2/1로 고정](../../shared/decisions/0008-fixed-persona-allocation.md): Accepted, 2026-10-06. 첫 HR을 포함한 기술 6회·도메인 2회·HR 1회이며 이후 기술·도메인 순서는 자율이다. 이번 반영은 문서에 한정하며 [공통 0004](../../shared/decisions/0004-flexible-persona-allocation-restoration.md)는 대체된 이력으로 보존한다.
 
 - [0001 AI 구현 기준선](0001-ai-baseline.md) — Accepted, 2026-09-12. 모델 선택 부분은 0011로 대체.
-- [0002 Sprint 1 vector 검색 미도입](0002-sprint1-vector-search.md): Accepted, 2026-09-12. 0001의 Sprint 1 pgvector 보류 부분만 대체하며, BE 반영 확인·Sprint 2 세부는 대기.
+- [0002 Sprint 1 vector 검색 미도입](0002-sprint1-vector-search.md): Accepted, 2026-09-12. 0001의 Sprint 1 pgvector 도입을 미루기로 한 부분만 대체하며, BE 반영 확인·Sprint 2 세부는 대기.
 - [0003 추가 근거 조회와 결과 해석 기준](0003-evidence-lookup-policy.md): Accepted, 2026-09-12. AI-L08의 AI 판단 정책만 확정하며, 파일 탐색·운영 상한·저장 계약은 대기.
 - [0004 답변 정성 평가와 후속 보완 원칙](0004-answer-assessment-policy.md): Accepted, 2026-09-12. 평가·보완·보존 의미를 확정한다. 질문 후보 복구는 0008, 서비스 복구·턴 배분·저장·공개 점수는 후속 0010·0014~0015·0018의 채택 범위를 따르며 실제 연결·검수는 대기.
 - [0005 도메인 질문 생성과 개발용 후보 유지](0005-domain-question-policy.md): Accepted, 2026-09-12. 생성 정책과 기존 21개 개발용 후보를 유지한다. 후보 선택은 0008을 함께 따르며 운영 문구·검수·활성 버전·저장은 대기.
@@ -37,7 +37,7 @@ Director 후속 게시의 코어 경계는 [0023](0023-director-runtime.md), 별
 - [0007 평가자료 분리와 검수·결과 기록 원칙](0007-evaluation-design-policy.md): Accepted, 2026-09-12. 자료 분리·독립 검수·전체 결과 기록의 원칙을 유지한다. 로컬 합성 자료와 검수 방법은 0009를 함께 따르며 실제 자료 검수·수치 목표·실측·출시는 대기.
 - [0008 AI 후보 검증·근거 선택·질문 복구](0008-ai-candidate-policy.md): Accepted, 2026-09-12. 출력 오류 구분, L2 관찰 한계, 제한 범위 내 근거 우선순위, 질문 복구 판단, 도메인 프레임 선택을 확정한다. 실제 계약·실행·저장·서비스 상태는 승인 범위 밖이다.
 - [0009 AI 평가자료·검수·재평가 방법](0009-ai-evaluation-method.md): Accepted, 2026-09-12. 로컬 합성 JSON 쌍, 검수 불일치·채점기 검사, 통제된 모델·검색 비교 방법을 확정한다. 실제 자료 운영·수치 기준·도입·출시는 별도 결정이다.
-- [0010 Sprint 1 인터페이스와 런타임 보류 해소](0010-sprint1-interface-runtime-decisions.md): Partially Superseded, 2026-09-15. 인증 쿠키 부분만 후속 공통 0003으로 대체한다. 리포트 점수, WS/sessionId, 준비 retry, 문서 preview, JD 신호, L2 partial success, LLM/ARQ retry, lazy report, profile summary, worker 분리 정책의 Sprint 1 결정을 기록한다. 모델·내부 저장·profile 중복 제거는 후속 0011·0014~0016의 채택 범위를 따르며 실행 budget·Evidence 상한은 대기.
+- [0010 Sprint 1 인터페이스와 런타임 합의 필요 사항 해소](0010-sprint1-interface-runtime-decisions.md): Partially Superseded, 2026-09-15. 인증 쿠키 부분만 후속 공통 0003으로 대체한다. 리포트 점수, WS/sessionId, 준비 retry, 문서 preview, JD 신호, L2 partial success, LLM/ARQ retry, lazy report, profile summary, worker 분리 정책의 Sprint 1 결정을 기록한다. 모델·내부 저장·profile 중복 제거는 후속 0011·0014~0016의 채택 범위를 따르며 실행 budget·Evidence 상한은 대기.
 
 - [0011 Sprint 1 모델 선택](0011-sprint1-model-selection.md): Accepted, 2026-09-21. 사용자 선택에 따라 공급자는 OpenAI, API 모델 ID는 `gpt-5.6-luna`로 확정한다. 인증·SDK/client·호출 경로·버전 기록 방식과 실제 접근·품질 검증은 AI-L01에 남는다.
 - [0012 질문별 평가 기준의 저장과 구성](0012-question-contract.md): Partially Superseded, 2026-09-21. 당시 결정 이력. 질문 동시 저장·다섯 내용 항목·근거 연결·변경 자료의 새 ID는 유지하며 현행 저장 형식은 0014를 따른다.
@@ -48,13 +48,13 @@ Director 후속 게시의 코어 경계는 [0023](0023-director-runtime.md), 별
 
 - [0015 기존 내부 계약·작업 인수 유지와 부분 조회 오류 처리](0015-existing-contracts-and-tool-results.md): Accepted, 2026-09-22. 기존 Context·Question·Evidence 기본 필드, ToolResult 다섯 필드·네 상태와 오류 시 유효 근거 보존, 다섯 job의 전달 인수, 프로필의 기존 저장·공개 구조를 채택한다. 프로필 언어 집계는 0016, 개인 역할 요약은 0019를 따르며 운영 상한·미채택 상세 구현 경계는 해당 잔여 범위다.
 
-- [0016 프로필 언어 집계와 Sprint 1 역할 요약 범위](0016-profile-language-aggregation.md): Partially Superseded, 2026-09-22. 완료 면접의 사용 저장소를 중복 제거하고 기존 저장소별 언어 비율을 같은 비중으로 평균내는 기준은 유지한다. 역할 요약 보류·안내 표시는 0019로 대체한다. 기존 DB·공개 API 구조를 유지하며 실제 구현·저장 연결·검증은 후속 작업이다.
+- [0016 프로필 언어 집계와 Sprint 1 역할 요약 범위](0016-profile-language-aggregation.md): Partially Superseded, 2026-09-22. 완료 면접의 사용 저장소를 중복 제거하고 기존 저장소별 언어 비율을 같은 비중으로 평균내는 기준은 유지한다. 역할 요약 제공을 미루기로 한 결정·안내 표시는 0019로 대체한다. 기존 DB·공개 API 구조를 유지하며 실제 구현·저장 연결·검증은 후속 작업이다.
 
-- [0017 Sprint 1 추천 숫자 점수 보류](0017-recommendation-score-deferral.md): Accepted, 2026-09-22. 필수 matchScore 필드는 null로 반환하고 기존 추천 표시·이유·최대 5개 추천을 유지한다. 후속 0018에서 기존 기술 직접 비교·후보 순서에 따른 대상 선정도 채택했다.
+- [0017 Sprint 1 추천 숫자 점수 범위 밖](0017-recommendation-score-deferral.md): Accepted, 2026-09-22. 필수 matchScore 필드는 null로 반환하고 기존 추천 표시·이유·최대 5개 추천을 유지한다. 후속 0018에서 기존 기술 직접 비교·후보 순서에 따른 대상 선정도 채택했다.
 
 - [0018 기존안 일괄 유지와 질문·구현·후속 검토 분리](0018-existing-baseline-bulk-resolution.md): Accepted, 2026-09-22. 기존 계약·흐름·추천 방식을 유지하고 상세 구현·실측·자료 검수를 사용자 선택에서 분리한다. 팀 내부의 실제 문답 검증과 후속 내부 비교용 보관·재사용을 채택했다. 최종 내부 비교 검증 뒤에도 보관하며 별도의 자동 삭제 기한은 두지 않는다. 현재 추가 사용자 선택은 없으며 Sprint 2의 7개 항목은 해당 기능 착수 시 검토한다.
 
-- [0019 Sprint 1 개인 역할 요약의 기존 계획 복원](0019-sprint1-profile-role-summary-restoration.md): Accepted, 2026-09-22. 0006·0016의 개인 역할 요약 보류·LLM 비호출을 철회하고 기존 저장 항목·API·화면·갱신 흐름으로 LLM 역할 요약을 제공한다. 통계 집계와 근거 없는 기여 추정 금지는 유지한다. 실제 생성·호출·저장은 구현 대기다.
+- [0019 Sprint 1 개인 역할 요약의 기존 계획 복원](0019-sprint1-profile-role-summary-restoration.md): Accepted, 2026-09-22. 0006·0016의 개인 역할 요약 제공을 미루기로 한 결정·LLM 비호출을 철회하고 기존 저장 항목·API·화면·갱신 흐름으로 LLM 역할 요약을 제공한다. 통계 집계와 근거 없는 기여 추정 금지는 유지한다. 실제 생성·호출·저장은 구현 대기다.
 
 - [0022 공고 도메인 category의 LLM 판정](0022-domain-category-llm.md): Accepted, 2026-10-06. 공고 원문(회사명·`industry_name` 제외)을 LLM이 읽고 category 7종 중 하나를 고른다. 근거 인용이 원문에 없거나 호출이 실패하면 `etc`이며, NULL은 판정 전에만 쓰고 공고당 1회만 판정한다. 0005의 category 신뢰 판단 방식을 채우고 0006의 prompt version 목록에 `domain_category_v1`을 더한다. 결정 4·8은 0028로 대체됐다.
 

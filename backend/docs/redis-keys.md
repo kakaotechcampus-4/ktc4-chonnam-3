@@ -31,7 +31,7 @@
 - 로그아웃은 현재 `auth:sess:{sid}` 삭제와 쿠키 만료로 처리하며 이미 없는 세션에도 `204`를 반환한다. 로그인 세션은 SQL `auth_sessions` 테이블에 저장하지 않는다.
 - 세션 생성·조회·14일 sliding 갱신·로그아웃은 구현·검증 대기이며, 이 표가 실제 Redis 연결 완료를 뜻하지 않는다.
 
-## 보류
+## 범위 밖
 
 - DEVON JWT·refresh token은 Sprint 2로 넘기며 관련 저장 설계는 해당 구현 시 검토한다.
 - Sprint 1에는 heartbeat/timeout 기반 자동 abandoned 판정을 두지 않는다. `ws:lock:{sessionId}` 만료를 사용자 이탈로 해석하는 정책은 Sprint 2에서 검토한다.
