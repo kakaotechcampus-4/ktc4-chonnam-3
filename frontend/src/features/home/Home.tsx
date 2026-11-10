@@ -13,13 +13,10 @@ export default function Home() {
   const homeQuery = useQuery({
     queryKey: queryKeys.home,
     queryFn: api.getHome,
-    // 실패해도 이전 data가 남아 syncing 폴링이 이어지므로, 토큰 무효면 재연동 전까지 멈춘다.
+    // 실패해도 이전 data(syncing)가 남아 폴링이 이어진다. 오류면 멈추고 "다시 시도"로 복구한다(#90 15번).
+    // 다시 시도가 성공하면 error가 비워져 syncing 폴링이 다시 이어진다.
     refetchInterval: (query) =>
-      (query.state.error as unknown as ApiError | null)?.error?.reason === 'github_token_invalid'
-        ? false
-        : query.state.data?.analysisStatus === 'syncing'
-          ? 3000
-          : false,
+      !query.state.error && query.state.data?.analysisStatus === 'syncing' ? 3000 : false,
   });
 
   const home = homeQuery.data;
