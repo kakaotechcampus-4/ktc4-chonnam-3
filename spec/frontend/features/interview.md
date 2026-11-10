@@ -8,7 +8,7 @@
 
 WebSocket으로 AI 면접관과 텍스트 면접을 진행한다. 준비 단계와 진행 단계가 같은 WS 연결을 공유한다.
 
-[공통 0008](../../shared/decisions/0008-fixed-persona-allocation.md)에 따라 정상 완료 9턴은 기술 6회·도메인 2회·HR 1회이며 첫 질문이 유일한 HR 질문이다. 이후 기술·도메인 순서는 고정하지 않으며 FE는 서버가 전달한 Persona를 표시한다. 9번째 답변 처리 후 종료하고, 이탈·실패로 중단된 면접에는 정상 배분을 강제하지 않는다. 이번 반영은 문서에 한정하며 실제 제어·mock 정합성·검증 상태는 [AI 구현 기록](../../ai/implementation.md)을 따른다.
+[공통 0008](../../shared/decisions/0008-fixed-persona-allocation.md)에 따라 정상 완료 9턴은 기술 6회·도메인 2회·HR 1회이며 첫 질문이 유일한 HR 질문이다. 이후 기술·도메인 순서는 고정하지 않으며 FE는 서버가 전달한 Persona를 표시한다. 9번째 답변 처리 후 종료하고, 이탈·실패로 중단된 면접에는 정상 배분을 강제하지 않는다. 제한 시간이 다 돼 9턴을 못 채우고 끝난 면접도 `completed`이며 배분을 강제하지 않는다([공통 0013](../../shared/decisions/0013-interview-time-limit-and-early-end-report.md)). 이번 반영은 문서에 한정하며 실제 제어·mock 정합성·검증 상태는 [AI 구현 기록](../../ai/implementation.md)을 따른다.
 
 | 화면 | 코드 | 구성 |
 | --- | --- | --- |
@@ -228,14 +228,19 @@ Sprint 1의 `question` 수신은 질문 전달 완료를 뜻하며 `questionEnd`
 
 허용된 시도 후에도 질문 생성에 실패하면 [기존 면접 실패 정책](../../ai/features/interviewer.md#공개-메시지와-미구현-항목)에 따라 오류 안내·기록 보존·명시적 나가기와 새 면접 흐름을 유지한다. [공통 0012](../../shared/decisions/0012-bounded-question-recovery.md)에 따라 저장 T3 이후 다음 질문 실패에만 서버가 허용한 명시 수동 이어가기 1라운드를 제공한다. GET의 questionRetryState로 요청 ID·진행 상태를 복원하며 새 UUID나 답변 재전송으로 우회하지 않는다. 실패한 면접은 `in_progress`로 남으므로 FE는 abandon을 먼저 보낸 뒤 같은 레포로 재도전하거나 홈으로 나가게 한다(abandon 없이 홈으로 보내면 같은 run의 새 면접이 `409 session_limit_exceeded`가 된다).
 
-`recoverable: false`면 서버가 WS 연결을 닫는다. 오류 안내나 연결 종료만으로 DB 상태를 `completed` 또는 `abandoned`로 바꾸지 않는다. 정상 완료는 9번째 답변 처리 완료, `abandoned`는 명시적 나가기 확인·레포 재선택에 따른다. 오류 전달·종료 요청·실패 기록 복원의 실제 연결은 구현·검증 대상이다.
+`recoverable: false`면 서버가 WS 연결을 닫는다. 오류 안내나 연결 종료만으로 DB 상태를 `completed` 또는 `abandoned`로 바꾸지 않는다. 정상 완료는 9번째 답변 처리 완료 또는 제한 시간 만료([공통 0013](../../shared/decisions/0013-interview-time-limit-and-early-end-report.md)), `abandoned`는 명시적 나가기 확인·레포 재선택에 따른다. 오류 전달·종료 요청·실패 기록 복원의 실제 연결은 구현·검증 대상이다.
 
 `code`·`occurredAt`은 화면에 노출하지 않는다. 사용자에게 의미 없는 영문 코드와 ISO 시각이 안내 문구 앞에 붙어 어색하기 때문이다. 배너는 `reason`별 문구만 보인다.
 `step`은 준비 단계 오류일 때만 값이 있고, 진행 중 오류에서는 `null`이다.
 
 ### 타이머
 
-`remainingSeconds`는 서버 시각 기준(`planned_duration_sec - elapsed_sec`)이다. 재연결 시 클라이언트 타이머를 이 값으로 덮어쓴다.
+`remainingSeconds`는 서버 시각 기준이며 총 시간에서 경과를 뺀 뒤 질문 생성 대기(답변 저장부터 다음 질문 저장까지)를 더한 값이다([공통 0013](../../shared/decisions/0013-interview-time-limit-and-early-end-report.md)). 재연결 시 클라이언트 타이머를 이 값으로 덮어쓴다.
+
+- `thinking`을 받은 뒤 다음 메시지가 올 때까지 카운트다운을 멈춘다. 질문 음성(TTS) 재생 중에는 멈추지 않는다.
+- 답변 대기 중 0이 되면 서버가 면접을 `completed`로 끝내고 `GET`·WS 연결·답변 수신 시점에 판정한다. FE는 입력과 녹음을 막고 안내한 뒤 `GET /interviews/{id}`로 상태를 다시 확인하며(서버가 아직 끝내지 않았거나 조회가 실패하면 주기적으로), `completed`면 리포트로 이동한다. 작성·녹음 중이던 답변은 저장하지 않으며, 만료 뒤 도착한 답변은 서버도 저장하지 않고 `interviewEnd`로 닫는다. 녹음을 끝내고 저장 중인 답변은 취소하지 않는다.
+- 리포트: 9개 미만으로 끝난 리포트는 진행한 질문 수를 안내한다. 리포트를 만들 수 없으면(`409 report_unavailable`) 면접 조회로 시간이 끝나 진행이 짧은 면접인지 가려 안내와 다시 도전하기를 보인다.
+- 마이페이지: 목록 행의 `answeredTurns`가 9 미만이면 "시간 종료 N/9턴"을, `reportAvailable`이 `false`이면 "리포트 없음"과 다시 도전하기를 보인다.
 
 ## 상태 요구사항 (Sprint 1)
 
@@ -283,6 +288,8 @@ Sprint 1의 `question` 수신은 질문 전달 완료를 뜻하며 `questionEnd`
 - `preparing_failed` 새로고침 시 WS 없이 `lastError`만으로 면접 준비 실패 배너 렌더 확인
 - 오류·연결 종료만으로 DB 종료 상태를 바꾸지 않고, 명시적 이탈 뒤에도 저장 답변을 보존함
 - `remainingSeconds` 서버값으로 동기화
+- `thinking` 동안 카운트다운이 멈추고 질문 수신 뒤 다시 줄어든다. TTS 재생 중에는 계속 줄어든다.
+- 답변 대기 중 0이 되면 입력이 막히고 서버가 끝낸 `completed`를 확인해 리포트로 이동한다. 녹음 중이던 답변은 저장되지 않는다.
 
 ---
 

@@ -8,10 +8,25 @@ from pydantic import ValidationError
 
 from app.db.models.analysis import AnalysisJob
 from app.db.models.github import Repository, UserProfileSummary
-from app.db.models.interview import InterviewSession
+from app.db.models.interview import InterviewSession, InterviewTurn
 from app.db.models.posting import JobPosting
 from app.db.models.report import InterviewReport
 from app.db.models.user import GithubAccount, User
+
+
+def _answered_turns(interview, count, personas=("tech_lead",)):
+    """답변 완료 턴 count개. 면접관은 personas 를 돌려 가며 배정한다."""
+    return [
+        InterviewTurn(
+            interview_session_id=interview.id,
+            turn_no=number,
+            persona=personas[(number - 1) % len(personas)],
+            status="answered",
+            question_text=f"Q{number}",
+            answer_text=f"A{number}",
+        )
+        for number in range(1, count + 1)
+    ]
 
 
 def test_identity_serializer_rejects_account_or_provider_secrets():
@@ -140,6 +155,7 @@ async def test_profile_and_history_are_completed_only_and_user_scoped(client, me
     )
     db.add_all([mine, foreign, abandoned])
     await db.flush()
+    db.add_all(_answered_turns(mine, 9))  # 평균은 모든 턴에 답한 면접만 센다
     db.add_all(
         [
             InterviewReport(
@@ -159,6 +175,8 @@ async def test_profile_and_history_are_completed_only_and_user_scoped(client, me
     assert history["total"] == 1
     assert history["averageScore"] == 80
     assert [row["id"] for row in history["interviews"]] == [str(mine.id)]
+    assert history["interviews"][0]["answeredTurns"] == 9
+    assert history["interviews"][0]["reportAvailable"] is True  # 리포트가 있다
     profile = (await client.get("/api/me/profile")).json()
     assert profile["desiredPosition"] == "Backend engineer"
     assert profile["interviewSummary"] == {"totalCount": 1, "averageScore": 80}
@@ -166,6 +184,99 @@ async def test_profile_and_history_are_completed_only_and_user_scoped(client, me
     assert home["analysisStatus"] == "completed"
     assert home["analysis"]["roleSummary"] == "Stored summary"
     assert [item["id"] for item in home["recentInterviews"]] == [str(mine.id)]
+
+
+async def test_average_leaves_out_interviews_that_ran_out_of_time(client, member, db):
+    """시간 종료 면접은 횟수·목록에는 남고 평균에서만 빠진다. 리포트를 만들 수 없으면 표시한다."""
+    posting = JobPosting(
+        normalized_url="https://wanted.co.kr/wd/20",
+        raw_url="https://wanted.co.kr/wd/20",
+        parse_status="succeeded",
+    )
+    db.add(posting)
+    await db.flush()
+    job = AnalysisJob(user_id=member.id, job_type="analysis_run", status="succeeded")
+    db.add(job)
+    await db.flush()
+    both = ("tech_lead", "domain_lead")
+    # 이름 -> (답변 완료 턴 수, 면접관, 리포트 점수(없으면 None))
+    cases = {
+        "full": (9, both, 60),
+        "early_with_report": (5, both, 95),
+        "early_not_opened": (3, both, None),  # 열면 만들어지지만 아직 안 열었다(지연 생성)
+        "too_short": (2, ("tech_lead",), None),  # domain_lead 질문에 답하지 못했다
+    }
+    interviews = {}
+    for index, (name, (answered, personas, score)) in enumerate(cases.items()):
+        interview = InterviewSession(
+            user_id=member.id,
+            analysis_job_id=job.id,
+            job_posting_id=posting.id,
+            status="completed",
+            completed_at=datetime(2026, 11, 10 + index, tzinfo=UTC),
+        )
+        db.add(interview)
+        await db.flush()
+        db.add_all(_answered_turns(interview, answered, personas))
+        if score is not None:
+            db.add(
+                InterviewReport(
+                    interview_session_id=interview.id,
+                    headline="Report",
+                    summary="Summary",
+                    total_score=score,
+                )
+            )
+        interviews[name] = interview
+    await db.commit()
+
+    history = (await client.get("/api/me/interviews")).json()
+
+    assert history["total"] == 4
+    assert history["averageScore"] == 60  # 95점 면접은 5턴만 답해 평균에 넣지 않는다
+    rows = {row["id"]: row for row in history["interviews"]}
+    shown = {
+        name: (row["answeredTurns"], row["totalScore"], row["reportAvailable"])
+        for name, interview in interviews.items()
+        for row in [rows[str(interview.id)]]
+    }
+    assert shown == {
+        "full": (9, 60, True),
+        "early_with_report": (5, 95, True),  # 점수 자체는 그대로 보인다
+        "early_not_opened": (3, None, True),
+        "too_short": (2, None, False),
+    }
+    profile = (await client.get("/api/me/profile")).json()
+    assert profile["interviewSummary"] == {"totalCount": 4, "averageScore": 60}
+
+
+async def test_abandoned_interview_is_never_report_available(client, member, db):
+    """중단된 면접은 tech·domain 답변이 있어도 리포트를 만들 수 없다."""
+    posting = JobPosting(
+        normalized_url="https://wanted.co.kr/wd/21",
+        raw_url="https://wanted.co.kr/wd/21",
+        parse_status="succeeded",
+    )
+    db.add(posting)
+    await db.flush()
+    job = AnalysisJob(user_id=member.id, job_type="analysis_run", status="succeeded")
+    db.add(job)
+    await db.flush()
+    interview = InterviewSession(
+        user_id=member.id,
+        analysis_job_id=job.id,
+        job_posting_id=posting.id,
+        status="abandoned",
+        started_at=datetime(2026, 11, 10, tzinfo=UTC),
+    )
+    db.add(interview)
+    await db.flush()
+    db.add_all(_answered_turns(interview, 3, ("tech_lead", "domain_lead")))
+    await db.commit()
+
+    row = (await client.get("/api/me/interviews")).json()["interviews"][0]
+
+    assert (row["status"], row["answeredTurns"], row["reportAvailable"]) == ("abandoned", 3, False)
 
 
 async def test_landing_requires_session_and_revoked_github_is_separate(client, member, db):
@@ -226,6 +337,7 @@ async def test_history_lists_started_abandoned_with_completed_total_and_order(cl
     )
     db.add_all([completed, started_abandoned, unstarted_abandoned])
     await db.flush()
+    db.add_all(_answered_turns(completed, 9))  # 평균은 모든 턴에 답한 면접만 센다
     db.add(
         InterviewReport(
             interview_session_id=completed.id, headline="Report", summary="Summary", total_score=70

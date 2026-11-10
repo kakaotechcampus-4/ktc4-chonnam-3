@@ -69,6 +69,9 @@ class InterviewSummary(RecentInterview):
     repository_names: list[str]
     status: Literal["preparing", "preparing_failed", "in_progress", "completed", "abandoned"]
     started_at: datetime | None
+    answered_turns: int
+    # 리포트가 있거나 열면 만들어지는 면접이다. 시간 종료로 일찍 끝나 만들 수 없으면 false(#246).
+    report_available: bool
 
 
 class InterviewListResponse(CamelModel):

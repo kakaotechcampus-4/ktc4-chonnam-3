@@ -5,8 +5,9 @@ task-16
 
 import pytest
 from redis.exceptions import RedisError
-from sqlalchemy import select
+from sqlalchemy import select, update
 
+from app.db.models import InterviewTurn
 from app.db.models.report import ReportGenerationRequest
 
 from ..interview.factories import make_interview, make_repo, make_run, make_turn, make_user
@@ -65,6 +66,26 @@ async def test_409_when_no_answered_turn(client, db, app, enqueue) -> None:
     await make_turn(db, interview, 1)  # asked 만 있다
     await db.commit()
     client.cookies.set("devon_session", await app.state.sessions.create(user.id))
+
+    response = await client.get(url(interview.id))
+
+    assert response.status_code == 409
+    assert response.json()["error"]["reason"] == "report_unavailable"
+    enqueue.assert_not_called()
+
+
+@pytest.mark.parametrize("missing", ["tech_lead", "domain_lead"])
+async def test_409_when_a_required_persona_has_no_answered_turn(
+    client, db, ctx, enqueue, missing
+) -> None:
+    """시간 종료로 일찍 끝나 tech_lead·domain_lead 중 한쪽에 답하지 못했으면 만들지 않는다."""
+    interview, _ = ctx
+    await db.execute(
+        update(InterviewTurn)
+        .where(InterviewTurn.interview_session_id == interview.id, InterviewTurn.persona == missing)
+        .values(status="asked", answer_text=None)
+    )
+    await db.commit()
 
     response = await client.get(url(interview.id))
 

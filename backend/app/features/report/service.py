@@ -11,7 +11,7 @@ import asyncio
 import hashlib
 import json
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from typing import Literal, NoReturn, cast
@@ -62,7 +62,7 @@ from app.llm_tasks.report import (
     total_score,
     validate_draft,
 )
-from app.shared.enums import Reason
+from app.shared.enums import REPORT_REQUIRED_PERSONAS, Reason
 from app.shared.events import commit_events, record_event
 
 # docs/redis-keys.md: report generation lock. worker 가 끝나기 전에 풀리면 중복 enqueue 가 난다.
@@ -103,7 +103,7 @@ async def get_report(
             return response
         if interview.status != "completed":
             raise AppError(Reason.REPORT_UNAVAILABLE)
-        if await queries.count_answered_turns(db, interview_id=interview_id) < 1:
+        if not enough_answers(await queries.list_answered_turns(db, interview_id=interview_id)):
             raise AppError(Reason.REPORT_UNAVAILABLE)
         active = await generation.latest(db, interview_id, active=True, for_update=False)
         if active is not None and active.expires_at > datetime.now(UTC):
@@ -146,7 +146,7 @@ async def _build_report(
         coverage = ReportCoverage.model_validate(report.coverage_json)
     except (ValidationError, TypeError):
         _corrupt(report, "feedback_or_coverage")
-    turns = await queries.list_turns(db, interview_id=interview.id)
+    turns = await queries.list_answered_turns(db, interview_id=interview.id)
     position = posting.position or ""
     # 면접 진행·재접속·리포트가 같은 DB 부모 관계를 같은 질문 위치로 표시한다.
     positions = [(t.turn_no, t.depth, t.parent_turn_no) for t in turns]
@@ -188,11 +188,17 @@ def _corrupt(report: InterviewReport, part: str) -> NoReturn:
 type GenerateOutcome = Literal["created", "revised", "exists", "skipped"]
 
 
+def enough_answers(answered: Sequence[InterviewTurn]) -> bool:
+    """점수 key 6개를 낼 수 있는 최소 진행 조건이다(REPORT_REQUIRED_PERSONAS, #246)."""
+    return REPORT_REQUIRED_PERSONAS <= {turn.persona for turn in answered}
+
+
 async def _read_generation_input(
     db: AsyncSession,
     interview: InterviewSession,
 ) -> tuple[dict[str, object], dict[str, c.PromptSpec], dict[int, uuid.UUID], dict[str, object]]:
-    turns = await queries.list_report_turns(db, interview_id=interview.id)
+    # 답하지 못한 마지막 턴(시간 종료)은 입력에서 뺀다(#246).
+    turns = await queries.list_answered_turns(db, interview_id=interview.id)
     posting = await db.get(JobPosting, interview.job_posting_id)
     requirements = await queries.list_requirements(db, posting_id=interview.job_posting_id)
     evidences = await queries.list_turn_evidences(db, interview_id=interview.id)
@@ -203,8 +209,7 @@ async def _read_generation_input(
     payload = await enrich_report_history(
         db, interview, turns, _build_payload(posting, turns, evidences, requirements, rubrics)
     )
-    answered = await queries.list_answered_turns(db, interview_id=interview.id)
-    return payload, prompts, {t.turn_no: t.id for t in turns}, _coverage(requirements, answered)
+    return payload, prompts, {t.turn_no: t.id for t in turns}, _coverage(requirements, turns)
 
 
 def _input_snapshot(
@@ -283,7 +288,7 @@ async def generate_report(
                 assert request is not None
                 request.status, request.error_code = "stale", "report_revision_changed"
                 return "skipped"
-            if not await queries.count_answered_turns(db, interview_id=interview_id):
+            if not enough_answers(await queries.list_answered_turns(db, interview_id=interview_id)):
                 if request is not None:
                     request.status, request.error_code = "stale", "no_answered_turns"
                 return "skipped"

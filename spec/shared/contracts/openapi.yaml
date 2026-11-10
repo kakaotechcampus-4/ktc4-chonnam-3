@@ -88,8 +88,11 @@ paths:
         (startedAt is not null). Interviews abandoned before the first question are
         not listed. startedAt is set when the first question is saved. Rows are ordered
         by coalesce(completedAt, startedAt) descending, then id descending. total counts
-        the listed rows; averageScore averages completed interviews only. See
-        spec/shared/decisions/0009-interview-abandon-transition.md.
+        the listed rows; averageScore averages the report scores of completed
+        interviews in which every turn was answered (interviews the time limit ended
+        early are listed but not averaged). See
+        spec/shared/decisions/0009-interview-abandon-transition.md and
+        spec/shared/decisions/0013-interview-time-limit-and-early-end-report.md.
       parameters:
         - name: page
           in: query
@@ -328,7 +331,9 @@ paths:
       summary: Interview state, shared by the prepare and in-progress screens
       description: >-
         Returns 200 for any existing interview regardless of status. The client
-        decides which screen to render from status.
+        decides which screen to render from status. An in-progress interview whose
+        time ran out while waiting for an answer is completed by this call and
+        returned as completed (spec/shared/decisions/0013).
       parameters:
         - $ref: '#/components/parameters/InterviewId'
       responses:
@@ -497,6 +502,11 @@ paths:
     get:
       operationId: getInterviewReport
       summary: Interview report
+      description: >-
+        409 report_unavailable also covers a completed interview that ended too
+        early (no answered tech_lead and domain_lead turn). Only answered turns are
+        sent to scoring and listed in the response. See
+        spec/shared/decisions/0013-interview-time-limit-and-early-end-report.md.
       parameters:
         - $ref: '#/components/parameters/InterviewId'
       responses:
@@ -863,6 +873,8 @@ components:
         - totalScore
         - startedAt
         - completedAt
+        - answeredTurns
+        - reportAvailable
       properties:
         id:
           type: string
@@ -894,6 +906,18 @@ components:
           type: string
           format: date-time
           nullable: true
+        answeredTurns:
+          type: integer
+          description: >-
+            Number of turns the candidate answered. Less than the total turn count
+            when the time limit ended the interview early.
+        reportAvailable:
+          type: boolean
+          description: >-
+            True when a report exists or opening it would generate one (the
+            candidate answered at least one tech_lead and one domain_lead turn).
+            False when the interview ended too early for a report. See
+            spec/shared/decisions/0013-interview-time-limit-and-early-end-report.md.
 
     InterviewListResponse:
       type: object
@@ -1323,6 +1347,11 @@ components:
           type: integer
         remainingSeconds:
           type: integer
+          description: >-
+            Time limit minus elapsed time, where the time spent waiting for the
+            next question (from the answer being saved to the next question being
+            saved) is not counted. Question audio playback is counted. See
+            spec/shared/decisions/0013-interview-time-limit-and-early-end-report.md.
         turns:
           type: array
           items:

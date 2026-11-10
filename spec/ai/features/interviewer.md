@@ -71,7 +71,7 @@ Controller는 확정·제시한 Persona별 질문 수와 남은 할당을 확인
 3. `thinking` 상태에서 T3 답변 평가를 수행한다. 필요한 경우 제한된 근거 검색과 `evidenceCheck` 알림을 사용한다.
 4. 평가·근거·정정·진행 상태를 모아 T4 Director를 실행한다.
 5. Controller가 현재 면접·Turn을 다시 읽고 늦은 결과·종료 후 결과를 차단한다.
-6. 다음 질문이 필요하면 검증된 Question/Contract/Persona·근거 관계를 확정하고 DB commit 후 전달한다. 정상 종료는 9번째 답변 처리 완료일 때만 확정한다. 사용자 종료나 시스템 실패는 service의 별도 상태 처리이며 모델이 정상 종료로 바꾸지 않는다.
+6. 다음 질문이 필요하면 검증된 Question/Contract/Persona·근거 관계를 확정하고 DB commit 후 전달한다. 정상 종료는 9번째 답변 처리 완료일 때만 확정한다. 사용자 종료나 시스템 실패, 제한 시간 만료([공통 0013](../../shared/decisions/0013-interview-time-limit-and-early-end-report.md))는 service의 별도 상태 처리이며 모델이 정상 종료로 바꾸지 않는다.
 7. Postgres Context 확정 후 Redis snapshot을 갱신한다. Redis 누락은 DB에서 복구한다.
 
 [0014](../decisions/0014-minimal-change-revision.md)에 따라 기존 T3 분석 저장·T4 판단과 Context 갱신 순서를 유지하고, `analysis`·`decision` JSONB에 기존 객체를 직접 보관한다. 별도 실행 상태·공통 바깥 객체·조회별 DB 쓰기는 추가하지 않는다. 실제 조회 요약은 성공 판단의 `reason_summary`에 포함하며 최초 분석·근거를 보존한다. 실패·중단 기록은 [저장 경계](../contracts.md#분석과-판단의-저장)를 따르고 영구 실패 기록 위치·형식은 AI-L02·AI-L18에서 정한다.

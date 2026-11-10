@@ -56,7 +56,7 @@ async def retry_report(
     interview_id: str, request: Request, db: Database, user: CurrentUser
 ) -> GeneratingResponse:
     identity = _parse_id(interview_id)
-    if await queries.count_answered_turns(db, interview_id=identity) < 1:
+    if not service.enough_answers(await queries.list_answered_turns(db, interview_id=identity)):
         # 소유권 여부를 먼저 확인해 타 사용자 상태를 추측할 수 없게 한다.
         await generation.locked_interview(db, identity, user.id)
         raise AppError(Reason.REPORT_UNAVAILABLE)

@@ -33,7 +33,7 @@ PERSONAS = ("tech_lead", "domain_lead", "hr_manager")
 def _score_output(turn_ids):
     return {
         "judgments": [
-            {"turn_id": turn_id, "key": key, "level": 0 if turn_id == "3" else 3}
+            {"turn_id": turn_id, "key": key, "level": 3}
             for turn_id, persona in zip(turn_ids, PERSONAS, strict=True)
             for key in c.SCORE_CANDIDATE_KEYS[persona]
         ]
@@ -72,34 +72,32 @@ class _Provider:
         return c.ModelResult(validate(self.raw), None, (attempt,))
 
 
-async def _seed(db, interview, repo, *, answer_third):
-    first = await db.scalar(select(InterviewTurn).where(InterviewTurn.turn_no == 1))
-    first.question_contract = CONTRACT  # ctx 의 1번 턴(tech_lead)에 질문 계약을 채운다.
+async def _seed(db, interview, repo, *, unanswered_extra):
+    first, second = (
+        await db.scalars(select(InterviewTurn).order_by(InterviewTurn.turn_no).limit(2))
+    ).all()
+    # ctx 의 1번(tech_lead)·2번(domain_lead) 턴에 질문 계약을 채운다.
+    first.question_contract = second.question_contract = CONTRACT
     turns = [
         first,
+        second,
         await make_turn(
-            db, interview, 2, answered=True, persona="domain_lead", question_contract=CONTRACT
-        ),
-        await make_turn(
-            db,
-            interview,
-            3,
-            answered=answer_third,
-            persona="hr_manager",
-            question_contract=CONTRACT,
+            db, interview, 3, answered=True, persona="hr_manager", question_contract=CONTRACT
         ),
     ]
+    if unanswered_extra:  # 시간 종료로 질문만 받고 끝난 마지막 턴
+        await make_turn(db, interview, 4, persona="tech_lead", question_contract=CONTRACT)
     evidence = await make_evidence(db, interview, repo)
     db.add(TurnEvidence(turn_id=turns[0].id, evidence_id=evidence.id, usage="evaluation_basis"))
     await db.commit()
     return evidence
 
 
-async def _run(app, db, ctx, *, answer_third):
+async def _run(app, db, ctx, *, unanswered_extra=False):
     from app.features.report import service
 
     interview, repo = ctx
-    await _seed(db, interview, repo, answer_third=answer_third)
+    await _seed(db, interview, repo, unanswered_extra=unanswered_extra)
     score = _Provider(_score_output(["1", "2", "3"]))
     narrative = _Provider(_narrative_output())
     providers = iter([score, narrative])
@@ -120,7 +118,7 @@ async def _run(app, db, ctx, *, answer_third):
 
 
 async def test_be_payload_passes_the_real_generate_report(app, db, ctx, prompt):
-    outcome, _, narrative = await _run(app, db, ctx, answer_third=True)
+    outcome, _, narrative = await _run(app, db, ctx)
     assert outcome == "created"
     rows = (await db.scalars(select(ReportScore))).all()
     assert {r.score_key for r in rows} == set(SCORE_KEYS)
@@ -131,12 +129,9 @@ async def test_be_payload_passes_the_real_generate_report(app, db, ctx, prompt):
     assert sent["git_ref"] == evidence.git_ref
 
 
-async def test_unanswered_turn_is_sent_as_null_and_scored_at_level_zero(app, db, ctx, prompt):
-    outcome, score, narrative = await _run(app, db, ctx, answer_third=False)
+async def test_unanswered_turn_is_not_sent_to_ai(app, db, ctx, prompt):
+    # 시간 종료로 답하지 못한 마지막 턴은 BE 가 입력에서 뺀다(#246). AI 는 답한 턴만 판정한다.
+    outcome, score, narrative = await _run(app, db, ctx, unanswered_extra=True)
     assert outcome == "created"
-    assert {t["turn_id"]: t["answer"] for t in score.requests[0].payload["turns"]}["3"] is None
-    assert {t["turn_id"]: t["answer"] for t in narrative.requests[0].payload["turns"]}["3"] is None
-    contribution = await db.scalar(
-        select(ReportScore).where(ReportScore.score_key == "contribution_clarity")
-    )
-    assert contribution.score == 0
+    assert [t["turn_id"] for t in score.requests[0].payload["turns"]] == ["1", "2", "3"]
+    assert [t["turn_id"] for t in narrative.requests[0].payload["turns"]] == ["1", "2", "3"]

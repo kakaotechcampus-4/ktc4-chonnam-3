@@ -7,9 +7,9 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
-from app.db.models import JobPosting, ReportScore
+from app.db.models import InterviewTurn, JobPosting, ReportScore
 
 from ..interview.factories import make_interview, make_repo, make_run, make_turn, make_user
 from .factories import make_disagreement, make_report
@@ -56,7 +56,15 @@ async def test_200_returns_stored_report(client, db, ctx) -> None:
             "answer": "답변 1",
             "mainIndex": 1,
             "followUpDepth": 0,
-        }
+        },
+        {
+            "turn": 2,
+            "persona": "domain_lead",
+            "question": "질문 2",
+            "answer": "답변 2",
+            "mainIndex": 2,
+            "followUpDepth": 0,
+        },
     ]
     assert body["repositoryNames"] == [repo.name]
     assert body["headline"] == "헤드라인"
@@ -64,7 +72,9 @@ async def test_200_returns_stored_report(client, db, ctx) -> None:
 
 async def test_report_restores_main_and_follow_up_positions(client, db, ctx) -> None:
     interview, _ = ctx
-    await make_turn(db, interview, 2, answered=True, depth=2, parent_turn_no=1)
+    # ctx 의 2번 턴(domain_lead)을 1번 턴의 꼬리질문으로 바꾸고 3번 턴을 새 주 질문으로 둔다.
+    second = await db.scalar(select(InterviewTurn).where(InterviewTurn.turn_no == 2))
+    second.depth, second.parent_turn_no = 2, 1
     await make_turn(db, interview, 3, answered=True, depth=1)
     await make_report(db, interview)
     await db.commit()
@@ -76,6 +86,17 @@ async def test_report_restores_main_and_follow_up_positions(client, db, ctx) -> 
         (1, 1),
         (2, 0),
     ]
+
+
+async def test_200_leaves_out_the_turn_left_unanswered_when_time_ran_out(client, db, ctx) -> None:
+    interview, _ = ctx
+    await make_report(db, interview)
+    await make_turn(db, interview, 3, persona="tech_lead")  # 질문만 받고 시간이 끝났다
+    await db.commit()
+
+    body = (await client.get(url(interview.id))).json()
+
+    assert [t["turn"] for t in body["turns"]] == [1, 2]
 
 
 async def test_200_does_not_enqueue(client, db, ctx, enqueue) -> None:

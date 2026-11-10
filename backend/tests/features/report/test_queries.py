@@ -33,12 +33,14 @@ async def test_get_owned_interview_rejects_other_user(db, setup) -> None:
     assert await queries.get_owned_interview(db, user_id=user.id, interview_id=uuid.uuid4()) is None
 
 
-async def test_count_answered_turns_ignores_asked(db, setup) -> None:
+async def test_list_answered_turns_ignores_asked(db, setup) -> None:
     _, interview, _ = setup
+    await make_turn(db, interview, 3)
+    await make_turn(db, interview, 2, answered=True)
     await make_turn(db, interview, 1, answered=True)
-    await make_turn(db, interview, 2)
     await db.commit()
-    assert await queries.count_answered_turns(db, interview_id=interview.id) == 1
+    turns = await queries.list_answered_turns(db, interview_id=interview.id)
+    assert [t.turn_no for t in turns] == [1, 2]
 
 
 async def test_get_report_none_before_generation(db, setup) -> None:
@@ -72,12 +74,3 @@ async def test_list_repository_names_in_selection_order(db, setup) -> None:
         repos[0].name,
         repos[1].name,
     ]
-
-
-async def test_list_turns_ordered(db, setup) -> None:
-    _, interview, _ = setup
-    await make_turn(db, interview, 2)
-    await make_turn(db, interview, 1, answered=True)
-    await db.commit()
-    turns = await queries.list_turns(db, interview_id=interview.id)
-    assert [t.turn_no for t in turns] == [1, 2]

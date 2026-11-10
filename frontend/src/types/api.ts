@@ -126,6 +126,10 @@ export type InterviewSummary = {
   totalScore: number | null;
   startedAt: string | null;
   completedAt: string | null;
+  // 답변을 마친 질문 수. 시간이 끝나 9턴을 못 채운 면접을 가린다(#246).
+  answeredTurns: number;
+  // 리포트가 있거나 열면 만들어지는 면접이다. 시간이 끝나 진행이 짧아 만들 수 없으면 false(#246).
+  reportAvailable: boolean;
 };
 
 export type InterviewListResponse = {

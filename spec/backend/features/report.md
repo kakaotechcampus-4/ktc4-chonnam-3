@@ -16,7 +16,8 @@
 생성 가능 조건:
 
 - `interview_sessions.status='completed'`.
-- 답변 완료 turn이 1개 이상.
+- `tech_lead`와 `domain_lead`의 답변 완료 turn이 각각 1개 이상([공통 0013](../../shared/decisions/0013-interview-time-limit-and-early-end-report.md)). 9턴 정상 완료는 6/2/1 배분이라 항상 충족하며, 제한 시간이 다 돼 일찍 끝난 면접에 적용된다. 미달이면 `409 report_unavailable`이다.
+- AI 입력과 응답의 turn은 답변 완료 turn만 쓴다. 시간이 다 돼 답하지 못한 마지막 질문은 넣지 않는다.
 - `abandoned`, `preparing`, `preparing_failed`, `in_progress`는 생성 대상이 아니다.
 - 이전 `report_generate` 실패 이력이 있으면 Sprint 1에서는 자동 재생성하지 않고 `409 report_unavailable`로 응답한다. 리포트 재생성·수동 재시도·이의제기 기반 재평가는 Sprint 2다.
 

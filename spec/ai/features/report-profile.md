@@ -10,7 +10,7 @@
 
 ARQ worker가 확정 문답·평가·근거·종료 상태를 읽어 `report_v1`을 실행하고 검증된 결과를 저장한다. 같은 면접의 재실행은 문답을 변경하거나 리포트를 중복 생성하지 않아야 한다. lock·저장 시점은 BE 작업과 함께 검사한다.
 
-생성 가능 조건은 `interview_sessions.status='completed'`이고 답변 완료 turn이 1개 이상인 경우다. `abandoned`, `preparing`, `preparing_failed`, `in_progress`는 Sprint 1 report 생성 대상이 아니다. 이미 생성된 report는 200으로 반환한다.
+생성 가능 조건은 `interview_sessions.status='completed'`이고 `tech_lead`·`domain_lead`의 답변 완료 turn이 각각 1개 이상인 경우다([공통 0013](../../shared/decisions/0013-interview-time-limit-and-early-end-report.md)). 입력 문답은 답변 완료 turn만이다. `abandoned`, `preparing`, `preparing_failed`, `in_progress`는 Sprint 1 report 생성 대상이 아니다. 이미 생성된 report는 200으로 반환한다.
 
 이전 `report_generate` 실패 이력이 있으면 Sprint 1에서는 자동 재생성하지 않고 `409 report_unavailable`로 닫는다. report 재생성, 수동 retry, 이의제기 기반 재평가는 Sprint 2로 넘긴다.
 

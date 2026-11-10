@@ -19,12 +19,13 @@ async def enqueue(app, monkeypatch):
 
 @pytest.fixture
 async def ctx(app, db, client):
-    """로그인한 사용자의 완료 면접(답변 완료 턴 1개). 리포트는 아직 없다."""
+    """로그인한 사용자의 완료 면접(tech_lead·domain_lead 답변 턴 각 1개). 리포트는 아직 없다."""
     user = await make_user(db)
     run = await make_run(db, user)
     repo = await make_repo(db, run)
     interview = await make_interview(db, run, [repo], status="completed")
     await make_turn(db, interview, 1, answered=True, persona="tech_lead")
+    await make_turn(db, interview, 2, answered=True, persona="domain_lead")
     await seed_criteria(db)
     await db.commit()
     client.cookies.set("devon_session", await app.state.sessions.create(user.id))

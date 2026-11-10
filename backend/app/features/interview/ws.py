@@ -47,6 +47,7 @@ from app.features.interview.question_replay import ExplicitReplayCommands, shoul
 from app.features.interview.schemas import InterviewLastError
 from app.features.interview.service import (
     REALTIME_SESSION_TTL_SECONDS,
+    expire_if_due,
     realtime_interview_key,
     realtime_session_key,
 )
@@ -127,6 +128,8 @@ class _State:
     last_error: dict[str, object] | None
     prepare_steps: tuple[tuple[str, str], ...]
     answer_mode: str = "voice"
+    # 이 조회에서 제한 시간이 다 돼 면접이 completed 로 끝났다(#246).
+    expired: bool = False
 
 
 def _preparation_steps(raw: object) -> tuple[tuple[str, str], ...]:
@@ -213,6 +216,8 @@ async def _read_state(socket: WebSocket, user_id: UUID, interview_id: UUID) -> _
         interview = await db.get(InterviewSession, interview_id)
         if interview is None or interview.user_id != user_id:
             raise AppError(Reason.NOT_FOUND)
+        # 답변 대기 중 제한 시간이 다 됐으면 여기서 끝낸다. 아래는 끝난 상태를 읽는다(#246).
+        expired = await expire_if_due(db, interview)
         # 준비 중 폴링은 세션 한 행만 읽는다. 질문·pending 조회는 준비 완료 뒤에 한다.
         turns = (
             []
@@ -283,6 +288,7 @@ async def _read_state(socket: WebSocket, user_id: UUID, interview_id: UUID) -> _
             interview.last_error,
             _preparation_steps(interview.prepare_steps),
             interview.answer_mode,
+            expired,
         )
 
 
@@ -704,6 +710,10 @@ async def _run_answer(
     try:
         result = await _execute(connection, user_id, turn, text, answer_mode=answer_mode)
     except AgentStateError as exc:
+        if exc.reason == "time_up":
+            # 시간이 다 된 뒤의 답변은 저장하지 않는다. restore 가 interviewEnd 를 보낸다(#246).
+            await connection.restore(user_id)
+            return False
         if exc.reason == "answer_turn_invalid":
             # 저장되지 않았으므로 answerReceived는 가지 않았다. 텍스트는 stale, 음성은 rejected.
             await connection.send(_error(invalid_turn_reason))
@@ -727,6 +737,8 @@ async def _execute(
     state = connection.socket.app.state
     config = state.settings
     current = await _read_state(connection.socket, user_id, connection.interview_id)
+    if current.expired:
+        raise AgentStateError("time_up")
     if (
         current.status != "in_progress"
         or current.answer_mode != answer_mode
