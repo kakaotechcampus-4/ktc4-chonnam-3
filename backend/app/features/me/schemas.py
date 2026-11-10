@@ -69,6 +69,7 @@ class InterviewSummary(RecentInterview):
     repository_names: list[str]
     status: Literal["preparing", "preparing_failed", "in_progress", "completed", "abandoned"]
     started_at: datetime | None
+    answered_turns: int
 
 
 class InterviewListResponse(CamelModel):

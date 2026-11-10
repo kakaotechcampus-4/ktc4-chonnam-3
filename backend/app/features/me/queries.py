@@ -2,12 +2,12 @@
 
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, and_, func, or_, select
+from sqlalchemy import ColumnElement, and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.analysis import AnalysisJob
 from app.db.models.github import Repository, UserProfileSummary
-from app.db.models.interview import InterviewSession, SessionRepository
+from app.db.models.interview import InterviewSession, InterviewTurn, SessionRepository
 from app.db.models.posting import JobPosting
 from app.db.models.report import InterviewReport
 from app.db.models.user import GithubAccount
@@ -58,9 +58,27 @@ async def profile_summary(db: AsyncSession, user_id: UUID) -> UserProfileSummary
 
 
 async def interview_stats(db: AsyncSession, user_id: UUID) -> tuple[int, float | None]:
+    """완료 횟수와 평균 점수. 평균은 모든 턴에 답한 면접만으로 계산한다(#246).
+
+    시간 종료로 일찍 끝난 면접은 질문 수가 달라 9턴 면접과 같은 기준의 점수가 아니다.
+    """
+    answered = (
+        select(func.count())
+        .select_from(InterviewTurn)
+        .where(
+            InterviewTurn.interview_session_id == InterviewSession.id,
+            InterviewTurn.status == "answered",
+        )
+        .scalar_subquery()
+    )
     row = (
         await db.execute(
-            select(func.count(InterviewSession.id), func.avg(InterviewReport.total_score))
+            select(
+                func.count(InterviewSession.id),
+                func.avg(
+                    case((answered == InterviewSession.total_turns, InterviewReport.total_score))
+                ),
+            )
             .outerjoin(InterviewReport, InterviewReport.interview_session_id == InterviewSession.id)
             .where(InterviewSession.user_id == user_id, InterviewSession.status == "completed")
         )
@@ -110,6 +128,21 @@ async def history_interviews(
         .limit(limit)
     )
     return [(interview, posting, report) for interview, posting, report in rows]
+
+
+async def answered_turn_counts(db: AsyncSession, interview_ids: list[UUID]) -> dict[UUID, int]:
+    """면접별 답변 완료 턴 수. 답한 턴이 없으면 키가 없다."""
+    if not interview_ids:
+        return {}
+    rows = await db.execute(
+        select(InterviewTurn.interview_session_id, func.count())
+        .where(
+            InterviewTurn.interview_session_id.in_(interview_ids),
+            InterviewTurn.status == "answered",
+        )
+        .group_by(InterviewTurn.interview_session_id)
+    )
+    return {interview_id: count for interview_id, count in rows}
 
 
 async def completed_interviews(

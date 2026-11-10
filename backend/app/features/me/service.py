@@ -104,11 +104,13 @@ async def get_home(db: AsyncSession, user: User) -> HomeResponse:
 async def get_interviews(
     db: AsyncSession, user: User, *, page: int, size: int
 ) -> InterviewListResponse:
-    # total 은 목록 행 수(완료 + 시작 후 중단), 평균은 완료 면접만이다(openapi /me/interviews).
+    # total 은 목록 행 수(완료 + 시작 후 중단), 평균은 모든 턴에 답한 완료 면접만이다.
     count = await queries.history_count(db, user.id)
     _, average = await queries.interview_stats(db, user.id)
     rows = await queries.history_interviews(db, user.id, limit=size, offset=(page - 1) * size)
-    names = await queries.repository_names(db, user.id, [row[0].id for row in rows])
+    ids = [row[0].id for row in rows]
+    names = await queries.repository_names(db, user.id, ids)
+    answered = await queries.answered_turn_counts(db, ids)
     return InterviewListResponse(
         interviews=[
             InterviewSummary(
@@ -118,6 +120,7 @@ async def get_interviews(
                 repository_names=names.get(row[0].id, []),
                 status=row[0].status,
                 started_at=row[0].started_at,
+                answered_turns=answered.get(row[0].id, 0),
             )
             for row in rows
         ],
