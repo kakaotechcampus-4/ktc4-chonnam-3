@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.analysis import AnalysisJob
@@ -66,6 +66,50 @@ async def interview_stats(db: AsyncSession, user_id: UUID) -> tuple[int, float |
         )
     ).one()
     return int(row[0]), float(row[1]) if row[1] is not None else None
+
+
+def _history_filter(user_id: UUID) -> ColumnElement[bool]:
+    """이력 목록 대상: 완료 면접과 첫 질문 뒤 중단된 면접(공통 0009)."""
+    return and_(
+        InterviewSession.user_id == user_id,
+        or_(
+            InterviewSession.status == "completed",
+            and_(
+                InterviewSession.status == "abandoned",
+                InterviewSession.started_at.is_not(None),
+            ),
+        ),
+    )
+
+
+async def history_count(db: AsyncSession, user_id: UUID) -> int:
+    """이력 목록의 전체 행 수. 페이지 계산용이며 평균 점수와 분모가 다르다."""
+    count = await db.scalar(select(func.count(InterviewSession.id)).where(_history_filter(user_id)))
+    return int(count or 0)
+
+
+async def history_interviews(
+    db: AsyncSession,
+    user_id: UUID,
+    *,
+    limit: int,
+    offset: int = 0,
+) -> list[InterviewRow]:
+    rows = await db.execute(
+        select(InterviewSession, JobPosting, InterviewReport)
+        .outerjoin(JobPosting, JobPosting.id == InterviewSession.job_posting_id)
+        .outerjoin(InterviewReport, InterviewReport.interview_session_id == InterviewSession.id)
+        .where(_history_filter(user_id))
+        .order_by(
+            func.coalesce(InterviewSession.completed_at, InterviewSession.started_at)
+            .desc()
+            .nulls_last(),
+            InterviewSession.id.desc(),
+        )
+        .offset(offset)
+        .limit(limit)
+    )
+    return [(interview, posting, report) for interview, posting, report in rows]
 
 
 async def completed_interviews(

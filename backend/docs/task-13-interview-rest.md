@@ -14,7 +14,7 @@
 - 선택 repo는 current run, public, accessible, eligible, L1 succeeded여야 한다.
 - 성공 직후 `interview_prep`을 enqueue한다.
 - `GET /interviews/{id}`는 preparing/preparing_failed/in_progress/completed/abandoned를 반환한다.
-- `GET /interviews/{id}`는 재연결용 `sessionId`, `answerMode`, `prepareSteps`, `lastError`를 포함한다.
+- `GET /interviews/{id}`는 재연결용 `sessionId`, `answerMode`, `lastError`를 포함한다. 준비 단계 목록(`prepareSteps`)은 넣지 않는다. 준비 실패 화면은 `lastError.step`으로, 준비 진행은 WS `prepareStep`으로 복구한다(#121 1-3).
 - 준비 실패 재시도는 `POST /interviews/{id}/prepare/retry`로 처리한다.
 - `/interviews/{id}/retry`는 completed/abandoned 원본만 허용하고 원본 입력을 복사한다.
 - WS 식별자는 `sessionId`를 사용하고 REST/report route는 `interviewId`를 사용한다.

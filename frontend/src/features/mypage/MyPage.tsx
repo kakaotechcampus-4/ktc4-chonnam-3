@@ -173,7 +173,8 @@ export default function MyPage() {
                     <div className="flex items-center justify-between gap-4">
                       <div className="min-w-0 shrink-0">
                         <p className="font-bold">
-                          {item.companyName} · {item.position}
+                          {/* 공고에 직무명이 없으면 BE가 빈 문자열을 준다(#121 1-5). */}
+                          {item.companyName} · {item.position.trim() || '직무 정보 없음'}
                         </p>
                         <p className="mt-1 text-[10.5px] text-muted">
                           {formatDate(abandoned ? item.startedAt : item.completedAt)} ·{' '}

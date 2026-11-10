@@ -86,7 +86,7 @@ DB 변경의 정확한 transaction 분리와 row lock/CAS 방식은 BE와 맞춘
 
 별도 `clientSubmissionId`는 Sprint 1에 추가하지 않는다. 같은 연결의 진행 중 중복은 service 상태/lock으로 막고, turn mismatch나 이미 답변된 turn의 메시지는 저장하지 않는다. 동일 본문이라는 이유로 모든 반복 답변을 중복 처리하지 않는다.
 
-WS 경로는 `/api/ws/interviews/{sessionId}`이며 REST route는 `interviewId`를 사용한다. `POST /interviews`와 `GET /interviews/{id}`는 `sessionId`를 반환한다. WS 인증은 [공통 0003](../../shared/decisions/0003-sprint1-session-auth.md)에 따라 HttpOnly `devon_session` 쿠키와 Redis 로그인 세션으로 handshake 시 확인한다. 로그인 세션 ID는 면접 `sessionId`와 별개다. 준비 실패 snapshot은 `GET /interviews/{id}`의 `lastError`와 `prepareSteps`로 복구하고, 준비 재시도는 `POST /interviews/{id}/prepare/retry` REST endpoint로 처리한다. Sprint 1에서는 연결 끊김·재연결 실패만으로 `abandoned`를 설정하지 않는다.
+WS 경로는 `/api/ws/interviews/{sessionId}`이며 REST route는 `interviewId`를 사용한다. `POST /interviews`와 `GET /interviews/{id}`는 `sessionId`를 반환한다. WS 인증은 [공통 0003](../../shared/decisions/0003-sprint1-session-auth.md)에 따라 HttpOnly `devon_session` 쿠키와 Redis 로그인 세션으로 handshake 시 확인한다. 로그인 세션 ID는 면접 `sessionId`와 별개다. 준비 실패 snapshot은 `GET /interviews/{id}`의 `lastError`(실패 단계 `step`)로 복구하고(준비 단계 진행은 WS `prepareStep`, #121 1-3), 준비 재시도는 `POST /interviews/{id}/prepare/retry` REST endpoint로 처리한다. Sprint 1에서는 연결 끊김·재연결 실패만으로 `abandoned`를 설정하지 않는다.
 
 명시적 나가기 확인·레포 재선택만 abandoned로 처리하는 기존 정책을 유지한다. 사용자 종료 요청의 정확한 wire는 이 동작과 기존 소유권에 맞춰 BE·FE 연결 시 구체화하며 메시지 필드·WS/REST를 사용자에게 개별 선택으로 묻지 않는다. 내부 Controller에서 종료 이후 결과 차단을 검사할 수 있지만, 실제 송수신 계약을 기록·검증하기 전 종료 연동 완료를 주장하지 않는다.
 

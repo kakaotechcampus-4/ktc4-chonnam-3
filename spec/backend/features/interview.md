@@ -21,7 +21,7 @@
 
 `/interviews/{id}/retry`
 
-- 원본이 `completed` 또는 `abandoned`일 때만 허용한다.
+- 원본이 `completed`이거나, 시작 후 중단된 `abandoned`(`started_at` 있음)일 때만 허용한다. 준비 단계에서 버린 면접은 질문이 없어 허용하지 않는다. 그 외는 `409 original_not_completed`(#121 1-2, [공통 0009](../../shared/decisions/0009-interview-abandon-transition.md)).
 - 원본의 run, 공고, repo 조합을 복사한다.
 - 원본 repo가 삭제/접근불가/private 전환이면 `repository_unavailable`.
 
@@ -48,8 +48,13 @@ Prepare step:
 - DB `interview_sessions.status='preparing_failed'`.
 - `abandoned`와 구분한다.
 - WS 진입은 차단한다.
-- `GET /interviews/{id}`는 `lastError`, `prepareSteps`, `answerMode`, `sessionId`를 포함해 새로고침 후 실패 화면을 복구할 수 있어야 한다.
+- `GET /interviews/{id}`는 `lastError`, `answerMode`, `sessionId`를 포함해 새로고침 후 실패 화면을 복구할 수 있어야 한다. 준비 단계는 순서대로 실행되므로 `lastError.step`으로 앞 단계는 완료, 뒤 단계는 대기로 복구한다. 준비 단계 목록(`prepareSteps`)은 GET에 넣지 않고 WS `prepareStep`으로 받는다(#121 1-3).
 - 복구 가능한 준비 실패는 `POST /interviews/{id}/prepare/retry`로 실패 단계부터 재실행한다. 성공한 단계는 재실행하지 않는다.
+- 준비 재시도 거절 응답(#121 1-4):
+  - 이미 `preparing`이거나 동시 재시도에서 진 요청: `409 prep_in_progress`
+  - `preparing_failed`가 아니거나 `lastError.recoverable`이 `false`인 실패: `409 prep_failed`
+  - 실패 뒤 같은 run에 다른 활성 면접이 생김(run당 활성 1개 위반): `409 session_limit_exceeded`. 다시 눌러도 결과가 같아 `prep_failed`와 구분하며, FE는 진행 중인 면접이 있다는 안내를 보여 준다.
+- 공고에 직무명이 없으면 `GET /interviews/{id}`의 `position`은 빈 문자열 `""`이다. FE는 빈 값(공백만 있는 경우 포함)을 "직무 정보 없음"으로 표시한다(#121 1-5).
 
 ## WebSocket
 
