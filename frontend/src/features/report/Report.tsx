@@ -68,7 +68,26 @@ export default function Report() {
       <main className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-7 px-7 py-6">
         {reportQuery.isLoading && <p className="text-sm text-muted">불러오는 중...</p>}
         {generating && !reportQuery.isError && (
-          <p className="text-sm text-muted">리포트를 만들고 있어요...</p>
+          // 로고 이미지가 없어 헤더와 같은 DEVON 워드마크 가운데에 로딩 막대를 넣는다.
+          <div className="flex flex-1 flex-col items-center justify-center gap-4">
+            <div aria-hidden className="flex items-center gap-3 text-3xl font-bold">
+              DEV
+              <span className="flex items-center">
+                {[
+                  'h-5',
+                  'mx-[5px] h-[35px] [animation-delay:.25s]',
+                  'h-5 [animation-delay:.5s]',
+                ].map((bar) => (
+                  <span
+                    key={bar}
+                    className={`inline-block w-[3px] animate-[loader-bar_1s_linear_infinite] rounded-full bg-accent/50 motion-reduce:animate-none ${bar}`}
+                  />
+                ))}
+              </span>
+              ON
+            </div>
+            <p className="text-sm text-muted">리포트를 만들고 있어요...</p>
+          </div>
         )}
         {showError && (
           <div className="flex flex-col items-start gap-3">

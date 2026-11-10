@@ -634,6 +634,20 @@ export default function InterviewScreen() {
       ? QUESTION_RETRY_MESSAGE.question_retry_in_progress
       : null);
   const questionRetryBusy = questionRetry.isPending || awaitingRetriedQuestion;
+  /**
+   * 다음 질문을 기다리는 동안. 질문 텍스트 표시 설정과 무관하게 생성 중으로 보여 준다.
+   * - 마지막 턴의 답변 뒤에는 다음 질문이 없고 interviewEnd로 넘어가므로 제외한다.
+   * - 저장된 답변으로 이어가기(questionRetryBusy) 중에는 오류 배너가 남아 있어도 질문을 다시 만드는 중이다.
+   * - 질문이 아직 없을 때는 연결된 뒤에만 생성 중으로 본다. 첫 연결 전에는 서버가 아직 질문을 만들지 않았을 수 있다.
+   */
+  const generatingQuestion =
+    questionRetryBusy ||
+    (!error &&
+      (thinking ||
+        (!question && wsStatus === 'open') ||
+        (!!question &&
+          current.phase === 'submitted' &&
+          (!interview?.totalTurns || question.turn < interview.totalTurns))));
   // 공통 0012의 자동 복구는 서버가 먼저 실행하며, FE의 명시 수동 이어가기는 질문당 1회다.
   const canContinueQuestion =
     fatal &&
@@ -738,8 +752,6 @@ export default function InterviewScreen() {
         <p className="text-[11px] font-bold text-error">연결이 끊겼어요 · 다시 연결하는 중이에요</p>
       )}
 
-      {thinking && !evidence && <p className="text-[11px] text-muted">다음 질문을 만들고 있어요</p>}
-
       {evidence && (
         <p className="rounded-card bg-accent-soft px-3 py-2 text-[11px] text-accent">
           근거 확인 중 · {evidence.repository} / {evidence.file}
@@ -777,7 +789,20 @@ export default function InterviewScreen() {
           )}
         </div>
 
-        {showText ? (
+        {generatingQuestion ? (
+          <p className="mt-4 flex items-end gap-2 text-[17px] font-bold leading-relaxed text-muted">
+            질문 생성 중
+            <span aria-hidden className="mb-[7px] flex h-[14px] items-end gap-[3px]">
+              {['0s', '.1s', '.2s', '.3s'].map((delay) => (
+                <span
+                  key={delay}
+                  style={{ animationDelay: delay }}
+                  className="h-1 w-1 animate-[loading-wave_1s_ease-in-out_infinite] rounded-full bg-accent motion-reduce:animate-none"
+                />
+              ))}
+            </span>
+          </p>
+        ) : showText ? (
           <>
             <p className="mt-4 text-[17px] font-bold leading-relaxed">
               {question?.text ?? '다음 질문을 준비하고 있어요'}

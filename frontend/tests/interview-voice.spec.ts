@@ -85,6 +85,23 @@ test('답변을 녹음하면 실시간 자막 뒤 최종 전사로 바뀌고 다
   await expect(page.getByText('질문 2 / 9 · 개발팀')).toBeVisible({ timeout: 10_000 });
 });
 
+for (const shown of [true, false]) {
+  test(`답변 저장 뒤 다음 질문이 오기 전까지 질문 칸에 질문 생성 중을 보여 준다 (텍스트 ${shown ? 'ON' : 'OFF'})`, async ({
+    page,
+  }) => {
+    await stubMic(page);
+    await page.addInitScript(
+      (value) => localStorage.setItem('devon.showQuestionText', value),
+      String(shown),
+    );
+    await openSession(page);
+    await answerOnce(page);
+    await expect(page.getByText('질문 생성 중')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('질문 2 / 9 · 개발팀')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('질문 생성 중')).toHaveCount(0);
+  });
+}
+
 test('꼬리질문은 메인 질문 번호 옆에 단계를 붙인다', async ({ page }) => {
   await stubMic(page);
   await openSession(page);
