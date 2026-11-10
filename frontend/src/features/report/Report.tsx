@@ -7,6 +7,7 @@ import { queryKeys } from '@/shared/queryKeys';
 import Header from '@/shared/components/Header';
 import Footer from '@/shared/components/Footer';
 import { PERSONA_INITIALS, PERSONA_LABELS } from '@/shared/persona';
+import { INTERVIEW_TOTAL_TURNS } from '@/shared/interview';
 import { RESTART_REASONS, RETRY_ERROR } from '@/features/interview/retryErrors';
 import { isApiError } from '@/types/api';
 import type { AgentFeedback } from '@/types/api';
@@ -59,8 +60,32 @@ export default function Report() {
   const errorReason = isApiError(reportQuery.error) ? reportQuery.error.error.reason : null;
   const reportUnavailable = errorReason === 'report_unavailable';
   const retryReason = isApiError(retryMutation.error) ? retryMutation.error.error.reason : null;
+  // 리포트를 만들 수 없을 때만 면접을 조회해 시간이 끝나 일찍 끝난 면접인지 가린다(#246).
+  const interviewQuery = useQuery({
+    queryKey: queryKeys.interview(id),
+    queryFn: () => api.getInterview(id),
+    enabled: !!id && reportUnavailable,
+  });
+  const answeredTurns = interviewQuery.data?.turns.filter((turn) => turn.answer !== null).length;
+  const endedEarly =
+    interviewQuery.data?.status === 'completed' &&
+    answeredTurns !== undefined &&
+    answeredTurns < INTERVIEW_TOTAL_TURNS;
   // 이미 받은 리포트가 있으면 재조회 실패는 화면에 드러내지 않고 리포트를 유지한다.
   const showError = reportQuery.isError && !report;
+  const retryFailure = retryMutation.isError && (
+    <div className="flex items-center justify-end gap-3">
+      <p role="alert" className="text-xs text-error">
+        {(retryReason && RETRY_ERROR[retryReason]) ??
+          '새 면접을 준비하지 못했어요. 잠시 후 다시 시도해주세요.'}
+      </p>
+      {retryReason && RESTART_REASONS.has(retryReason) && (
+        <button type="button" onClick={() => navigate('/interview/new')} className={OUTLINE_BUTTON}>
+          공고 입력부터 다시
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div className="flex min-h-screen flex-col bg-surface text-ink">
@@ -97,14 +122,26 @@ export default function Report() {
               role="alert"
               className={`text-sm ${reportUnavailable ? 'text-muted' : 'text-error'}`}
             >
-              {reportUnavailable
-                ? '이 면접은 리포트를 만들 수 없어요.'
-                : '리포트를 불러오지 못했어요.'}
+              {endedEarly
+                ? '시간이 끝나 진행한 질문이 적어 리포트를 만들 수 없어요.'
+                : reportUnavailable
+                  ? '이 면접은 리포트를 만들 수 없어요.'
+                  : '리포트를 불러오지 못했어요.'}
             </p>
             <div className="flex gap-2">
               <button type="button" onClick={() => navigate('/home')} className={OUTLINE_BUTTON}>
                 홈으로 가기
               </button>
+              {endedEarly && (
+                <button
+                  type="button"
+                  disabled={retryMutation.isPending}
+                  onClick={() => retryMutation.mutate()}
+                  className={`${OUTLINE_BUTTON} disabled:opacity-50`}
+                >
+                  {retryMutation.isPending ? '준비 중...' : '다시 도전하기'}
+                </button>
+              )}
               {!reportUnavailable && (
                 <button
                   type="button"
@@ -114,7 +151,7 @@ export default function Report() {
                   다시 불러오기
                 </button>
               )}
-              {reportUnavailable && (
+              {reportUnavailable && !endedEarly && (
                 <button
                   type="button"
                   disabled={reportRetry.isPending}
@@ -133,6 +170,7 @@ export default function Report() {
                   : '리포트 생성을 다시 요청하지 못했어요. 잠시 후 다시 시도해주세요.'}
               </p>
             )}
+            {endedEarly && retryFailure}
           </div>
         )}
 
@@ -142,6 +180,12 @@ export default function Report() {
               <p className="text-[11px] font-bold text-muted">면접 리포트</p>
               <h1 className="text-xl font-bold">{report.headline}</h1>
               <p className="text-xs text-muted">지원 포지션 · {report.positionLabel}</p>
+              {report.turns.length < INTERVIEW_TOTAL_TURNS && (
+                <p className="text-xs text-muted">
+                  시간이 끝나 {INTERVIEW_TOTAL_TURNS}개 중 {report.turns.length}개 질문까지
+                  진행했어요 · 점수는 답변한 질문을 기준으로 해요
+                </p>
+              )}
             </div>
 
             <section className="flex flex-col gap-4">
@@ -252,23 +296,7 @@ export default function Report() {
                 {retryMutation.isPending ? '준비 중...' : '새 모의면접 시작하기'}
               </button>
             </div>
-            {retryMutation.isError && (
-              <div className="flex items-center justify-end gap-3">
-                <p role="alert" className="text-xs text-error">
-                  {(retryReason && RETRY_ERROR[retryReason]) ??
-                    '새 면접을 준비하지 못했어요. 잠시 후 다시 시도해주세요.'}
-                </p>
-                {retryReason && RESTART_REASONS.has(retryReason) && (
-                  <button
-                    type="button"
-                    onClick={() => navigate('/interview/new')}
-                    className={OUTLINE_BUTTON}
-                  >
-                    공고 입력부터 다시
-                  </button>
-                )}
-              </div>
-            )}
+            {retryFailure}
           </>
         )}
       </main>

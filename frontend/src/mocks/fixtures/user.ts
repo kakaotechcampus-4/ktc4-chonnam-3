@@ -1,3 +1,4 @@
+import { INTERVIEW_TOTAL_TURNS } from '@/shared/interview';
 import type {
   HomeResponse,
   InterviewListResponse,
@@ -91,6 +92,8 @@ const allInterviews: InterviewListResponse['interviews'] = [
     totalScore: 81,
     startedAt: '2026-09-01T15:00:00Z',
     completedAt: '2026-09-01T15:20:00Z',
+    answeredTurns: 9,
+    reportAvailable: true,
   },
   {
     id: 'a3d51c20-1002-4c00-9a00-000000000002',
@@ -103,6 +106,38 @@ const allInterviews: InterviewListResponse['interviews'] = [
     totalScore: 74,
     startedAt: '2026-08-21T09:44:00Z',
     completedAt: '2026-08-21T10:05:00Z',
+    answeredTurns: 9,
+    reportAvailable: true,
+  },
+  {
+    // 시간이 끝나 5턴에서 끝난 면접. 리포트는 있고 평균 점수에는 들어가지 않는다(#246).
+    id: 'a3d51c20-1007-4c00-9a00-000000000007',
+    position: 'Backend Developer',
+    companyName: '테스트 기업',
+    techStack: ['Python', 'FastAPI'],
+    careerLevel: '신입',
+    repositoryNames: ['project-a'],
+    status: 'completed',
+    totalScore: 88,
+    startedAt: '2026-08-28T11:00:00Z',
+    completedAt: '2026-08-28T11:15:00Z',
+    answeredTurns: 5,
+    reportAvailable: true,
+  },
+  {
+    // 시간이 끝나 2턴에서 끝난 면접. 진행이 짧아 리포트를 만들 수 없다(#246).
+    id: 'a3d51c20-1008-4c00-9a00-000000000008',
+    position: 'Backend Developer',
+    companyName: '테스트 기업',
+    techStack: ['Python', 'FastAPI'],
+    careerLevel: '신입',
+    repositoryNames: ['notification-worker'],
+    status: 'completed',
+    totalScore: null,
+    startedAt: '2026-08-25T09:00:00Z',
+    completedAt: '2026-08-25T09:15:00Z',
+    answeredTurns: 2,
+    reportAvailable: false,
   },
   {
     id: 'a3d51c20-1003-4c00-9a00-000000000003',
@@ -115,6 +150,8 @@ const allInterviews: InterviewListResponse['interviews'] = [
     totalScore: null,
     startedAt: '2026-08-14T13:02:00Z',
     completedAt: null,
+    answeredTurns: 3,
+    reportAvailable: false,
   },
   {
     id: 'a3d51c20-1004-4c00-9a00-000000000004',
@@ -127,6 +164,8 @@ const allInterviews: InterviewListResponse['interviews'] = [
     totalScore: null,
     startedAt: '2026-09-12T20:11:00Z',
     completedAt: null,
+    answeredTurns: 5,
+    reportAvailable: false,
   },
   {
     // 준비 단계에서 버린 면접. 첫 질문 전이라 startedAt이 없고 목록에서 빠진다.
@@ -140,6 +179,8 @@ const allInterviews: InterviewListResponse['interviews'] = [
     totalScore: null,
     startedAt: null,
     completedAt: null,
+    answeredTurns: 0,
+    reportAvailable: false,
   },
 ];
 
@@ -157,11 +198,13 @@ const listedInterviews = allInterviews
   );
 
 /** 완료 면접 점수의 평균. 마이페이지 프로필과 면접 목록이 같은 값을 봐야 한다. */
+const scoredInterviews = allInterviews.filter(
+  // 평균은 9턴을 모두 답한 면접만 센다. 시간이 끝나 일찍 끝난 면접은 뺀다(#246).
+  (item) => item.totalScore !== null && item.answeredTurns === INTERVIEW_TOTAL_TURNS,
+);
 const averageScore =
-  allInterviews
-    .filter((item) => item.totalScore !== null)
-    .reduce((sum, item) => sum + (item.totalScore ?? 0), 0) /
-  allInterviews.filter((item) => item.totalScore !== null).length;
+  scoredInterviews.reduce((sum, item) => sum + (item.totalScore ?? 0), 0) /
+  scoredInterviews.length;
 
 /**
  * `desiredPosition`은 가장 최근 완료 면접의 position이다. 완료 면접이 없으면 null.

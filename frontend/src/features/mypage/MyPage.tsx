@@ -7,6 +7,7 @@ import { queryKeys } from '@/shared/queryKeys';
 import { clearSessionQueries } from '@/shared/queryClient';
 import Header from '@/shared/components/Header';
 import Footer from '@/shared/components/Footer';
+import { INTERVIEW_TOTAL_TURNS } from '@/shared/interview';
 import { RESTART_REASONS, RETRY_ERROR } from '@/features/interview/retryErrors';
 import { isApiError } from '@/types/api';
 
@@ -168,6 +169,8 @@ export default function MyPage() {
               {historyRows.map((item) => {
                 // 중단된 면접은 리포트가 없다. 일시는 시작 시각, 점수 자리는 "중단됨"이다.
                 const abandoned = item.status === 'abandoned';
+                // 시간이 끝나 9턴을 못 채운 면접. 점수는 있어도 평균에는 들어가지 않는다(#246).
+                const endedEarly = !abandoned && item.answeredTurns < INTERVIEW_TOTAL_TURNS;
                 return (
                   <li key={item.id} className="py-2">
                     <div className="flex items-center justify-between gap-4">
@@ -204,12 +207,34 @@ export default function MyPage() {
                               다시 도전하기 →
                             </button>
                           </>
+                        ) : !item.reportAvailable ? (
+                          <>
+                            {/* 시간이 끝나 진행한 질문이 적어 리포트를 만들 수 없는 면접이다(#246). */}
+                            <span className="font-bold text-muted">
+                              시간 종료 {item.answeredTurns}/{INTERVIEW_TOTAL_TURNS}턴 · 리포트 없음
+                            </span>
+                            <button
+                              type="button"
+                              className="text-accent hover:underline disabled:opacity-50"
+                              disabled={retryMutation.isPending}
+                              onClick={() => retryMutation.mutate(item.id)}
+                            >
+                              다시 도전하기 →
+                            </button>
+                          </>
                         ) : (
                           <>
-                            <span className="font-bold">
-                              {item.totalScore}
-                              <span className="font-normal text-muted">/100</span>
-                            </span>
+                            {endedEarly && (
+                              <span className="text-[10.5px] text-muted">
+                                시간 종료 {item.answeredTurns}/{INTERVIEW_TOTAL_TURNS}턴
+                              </span>
+                            )}
+                            {item.totalScore !== null && (
+                              <span className="font-bold">
+                                {item.totalScore}
+                                <span className="font-normal text-muted">/100</span>
+                              </span>
+                            )}
                             <button
                               type="button"
                               className="text-accent hover:underline"

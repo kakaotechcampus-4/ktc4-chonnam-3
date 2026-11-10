@@ -114,6 +114,19 @@ const FAILURE_MESSAGE: Record<Failure, string> = {
   micUnavailable: '마이크를 사용할 수 없어요 · 브라우저의 마이크 권한과 연결을 확인해주세요',
 };
 
+/** 질문을 만드는 구간. 끝나기 전에는 to가 null이다. */
+type Pause = { from: number; to: number | null };
+
+/** 열려 있는 정지 구간을 지금 닫는다. 열린 게 없으면 같은 배열을 돌려줘 다시 그리지 않는다. */
+function closePause(list: Pause[]): Pause[] {
+  return list.some((pause) => pause.to === null)
+    ? list.map((pause) => (pause.to === null ? { ...pause, to: Date.now() } : pause))
+    : list;
+}
+
+/** 제한 시간이 다 된 뒤 서버가 면접을 끝냈는지 다시 확인하는 간격. */
+const TIME_UP_RECHECK_MS = 5_000;
+
 function formatRemaining(seconds: number) {
   const minutes = Math.floor(seconds / 60);
   return `${String(minutes).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
@@ -177,6 +190,8 @@ export default function InterviewScreen() {
   /** 녹음 중인 턴. 녹음기 콜백이 리렌더보다 먼저 와도 맞는 턴으로 보내게 한다. */
   const recordingTurnRef = useRef<number | null>(null);
   const [thinking, setThinking] = useState(false);
+  /** 질문을 만드는 동안(thinking)은 제한 시간이 멈춘다. 서버가 같은 구간을 빼고 알려준다(#246). */
+  const [pauses, setPauses] = useState<Pause[]>([]);
   const [evidence, setEvidence] = useState<{ repository: string; file: string } | null>(null);
   const [error, setError] = useState<InterviewLastError | null>(null);
   const [questionRetryMessage, setQuestionRetryMessage] = useState<string | null>(null);
@@ -255,7 +270,10 @@ export default function InterviewScreen() {
     onMessage: (message) => {
       // 근거 확인 배너와 생성 중 표시는 다른 메시지를 받으면 내린다.
       if (message.type !== 'evidenceCheck') setEvidence(null);
-      if (message.type !== 'thinking') setThinking(false);
+      if (message.type !== 'thinking') {
+        setThinking(false);
+        setPauses(closePause);
+      }
 
       if (message.type === 'question') {
         setQuestionReadySession(interview?.sessionId ?? null);
@@ -311,6 +329,7 @@ export default function InterviewScreen() {
         );
       } else if (message.type === 'thinking') {
         setThinking(true);
+        setPauses((list) => [...closePause(list), { from: Date.now(), to: null }]);
       } else if (message.type === 'evidenceCheck') {
         setEvidence({ repository: message.repository, file: message.file });
       } else if (message.type === 'interviewEnd') {
@@ -432,9 +451,28 @@ export default function InterviewScreen() {
 
   const questionAudio = useQuestionAudio(isTextMode ? null : (question?.audioUrl ?? null), playKey);
 
-  /** 지금 턴의 답변 상태. 턴이 바뀌면 듣기부터 시작한다. */
+  /**
+   * remainingSeconds는 서버 시각 기준이다. 응답을 받은 시점(dataUpdatedAt)부터
+   * 흐른 만큼에서 질문을 만든 시간을 빼고 표시한다. 재연결로 GET을 다시 부르면 서버값으로 덮어써진다.
+   */
+  const pausedMs = pauses.reduce(
+    (sum, pause) =>
+      sum + Math.max(0, Math.min(pause.to ?? now, now) - Math.max(pause.from, dataUpdatedAt)),
+    0,
+  );
+  const remaining = interview
+    ? Math.max(0, interview.remainingSeconds - Math.floor((now - dataUpdatedAt - pausedMs) / 1000))
+    : null;
+
+  /**
+   * 제한 시간이 다 됐다. 서버는 답변을 기다리는 중에 0이 되면 면접을 끝낸다(GET이 판정). 질문을
+   * 만드는 중에는 시간이 멈춰 있어 해당하지 않는다. 입력을 막고 서버 상태를 확인해 리포트로 보낸다.
+   */
+  const timeUp = remaining === 0 && status === 'in_progress' && !thinking;
+
+  /** 지금 턴의 답변 상태. 턴이 바뀌면 듣기부터 시작한다. 시간이 끝나면 녹음 중이던 답변은 없다. */
   const liveAnswer: AnswerState =
-    answer && question && answer.turn === question.turn
+    answer && question && answer.turn === question.turn && !(timeUp && answer.phase === 'recording')
       ? answer
       : { turn: question?.turn ?? -1, phase: 'listening', partial: '', final: null, failure: null };
   /**
@@ -477,13 +515,21 @@ export default function InterviewScreen() {
     return () => clearTimeout(timer);
   }, [current.phase, current.turn, refetchInterview, id, recheck]);
 
-  /**
-   * remainingSeconds는 서버 시각 기준이다. 응답을 받은 시점(dataUpdatedAt)부터
-   * 흐른 만큼을 빼서 표시한다. 재연결로 GET을 다시 부르면 서버값으로 덮어써진다.
-   */
-  const remaining = interview
-    ? Math.max(0, interview.remainingSeconds - Math.floor((now - dataUpdatedAt) / 1000))
-    : null;
+  const recordingAtTimeUp = timeUp && answer?.phase === 'recording';
+  useEffect(() => {
+    if (!recordingAtTimeUp) return;
+    // 녹음 중이던 답변은 저장하지 않는다(즉시 끊기). 서버도 만료 뒤 답변을 받지 않는다.
+    // 이미 녹음을 끝내고 저장 중인 답변은 건드리지 않는다. 화면 상태는 liveAnswer가 가린다.
+    recorderRef.current?.cancel();
+    markRecording(id, null);
+  }, [recordingAtTimeUp, id]);
+  useEffect(() => {
+    if (!timeUp) return;
+    void refetchInterview();
+    // 서버가 아직 끝내지 않았거나 조회가 실패했으면 다시 확인한다.
+    const timer = setInterval(() => void refetchInterview(), TIME_UP_RECHECK_MS);
+    return () => clearInterval(timer);
+  }, [timeUp, refetchInterview]);
 
   /**
    * recoverable: false면 보통 서버가 세션을 닫는다. stt_unavailable은 연결을 유지하지만 다시 답해도
@@ -492,8 +538,10 @@ export default function InterviewScreen() {
   const fatal = !!error && !error.recoverable;
   // REST 질문이 먼저 보여도 현재 연결이 질문을 재전달하기 전에는 녹음을 시작하지 않는다.
   // 늦은 최초 question이 진행 중 답변을 다시 듣기 상태로 초기화하는 경합을 막는다.
+  // 제한 시간이 끝났으면 시작하지 않는다.
   const canStart =
     !fatal &&
+    !timeUp &&
     !!question &&
     questionReadySession === interview?.sessionId &&
     wsStatus === 'open' &&
@@ -510,17 +558,19 @@ export default function InterviewScreen() {
    */
   const liveStatus = error
     ? '' // 오류 배너가 role="alert"로 읽는다. 여기서 또 읽으면 두 번 들린다.
-    : current.phase === 'recording'
-      ? '녹음 중이에요'
-      : current.phase === 'transcribing'
-        ? isTextMode
-          ? '답변 저장을 확인하고 있어요'
-          : '답변을 정리하고 있어요'
-        : wsStatus === 'reconnecting'
-          ? '연결이 끊겼어요. 다시 연결하는 중이에요'
-          : thinking
-            ? '다음 질문을 만들고 있어요'
-            : '';
+    : timeUp
+      ? '제한 시간이 끝났어요. 면접을 마무리하고 있어요'
+      : current.phase === 'recording'
+        ? '녹음 중이에요'
+        : current.phase === 'transcribing'
+          ? isTextMode
+            ? '답변 저장을 확인하고 있어요'
+            : '답변을 정리하고 있어요'
+          : wsStatus === 'reconnecting'
+            ? '연결이 끊겼어요. 다시 연결하는 중이에요'
+            : thinking
+              ? '다음 질문을 만들고 있어요'
+              : '';
 
   function handleStartAnswer() {
     if (isTextMode || !question || !canStart) return;
@@ -750,6 +800,12 @@ export default function InterviewScreen() {
 
       {wsStatus === 'reconnecting' && (
         <p className="text-[11px] font-bold text-error">연결이 끊겼어요 · 다시 연결하는 중이에요</p>
+      )}
+
+      {timeUp && (
+        <p className="text-[11px] font-bold text-muted">
+          제한 시간이 끝났어요 · 면접을 마무리하고 있어요
+        </p>
       )}
 
       {evidence && (
