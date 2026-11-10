@@ -2,6 +2,20 @@
 
 구현 범위와 실제 실행 결과를 기록한다. 기능 요구사항은 각 features 문서와 task 문서를 따른다.
 
+## 2026-11-11 — #118 준비 reaper 문서 정리
+
+코드 변경 없이 #118 완료 조건의 문서 두 곳을 현재 구현에 맞췄다.
+
+- `backend/docs/pipeline.md` 4.3절 주기 작업 표: 분석 reaper만 적힌 표를 현재 등록된 reaper 네 개로 고쳤다.
+  - `analysis_reaper`(#108)
+  - `interview_prep_reaper`(#167)
+  - `interview_preparation_reaper`(#136)
+  - `profile_refresh_reaper`
+
+  모두 배포 worker `app.workers.analysis_app.WorkerSettings`에 30초 주기로 등록되어 있다.
+- 2026-10-04 기록의 "reaper 미구현" 남은 작업은 `analysis_reaper`(#108)로 해소됐다. 면접 준비 재등록은 `interview_prep_reaper`가 맡으며 `_job_id=interview_prep:{id}`로 중복 실행을 막는다. 관련 테스트는 `backend/tests/features/interview/test_prep_reaper.py`와 `test_reaper_paging.py`에 있다.
+- 검증: 문서만 수정했으며 테스트는 실행하지 않았다.
+
 ## 2026-11-02 — STT(MLAPI Whisper) 연동 (진행 중, 브랜치 `feature/be-stt-mlapi`)
 
 설계 근거는 [0007](../shared/decisions/0007-voice-interview-contract.md)(Proposed)과
@@ -262,6 +276,7 @@ PostgreSQL 15·Redis 7은 전용 테스트 DB와 Redis 15에서 검증했다.
 
 - `queued` 작업의 큐 등록 복구(reaper)는 `backend/docs/pipeline.md` 2절 설계이며 아직 구현되지 않았다.
   DB 커밋 뒤 enqueue 전에 프로세스가 종료되고 재로그인도 없으면 reaper 구현 전까지 복구되지 않는다.
+  (해소: 2026-11-11 기록 참고)
 
 ## 2026-09-28 — develop 기준 Task 9 API·공고 저장 Draft
 

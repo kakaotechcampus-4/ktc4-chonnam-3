@@ -228,7 +228,7 @@ Postgres 를 주기적으로 재확인하는 폴백을 둔다. 이벤트 보관�
 | `evidenceCheck`        | S→C  | **`INSERT evidences(retrieved_for_turn=n, git_ref, snippet, tool_name)`**                                                                                                               |
 | (답변과 코드 불일치 발견) | —  | Sprint 1 `evidence_conflicts(source='answer_vs_code')` 저장, 후속 질문 후보로 사용                                                                                                       |
 | `interviewEnd`         | S→C  | `status='completed'`, `events(interview_completed)`                                                                                                                                       |
-| 명시적 이탈·레포 재선택 | —    | `status='abandoned'`, `abandoned_at_turn=turn_count`. Sprint 1 고정 10개 외 별도 이탈 이벤트는 추가하지 않음                                                                              |
+| 명시적 이탈·레포 재선택 | —    | `status='abandoned'`, `abandoned_at`, `abandoned_at_turn=current_turn`(질문이 나간 턴 수, 답변 대기 중인 현재 질문 포함. [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md), #143). Sprint 1 고정 10개 외 별도 이탈 이벤트는 추가하지 않음                                                                              |
 
 `evidenceCheck` 가 화면에 뜬 순간 `evidences` 에 행이 있어야 한다. 화면에는 떴는데 행이 없으면
 그건 연출이고, 서비스가 주장하는 "근거 기반" 이 데이터로 증명되지 않는다.
@@ -252,11 +252,15 @@ WS `disconnect` 만으로 `abandoned` 를 확정하지 않는다 (새로고침·
 Sprint 1에는 하트비트/timeout 기반 자동 abandoned 판정 배치를 두지 않는다. `abandoned`는 사용자가
 이탈 확인 모달에서 명시적으로 나가거나, 레포 재선택으로 새 세션을 만들 때만 설정한다.
 
-주기 작업은 분석 reaper만 본다.
+주기 작업은 아래 reaper가 본다. 모두 `app.workers.analysis_app.WorkerSettings`에 30초 주기(`second={0, 30}`, 기동 시 1회)로 등록되며,
+실행 중인 작업을 자동 재실행하거나 `abandoned`를 판정하지 않는다.
 
-| 대상                 | 판정                                          |
-| -------------------- | --------------------------------------------- |
-| `analysis_jobs`      | `queued` 인데 큐에 없음 → 재등록 (2절 reaper) |
+| 대상                 | 판정                                          | reaper |
+| -------------------- | --------------------------------------------- | ------ |
+| `analysis_jobs`      | `job_type='analysis_run'`이고 `status='queued'` → 재등록 (2절 reaper). 성공·partial run의 `pending` 후보 페이지 → 재등록 | `analysis_reaper` |
+| `interview_sessions` | `preparing`이고 `updated_at`이 `interview_prep_reaper_min_age_seconds`(기본 60초)보다 오래됐으며 준비 claim(`prepare_job_id`)이 없음 → `interview_prep` 재등록. `_job_id=interview_prep:{id}`로 중복 실행을 막는다 (#118) | `interview_prep_reaper` |
+| `interview_sessions` | `preparing`이고 준비 lease 만료 → `preparing_failed`(`code=preparation_lease_expired`, 재시도 가능) | `interview_preparation_reaper` |
+| 프로필 갱신 outbox   | 보고서 성공 뒤 남은 프로필 전달 → 유한 페이지·횟수로 재등록 | `profile_refresh_reaper` |
 
 세션 재개는 미지원이다 (`status` 에 `paused` 없음). 답변 초안 저장도 없다. 제출 1회.
 
