@@ -14,7 +14,7 @@
 import json
 import secrets
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 from typing import cast
 
@@ -158,7 +158,7 @@ async def get_interview(
         repository_names=await queries.list_repository_names(db, interview_id=interview.id),
         current_turn=interview.current_turn,
         total_turns=interview.total_turns,
-        remaining_seconds=_remaining_seconds(interview),
+        remaining_seconds=_remaining_seconds(interview, turns),
         turns=[
             _detail_turn(t, [(item.turn_no, item.depth, item.parent_turn_no) for item in turns])
             for t in turns
@@ -332,13 +332,30 @@ async def retry_prepare(
         raise AppError(Reason.INTERNAL_ERROR) from None
 
 
-def _remaining_seconds(interview: InterviewSession) -> int:
-    """면접 제한 시간 - 경과. 시작 전이면 전체, 끝났으면 끝난 시각 기준."""
+def _remaining_seconds(interview: InterviewSession, turns: Sequence[InterviewTurnRow]) -> int:
+    """면접 제한 시간 - (경과 - 질문 생성 대기). 시작 전이면 전체, 끝났으면 끝난 시각 기준.
+
+    질문 생성 대기는 답변을 저장한 시각부터 다음 질문을 저장한 시각까지다(#246).
+    다음 질문이 아직 없는 구간은 끝난 시각(진행 중이면 지금)까지 센다. turns 는 turn_no 순.
+    """
     total = get_settings().interview_duration_seconds
-    if interview.started_at is None:
+    started = interview.started_at
+    if started is None:
         return total
     end = interview.completed_at or interview.abandoned_at or datetime.now(UTC)
-    return max(0, total - int((end - interview.started_at).total_seconds()))
+    paused = 0.0
+    for index, turn in enumerate(turns):
+        if turn.answered_at is None:
+            continue
+        following = turns[index + 1] if index + 1 < len(turns) else None
+        if following is None:
+            resume = end
+        elif following.asked_at is None:
+            continue  # 질문 저장 시각을 모르면 정지로 보지 않는다.
+        else:
+            resume = min(following.asked_at, end)
+        paused += max(0.0, (resume - max(turn.answered_at, started)).total_seconds())
+    return max(0, total - int((end - started).total_seconds() - paused))
 
 
 # ★ rt:{sessionId} 와 rt:interview:{interviewId} 는 한 쌍이다. 같이 쓰고, TTL 연장·삭제도
