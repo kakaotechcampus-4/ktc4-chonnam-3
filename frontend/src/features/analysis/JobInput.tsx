@@ -6,12 +6,13 @@ import { api, BASE } from '@/shared/api';
 import Footer from '@/shared/components/Footer';
 import Header from '@/shared/components/Header';
 import { isApiError } from '@/types/api';
-import type { DocumentPreviewResponse } from '@/types/api';
+import type { DocumentPreviewResponse, DocumentType } from '@/types/api';
 import { postingUrlFrom, type AnalysisInputState } from '@/features/analysis/steps';
 
 const MB = 1024 * 1024;
 
 type FileFieldConfig = {
+  docType: DocumentType;
   label: string;
   accept: string;
   hint: string;
@@ -19,6 +20,7 @@ type FileFieldConfig = {
 };
 
 const COVER_LETTER: FileFieldConfig = {
+  docType: 'cover_letter',
   label: '자기소개서',
   accept: '.pdf,.docx',
   hint: 'PDF, DOCX · 최대 10MB',
@@ -26,6 +28,7 @@ const COVER_LETTER: FileFieldConfig = {
 };
 
 const PORTFOLIO: FileFieldConfig = {
+  docType: 'portfolio',
   label: '포트폴리오',
   accept: '.pdf',
   hint: 'PDF · 최대 20MB',
@@ -42,8 +45,8 @@ const RUN_ERROR: Record<string, string> = {
   posting_url_required: '공고 URL을 입력해주세요.',
   unsupported_site: '지원하지 않는 사이트예요.',
   github_token_invalid: 'GitHub 연동이 만료됐어요. 다시 연동해주세요.',
-  document_extract_failed: '첨부한 포트폴리오를 읽지 못했어요. 다시 올리거나 빼고 진행해주세요.',
-  invalid_request: '첨부한 포트폴리오를 찾지 못했어요. 다시 올려주세요.',
+  document_extract_failed: '첨부한 문서를 읽지 못했어요. 다시 올리거나 빼고 진행해주세요.',
+  invalid_request: '첨부한 문서를 찾지 못했어요. 다시 올려주세요.',
 };
 
 function isHttpUrl(value: string) {
@@ -88,7 +91,7 @@ function useDocumentSlot(config: FileFieldConfig) {
   const [slot, setSlot] = useState<DocSlot>(EMPTY_SLOT);
 
   const upload = useMutation({
-    mutationFn: (file: File) => api.previewDocument(file),
+    mutationFn: (file: File) => api.previewDocument(file, config.docType),
     onSuccess: (preview) => setSlot((prev) => ({ ...prev, preview, error: null })),
     onError: (error) =>
       setSlot((prev) => ({
@@ -282,11 +285,11 @@ export default function JobInput() {
   function handleSubmit() {
     if (!urlValid || busy) return;
     setSubmitError(null);
-    // Sprint 1 은 포트폴리오만 분석에 반영한다(BE 협의). 추출 실패면 usablePreview 가 걸러
-    // documentId 가 빠지고, 서버는 문서 없이 분석한다.
+    // 읽기에 실패해 제외한 문서는 보내지 않고, 두 종류를 명시적으로 선택한다.
     startRun.mutate({
       postingUrl: jobUrl.trim(),
       documentId: usablePreview(portfolio.slot)?.documentId,
+      coverLetterDocumentId: usablePreview(coverLetter.slot)?.documentId,
     });
   }
 

@@ -53,13 +53,24 @@ def _tree(path, sha):
     return dict(path=path, mode="040000", type="tree", sha=sha)
 
 
-async def _enumerate(trees, *, max_requests, **limits):
+async def _enumerate(trees, *, max_requests, recursive_flat=False, **limits):
     requested = []
+
+    def flattened(sha, prefix=""):
+        result = []
+        for entry in trees[sha]:
+            path = prefix + entry["path"]
+            result.append(dict(entry, path=path))
+            if entry["type"] == "tree":
+                result.extend(flattened(entry["sha"], path + "/"))
+        return result
 
     def handle(request):
         sha = request.url.path.rsplit("/", 1)[-1]
-        requested.append(sha)
-        return httpx.Response(200, json=dict(sha=sha, truncated=False, tree=trees[sha]))
+        recursive = request.url.params.get("recursive") == "1"
+        requested.append(sha + ("?recursive=1" if recursive else ""))
+        entries = flattened(sha) if recursive and recursive_flat else trees[sha]
+        return httpx.Response(200, json=dict(sha=sha, truncated=False, tree=entries))
 
     config = Settings(_env_file=None, **limits)
     scope = EvidenceScope(str(UUID(int=1)), 123, "owner/sample", "e" * 40, frozenset())
@@ -76,7 +87,8 @@ async def _enumerate(trees, *, max_requests, **limits):
     return requested, files, limitations
 
 
-async def test_depth_cap_stops_descent_and_reports_unvisited_subtree():
+@pytest.mark.parametrize("recursive_flat", [False, True], ids=["fallback", "recursive"])
+async def test_depth_cap_stops_descent_and_reports_unvisited_subtree(recursive_flat):
     root, src, deep = "a" * 40, "b" * 40, "c" * 40
     trees = {
         root: [_blob("root.py"), _tree("src", src)],
@@ -84,10 +96,12 @@ async def test_depth_cap_stops_descent_and_reports_unvisited_subtree():
         deep: [_blob("hidden.py")],
     }
     requested, files, limitations = await _enumerate(
-        trees, max_requests=10, director_prepare_max_depth=1
+        trees, max_requests=10, recursive_flat=recursive_flat, director_prepare_max_depth=1
     )
-    # 상한 밖 하위 tree는 요청하지 않고, 그 안의 파일을 후보로 만들지 않는다.
-    assert requested == [root, src]
+    # 얕은 재귀 응답은 경로별 순회로 보완하며, 완전한 flat 목록이면 부모 재요청은 없다.
+    expected = [root, root + "?recursive=1"] + ([] if recursive_flat else [src])
+    assert requested == expected
+    # 두 전략 모두 깊이 밖 tree를 개별 요청하지 않고, 그 안의 원문을 후보로 만들지 않는다.
     assert files == ("root.py", "src/mid.py")
     assert len(limitations) == 1 and "깊이 상한" in limitations[0]
 
@@ -114,7 +128,7 @@ async def test_request_budget_without_candidates_fails_instead_of_empty_success(
     assert error.value.code == "evidence_budget_exhausted"
 
 
-async def test_oversized_and_non_regular_entries_are_skipped_with_limitations():
+async def test_large_files_remain_candidates_while_non_regular_entries_are_rejected():
     root = "a" * 40
     trees = {
         root: [
@@ -128,10 +142,9 @@ async def test_oversized_and_non_regular_entries_are_skipped_with_limitations():
     _, files, limitations = await _enumerate(
         trees, max_requests=10, director_prepare_max_file_bytes=100
     )
-    # 크기 상한을 넘는 파일과 일반 파일이 아닌 항목은 후보에서 빼고 이유를 남긴다.
-    assert files == ("main.py", "run.sh")
+    # 큰 텍스트도 구간으로 읽을 수 있다. symlink·submodule 차단은 그대로 유지한다.
+    assert files == ("main.py", "data.json", "run.sh")
     assert limitations == [
-        "파일 크기 상한으로 원문을 읽지 않았습니다: data.json",
         "일반 파일이 아닌 항목은 읽지 않았습니다: link",
         "일반 파일이 아닌 항목은 읽지 않았습니다: vendor",
     ]

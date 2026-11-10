@@ -69,6 +69,32 @@ def response(text: str = '{"value": 7}', **changes: object) -> dict[str, object]
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("effort", [None, "low"])
+async def test_reasoning_control_reaches_provider_only_when_explicit(effort):
+    sent = []
+
+    def transport(req):
+        sent.append(json.loads(req.content))
+        return httpx.Response(200, json=response())
+
+    item = request()
+    item = replace(item, limits=replace(item.limits, reasoning_effort=effort))
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        result = await client.call_model(
+            item,
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://api.openai.com/v1",
+            http_client=http,
+        )
+    assert result.data == 7
+    if effort is None:
+        assert "reasoning" not in sent[0]
+    else:
+        assert sent[0]["reasoning"] == {"effort": "low"}
+
+
+@pytest.mark.asyncio
 async def test_missing_base_url_rejects_proxy_token_before_http():
     sent = []
 
@@ -1042,3 +1068,52 @@ async def test_valid_retry_after_survives_an_unreadable_429_body(monkeypatch):
         )
     assert result.failure.stage == "provider"
     assert events == [("request", 0), ("sleep", 0.5), ("request", 0)]
+
+
+@pytest.mark.asyncio
+async def test_request_size_matches_the_actual_unicode_and_schema_envelope():
+    configured = replace(request(), payload={"원문": '한글 "인용"', "paths": ["src/자료.py"]})
+    sent = []
+
+    def transport(req):
+        sent.append(req)
+        return httpx.Response(200, json=response())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        result = await client.call_model(
+            configured,
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://provider.example.test/v1",
+            http_client=http,
+        )
+    assert result.succeeded and len(sent) == 1
+    assert client.request_size(configured) == len(sent[0].content)
+    assert client.request_size(configured) > len(
+        json.dumps(configured.payload, ensure_ascii=False).encode("utf-8")
+    )
+
+
+@pytest.mark.asyncio
+async def test_request_size_boundary_prevents_http_when_the_full_envelope_does_not_fit():
+    configured = request()
+    configured = replace(
+        configured,
+        limits=replace(configured.limits, max_input_bytes=client.request_size(configured) - 1),
+    )
+    sent = []
+
+    def transport(req):
+        sent.append(req)
+        return httpx.Response(200, json=response())
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        result = await client.call_model(
+            configured,
+            validate,
+            api_key=SecretStr("fixture-key"),
+            base_url="https://provider.example.test/v1",
+            http_client=http,
+        )
+    assert result.failure is not None and result.attempts == ()
+    assert sent == []

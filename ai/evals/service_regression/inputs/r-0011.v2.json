@@ -1,0 +1,421 @@
+{
+  "case_id": "r-0011",
+  "version": 2,
+  "control": {
+    "kind": "report",
+    "split": "dev",
+    "source_group_id": "sg-r1",
+    "synthetic": true
+  },
+  "payload": {
+    "service_task": "report",
+    "service_input": {
+      "turns": [
+        {
+          "turn_no": 1,
+          "persona": "hr_manager",
+          "question": "간단히 자기소개와 이 프로젝트에서 맡은 역할을 말씀해 주세요.",
+          "answer": "백엔드를 맡았고 로그인과 토큰 재발급을 담당했습니다.",
+          "question_contract": {
+            "purpose": "지원자가 맡은 역할과 담당 범위 확인",
+            "required_points": [
+              {
+                "key": "role",
+                "description": "맡은 역할"
+              },
+              {
+                "key": "own_work",
+                "description": "직접 한 일의 범위"
+              }
+            ],
+            "evaluation_scope": "본인 역할과 기여 범위의 설명을 평가한다. 기술 선택 이유나 공고 요구사항 연결은 평가하지 않는다.",
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_keys": [
+              "communication",
+              "contribution_clarity"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 2,
+          "persona": "tech_lead",
+          "question": "refresh token 저장소로 Redis를 선택하신 이유가 있나요?",
+          "answer": "토큰은 만료가 있는 단순 key-value라 TTL이 자연스러운 Redis를 골랐습니다. RDB에 두는 방법도 있었지만 만료된 토큰을 주기적으로 지우는 배치가 따로 필요해서 Redis가 더 단순하다고 판단했습니다.",
+          "question_contract": {
+            "purpose": "refresh token 저장소 선택의 근거 확인",
+            "required_points": [
+              {
+                "key": "choice_reason",
+                "description": "선택 이유"
+              },
+              {
+                "key": "alternative",
+                "description": "고려한 대안"
+              }
+            ],
+            "evaluation_scope": "기술 선택 이유와 대안 비교를 평가한다. 구현 세부와 성능 수치는 평가하지 않는다.",
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_keys": [
+              "communication",
+              "technical_reasoning"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 3,
+          "persona": "tech_lead",
+          "question": "재발급 시 기존 토큰은 어떻게 처리하셨나요?",
+          "answer": "재발급과 동시에 기존 토큰 전체를 폐기하고, 폐기된 토큰으로 요청이 오면 거절합니다.",
+          "question_contract": {
+            "purpose": "재발급 시 토큰 처리 흐름 이해 확인",
+            "required_points": [
+              {
+                "key": "revoke_flow",
+                "description": "기존 토큰 폐기 방식"
+              },
+              {
+                "key": "reject_flow",
+                "description": "폐기 토큰 요청 처리"
+              }
+            ],
+            "evaluation_scope": "처리 흐름의 이해와 설명을 평가한다. 선택 이유는 평가하지 않는다.",
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_keys": [
+              "communication",
+              "project_understanding"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 4,
+          "persona": "domain_lead",
+          "question": "공고에 '개인정보 보호를 고려한 인증 설계 경험'이 요구사항으로 있습니다. 본인 경험과 어떻게 연결되나요?",
+          "answer": "토큰에는 사용자 번호만 담고 이메일 같은 개인정보는 넣지 않습니다. 요구하시는 인증 설계와 개인정보 최소화라는 점에서 맞닿아 있지만, 보안 감사를 받아 본 경험은 없다는 한계가 있습니다.",
+          "question_contract": {
+            "purpose": "공고의 인증 설계 요구사항과 본인 경험의 연결 확인",
+            "required_points": [
+              {
+                "key": "requirement",
+                "description": "요구사항에 대응하는 경험"
+              },
+              {
+                "key": "limit",
+                "description": "경험의 한계"
+              }
+            ],
+            "evaluation_scope": "공고 요구사항과 본인 경험의 연결을 평가한다. 구현 세부와 기술 선택 이유는 평가하지 않는다.",
+            "assumptions": [],
+            "basis_refs": [
+              {
+                "kind": "jd_requirement",
+                "id": "synthetic-jd-auth"
+              }
+            ],
+            "evaluation_keys": [
+              "communication",
+              "company_job_fit"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [
+            "synthetic-jd-auth"
+          ],
+          "evidences": []
+        },
+        {
+          "turn_no": 5,
+          "persona": "tech_lead",
+          "question": "토큰 폐기 도중 재발급이 롤백되면 어떻게 되나요?",
+          "answer": "폐기는 REQUIRES_NEW로 별도 트랜잭션에 두었습니다. 재발급이 실패해 롤백돼도 폐기는 유지되어야 탈취된 토큰이 다시 살아나지 않기 때문입니다. 대신 재발급이 실패하면 사용자가 다시 로그인해야 하는 불편은 감수했습니다.",
+          "question_contract": {
+            "purpose": "폐기와 재발급의 트랜잭션 분리 이유와 실패 영향 확인",
+            "required_points": [
+              {
+                "key": "tx_reason",
+                "description": "트랜잭션 분리 이유"
+              },
+              {
+                "key": "failure_effect",
+                "description": "롤백 시 영향"
+              }
+            ],
+            "evaluation_scope": "설계 근거와 실패 상황의 대응을 평가한다. 코드 작성자 확인은 평가하지 않는다.",
+            "assumptions": [],
+            "basis_refs": [
+              {
+                "kind": "evidence",
+                "id": "m2"
+              }
+            ],
+            "evaluation_keys": [
+              "communication",
+              "technical_reasoning"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": [
+            {
+              "id": "m2",
+              "repository_id": "synthetic-repo-sg-r1",
+              "git_ref": "70a6816bba2e328de436952d69d14395ba13d2e4",
+              "source_type": "code",
+              "path": "src/main/java/app/auth/AuthService.java",
+              "metadata_key": null,
+              "snippet": "    // revokeAllByUserId() runs in REQUIRES_NEW, so the revocation is committed\n    // even if this transaction rolls back.\n    @Transactional\n    public TokenPair reissue(String refreshToken) {\n",
+              "tool_name": null,
+              "start_line": 128,
+              "end_line": 131
+            }
+          ]
+        },
+        {
+          "turn_no": 6,
+          "persona": "tech_lead",
+          "question": "의존성 구성은 어떻게 하셨나요?",
+          "answer": "Spring Boot 3.2에서 web, jpa, redis 스타터를 선언했고 redis는 토큰 저장에 씁니다.",
+          "question_contract": {
+            "purpose": "프로젝트 의존성 구성 이해 확인",
+            "required_points": [
+              {
+                "key": "dependencies",
+                "description": "선언한 의존성"
+              },
+              {
+                "key": "redis_use",
+                "description": "redis 사용 위치"
+              }
+            ],
+            "evaluation_scope": "프로젝트 구성의 이해를 평가한다. 선택 이유는 평가하지 않는다.",
+            "assumptions": [],
+            "basis_refs": [
+              {
+                "kind": "evidence",
+                "id": "m1"
+              }
+            ],
+            "evaluation_keys": [
+              "communication",
+              "project_understanding"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": [
+            {
+              "id": "m1",
+              "repository_id": "synthetic-repo-sg-r1",
+              "git_ref": "70a6816bba2e328de436952d69d14395ba13d2e4",
+              "source_type": "code",
+              "path": "build.gradle",
+              "metadata_key": null,
+              "snippet": "dependencies {\n    implementation 'org.springframework.boot:spring-boot-starter-web'\n    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'\n    implementation 'org.springframework.boot:spring-boot-starter-data-redis'\n    runtimeOnly 'com.mysql:mysql-connector-j'\n}",
+              "tool_name": null,
+              "start_line": 38,
+              "end_line": 43
+            }
+          ]
+        },
+        {
+          "turn_no": 7,
+          "persona": "domain_lead",
+          "question": "공고에 '위치 정보 등 민감 데이터 취급 경험'이 우대사항으로 있습니다. 이 프로젝트에서 관련 경험이 있나요?",
+          "answer": "위치 정보는 로그에 남기지 않고 필요하면 마스킹하도록 했습니다. 우대사항의 민감 데이터 취급과 맞닿아 있지만, 실제 위치 데이터를 대량으로 다뤄 본 경험은 없다는 한계가 있습니다.",
+          "question_contract": {
+            "purpose": "공고의 민감 데이터 취급 우대사항과 본인 경험의 연결 확인",
+            "required_points": [
+              {
+                "key": "requirement",
+                "description": "우대사항에 대응하는 경험"
+              },
+              {
+                "key": "limit",
+                "description": "경험의 한계"
+              }
+            ],
+            "evaluation_scope": "공고 우대사항과 본인 경험의 연결을 평가한다. 구현 세부와 기술 선택 이유는 평가하지 않는다.",
+            "assumptions": [],
+            "basis_refs": [
+              {
+                "kind": "jd_requirement",
+                "id": "synthetic-jd-location"
+              }
+            ],
+            "evaluation_keys": [
+              "communication",
+              "company_job_fit"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [
+            "synthetic-jd-location"
+          ],
+          "evidences": []
+        },
+        {
+          "turn_no": 8,
+          "persona": "tech_lead",
+          "question": "토큰 만료 시간은 어떤 기준으로 정하셨나요?",
+          "answer": "access는 30분, refresh는 14일로 했습니다. access를 길게 하면 탈취됐을 때 위험이 커지고 너무 짧으면 재발급 호출이 늘어서 그 사이로 정했습니다. 실제 사용 패턴으로 측정해 보지는 못해서 이후 조정이 필요합니다.",
+          "question_contract": {
+            "purpose": "토큰 만료 시간 설정 기준 확인",
+            "required_points": [
+              {
+                "key": "expiry_basis",
+                "description": "만료 시간 기준"
+              },
+              {
+                "key": "tradeoff",
+                "description": "기준의 한계"
+              }
+            ],
+            "evaluation_scope": "설계 기준과 트레이드오프의 설명을 평가한다. 측정 결과는 평가하지 않는다.",
+            "assumptions": [],
+            "basis_refs": [],
+            "evaluation_keys": [
+              "communication",
+              "technical_reasoning"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": null,
+          "jd_requirement_ids": [],
+          "evidences": []
+        },
+        {
+          "turn_no": 9,
+          "persona": "tech_lead",
+          "question": "README에는 Spring Boot 4.1.0으로 적혀 있는데 사용하신 버전은 무엇인가요? 버전 차이로 생길 수 있는 오류를 가정하고 관찰·재현·수정 검증 순서도 설명해 주세요.",
+          "answer": "3.2로 알고 있는데 README가 맞는지는 확인해 보겠습니다. 합성 가정입니다. 만료 토큰 요청이 재시도되는 상황을 로그로 분리하고, 같은 요청을 재현한 뒤 응답과 폐기 상태를 비교합니다. 수정 후에는 정상·실패 경로와 재발급 동시 요청을 다시 시험합니다. 실제 운영 성과를 확인한 것은 아닙니다.",
+          "question_contract": {
+            "purpose": "README에는 Spring Boot 4.1.0으로 적혀 있는데 사용하신 버전은 무엇인가요? 버전 차이로 생길 수 있는 오류를 가정하고 관찰·재현·수정 검증 순서도 설명해 주세요.",
+            "required_points": [
+              {
+                "key": "symptom",
+                "description": "가정한 오류와 관찰"
+              },
+              {
+                "key": "investigation",
+                "description": "원인 가설과 재현"
+              },
+              {
+                "key": "validation",
+                "description": "개선 후 확인 방법"
+              }
+            ],
+            "assumptions": [],
+            "basis_refs": [
+              {
+                "kind": "evidence",
+                "id": "m3"
+              }
+            ],
+            "evaluation_scope": "README에는 Spring Boot 4.1.0으로 적혀 있는데 사용하신 버전은 무엇인가요? 버전 차이로 생길 수 있는 오류를 가정하고 관찰·재현·수정 검증 순서도 설명해 주세요.",
+            "evaluation_keys": [
+              "communication",
+              "problem_solving"
+            ]
+          },
+          "analysis": null,
+          "parent_turn_no": 6,
+          "jd_requirement_ids": [],
+          "evidences": [
+            {
+              "id": "m3",
+              "repository_id": "synthetic-repo-sg-r1",
+              "git_ref": "70a6816bba2e328de436952d69d14395ba13d2e4",
+              "source_type": "code",
+              "path": "README.md",
+              "metadata_key": null,
+              "snippet": "| Framework | Spring Boot 4.1.0 |",
+              "tool_name": null,
+              "start_line": 12,
+              "end_line": 12
+            }
+          ]
+        }
+      ],
+      "requirements": [
+        {
+          "id": "synthetic-jd-auth",
+          "text": "개인정보 보호를 고려한 인증 설계 경험",
+          "category": "required"
+        },
+        {
+          "id": "synthetic-jd-location",
+          "text": "위치 정보 등 민감 데이터 취급 경험",
+          "category": "preferred"
+        }
+      ],
+      "rubrics": {
+        "project_understanding": {
+          "0": "질문을 받았지만 프로젝트의 목적이나 핵심 기능을 설명하지 못한다.",
+          "1": "목적이나 기능을 언급하나 핵심이 빈약하고 구체적인 내용이 없다.",
+          "2": "핵심 기능은 설명하나 구조·흐름 설명이 피상적이거나 일부 부정확하다.",
+          "3": "핵심 기능과 구조를 대체로 정확히 설명한다.",
+          "4": "구조·의존관계·설계 의도까지 근거를 들어 설명한다."
+        },
+        "technical_reasoning": {
+          "0": "질문을 받았지만 이유를 말하지 않거나(방식만 말하는 경우 포함) 모른다고 답한다.",
+          "1": "이유를 말하지만 '편해서·많이 써서' 같이 내용이 없는 수준이다.",
+          "2": "근거는 제시하나 대안과의 비교가 없거나 피상적이다.",
+          "3": "대안을 인지하고 선택 이유를 합리적으로 설명한다.",
+          "4": "트레이드오프를 구체적으로 비교하고 한계까지 인지하고 있다."
+        },
+        "problem_solving": {
+          "0": "질문을 받았지만 문제 상황을 구체적으로 떠올리지 못한다.",
+          "1": "문제 상황만 말하거나, 구체적인 원인·방법 없이 해결했다고만 말한다.",
+          "2": "해결했다고 말하며 원인이나 방법을 언급하나 모호하거나 일부만 설명한다.",
+          "3": "문제 원인을 진단하고 해결한 과정을 구체적으로 설명한다.",
+          "4": "여러 대안을 검토한 근거와 재발 방지까지 설명한다."
+        },
+        "communication": {
+          "0": "질문과 무관한 답변을 하거나 의미를 파악하기 어렵다.",
+          "1": "질문의 일부에만 답하고 핵심이 불분명하다.",
+          "2": "질문에는 답하나 설명 순서가 뒤섞여 이해하기 어렵다.",
+          "3": "질문 의도에 맞춰 논리적 순서로 답변한다.",
+          "4": "핵심을 먼저 제시하고 근거를 명확히 구조화해 설명한다."
+        },
+        "contribution_clarity": {
+          "0": "질문을 받았지만 본인이 한 일을 말하지 못한다.",
+          "1": "참여했다고만 말하고 팀 성과와 본인 기여를 구분하지 못한다.",
+          "2": "본인이 한 일은 말하나 범위와 결과가 불명확하다.",
+          "3": "본인이 담당한 부분과 그 근거를 구체적으로 설명한다.",
+          "4": "협업 지점과 단독 기여를 명확히 구분해 설명한다."
+        },
+        "company_job_fit": {
+          "0": "질문을 받았지만 무엇을 했는지 말하지 않거나(경험이 있다는 말만 하는 경우 포함) 모른다고 답한다.",
+          "1": "요구사항이나 경험 중 하나만 구체적으로 언급한다.",
+          "2": "요구사항과 경험을 둘 다 언급하며 연결하나 근거가 빈약하거나 일반론에 그친다.",
+          "3": "요구사항과 본인 경험을 구체적 사례로 연결한다.",
+          "4": "요구사항별로 대응하는 경험과 한계까지 균형 있게 설명한다."
+        }
+      },
+      "tool_results": [],
+      "limitations": [
+        "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+        "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+        "이전 후보는 Redis 사용 선언만으로 캐시 설계 경험을 전제하여 거절됐다. 이번에는 새 질문 행동으로만 판정하며 recovery enum을 출력하라고 요구하지 않는다."
+      ]
+    }
+  }
+}

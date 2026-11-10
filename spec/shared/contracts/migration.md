@@ -42,6 +42,16 @@
 
 기존 자료는 참고 기록으로 남긴다. 구현자는 이 문서의 FIX/PENDING 상태를 보고 범위를 판단한다.
 
+## 진행 중 다음 질문의 유한 복구 — 2026-11-09 로컬 사용자 승인
+
+[공통 0012](../decisions/0012-bounded-question-recovery.md)에 따라 안전한 질문 후보 반려는
+자동 1라운드, 저장된 답변으로 이어받기는 명시 수동 1라운드로 제한한다.
+`POST /interviews/{id}/question/retry`의 요청 ID 재생과 새 realtime sessionId,
+GET의 선택 필드 `canRetryQuestion`·`questionRetryCount`·`questionRetryState`, 409의
+`question_retry_unavailable/in_progress/failed/limit`를 OpenAPI에 추가한다.
+0012은 기존 0010의 다음 질문 복구 금지 범위만 부분 대체한다. 0010 원문과 실패 기록을 보존하고 T3 재실행·전체 면접 초기화·검토 생략은 하지 않는다.
+이 행은 계약 변경이며 실제 구현·검증 결과나 팀 승인 상태를 대신하지 않는다.
+
 ## PR #15 JD 분류 정합화
 
 API `JdCategory`와 DB·AI `category`는 같은 값이다(2026-09-21 PR #41 코멘트로 확정, [공통 0005](../decisions/0005-jd-category-unification.md)로 AI 쪽도 통일). 별도 변환 레이어를 두지 않으며, 원문 출처 보존은 [분석 Run](../../backend/features/analysis-run.md#wanted-공고-수집분류)을 따른다. 공개 API 값이나 DB enum을 변경하지 않는다.

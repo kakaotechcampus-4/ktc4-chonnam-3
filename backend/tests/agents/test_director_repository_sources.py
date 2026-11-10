@@ -102,6 +102,187 @@ class Transport:
         raise AssertionError(f"예상하지 않은 GitHub 경로: {suffix}")
 
 
+async def test_symlink_inventory_is_preserved_without_filling_the_selection_request():
+    from uuid import UUID
+
+    from app.agents.director.tools import EvidenceScope
+    from app.features.interview.repository_sources import collect_repository_sources
+    from app.integrations.llm.client import CallBudget
+
+    seed = dict(repo_id=UUID(int=1), sha="a" * 40)
+    transport = Transport(seed, miss=True)
+
+    async def handle(request):
+        response = await transport(request)
+        if request.url.path.endswith(f"/git/trees/{TREE}"):
+            raw = response.json()
+            raw["tree"].extend(
+                dict(path=f"symlink-{n}", mode="120000", type="blob", sha="d" * 40)
+                for n in range(3000)
+            )
+            return httpx.Response(200, json=raw)
+        return response
+
+    config = settings().model_copy(
+        update={
+            "director_prepare_max_response_bytes": 1048576,
+            "director_prepare_max_total_bytes": 2097152,
+        }
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        result = await collect_repository_sources(
+            scope=EvidenceScope(
+                str(seed["repo_id"]), 123, "owner/sample", seed["sha"], frozenset()
+            ),
+            shallow=shallow(seed),
+            prompt=c.PromptSpec("repo_deep", "fixture", "fixture", "t"),
+            settings=config,
+            http_client=http,
+            budget=CallBudget(),
+        )
+    assert len(result.inventory_limitations) == 3000
+    assert len(result.limitations) < 12
+    assert len(transport.model_payloads[0]["limitations"]) < 12
+    assert [source.path for source in result.item.sources] == [PATH]
+
+
+async def test_cached_inventory_is_reused_without_replacing_its_observed_scope():
+    from uuid import UUID
+
+    from app.agents.director.tools import EvidenceScope
+    from app.features.interview.repository_inventory import SourceInventory
+    from app.features.interview.repository_sources import collect_repository_sources
+    from app.integrations.llm.client import CallBudget
+
+    seed = dict(repo_id=UUID(int=1), sha="a" * 40)
+    transport = Transport(seed)
+    original = SourceInventory(seed["sha"], (PATH, "old.custom"), (PATH,), ("당시 일부 미확인",))
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+        result = await collect_repository_sources(
+            scope=EvidenceScope(
+                str(seed["repo_id"]), 123, "owner/sample", seed["sha"], frozenset()
+            ),
+            shallow=shallow(seed),
+            prompt=c.PromptSpec("repo_deep", "fixture", "fixture", "t"),
+            settings=settings().model_copy(update={"director_prepare_max_entries": 1}),
+            http_client=http,
+            budget=CallBudget(),
+            paths=(PATH,),
+            read_scopes=((PATH, "entire file"),),
+            inventory=original,
+        )
+    assert (
+        SourceInventory(
+            seed["sha"],
+            result.inventory_paths,
+            result.selection_paths,
+            result.inventory_limitations,
+        )
+        == original
+    )
+    assert not transport.model_operations
+
+
+async def test_actual_tree_neighbor_is_preserved_without_reading_or_analyzing_it():
+    from uuid import UUID
+
+    from app.agents.director.tools import EvidenceScope
+    from app.features.interview.repository_sources import collect_repository_sources
+    from app.integrations.llm.client import CallBudget
+
+    seed = dict(repo_id=UUID(int=1), sha="a" * 40)
+    transport = Transport(seed, miss=True)
+
+    async def handle(request):
+        response = await transport(request)
+        if request.url.path.endswith(f"/git/trees/{TREE}"):
+            raw = response.json()
+            raw["tree"].append(
+                dict(path="adjacent.custom", mode="100644", type="blob", sha="d" * 40)
+            )
+            return httpx.Response(200, json=raw)
+        return response
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        result = await collect_repository_sources(
+            scope=EvidenceScope(
+                str(seed["repo_id"]), 123, "owner/sample", seed["sha"], frozenset()
+            ),
+            shallow=shallow(seed),
+            prompt=c.PromptSpec("repo_deep", "fixture", "fixture", "t"),
+            settings=settings(),
+            http_client=http,
+            budget=CallBudget(),
+        )
+    assert result.candidate_paths == (PATH, "adjacent.custom")
+    assert [source.path for source in result.item.sources] == [PATH]
+    assert not any("adjacent.custom" in str(request.url) for request in transport.github)
+
+
+async def test_cached_file_beyond_entry_cap_rereads_complete_parent_before_absence():
+    from uuid import UUID
+
+    from app.agents.director.tools import EvidenceScope
+    from app.features.interview.repository_sources import (
+        SourcePreparationError,
+        collect_repository_sources,
+    )
+    from app.integrations.llm.client import CallBudget
+
+    seed = dict(repo_id=UUID(int=1), sha="a" * 40)
+    transport = Transport(seed)
+    trees = []
+
+    async def handle(request):
+        if request.url.path.endswith(f"/git/trees/{TREE}"):
+            trees.append(request)
+            return httpx.Response(
+                200,
+                json=dict(
+                    sha=TREE,
+                    truncated=False,
+                    tree=[
+                        dict(path=path, mode="100644", type="blob", sha=BLOB)
+                        for path in ("a.py", "b.py", "z.py")
+                    ],
+                ),
+            )
+        if request.url.path.endswith("/contents/z.py"):
+            return httpx.Response(
+                200,
+                json=dict(
+                    type="file",
+                    path="z.py",
+                    sha=BLOB,
+                    size=len(TEXT.encode()),
+                    encoding="base64",
+                    content=base64.b64encode(TEXT.encode()).decode(),
+                ),
+            )
+        return await transport(request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        try:
+            result = await collect_repository_sources(
+                scope=EvidenceScope(
+                    str(seed["repo_id"]), 123, "owner/sample", seed["sha"], frozenset()
+                ),
+                shallow=shallow(seed),
+                prompt=c.PromptSpec("repo_deep", "v1", "fixture", "fixture"),
+                settings=settings().model_copy(update={"director_prepare_max_entries": 1}),
+                http_client=http,
+                budget=CallBudget(),
+                paths=("z.py",),
+                read_scopes=(("z.py", "entire file"),),
+            )
+        except SourcePreparationError as error:
+            pytest.fail(f"부분 구조 밖의 캐시 원문을 재조회해야 합니다: {error.code}")
+    assert [(source.path, source.content) for source in result.item.sources] == [("z.py", TEXT)]
+    assert len(trees) == 2
+    assert any("항목" in value for value in result.limitations)
+    assert transport.model_operations == []
+
+
 async def test_source_structure_is_bounded_and_keeps_unread_scope_limitations():
     from uuid import UUID
 
@@ -136,6 +317,69 @@ async def test_source_structure_is_bounded_and_keeps_unread_scope_limitations():
     assert any("상한" in note for note in result.limitations)
     assert all("recursive" not in request.url.params for request in transport.github)
     assert transport.model_operations == ["select"]
+
+
+@pytest.mark.parametrize("limit", ["requests", "bytes", "empty"])
+async def test_structure_leaves_budget_for_verified_source_reads(limit):
+    from uuid import UUID
+
+    from app.agents.director.tools import EvidenceScope
+    from app.features.interview.repository_sources import (
+        SourcePreparationError,
+        collect_repository_sources,
+    )
+    from app.integrations.llm.client import CallBudget
+
+    seed = dict(repo_id=UUID(int=1), sha="a" * 40)
+    transport = Transport(seed, miss=True)
+    child = "d" * 40
+
+    async def bounded_tree(request):
+        if request.url.path.endswith(f"/git/trees/{child}"):
+            entries = [
+                dict(path=f"unread{i}.py", mode="100644", type="blob", sha=BLOB)
+                for i in range(200 if limit == "bytes" else 1)
+            ]
+            return httpx.Response(200, json=dict(sha=child, truncated=False, tree=entries))
+        original = await transport(request)
+        if request.url.path.endswith(f"/git/trees/{TREE}"):
+            payload = original.json()
+            payload["tree"] = (
+                []
+                if limit == "empty"
+                else [*payload["tree"], dict(path="unread", mode="040000", type="tree", sha=child)]
+            )
+            return httpx.Response(200, json=payload)
+        return original
+
+    config = settings().model_copy(
+        update={
+            "director_prepare_max_requests": 4 if limit == "requests" else 8,
+            "director_prepare_max_total_bytes": 4096,
+            "director_prepare_max_response_bytes": 2048,
+        }
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(bounded_tree)) as http:
+        arguments = dict(
+            scope=EvidenceScope(
+                str(seed["repo_id"]), 123, "owner/sample", seed["sha"], frozenset()
+            ),
+            shallow=shallow(seed),
+            prompt=c.PromptSpec("repo_deep", "v1", "fixture", "fixture"),
+            settings=config,
+            http_client=http,
+            budget=CallBudget(),
+        )
+        if limit == "empty":
+            with pytest.raises(SourcePreparationError, match="repository_sources_unavailable"):
+                await collect_repository_sources(**arguments)
+            assert transport.model_operations == []
+        else:
+            collected = await collect_repository_sources(**arguments)
+            assert collected.item.sources == (c.SourceDocument(PATH, "file", TEXT, "entire file"),)
+            assert any("상한" in note for note in collected.limitations)
+            assert transport.model_operations == ["select"]
+            assert len(transport.github) <= config.director_prepare_max_requests
 
 
 @pytest.mark.parametrize("failure", ["binary", "timeout"])
@@ -214,3 +458,48 @@ def response(data, model="fixture-model"):
             "usage": {"input_tokens": 8, "output_tokens": 6},
         },
     )
+
+
+async def test_large_selected_file_is_split_with_real_line_locations(monkeypatch):
+    import sys
+    from uuid import UUID
+
+    from app.agents.director.tools import EvidenceScope
+    from app.features.interview.repository_sources import collect_repository_sources
+    from app.integrations.llm.client import CallBudget
+
+    original = "".join(f"def item_{n}(): return {n}\n" for n in range(30))
+    digest = hashlib.sha1(
+        f"blob {len(original.encode())}\0".encode() + original.encode()
+    ).hexdigest()
+    monkeypatch.setattr(sys.modules[__name__], "TEXT", original)
+    monkeypatch.setattr(sys.modules[__name__], "BLOB", digest)
+    seed = dict(repo_id=UUID(int=1), sha="a" * 40)
+    transport = Transport(seed, miss=True)
+
+    async def sized(request):
+        result = await transport(request)
+        if request.headers.get("accept") == "application/vnd.github.raw+json":
+            return httpx.Response(200, content=original.encode())
+        if "/git/trees/" in request.url.path:
+            value = result.json()
+            value["tree"][0]["size"] = len(original.encode())
+            return httpx.Response(200, json=value)
+        return result
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(sized)) as http:
+        result = await collect_repository_sources(
+            scope=EvidenceScope(
+                str(seed["repo_id"]), 123, "owner/sample", seed["sha"], frozenset()
+            ),
+            shallow=shallow(seed),
+            prompt=c.PromptSpec("repo_deep", "v2", "fixture", "fixture"),
+            settings=settings().model_copy(update={"director_prepare_max_file_bytes": 128}),
+            http_client=http,
+            budget=CallBudget(),
+        )
+    assert len(result.item.sources) > 1
+    assert len({item.path for item in result.item.sources}) == 1
+    assert all(item.end_line is not None for item in result.item.sources)
+    assert result.item.sources[-1].end_line == 30
+    assert transport.model_operations == ["select"]

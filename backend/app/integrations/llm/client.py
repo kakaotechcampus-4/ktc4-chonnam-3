@@ -130,6 +130,42 @@ def _quota_exhausted(raw: bytes) -> bool:
     )
 
 
+def _http_failure(status: int, raw: str | None) -> CallFailure:
+    """원문 메시지 대신 고정 원인과 수동 재시도 정책을 호출 기록에 저장한다."""
+    transient = status in {408, 409, 500, 502, 503, 504}
+    failure = CallFailure(
+        "provider",
+        "llm_failed",
+        f"Provider HTTP {status} request failed.",
+        provider_status=status,
+        provider_cause="transient_http" if transient else "permanent_http",
+        manual_retryable=transient,
+    )
+    if status != 429:
+        return failure
+    quota = _quota_exhausted((raw or "").encode("utf-8"))
+    try:
+        body = _json(raw or "")
+    except (ValueError, UnicodeError, RecursionError):
+        body = None
+    error = body.get("error") if isinstance(body, dict) else None
+    rate_limited = isinstance(error, dict) and (
+        error.get("code") == "rate_limit_exceeded" or error.get("type") == "rate_limit_error"
+    )
+    return CallFailure(
+        "provider",
+        "llm_failed",
+        failure.reason_summary,
+        provider_status=status,
+        provider_cause="quota_exhausted"
+        if quota
+        else "rate_limit"
+        if rate_limited
+        else "unclassified_http",
+        manual_retryable=rate_limited and not quota,
+    )
+
+
 def _body(request: ModelRequest) -> bytes:
     body = {
         "model": request.prompt.model,
@@ -156,7 +192,63 @@ def _body(request: ModelRequest) -> bytes:
         "max_output_tokens": request.limits.max_output_tokens,
         "store": False,
     }
+    # 설정한 task만 추론량을 제어한다. 미설정 모델에 미지원 인수를 자동으로 보내지 않는다.
+    if request.limits.reasoning_effort is not None:
+        body["reasoning"] = {"effort": request.limits.reasoning_effort}
+    if request.limits.stream:
+        body["stream"] = True
     return json.dumps(body, ensure_ascii=False, allow_nan=False).encode("utf-8")
+
+
+def request_size(request: ModelRequest) -> int:
+    """실제 전송과 같은 직렬화로 입력 예산을 측정하며 요청 내용은 반환하지 않는다."""
+    return len(_body(request))
+
+
+def _stream_envelope(raw: bytes) -> dict[str, object]:
+    """델타를 확정 결과로 발행하지 않고 유일한 종료 이벤트의 전체 응답을 읽는다."""
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeError:
+        raise _failed("provider", "llm_failed", "Invalid provider stream encoding.") from None
+    terminal: dict[str, object] | None = None
+    data_lines: list[str] = []
+    # SSE 줄 경계는 LF/CRLF/CR뿐이다. JSON 안의 Unicode 구분자를 자르지 않는다.
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    if not text.endswith("\n"):
+        raise _failed("provider", "llm_failed", "Provider stream frame was interrupted.")
+    for line in text.split("\n")[:-1]:
+        if line.startswith(":"):
+            continue
+        if line:
+            field, _, value = line.partition(":")
+            if field == "data":
+                data_lines.append(value.removeprefix(" "))
+            continue
+        if not data_lines:
+            continue
+        data, data_lines = "\n".join(data_lines), []
+        if data == "[DONE]":
+            continue
+        try:
+            event = _json(data)
+        except (ValueError, UnicodeError, RecursionError):
+            raise _failed("provider", "llm_failed", "Invalid provider stream event.") from None
+        if not isinstance(event, dict) or not isinstance(event.get("type"), str):
+            raise _failed("provider", "llm_failed", "Invalid provider stream event.")
+        kind = event["type"]
+        if kind == "error":
+            raise _failed("provider", "llm_failed", "Provider stream failed.")
+        if kind in {"response.completed", "response.failed", "response.incomplete"}:
+            response = event.get("response")
+            if terminal is not None or not isinstance(response, dict):
+                raise _failed("provider", "llm_failed", "Ambiguous provider stream completion.")
+            if response.get("status") != kind.removeprefix("response."):
+                raise _failed("provider", "llm_failed", "Inconsistent provider stream status.")
+            terminal = response
+    if terminal is None or data_lines:
+        raise _failed("provider", "llm_failed", "Provider stream did not complete.")
+    return terminal
 
 
 def _token(usage: object, name: str) -> int | None:
@@ -216,6 +308,7 @@ async def _attempt[T](
     failure: CallFailure | None = None
     data: T | None = None
     retry_delay: float | None = 0.0
+    provider_status: int | None = None
     try:
         async with asyncio.timeout(request.limits.timeout_seconds) as deadline:
             async with http.stream(
@@ -234,6 +327,7 @@ async def _attempt[T](
                 if not response.is_success:
                     retry_delay = 0.0
                     status = response.status_code
+                    provider_status = status
                     if status == 429:
                         # 오류 본문이 끊기더라도 이미 받은 서버 최소 대기는 보존한다.
                         retry_delay = _retry_delay(
@@ -256,9 +350,7 @@ async def _attempt[T](
                             response.headers["Retry-After"], request.limits.timeout_seconds
                         )
                     raise _CallFailed(
-                        CallFailure(
-                            "provider", "llm_failed", f"Provider HTTP {status} request failed."
-                        ),
+                        _http_failure(status, raw),
                         retry_delay,
                     )
                 buffer = bytearray()
@@ -274,7 +366,9 @@ async def _attempt[T](
             raise TimeoutError
         # 공급자 응답 봉투의 손상과 그 안에 담긴 모델 출력의 JSON 오류를 구분한다.
         try:
-            decoded = _json(bytes(buffer))
+            decoded = (
+                _stream_envelope(bytes(buffer)) if request.limits.stream else _json(bytes(buffer))
+            )
         except (ValueError, UnicodeError, RecursionError):
             raise _failed("provider", "llm_failed", "Invalid provider response JSON.") from None
         if not isinstance(decoded, dict):
@@ -309,11 +403,23 @@ async def _attempt[T](
             raise _failed("schema", "llm_failed", "Validator returned no result.")
     except (TimeoutError, httpx.TimeoutException):
         failure = CallFailure(
-            stage="timeout", error_code="llm_timeout", reason_summary="Provider request timed out."
+            stage="timeout",
+            error_code="llm_timeout",
+            reason_summary="Provider request timed out.",
+            provider_cause="timeout",
+            manual_retryable=True,
         )
     except httpx.RequestError:
-        failure = CallFailure(
-            stage="provider", error_code="llm_failed", reason_summary="Provider transport failed."
+        failure = (
+            _http_failure(provider_status, raw)
+            if provider_status is not None
+            else CallFailure(
+                stage="provider",
+                error_code="llm_failed",
+                reason_summary="Provider transport failed.",
+                provider_cause="transport",
+                manual_retryable=True,
+            )
         )
     except _CallFailed as exc:
         failure = exc.failure

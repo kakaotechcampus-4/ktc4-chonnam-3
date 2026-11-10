@@ -20,6 +20,7 @@ from devon_ai import contracts as c
 from app.llm_tasks.report import ModelCall
 
 ROLE_SUMMARY_MAX_CHARS = 500
+SUPPORTED_PROMPT_VERSIONS = frozenset({"profile_summary_v1", "profile_summary_v2"})
 # 면접 진술에 없는 단정은 개인 기여를 부풀리기 쉬워 진술에 나온 말일 때만 허용한다.
 ABSOLUTE_CLAIMS = ("혼자", "단독", "전담", "전적으로", "도맡", "전부 직접", "모든 기능")
 RATIO_DIGITS = 3

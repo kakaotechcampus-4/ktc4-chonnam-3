@@ -8,6 +8,7 @@ from uuid import UUID
 
 from devon_ai import contracts as c
 from devon_ai.agents.director.agent import _references
+from devon_ai.llm_tasks.answer_analysis import decode_analysis_output
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +34,16 @@ def restored_question(
     """원래 저장한 질문 기준만 복원하고 평가 기준을 소급 생성하지 않는다."""
     try:
         contract = c.decode(c.QuestionContract, turn.question_contract)
+        parent_id = None
+        if turn.parent_turn_no is not None:
+            if not 1 <= turn.parent_turn_no < turn.turn_no or turn.parent_turn_no > len(
+                context.history
+            ):
+                raise c.ContractError("semantic", "question parent")
+            parent = context.history[turn.parent_turn_no - 1]
+            if parent.persona != turn.persona:
+                raise c.ContractError("semantic", "question parent")
+            parent_id = parent.turn_id
         question = c.Question(
             cast(c.PersonaId, turn.persona),
             turn.question_text,
@@ -40,12 +51,25 @@ def restored_question(
             contract,
             tuple(ref.id for ref in contract.basis_refs if ref.kind == "evidence"),
             tuple(str(value) for value in turn.jd_requirement_ids),
+            "follow_up" if parent_id is not None else "main",
+            parent_id,
         )
         # 저장한 계약도 현재 고정 SHA와 실제 등록 원문에 대조한다. 본인 답변은 질문 근거가 아니다.
+        supplied = source_texts or {}
+        supplemental_kinds = {
+            "document_claim",
+            "document_visual",
+            "external_source",
+            "document_claim_comparison",
+        }
         sources = _references(
             replace(context, history=context.history[: turn.turn_no - 1]),
-            source_texts or {},
+            {ref: text for ref, text in supplied.items() if ref.kind not in supplemental_kinds},
         )
+        # DB에서 읽은 과거 인용만 별도로 등록한다. 새 질문의 모델 가시 범위를 넓히지 않는다.
+        for ref in contract.basis_refs:
+            if ref.kind in supplemental_kinds and ref in supplied:
+                sources[ref] = supplied[ref]
         return c.validate_question(
             question,
             review=c.QuestionReview(question.text, contract),
@@ -95,17 +119,40 @@ async def load_answer_context(
     turn = await db.scalar(query)
     if turn is None:
         raise AgentStateError("answer_turn_invalid")
-    sources = await reference_texts(db, interview_id)
+    sources = await reference_texts(db, interview_id, archive_supplemental=True)
+    checked = restored_question(turn, context, source_texts=sources)
+    visible = {c.BasisRef(item.kind, item.source_id) for item in context.supplemental_sources}
+    missing = tuple(
+        f"question_basis_outside_model_budget:{ref.kind}:{ref.id}"
+        for ref in checked.data.question_contract.basis_refs
+        if ref.kind
+        in {"document_claim", "document_visual", "external_source", "document_claim_comparison"}
+        and ref not in visible
+    )
+    if missing:
+        # 원문으로 복원했다는 사실과 이번 모델이 본 원문 범위를 혼동하지 않게 한다.
+        context = replace(
+            context, supplemental_limitations=context.supplemental_limitations + missing
+        )
     return AnswerContext(
         context,
-        restored_question(turn, context, source_texts=sources),
+        checked,
         str(turn.id),
         turn.answer_text,
     )
 
 
-async def reference_texts(db: AsyncSession, interview_id: UUID) -> dict[c.BasisRef, str]:
-    """면접에 고정한 공고 본문만 원문 근거로 전달한다."""
+async def reference_texts(
+    db: AsyncSession, interview_id: UUID, *, archive_supplemental: bool = False
+) -> dict[c.BasisRef, str]:
+    """새 모델 입력과 과거 질문의 불변 원문 검증 범위를 분리한다."""
+    result: dict[c.BasisRef, str] = {}
+    if archive_supplemental:
+        from app.features.interview.supplemental_sources import load_supplemental_sources
+
+        # Context 예산 밖의 과거 인용도 복원하되 이 맵을 새 모델 입력으로 보내지 않는다.
+        for item in await load_supplemental_sources(db, interview_id, max_total_bytes=None):
+            result[c.BasisRef(item.kind, item.source_id)] = item.content
     posting = await db.scalar(
         select(JobPosting)
         .join(
@@ -114,12 +161,10 @@ async def reference_texts(db: AsyncSession, interview_id: UUID) -> dict[c.BasisR
         )
         .where(InterviewSession.id == interview_id)
     )
-    if posting is None:
-        return {}
-    if not posting.raw_payload:
-        return {}
-    text = json.dumps(posting.raw_payload, ensure_ascii=False)
-    return {c.BasisRef("job_posting", str(posting.id)): text}
+    if posting is not None and posting.raw_payload:
+        text = json.dumps(posting.raw_payload, ensure_ascii=False)
+        result[c.BasisRef("job_posting", str(posting.id))] = text
+    return result
 
 
 async def prior_analyses(
@@ -147,7 +192,7 @@ async def prior_analyses(
         for scope in scopes
         for path in scope.allowed_paths
     )
-    sources = await reference_texts(db, interview.id)
+    sources = await reference_texts(db, interview.id, archive_supplemental=True)
     for turn in await db.scalars(select(InterviewTurn).where(InterviewTurn.id.in_(ids))):
         if turn.analysis is None or not turn.answer_text:
             continue
@@ -186,7 +231,27 @@ async def prior_analyses(
                     raw = attempt.get("raw_output")
                     if attempt.get("error_stage") is None and isinstance(raw, str):
                         # 최초 JSONB를 수정하지 않고 성공한 보강 분석을 당시 원문에 다시 대조한다.
-                        checked = validate(c.decode(c.AnswerAnalysis, json.loads(raw)))
+                        version, schema = (
+                            attempt.get("prompt_version"),
+                            attempt.get("schema_version"),
+                        )
+                        if (
+                            isinstance(version, str)
+                            and version.partition("@")[0] == "answer_analysis_v6"
+                        ):
+                            if not isinstance(schema, str):
+                                raise c.ContractError("schema", "analysis attempt version")
+                            restored = decode_analysis_output(
+                                json.loads(raw),
+                                prompt_version=version,
+                                schema_version=schema,
+                                answer_text=turn.answer_text,
+                                contract=question.data.question_contract,
+                            )
+                        else:
+                            # 구형 prior 경로의 관용적 복원과 report의 기존 strict 정책을 구분한다.
+                            restored = c.decode(c.AnswerAnalysis, json.loads(raw))
+                        checked = validate(restored)
             result[str(turn.id)] = checked
         except (c.ContractError, ValueError, TypeError):
             raise AgentStateError("analysis_contract_invalid") from None

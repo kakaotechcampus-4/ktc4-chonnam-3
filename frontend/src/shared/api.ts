@@ -6,6 +6,7 @@ import {
   type HomeResponse,
   type InterviewListResponse,
   type DocumentPreviewResponse,
+  type DocumentType,
   type CreateAnalysisRunRequest,
   type CreateAnalysisRunResponse,
   type AnalysisRunResponse,
@@ -15,6 +16,8 @@ import {
   type CreateInterviewRequest,
   type CreateInterviewResponse,
   type InterviewDetailResponse,
+  type RetryQuestionRequest,
+  type RetryQuestionResponse,
   type ReportResponse,
   type ReportGeneratingResponse,
   type FeedbackDisagreementRequest,
@@ -79,9 +82,10 @@ export const api = {
     return request<InterviewListResponse>(`/me/interviews${qs ? `?${qs}` : ''}`);
   },
   // Content-Type을 직접 지정하지 않는다. multipart boundary는 브라우저가 생성해야 한다.
-  previewDocument: (file: File) => {
+  previewDocument: (file: File, docType: DocumentType = 'portfolio') => {
     const form = new FormData();
     form.append('file', file);
+    form.append('docType', docType);
     return request<DocumentPreviewResponse>('/documents/preview', {
       method: 'POST',
       body: form,
@@ -102,16 +106,20 @@ export const api = {
   getInterview: (id: string) => request<InterviewDetailResponse>(`/interviews/${id}`),
   getInterviewReport: (id: string) =>
     request<ReportResponse | ReportGeneratingResponse>(`/interviews/${id}/report`),
+  retryReport: (id: string) =>
+    request<ReportGeneratingResponse>(`/interviews/${id}/report/retry`, { method: 'POST' }),
   retryInterview: (id: string) =>
     request<CreateInterviewResponse>(`/interviews/${id}/retry`, { method: 'POST' }),
+  retryQuestion: (id: string, body: RetryQuestionRequest) =>
+    requestJson<RetryQuestionResponse>(`/interviews/${id}/question/retry`, 'POST', body),
   /** 나가기·레포 재선택의 면접 중단. 이미 abandoned면 다시 불러도 204다. api-spec.md #24. */
-  abandonInterview: (id: string) =>
-    request<void>(`/interviews/${id}/abandon`, { method: 'POST' }),
+  abandonInterview: (id: string) => request<void>(`/interviews/${id}/abandon`, { method: 'POST' }),
   submitFeedbackDisagreement: (id: string, body: FeedbackDisagreementRequest) =>
     requestJson<void>(`/interviews/${id}/feedback-disagreements`, 'POST', body),
   analysisRunEventsUrl: (runId: string) => `${BASE}/analysis-runs/${runId}/events`,
   /** 준비 실패 재시도. 진행 상황은 응답이 아니라 WS prepareStep 으로 온다. api-spec.md #23. */
-  retryPrepare: (id: string) => request<void>(`/interviews/${id}/prepare/retry`, { method: 'POST' }),
+  retryPrepare: (id: string) =>
+    request<void>(`/interviews/${id}/prepare/retry`, { method: 'POST' }),
 
   /**
    * WebSocket은 request() 래퍼를 거치지 않는다. BASE(`/api`)를 직접 붙여야

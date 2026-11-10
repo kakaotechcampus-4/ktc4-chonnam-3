@@ -6,7 +6,7 @@ from functools import partial
 
 import httpx
 from devon_ai import contracts as c
-from devon_ai.agents.director.runtime import DirectorOutcome
+from devon_ai.agents.director.runtime import DirectorOutcome, RecoveryFeedback
 
 from app.core.config import LLMSettings
 from app.integrations.llm.client import CallBudget, call_model
@@ -22,6 +22,7 @@ async def execute_director(
     reference_texts: Mapping[c.BasisRef, str] | None = None,
     prior_analyses: Mapping[str, c.ContractChecked[c.AnswerAnalysis]] | None = None,
     tool_results: tuple[c.ToolResult, ...] = (),
+    recovery_feedback: RecoveryFeedback | None = None,
     http_client: httpx.AsyncClient | None = None,
     attempt_sink: list[c.AttemptMetadata] | None = None,
 ) -> c.ModelResult[DirectorOutcome]:
@@ -43,7 +44,7 @@ async def execute_director(
     return await runtime.run_director(
         context,
         prompt=prompt,
-        limits=settings.call_limits(),
+        limits=settings.call_limits(prompt.task_name),
         model_call=partial(
             call_model,
             api_key=settings.openai_api_key,
@@ -56,4 +57,5 @@ async def execute_director(
         reference_texts=reference_texts,
         prior_analyses=prior_analyses,
         tool_results=tool_results,
+        recovery_feedback=recovery_feedback,
     )

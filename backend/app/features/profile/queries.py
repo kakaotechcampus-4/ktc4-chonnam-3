@@ -7,7 +7,13 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import InterviewTurn, RepoAnalysis, Repository, UserProfileSummary
+from app.db.models import (
+    InterviewReport,
+    InterviewTurn,
+    RepoAnalysis,
+    Repository,
+    UserProfileSummary,
+)
 from app.db.models.interview import InterviewSession, SessionRepository
 
 SHALLOW_USABLE_STATUSES = ("succeeded", "partial")
@@ -110,6 +116,32 @@ async def get_summary(db: AsyncSession, *, user_id: uuid.UUID) -> UserProfileSum
         select(UserProfileSummary).where(UserProfileSummary.user_id == user_id)
     )
     return summary
+
+
+async def completed_versions(
+    db: AsyncSession, *, user_id: uuid.UUID, repo_ids: list[uuid.UUID]
+) -> list[dict[str, object]]:
+    used = select(SessionRepository.interview_session_id).where(
+        SessionRepository.repository_id.in_(repo_ids)
+    )
+    rows = await db.execute(
+        select(InterviewSession.id, InterviewSession.completed_at, InterviewReport.current_revision)
+        .outerjoin(InterviewReport, InterviewReport.interview_session_id == InterviewSession.id)
+        .where(
+            InterviewSession.user_id == user_id,
+            InterviewSession.status == "completed",
+            InterviewSession.id.in_(used),
+        )
+        .order_by(InterviewSession.id)
+    )
+    return [
+        {
+            "interview_id": str(identity),
+            "completed_at": completed.isoformat() if completed else None,
+            "report_revision": revision,
+        }
+        for identity, completed, revision in rows
+    ]
 
 
 async def save_summary(

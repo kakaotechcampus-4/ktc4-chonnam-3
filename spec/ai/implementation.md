@@ -1,5 +1,339 @@
 # AI 구현·검증 기록
 
+<a id="independent-review-fixes-20261110"></a>
+## 2026-11-10 #233 추가 재검토 7건 대응
+
+독립 검토 기준 `9467bb7`에서 확인한 7건을 후속 커밋으로 수정한다.
+결정은 [0050](decisions/0050-review-work-lifetime-and-scoped-recovery.md)이며 기존 API·DB 스키마,
+초기 설계·이전 검증 기록·17개 개별 PR은 보존한다.
+
+| 항목 | 현재 구현과 검증 경계 |
+| --- | --- |
+| 작업 수명 | WS 작업은 소켓과 독립된 nonce 임대를 갱신한다. 설정에서 계산한 유한 실행 기한, 자동 rewrite 합류, 반복 취소 차단과 30초 정리 상한을 둔다. DB 정리가 끝나지 않으면 표식을 지우지 않고 갱신을 멈춰 만료시킨다. |
+| Claim 재추출 | 문장·버전·위치뿐 아니라 유형·태그·원문·좌표가 같은 행만 재사용한다. 달라진 결과는 새 ID를 활성화하며 과거 Claim·대조를 보존한다. |
+| 프로필 DB 복구 | 명시한 일시적 SQLSTATE 또는 연결 무효화만 기존 재전달로 처리한다. 검증 생성 결과·5회·24시간·backoff를 유지하고 영구 SQL·semantic 오류는 종결한다. |
+| 질문 위치 | 저장된 부모를 따라 메인 순번과 깊이를 계산해 REST·WS·리포트에 공통 적용한다. 부모 필드가 없던 구형 기록의 기존 표시는 유지한다. |
+| 이미지 | redirect를 포함한 개별 다운로드 절대 기한과 전체 수집 기한을 함께 유지한다. 중간 소비 바이트를 실패·취소에도 한 번만 집계하고 정상 이미지·이미 확보한 원문은 보존한다. |
+| DB 대상 | 공통 지식 대상 검증이 설정 URL과 실제 bind URL의 query를 연결 전에 거절한다. 기존 공식 수집 정책·접속 후 DB 이름 검사는 유지한다. |
+| Judge | 잘못된 타입·판정값을 구조화 실패로 남긴다. CLI는 과거 형식의 judge_error도 실패 종료하며 유효한 품질 판정·사람 검수 대기와 구분한다. |
+
+### 기존 데이터의 제한 복구
+
+`backend/scripts/recover_ai_review_results.py`는 기본 dry-run이다. 로컬·개발 환경,
+DB 대상·사용자·명시한 문서/프로필 요청 ID·actor·reason·새 JSONL 감사 경로를 요구한다.
+한 번의 대상은 최대 100개다. apply에는 dry-run의 `state_sha256` 대조와 쓰기 전 fsync 감사가
+필요하다. 같은 감사 파일은 덮어쓰지 않는다.
+
+- 문서는 같은 보존 원문·프롬프트의 성공 캐시만 pending으로 되돌린다. 원문·Claim·과거 대조는
+  보존하고 활성 ID만 비운다. 예약이 있거나 preparing_failed를 포함한 종료 전 면접이 참조하면
+  거절한다. 다음 정상 준비 경로에서 재추출하며 진행 중 면접에 자동 반영하지 않는다.
+- 프로필은 확인한 internal_error 실패 요청 중 현재 소유 리포트 revision·잔여 회차·만료가 유효한
+  대상만 pending으로 되돌린다. 회차·만료·생성 결과는 초기화하지 않는다. 삭제된 생성 결과는
+  복원할 수 없으며 이후 정상 전달에서 추가 생성이 필요할 수 있다.
+- 명령 자체는 모델·큐를 호출하지 않는다. 실제 사용자 DB의 영향 대상은 이번 수정 검증에서
+  확정하지 않았고 업무 데이터에 apply하지 않았다. 전체 문서·실패 요청의 일괄 재개도 하지 않는다.
+
+실행은 backend에서 `python -m scripts.recover_ai_review_results`로 한다.
+`--env-file`, `--profile`, `--target-host`, `--target-port`, `--target-database`, `--user-id`,
+`--actor`, `--reason`, `--output`과 `--document-id` 또는 `--profile-request-id`를 명시한다.
+dry-run을 검토한 뒤 같은 대상에 `--apply --expected-state-sha256 <검토한지문>`과 새 감사 경로를
+사용한다. applying 뒤 결과 기록이 없으면 대상 DB 상태를 먼저 확인한다.
+
+### 이번 검증과 과거 결과의 구분
+
+- AI 전체는 수정본에서 999개 통과했다. BE 문서 집중 28개, profile/report 242개,
+  이미지·설정·평가 CLI 105개 및 복구 14개가 통과했다. 부분 집합은 겹쳐 합산하지 않는다.
+- 면접 174개 회귀 통과 후 반복 취소·정리 상한을 추가 보완했다. 최종 코드에서 관련 18개와
+  정리 상한 재현 1개를 별도로 재검증했다. 이전 174개를 최종 전체 재실행으로 표기하지 않는다.
+- 최종 BE app·scripts Mypy 243소스, AI Mypy 31소스와 각 팀 Ruff·format이 통과했다.
+  별도 계약 검사는 2스키마·부분 OpenAPI·양성/음성 fixture 7개 통과이며 전체 API 검증은 아니다.
+- DB는 격리 PostgreSQL·Redis이며 모델·검색·음성 공급자는 모의 응답이다. 실제 유료 공급자를
+  호출하거나 사람의 질문 품질 검수를 수행한 결과가 아니다. 실제 HTTP 지연·실제 PG SQLSTATE
+  오류 주입과 자연 발생 장애 실험도 구분한다.
+- 중간 테스트 fixture/명령 오류와 수정 전 실패를 보존했다. 최초 Linux 전체 실행은 검증 launcher
+  설정이 맞지 않아 본문 진입 전 실패했다. 수정한 전체 실행은 마지막 취소 보완 중 소스가 바뀌어
+  중단했고 최종 성공 수치로 사용하지 않는다. 최종 원격 전체 검증은 [#233 Checks](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/233/checks)의 해당 HEAD와 종합 리뷰에서 확인한다.
+
+
+<a id="integrated-review-20261110"></a>
+## 2026-11-10 #233 전체 리뷰 대응
+
+현재 기준은 develop `d7ca24ea`와 [ADR 0049](decisions/0049-integrated-review-runtime-consistency.md)다. 아래의 최초 통합 게시·#185 제외 기록은 해당 과거 HEAD의 기록으로 보존한다. 현재는 #185·#234·#235를 포함한 최신 기반을 유지하고, 음성·질문 위치·리포트 계약의 자체 보완을 실행 코드에 연결했다. 활성화한 음성 대기 패치 15개와 안내 4개는 게시본에서 제거했으며 기존 #233 원본과 Git bundle에 보존했다. 다른 17개 PR에는 이번 수정을 게시하지 않는다.
+
+### 변경 사항
+
+- 공통 계약·BE 응답·FE 문서의 `answerMode`, 질문·리포트의 `mainIndex`·`followUpDepth`, `already_completed`와 STT 오류를 맞췄다. STT 불가 시 소켓을 유지하는 최신 정책과 FE 명시적 abandon을 보존했다. 질문 복구 ADR은 STT 0011과 구분해 공통 0012로 옮겼다.
+- 실제 저장 모드·면접 상태·턴을 STT 전에 검사하고, 녹음 중 상태가 바뀐 경우도 재확인한다. 질문 이어가기는 공급자 오류의 구조화된 원인·허용값으로 판단한다. 선택 보완 검색의 예외는 안전한 실패 결과를 기록하고 질문 진행과 구분하며 실제 취소·저장 오류는 전파한다.
+- 같은 공고 입력의 성공 도메인 분류와 최근 실패를 분리한다. 위험한 검색어가 유효한 답변 분석 전체를 무효화하지 않게 하되 실제 Tool 경계의 외부 전송 차단을 유지한다. 문서 claim 예약은 작성자의 절대 만료 시각과 소유 토큰으로 보호한다.
+- Report v3·Score v3는 OCR/JD·코드·문서·도구 원문을 신뢰하지 않는 자료로 명시한다. 채점 입력의 근거·도구 결과·보완 자료·JD source notes는 각 턴이 실제 참조한 범위로 제한한다. `@release` 배포 식별자도 같은 v3 경계를 따른다. 기존 v2 본문·기존 버전의 입력 형태를 보존한다.
+- 평가 CLI는 UTF-8 LF 지문 형식과 raw 지문을 구분한다. 기존 결과 덮어쓰기 방지·실패 종료 코드·실행 중 checkpoint를 추가했다. 현재 runtime manifest는 Director v8·답변 분석 v6·Report v3·Score v3를 사용한다. 과거 snapshot의 원시 바이트·기준 사례와 당시 manifest는 보존하며 출처 비교 색인과 이전 24개 참조의 실제 지문을 검증한다.
+- 평가 컨테이너는 선택 코호트·원본 snapshot·형제 코호트를 같은 상대 구조로 읽기 전용 마운트한다. 제품 이미지에 평가 원문·정답을 넣지 않는다. 코드·프롬프트 이미지와 자료·결과 저장소를 구분한다.
+- 기존 migration 0007·0008은 바꾸지 않고 0015에서 실제 음성 0006과 AI 0014를 합류한다. 0016은 CHECK 이름만 정렬한다. 0017은 검증한 프로필 생성 결과를 영속 전달 중 보존하고 0018은 claim lease를 추가한다. 프로필은 실행 600초·lease 630초로 정렬하고 입력·실행 지문이 같은 revision은 성공 요약을 재사용한다. 생성 후 Redis 장애도 유한 전달하며 오래된 소유자는 저장하지 못한다.
+- 배포는 migration → 동일 릴리스의 11종 실행 프롬프트 등록 → API·worker 순서다. 프롬프트 등록 실패 뒤 소비자를 시작하지 않는다.
+- JD 이미지의 HTTP 다운로드 30초와 전체 인식 360초를 분리했다. 부분 인식의 재시도는 URL별 영속 예약으로 동시 중복 실행을 막고, 동일 원문에서 시간당 최대 3회·60/120초 대기 및 1시간 주기를 적용한다. 실패·취소한 시도도 예산에 남기고 성공한 기존 본문은 보존한다.
+- FE는 `crypto.randomUUID`가 없는 환경에서 안전한 난수 기반 UUID v4를 사용하고 네트워크 재확인에도 같은 요청 ID를 유지한다. 텍스트 답변 초과와 음성 초과는 저장 모드에 맞게 같은 턴을 다시 입력한다. 장치 점검의 5초 검증은 가상 시계로 경계를 고정하고 기존 제한을 유지한다.
+- 현재 연결의 첫 질문을 받기 전에는 답변 시작을 제한한다. REST 조회 직후 늦게 도착한 WS 질문이 이미 시작한 녹음을 초기화하던 경합을 제거했다. mock 세션의 UUID도 같은 공통 생성기를 사용하며 실제 새 연결에서 답변 가능한 상태까지 검증한다.
+
+### 검증 구분
+
+이번 수정은 모의 공급자와 격리 PostgreSQL·Redis 및 브라우저 자동 검사를 사용한다. 실제 유료 공급자를 새로 호출하지 않으며 실제 사용자 재면접·사람의 품질 평가는 이번 회귀 검사에 포함하지 않는다. 중간 실패·해당 부분 재검증·최종 전체 검증은 구분해서 PR의 현재 HEAD 결과와 원래 리뷰 스레드에 기록한다. 이전 게시의 테스트 수치를 이번 결과로 합산하지 않는다.
+
+### 게시본과 동일한 코드의 확인 결과
+
+| 검사 | 실제 결과·범위 |
+| --- | --- |
+| AI 전체 | 986개 통과. 실제 공급자 호출이 없는 회귀 검사다. |
+| BE 리뷰 집중 경로 | WS·모드·질문 재전달 57개, 리포트 113개, 최종 공고·이미지·도메인 소비자 184개, migration 11개 각각 통과. 부분 집합이 겹쳐 합산하지 않는다. |
+| BE·AI 정적 | BE app·scripts Mypy 242소스, AI src·evals Mypy 31소스와 각 팀 Ruff·format 통과. |
+| FE 전체 | 첫 질문 수신 경합과 UUID 대체 회귀를 포함한 169개 통과. lint·타입·빌드·프록시 4개도 통과했다. |
+| 공통 계약 | 계약 테스트 63개 통과. 별도 스키마 2개·부분 OpenAPI·양성/음성 fixture 7개 검사 통과이며 전체 API 호환 검증을 대신하지 않는다. |
+| 실제 Docker 평가 | 최종 런타임·평가 이미지를 새로 빌드하고 네트워크 없이 32·1·8건 입력 검증 통과. 중복 출력·과거 snapshot 누락·형제 코호트 누락은 의도한 종료 코드 2로 거절했다. 현재 코드·프롬프트 307파일과 이미지 지문이 같다. |
+| 원본 보존 | 기존 작업 원본 1,229파일, canonical 사례 58개 및 과거 평가 원시 파일 60개 보존. 기존 report v2와 migration 0007·0008도 보존했다. |
+| 중간 실행 구분 | FE 최초 전체는 167통과·1실패였고 첫 WS 질문 전 답변 시작 경합을 고쳐 위 169개로 재검증했다. 병렬 Windows BE 전체의 시간 초과를 관찰해 중단했으며 별도 진단에서 첫 공급자 진입 전 10초 대기 초과를 재현했다. 해당 준비 경로 단독 2개는 통과했고 제한을 늘리지 않고 Linux 전체와 최종 CI를 따로 확인한다. |
+| Linux 준비 환경 | 최초 host.docker.internal 주소는 테스트의 로컬 DB 안전 검사에서 거절됐다. 테스트를 완화하지 않고 별도 PG15·Redis7과 같은 loopback namespace를 사용하는 최종 환경으로 구분했다. |
+
+최종 전체 검증과 원격 CI는 [#233](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/233)의 현재 HEAD 본문·종합 리뷰에서 통과·실패·미실행을 구분한다. 이 표의 자동 검증을 실제 공급자 품질·실사용·사람 검수 완료로 확대하지 않는다.
+
+- 첫 원격 AI 검사는 985통과·1실패였다. AI 전용 환경에 없는 pytest-asyncio를 신규 테스트가 사용한 것이 원인이었다. 기존 AI 테스트처럼 `asyncio.run`으로 같은 취소·checkpoint 검증을 실행하게 바꾸고 플러그인 자동 로딩을 끈 환경에서 986개를 재통과했다. 제품·의존성·lock 파일은 바꾸지 않았다.
+- Linux BE 최초 실행은 754통과·1실패에서 멈췄다. 프로필 작업의 실효 제한은 600초로 같지만 기존 테스트는 명시 등록 전의 `None`을 기대했다. 프로필 등록·명시 600초·lease 630초를 필수 확인하도록 고치고 기존 준비·리포트 1800초 검증을 유지해 4개를 재통과했다. 이어지는 전체 사례 검증은 통과한 nodeID와 나머지 목록의 합집합으로 확인하고 중복 수치를 합산하지 않는다.
+
+---
+
+<a id="integrated-publication-20261110"></a>
+## 2026-11-10 기존 17개 PR의 단일 통합 게시
+
+- 사용자 요청에 따라 #212~#219·#222~#230의 신규 구현과 최신 리뷰 수정을 최신 develop에 통합한다.
+  기존 PR의 브랜치·본문·상태는 보존하며 새 통합 PR을 추가한다.
+- 단일 게시 범위의 결정은 [0047](decisions/0047-integrated-publication-without-voice-input.md)에 기록했다.
+  다른 팀원의 미병합 #185 기본 구현은 제외한다. 음성 전용 DB 변경·STT 수신·위치 보강이 필요한
+  이번 작업의 추가 코드와 대응 테스트·계약은 `backend/patches/ai-service-voice185/`에 원문 지문과 함께 보존한다.
+- 공통 설정·Model Gateway·Director·레포 원문 수집·공식 자료·평가 실행·리포트·질문 복구의
+  17개 PR 내부 의존성은 실제 코드와 테스트로 연결한다. 최초 분리 PR의 비활성 패치 보관만으로
+  실행 완료를 주장하지 않는다.
+- 자체 0007은 실제 0005 기반에 연결하고 0008~0014 체인은 유지한다. 가짜 0006은 추가하지 않는다.
+  나중에 #185가 반영되면 실제 두 분기와 보류 보완을 함께 재검증한다.
+- 최신 develop의 이벤트·SAVEPOINT·준비 재등록 검증을 유지한다. 준비 복구는 공통 keyset scanner의
+  공정성과 claim 재검사를 유지하면서 기존 PAGE_SIZE/MAX_PAGES 설정을 전달한다.
+- 기존 캐시 분석값을 유지한 `_source_inventory` 추가와 JD 본문·ID의 명시적 인자를 검사한다.
+  임시 자막 표시와 무관한 녹음 복구 검증은 녹음 상태·마이크 수·현재 턴의 저장 표식으로 확인한다.
+  검증 조건 삭제·테스트 제외·시간 제한 확대로 통과시키지 않는다.
+- 로컬 완전 개발본과 #185를 제외한 실제 게시본의 검사 결과를 구분한다. 실제 모델·STT·Vision·TTS·
+  Tavily API는 이번 통합 작업에서 호출하지 않으며 모의 공급자와 격리 PostgreSQL·Redis를 사용한다.
+- 최종 실행 결과와 원격 CI는 이 항목의 검증 표 및 새 통합 PR에 기록한다. 초기 실행에서 확인한
+  테스트 계약 불일치와 환경 설정 오류를 최종 통과 수치에 섞지 않는다.
+
+
+### 단일 통합 PR 게시 전 검증
+
+| 범위 | 실제 결과와 한계 |
+| --- | --- |
+| 게시본 AI 전체 | pytest 972개 통과. 실제 모델 API를 호출한 결과가 아니다. |
+| 게시본 BE 정적 | 전체 Ruff·format 통과, app·scripts Mypy 236소스 통과. |
+| 게시본 BE 최초 전체 | 934개 통과·10개 실패에서 중단. 캐시 metadata·위치/모드·JD fixture와 페이지 설정 호환성의 불일치를 확인했다. |
+| 해당 보완의 재검증 | 캐시 경계 파일 16개, WS·준비 응답 3개, 평가 기회 파일 37개, 수집 예산 파일 8개, 준비 재등록·공통 스캔·lease 34개 각각 통과. 범위가 겹쳐 합산하지 않는다. |
+| 게시본 BE 최종 전체 | 격리 PostgreSQL·Redis로 재실행 중. 최종 HEAD의 전체 검사와 원격 CI 결과는 새 통합 PR 검증 표에서 확인한다. |
+| 게시본 FE | lint·타입·빌드·프록시 검사 통과. 최초 MSW 161개 통과·1개 실패 후 녹음 상태 검사를 교정했고, 최종 전체 162개 통과. |
+| 경계·원문 | #185 대기 패치 12개를 독립 적용·목표 지문 확인. 원본 1229개 파일과 평가 snapshot 원시 바이트 보존. |
+| 실제 공급자·실사용·사람 검수 | 이번 통합 검증에서는 미실행. 모의 공급자, 격리 테스트 DB와 Redis를 사용했다. |
+
+
+
+### #233 게시 후 #185 경계 회귀 보완
+
+- 전체 재실행에서 2612개 통과·14개 실패·1개 별도 마이그레이션 검사의 미설정을 확인했다.
+  실패는 음성 전용 HTTP/WS 검사와 제외한 STT 예제 키의 필수 존재 검사였다.
+- VOICE HTTP 회귀 9개와 음성 입력 helper 회귀 9개를 없애지 않고 대응 코드가 필요한 패치에 보존했다.
+  현재 TEXT·인증·소유권·과금 차단과 실제 파서 검사를 별도로 실행하며, 미래 패치 적용 뒤에도 유지한다.
+- 비공개 연결 값 15종의 빈 값 검사는 유지한다. 현재 필드 13종의 필수 존재와 이후 STT 2종의 필수 존재를 구분한다.
+  미설정 STT 키에도 실제 값이 들어오면 거절하고 오류에 값을 노출하지 않는 회귀를 추가했다.
+- 해당 수정 후 TTS 범위 21개, WS 파서 3개, 설정 파일 전체 32개가 각각 통과했다.
+  완전 개발본에서는 TEXT 6개·VOICE 9개 및 입력 helper 기존 9개·파서 3개가 함께 통과했다.
+- 전용 `TASK11_MIGRATION_URL` 검사는 일반 pytest의 미설정 skip과 별도의 migration CI 통과를 구분한다.
+  최종 전체 검사·CI 상태는 #233의 현재 HEAD 검증 표를 따른다.
+
+
+<a id="review-round2-20261109"></a>
+## 2026-11-09 재리뷰 후속 수정과 검증
+
+- 범위: #213, #219, #222~#230. #212의 확인 완료와 #216~#218의 이전 수정 기록은 보존한다.
+- 원본 전체 작업 1199개 경로는 원시 바이트 지문으로 보존했다. 최신 develop 6caa681a와 별도
+  통합 환경을 만들고, 기존 PR 번호와 develop base를 유지하며 신규 수정만 분리한다.
+- 공통 기반: 기존 600초 timeout·과거 lease 경로와 새 1770/1800초 작업 예산을 구분한다.
+  프롬프트 버전 검사와 모델 출력 검증은 유지하고 fixture·worker 등록 검사를 실제 계약에 맞춘다.
+- #222: log_json·request_size의 실제 정의와 활성 호출을 맞추고 문자열 traceback도 정제한다.
+  초기화 원문 예외·비밀값·절대경로를 공개 로그에 남기지 않는다. 0042·0044의 색인은 이 PR에 둔다.
+- Director: 지원하지 않는 버전은 모델 호출 전 거절하고 v7·v8만 Plan에 복구 피드백을 받는다.
+  Review는 독립 검증하며 원문·실제 ID·호출 상한을 유지한다.
+- 질문 복구: 진행 상태를 소유자 GET으로 복원하고 같은 requestId를 재확인한다. 영구 오류를 제외하고
+  보완 조회 결과를 보존하며 오래된 성공 요청이 현재 연결을 교체하지 못하게 한다.
+- 화면·음성: 유한 질문 대기, 실제 MSW 복구, stale 텍스트 응답, voice 전용 재생·합성,
+  예산의 기간·근거와 확실한 거절/불명확 소비 정산, timeout 냉각을 보완한다.
+- 레포: 안내문·enum 개수/문자·요청 바이트를 함께 제한한다. 전체 inventory는 원문·SHA·지문을
+  유지해 안정적으로 저장하고 매턴 context에는 참조·요약만 둔다.
+- 평가·리포트: 최신 canonical 29사례와 과거 snapshot 원시 바이트를 유지한다. 과거 계약은 명시 opt-in,
+  LinkedRequirement는 기존 3필드이며 누락·null·잘못된 JD 연결은 구분해 검증한다.
+- 공식 자료: 0046에 따라 수집 페이지/선택 절을 분리하고 정책 식별·한영 질의·부분 실패·감사를 보완한다.
+  실제 Tavily extract는 2회·1크레딧, 7개 catalog 중 4개 저장 성공, 3개는 요청 절 누락으로 미채택했다.
+  성공: python-3.12-task-groups, mdn-http-429, naver-commerce-auth, fhir-r4-security.
+  미확인: kftc-openbanking-balance, steam-authentication, gtfs-stop-times.
+- 로컬 통합 검증: AI·BE·FE, 전용 PostgreSQL·Redis 및 실제 source 크기 경계 검사를 사용한다.
+  이 회차에서 GPT·STT·TTS 공급자를 새로 호출하지 않았다. 검사별 실제 명령·HEAD·수치와 남은 의존성은
+  각 PR 종합 리뷰에 구분해 남기며, 서로 겹치는 테스트 수를 합산하지 않는다.
+- 선행이 없는 게시본은 필요한 구현·호출·회귀를 원자적 후속 패치로 보존한다. 패치의 준비와 기능
+  활성화를 구분하며 실제 선행 적용·마이그레이션·현재 HEAD CI 검증 전에는 완료·병합 가능으로 보지 않는다.
+
+
+## 2026-11-07 — 최종 AI 서비스 통합의 로컬 구현
+
+### 범위와 원본 보존
+
+사용자가 전체 sprint의 최종 서비스로 실행할 수 있도록 AI 파트의 구현을 요청했다.
+`develop@13bd98e4af74c977c2db6e367c232fe6209b979b`에서
+`feature/ai-final-service-20261107`와 별도 worktree를 구성했다.
+선행 #153·#164·#165·#167·#174·#175·#183·#185의 내용을 로컬에서 결합해 연결을 검증하며,
+선행 구현을 이번 신규 작성분이나 이미 develop에 병합된 내용으로 표시하지 않는다.
+이번 요청은 자동 commit·push·PR 생성·다른 PR 병합의 승인으로 확대하지 않았다.
+
+초기 기능·설계·task·testing 문서는 수정하지 않는다.
+추가 정책과 협업 영향은 [ADR 0031 초안](decisions/0031-final-service-runtime-boundaries.md)에,
+현재 구현과 검증 범위는 이 절 한 곳에 기록한다.
+ADR은 Proposed이며 사용자 구현 요청과 FE·BE·AI 전체 팀의 공유 계약 승인은 구분한다.
+
+### 이번 신규 실행 연결
+
+| 구간 | 실제 연결과 보존 경계 | 주요 코드 |
+| --- | --- | --- |
+| 공고 도메인 | 공고 수집 뒤 기존 AI 도메인 분류를 연결한다. 원문 근거를 검사하며 실패·근거 부재의 `etc`를 실제 업종의 확정값으로 해석하지 않는다 | `backend/app/features/analysis/posting_domain.py`, `posting_service.py`, `app/llm_tasks/domain_category.py` |
+| 레포 원문 | 실제 트리에서 읽을 경로를 선정하고 수집한다. 큰 파일은 원래 줄 범위를 가진 구간으로 나누며, 모델·저장·후속 조회에서 같은 버전과 위치를 사용한다 | `backend/app/features/interview/repository_sources.py`, `source_segments.py`, `app/integrations/github/snapshot.py` |
+| 구문 보조 | 전체 Python·JSON·TOML 파일의 정적 구조를 보조한다. 다른 텍스트와 부분 구간은 원문으로 처리하고 전용 해석 부재를 명시한다. 코드를 실행하지 않는다 | `ai/src/devon_ai/source_readers.py`, `llm_tasks/repo_deep.py` |
+| 문서 원문 | preview와 별개인 추출 snapshot, 파일·텍스트 해시, 페이지·줄·가능한 좌표와 한계를 저장한다. Native와 Vision 전사를 병합하고 VLM 생성 설명은 별도 보존한다 | `backend/app/features/documents/source_snapshot.py`, `vision_processing.py`, `service.py`, `app/integrations/extract/pdf.py` |
+| 문서 선택 | 업로드의 `docType`과 분석 요청의 선택적 `coverLetterDocumentId`를 추가해 두 문서를 명시 선택한다. BE는 소유자·종류·추출 실패를 검사하며 자소서 입력 변경을 중복 판정에 반영한다 | `backend/app/features/documents/router.py`, `app/features/analysis/run_schemas.py`, `service.py`, `app/db/models/analysis.py`, `frontend/src/features/analysis/JobInput.tsx` |
+| 문서 Claim | 선택 문서만 면접 준비 중 호출한다. 원문·추출 prompt 버전, 진행·실패·정상 빈 결과를 구분하고 원문 위치를 저장한다. 이전 Claim을 보존하며 현재 입력 집합과 과거 참조 복원을 구분한다 | `backend/app/features/documents/selection.py`, `claims.py`, `app/llm_tasks/doc_claims.py`, `app/db/models/document.py` |
+| 보완 근거 | 문서 Claim·시각 설명·외부 자료를 종류·버전·위치·한계와 함께 Context에 넣는다. 문서별·외부 자료별 입력 예산을 배분하고 과거 질문의 인용 검사에는 별도 archive를 사용한다 | `backend/app/features/interview/supplemental_sources.py`, `agent_context.py`, `answer_context.py`, `ai/src/devon_ai/contracts.py` |
+| 외부 검색 | 검증된 T3 요청을 단일 Director Tool에서 Tavily Search·Extract로 실행한다. 공식 출처 범위, 금지 질의, 작업·면접 예산, 원문과 검색 상태·캐시를 기록한다 | `backend/app/features/interview/external_knowledge.py`, `app/integrations/search/tavily.py`, `app/db/models/external_source.py`, `ai/src/devon_ai/llm_tasks/answer_analysis.py` |
+| 질문·평가 기회 | 확정 질문의 `evaluation_keys`를 추적해 다음 배정을 계산하고 같은 계약을 재검증한다. 질문 배정과 답변 관찰·실제 점수는 구분한다 | `backend/app/features/interview/evaluation_coverage.py`, `question_structure.py`, `director_service.py`, `ai/src/devon_ai/agents/director/runtime.py` |
+| 음성·재청취 | 기존 STT·WS 연결에 확정 질문의 TTS URL과 인증된 음성 조회·캐시를 연결한다. 명시 재청취는 답변 저장·턴 소비와 분리하고 정상 모름 답변은 유지한다 | `backend/app/features/interview/question_audio.py`, `question_replay.py`, `router.py`, `ws.py`, `app/integrations/tts/google.py` |
+| 무료 TTS 예산 | persona별 음성 설정과 프로젝트·월 문자 예약을 사용한다. 실제 잔여량을 확인한 명시 초기화 없이는 합성하지 않으며 Redis 재시작을 무료량 복구로 간주하지 않는다 | `backend/app/features/interview/tts_budget.py`, `backend/scripts/initialize_tts_budget.py` |
+| 리포트·프로필 | 로컬에 결합한 선행 리포트·프로필 경로를 재사용한다. 새 근거·평가 기회와 미관찰 상태의 전달을 보완하며 누락을 임의의 긍정 평가로 채우지 않는다 | `ai/src/devon_ai/llm_tasks/report.py`, `report_score.py`, `backend/app/features/report/service.py` |
+| 평가 실행 | 기존 사례·채점기 자료에 실행기와 BE bridge·CLI를 연결한다. 입력과 정답을 분리하고 검수 상태·실패·시도·해시·token·지연을 기록한다 | `ai/evals/eval_runner.py`, `backend/scripts/ai_eval_bridge.py`, `run_ai_evaluation.py` |
+| 저장·설정 | 문서 근거·자소서 선택·외부 자료를 위한 모델 및 후속 마이그레이션을 추가한다. 선택 공급자의 환경 설정과 LLM reasoning effort 전달을 실제 호출 경계에서 검증한다 | `backend/migrations/versions/0007_ai_source_provenance.py`, `backend/app/core/config.py`, `app/integrations/llm/client.py` |
+
+### 유지한 동작과 새 협업 계약
+
+- `documentId`는 계속 포트폴리오를 뜻한다. 포트폴리오의 레포 추천 URL 힌트에 자소서 URL을 섞지 않는다.
+  자소서를 생략한 기존 요청의 fingerprint 형식도 유지해 진행 중인 기존 작업의 중복 등록을 막는다.
+- FE는 파일 업로드에 `docType=cover_letter|portfolio`를 전달하고, 실패해 제외한 문서의 ID는 분석 요청에 넣지 않는다.
+  기존 화면의 자소서 PDF/DOCX·포트폴리오 PDF 지원은 유지한다.
+  Vision API 경로의 추가 형식 지원을 화면의 공식 지원 확대나 모든 형식 검증 완료로 표현하지 않는다.
+- 문서 Claim과 생성 시각 설명, 검색 자료는 실제 개인 기여·성과의 확정 증거가 아니다.
+  근거 부족·추출 실패·예산 초과는 지원자 능력의 감점 근거로 바꾸지 않는다.
+- 새 공개 계약은 `docType`, `coverLetterDocumentId`, 확정 질문 음성 조회 경로와 관련 WS 필드다.
+  OpenAPI·FE 타입·BE 실행의 로컬 정합성과 팀의 최종 계약 승인을 구분하며 관련 팀 검토가 필요하다.
+- [#195](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/195)의 공개 점수 nullable 확대는 합의 완료로 기록하지 않는다.
+  내부 `not_evaluated` 보존과 공개 응답의 표현 정책은 별도 확인 대상이다.
+
+### 실행 환경과 검사 구분
+
+검증은 원본 서비스 환경을 변경하지 않는 worktree, Python 3.12, 격리 PostgreSQL 17·Redis를 사용한다.
+BE 실행·타입 검사에는 이 worktree의 `backend`·`ai/src`를 명시한다.
+원본 editable AI 패키지를 섞은 검사는 현재 소스 전체의 검증으로 사용하지 않는다.
+FE는 기존 의존성을 재사용하고 공식 배포 해시를 확인한 별도 Node 환경에서 검사한다.
+
+| 종류 | 검증 대상 | 최종 실행 결과 |
+| --- | --- | --- |
+| 결정적 AI 검사 | 계약·근거 검증, source reader, 평가 실행 경계, 리포트·Director 회귀 | 최종 통합 소스의 AI 전체 680 passed |
+| 실제 PostgreSQL·Redis | 선택 문서·Claim·원문·외부 자료 저장, 동시성·소유권·캐시·음성 예산 | BE 전체 2,135개 고유 사례 통과. agents 393, features 836, 공통 905+전용 migration 별도 1. PostgreSQL 17 전용 DB와 Redis DB13/14/15를 분리 |
+| 외부 API 대역 | HTTP transport 대역으로 Tavily·Vision·Google TTS·LLM 요청과 오류를 검증 | BE 검사에 포함. SSE 완료·중단·Unicode·예산 회귀, OAuth quota 프로젝트 헤더 포함. 실제 음질 검사와 구분 |
+| FE 브라우저·MSW | 두 문서의 실제 화면 업로드·분석 요청, 기존 인증·면접·오류 처리 회귀 | 파일 고정·새 서버·1 worker의 전체 135 passed |
+| 정적 검사·build | AI/BE Ruff·format·mypy, FE lint·production build, 공유 계약 검사 | AI/BE Ruff·format·mypy(22/198 source), FE lint/build, Docker build·이미지 내부 manifest 생성 통과. 계약 schema 2개·부분 OpenAPI·fixture 7개 통과 |
+| 실제 공급자 | 실제 LLM·GitHub·STT·Vision·Google TTS·Tavily와 전체 서비스 연결 | Elice LLM 합성 입력 9개 task의 호출·계약 검증 성공. 최종 리포트 확장 뒤 질문·답변·리포트 3사례 재실행 성공(검수 전 품질 분모 0). Tavily Search→Extract 1원문·5,816자 성공. 실제 GitHub·STT·Vision·Google TTS 인증·품질은 이번 실행에서 미검증 |
+
+자소서 API는 먼저 신규 필드 거절을, FE는 문서 종류 누락과 다른 자소서의 캐시 충돌을 재현한 뒤 수정했다.
+실제 PostgreSQL의 선택 ID 저장·소유권·종류·실패 거절·입력 중복 판정과 MSW 화면 흐름은 별도 검사다.
+개발 서버 HMR로 동일 모듈의 인스턴스가 달라진 중간 FE 실행은 최종 회귀 수치에 합산하지 않는다.
+
+통합 검증 중 다음 실제 회귀를 확인해 보완했다.
+
+- SHA를 먼저 확보한 뒤 GitHub 호출 제한·토큰 오류로 중단된 레포가 L1 모델 입력에 들어가
+  원래 수집 오류가 `llm_failed`로 바뀌는 문제를 수정했다. 중단 원인과 확보한 SHA·필드는 보존하고
+  해당 레포의 새 L1 호출은 하지 않는다. 정상 수집 레포의 분석은 계속 진행한다.
+- 기존 저장 경로는 빈 `evaluation_keys`·`external_queries`를 생략해 옛 JSONB 필드 수를 보존한다.
+  새로 선언한 값은 저장하며, 옛 저장값의 decode 복원과 새 확장의 유실 방지를 따로 검증했다.
+- 스트리밍의 잘린 마지막 프레임·모순된 실패 상태를 성공으로 발행하지 않고,
+  JSON 문자열 안의 Unicode 구분자는 SSE 줄 경계로 자르지 않는다.
+- 사용자 OAuth TTS 요청에는 예산 대상 quota 프로젝트 헤더를 전달한다.
+  이 HTTP 대역 검사는 Cloud 권한·음성 품질·실제 무료 잔여량의 검증과 별개다.
+
+최종 Linux 이미지도 별도로 빌드하고, 테스트용 OAuth 설정을 주입한 로컬 컨테이너에서
+`/api/health` 200, 실제 테스트 PostgreSQL `SELECT 1`, Redis `PING`, ARQ worker 기동과
+두 reaper 작업의 실행을 확인했다. 실제 GitHub 로그인이나 유료 공급자 검증으로 해석하지 않는다.
+전용 DB에서 마이그레이션 최초 upgrade, model/schema 차이 없음, 0007 downgrade·재upgrade도 통과했다.
+
+최종 BE XML과 전체 collection의 2,135개 사례를 대조해 누락·추가·미통과가 없음을 확인했다.
+공통 첫 실행의 1 skip은 전용 `task11_migration_test` DB가 없었기 때문이며,
+새 전용 DB에서 해당 사례를 별도로 실행해 통과했다. 전체 XML의 skip과 별도 pass를 구분해 보존했다.
+매 collection마다 `uuid4()`로 생성되는 두 '알 수 없는 ID' 매개변수만 함수·UUID 형식으로 대응시켰다.
+나머지 매개변수 ID는 그대로 대조했다. 중간 실패·중단 결과를 통과 수에 합산하지 않았다.
+
+### 배포·운영 전에 남은 확인
+
+로컬 실행 시 `backend`에서 다음 순서로 설정한다. 명령은 대상 환경 DB·Redis를 사용하므로
+실행 전 `.env`의 연결 대상을 확인한다. 이번 통합에서는 별도의 테스트 DB에서만 수행했다.
+
+1. `uv run alembic upgrade head`로 저장 구조를 반영한다.
+2. 필요한 `score_criteria`·`domain_question_frames`와 모델 prompt를 환경에 준비한다.
+   `uv run python -m scripts.seed_all`의 새 rubric은 비활성 초안이며 자동으로 활성화하지 않는다.
+   검수한 6개 rubric과 도메인 프레임이 실제 활성인지 확인한다. 누락 시 임의 기준을 만들지 않고 실패한다.
+3. `.env`의 실제 모델과 Gateway 제한을 정하고
+   `uv run python -m scripts.configure_ai_runtime --output report/runtime-manifest.json`으로
+   9개 task의 모델·본문·상한 manifest를 먼저 확인한다.
+   해당 버전과 본문을 사용할 환경에서는 같은 명령에 `--apply`를 추가해 DB에 명시 등록·활성화한다.
+   기존 version의 본문·모델이 다르면 충돌이며 덮어쓰지 않고 새 version으로 등록한다.
+4. `uv run uvicorn app.main:app`와 `uv run arq app.workers.arq_app.WorkerSettings`를 같은 설정으로 실행한다.
+   STT·Vision·Tavily는 필요한 주소·키가 있는 기능만 연결한다. 선택 공급자 미설정은 앱 기동 자체를 막지 않는다.
+   STT는 `STT_PROVIDER=mlapi`도 설정하고 실제 서비스의 주소·모델을 사용한다.
+5. TTS는 Cloud의 실제 잔여 무료 문자량·진행 중 요청·같은 프로젝트의 다른 사용량을 확인하고
+   `scripts.initialize_tts_budget --help`의 명시 초기화 절차를 따른다.
+   초기화하지 않으면 유료 합성을 시도하지 않고 질문 텍스트를 유지한다.
+   `TTS_PROVIDER=google_cloud`, 인증 정보, 세 역할의 `TTS_VOICE_MAP`, 프로젝트·월 문자 상한을 명시한다.
+   `.env.example`의 음성 ID는 설정 예시이며 공급자 자동 활성화나 음질 검수의 증거가 아니다.
+6. 평가 실행 예시는
+   `uv run python -m scripts.run_ai_evaluation --cases ../ai/evals/service_examples --manifest report/runtime-manifest.json --output report/ai-smoke.json --dry-run`이다.
+   실제 호출은 `--execute --max-model-attempts 12`로 한도를 명시한다.
+   예시는 합성·미검수 자료라 품질 분모에서 제외한다. #110의 사람 검수와 Judge 교정을 대체하지 않는다.
+
+이번 Elice `gpt-6-luna` 실측에서는 비스트리밍 `max_output_tokens=8192`가 400으로 거절됐고,
+공급자가 비스트리밍 2,000 token 상한과 `stream=true` 대안을 응답했다.
+상한 2,000의 일반 요청과 `LLM_STREAM=true`·8,192 token 예산의 SSE 요청을 각각 검증했다.
+이는 해당 환경의 실행 기록이며 모든 모델·계정에 적용할 고정 제한은 아니다.
+검증용 상한은 원본 `.env`를 변경하지 않고 별도 Settings 인자로 적용했다.
+
+해당 공급자에서 검증한 연결 예시는 다음과 같다. 모델은 실제 계정의 설정값을 사용한다.
+이는 초기 운용 예시이며 대표 서비스 자료의 지연·비용 측정으로 조정한다.
+
+```dotenv
+LLM_STREAM=true
+LLM_REASONING_EFFORT=low
+LLM_TIMEOUT_SECONDS=60
+LLM_MAX_OUTPUT_TOKENS=8192
+LLM_MAX_INPUT_BYTES=262144
+LLM_MAX_RESPONSE_BYTES=1048576
+```
+
+- 환경별 활성 prompt·model 버전과 Gateway 상한, DB 마이그레이션, worker·Redis의 실제 연결을 확인한다.
+  로컬의 미병합 선행 결합 상태와 develop 단독 실행을 혼동하지 않는다.
+- Elice STT·Vision의 사용 가능한 주소·키·모델·요청/응답을 실제 환경에서 검증한다.
+  설정 존재나 대역 응답 통과는 한국어 음성 인식·문서 인식 품질의 검증이 아니다.
+- Google Cloud 권한·실제 무료 조건·persona별 음질·자동재생을 확인하고,
+  같은 프로젝트의 다른 사용량을 반영한 잔여 문자 예산을 명시 초기화한다.
+  내부 카운터가 외부 계정의 비용 0원을 보증한다고 표현하지 않는다.
+- Tavily의 실제 공식 출처 적합성·검색 누락·비용·지연과 서로 다른 레포·문서의 품질을 별도 평가한다.
+  테스트한 언어·형식·크기를 모든 공개 레포·문서의 지원 보증으로 확대하지 않는다.
+- [#110](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/110)의 전체 평가 기준·근거·사람 검수 정답·Judge 교정은
+  실행기 구현과 별도다. 실행 성공을 품질·출시 gate 통과나 평가 체계 전체 설계 완료로 판정하지 않는다.
+- 게시가 요청되면 보존한 통합 원본에서 이번 신규 변경만 분리하고,
+  실제 공통 구현·공유 계약·대응 구현의 의존성과 검증을 각각 명시한다.
+
 ## 2026-11-06 — #180·#182·#191·#193·#194 리뷰 후속과 통합 검증
 
 사용자가 #183을 제외한 다섯 PR의 필수·선택 보완, 리뷰 답변과 병합을 승인했다.
@@ -1762,6 +2096,1155 @@ BE의 [설정](../../backend/app/core/config.py)과 [GitHub 조회 연결](../..
 
 #109의 `implementation.md` 공유 편집 구조와 BE·FE·shared 문서 정리는 여전히 후속 범위다. 이번 표현 보완을 실제 서비스 검증이나 #109 전체 완료로 확대하지 않는다.
 
+<a id="live-ai-validation-20261107"></a>
+
+## 2026-11-07 — 실제 공급자·원문을 사용한 AI 기능 검증과 발견 사항
+
+사용자 요청에 따라 STT·TTS를 제외하고 실제 GitHub·Elice MLAPI·Vision·Tavily를 사용했다.
+브라우저 로그인·마이크를 사용자에게 요구하는 검사가 아니라 내부 서비스와 실제 모델의 자동 기능 검사다.
+원본 `.env`와 업무 DB는 수정하지 않았다. `feature/ai-final-service-20261107`의 로컬 통합 작업이며 미게시다.
+동일 작업의 선행 코드·새 구현·전체 서비스 완료 여부는 이 기록의 이전 범위와 구분한다.
+
+### 실행 환경과 판정 경계
+
+- DB는 로컬 PostgreSQL의 새 `task10_test_ai_actual_20261107_test`로 분리하고 0007까지 마이그레이션했다.
+  사용자는 합성 사용자이며, 공고·지원자 답변·별도 리포트 문답도 합성 입력임을 기록했다.
+- 레포는 실제 Public `kakaotechcampus-4/ktc4-chonnam-3`의 `13bd98e4af74c977c2db6e367c232fe6209b979b`다.
+  전체 언어·레포 규모·파일 배치에 대한 품질 검증으로 확대하지 않는다.
+- 실제 LLM 호출의 검증 override는 timeout 60초, 출력 8192, 입력 262144바이트, 응답 1048576바이트,
+  `stream=True`, `reasoning_effort=low`다. 원본 환경의 기본값이나 확정된 작업별 품질 정책이 아니다.
+- 키·공급자 전체 주소를 결과에 출력하지 않았다. 상세 입력·출력·실패 이력은 Git 제외
+  `.claude/scratch/live-ai-check-20261107/`에 보존한다. MLAPI 원시 probe는 원본 저장소의 같은 scratch 경로다.
+
+### 실제 결과
+
+| 기능 | 확인한 결과와 제한 |
+| --- | --- |
+| L1 기본 분석 | 실제 GitHub 메타데이터·고정 SHA·구조 97항목·보조 파일 4개와 실제 모델로 분석. 구조 깊이·요청 상한 이후의 미확인 범위를 보존했다. |
+| L2 정밀 분석 | 실제 AI가 고른 8파일을 같은 SHA의 로컬 Git에서 읽고 실제 모델로 관찰 5개 생성. GitHub tree blob·로컬 Git object·원문 blob 해시를 모두 대조했다. GitHub 익명 quota로 수정 후 전체 수집 재실행은 못 했으며, 이 우회를 원격 수집 성공으로 표시하지 않았다. |
+| GitHub 수정 후 원문 조회 | 제품 `EvidenceReader.file_text`로 고정 SHA의 `ai/pyproject.toml` 663바이트·30줄을 실제 HTTP 200으로 확인했다. 전체 수집기의 재검증과는 구분한다. |
+| Vision | 합성 PNG 1건, 제출 1회·조회 3회 모두 HTTP 200. 9.672초에 OCR 751자·원문 블록 5개·도식 설명 1개. 미전사 영역을 `partial`로 유지하고 전사·생성 설명을 분리했다. |
+| 문서 Claim | 실제 Vision snapshot을 재사용해 제품 Claim 추출·저장을 실제 LLM으로 실행했다. 주장 1개와 원문 위치를 저장했으며 주장의 진위를 확정하지 않는다. |
+| 공고 도메인 | 합성 공고의 실제 분류 응답은 `etc`, 호출 실패 없음. 이 단독 검사에서 분류 결과를 새 공고에 저장해 frame을 고르는 전체 자동 연결까지 검증하지는 않았다. |
+| 외부 자료 | 명시적 Tool 점검으로 Tavily 검색·원문 수집 및 자료 3개 DB 저장 성공. AI가 스스로 검색을 요청한 분기의 통과로 계산하지 않는다. |
+| 연속 Director·T3 | 첫 HR와 다음 기술 질문, 답변 분석 2개를 저장했다. 1턴은 sufficient, 2턴은 partial이며 코드와 충돌한 주장은 conflicting·근거 충돌 2행으로 남았다. 다음 질문 후보는 rewrite 1회·replan 2회 거절. 마지막 1회는 별도 진단 작업에서도 재현됐다. 원 면접은 2턴에서 in_progress이며 9턴 완주 실패다. |
+| 별도 리포트·프로필 | Director와 분리한 합성 9문답을 DB에 넣고 실제 서비스로 리포트 점수 6개·Persona 피드백 3개·프로필 1개를 저장했다. 모델 호출은 리포트 2회+프로필 1회. 재호출은 각각 exists·role_kept이며 추가 모델 호출 0회다. |
+
+별도 리포트 입력에는 T3 분석·코드 Evidence·Tool 결과·보완 자료가 없다. 따라서 위 성공은
+문답→리포트·프로필→DB·동일 입력 재사용 범위다. 실제 면접의 T3·코드·Claim·외부 근거가 최종 리포트에
+전파되는 연결, 새 답변·새 면접·새 prompt의 캐시 무효화까지 검증했다고 주장하지 않는다.
+저장된 서술과 프로필은 합성 사례·실제 기여 미확인·성과 수치 미측정을 유지했다.
+
+### 원본 설정과 #196 비교
+
+원본 `.env`의 유효 LLM 연결은 `CHAT_PROXY_URL`·`PROXY_TOKEN`, 실제 모델은 `gpt-6-luna`다.
+기본 호출 설정은 출력 1024, timeout 30초, 입력 32768바이트, 응답 131072바이트,
+비스트리밍, 추론 강도 미지정이다. 같은 합성 9문답의 리포트를 이 설정으로 호출한 비교는 실패했다.
+4번의 provider 시도 모두 출력 1024를 사용했고 `llm_failed`로 완료형 결과를 얻지 못했다.
+위 스트리밍 override로 저장에 성공한 검사와 구분하며, 원본 `.env`를 변경하지 않았다.
+
+현재 endpoint에 짧은 `OK` 응답을 요청한 원시 HTTP 비교도 별도로 수행했다.
+
+| 요청 | 실제 응답 |
+| --- | --- |
+| 비스트리밍·출력 2000·low | HTTP 200·completed |
+| 비스트리밍·출력 8192·low | HTTP 400, 비스트리밍 2000 이하 또는 streaming 사용 안내 |
+| 비스트리밍·출력 8192·추론 미지정 | 같은 HTTP 400 |
+| 스트리밍·출력 8192·low | HTTP 200·response.completed |
+
+이는 [#196](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/196)의 **해당 서버 비스트리밍 제한**을 재확인한다.
+MLAPI 전체나 모델의 보편적 출력 한도가 2000이라는 뜻은 아니다. `OK` probe가 실제 8192토큰 생성이나
+그 이상의 최대 한도·판정 품질을 검증한 것도 아니다. 작업별 추론·출력 설정과 품질 비교는 후속 범위다.
+
+### 실제 실패에서 수정한 코드
+
+- GitHub 일반·직접 요청의 공통 `User-Agent`: `integrations/github/base.py`, `client.py`, `evidence.py`.
+- 구조 목록의 디렉터리 끝 `/`와 파일 경로 규칙을 구분: `ai/src/devon_ai/contracts.py`.
+- 구조 조회가 파일 수집 요청·바이트를 모두 소진하지 않도록 예약: `features/interview/repository_sources.py`, reader 예산 경계.
+- 기존 Vision 설정명과 `/v1` 접미사 호환, 명시 endpoint의 자격증명 우선순위: `core/config.py`, 문서 router, Vision 어댑터.
+- 실제 `bounding_box`의 좌표 보존: Vision 어댑터. 최초 결과는 보존하고 같은 실제 응답만 재정규화해
+  원문·텍스트 해시·파일 해시 불변과 원문 5개·도식 1개의 좌표를 확인했다. 추가 Vision 추론 호출은 없다.
+
+결정·이유·영향은 [0032](decisions/0032-provider-compatibility-and-source-budgets.md)에 분리했다.
+STT 설정은 기존 `Whisper_Large_v3_PROXY_URL`이 있으나 현행 `STT_BASE_URL`·`STT_API_KEY`와 자동 연결되지 않는다.
+이번 요청에서 STT·TTS는 제외했으므로 연결 변경이나 실제 음성 요청은 하지 않았다.
+
+### 회귀 검사와 남은 범위
+
+- 이번 최종 AI 전체 검사: **687 passed**, `ai/report/live-verification-ai.xml`.
+- GitHub·원문 관련 BE 122개, 관련 AI 65개, PostgreSQL 준비·캐시 52개 통과·1개 환경 skip.
+  마지막 핵심 PG 4개 재검사는 52개와 중복이다. skip은 TEST_REDIS_URL 미설정의 REST retry 검사다.
+- Vision 설정·정규화·preview·snapshot 관련 42개 통과. 변경 파일 Ruff·format·mypy 통과.
+  위 수치는 중복 범위가 있으므로 합산하지 않는다. 대역 회귀는 실제 외부 호출과 별도로 기록한다.
+- 실제 남은 작업은 후보 거절 사유를 반영하는 생성·복구의 제한된 실행 정책과 품질 보완,
+  운영 작업별 호출 설정, 인증된 GitHub에서 전체 수집기 재검증, 실제 전체 면접의 최종 리포트 근거 전파다.
+  이번 검증 도구의 별도 질문 작업을 제품의 자동 복구로 간주하지 않는다.
+- 핵심 산출물: `repository/report.json`, `repository/validation.json`, `vision/live-summary.json`,
+  `vision/source-snapshot.v2.json`, `interview/result.json`과 보존된 attempt-01·02,
+  `interview/report-profile-components/result.json`, `interview/env-report-comparison/result.json`,
+  `database-audit.json`. 실제 출력·저장·미실행을 구분하며 서비스 전체 완료를 선언하지 않는다.
+
+<a id="stt-live-validation-20261107"></a>
+
+## 2026-11-07 — STT 설정 호환과 실제 한국어 전사 확인
+
+사용자의 후속 요청으로 STT를 실제 호출했다. 기존 기록의 STT 미확인은 그 시점의 결과이며,
+이번 기록에서 확인한 범위로 갱신한다. TTS 서비스 연결과 전체 음성 면접 완주는 별도 범위다.
+
+### 연결 보완
+
+- `backend/app/core/config.py`가 기존 `Whisper_Large_v3_PROXY_URL`을 읽게 했다.
+  전용 STT 주소·키를 우선하며, 기존 프록시 경로에서만 공통 `PROXY_TOKEN`을 재사용한다.
+- 전사 클라이언트가 붙이는 경로와 중복하지 않도록 끝의 `/v1`을 정규화한다.
+  모델·언어·공급자·HTTPS·키 검증과 명시 endpoint의 자격증명 경계는 유지한다.
+- 현재 작업본에서 원본 `backend/.env`를 그대로 읽은 `require_stt()`가 성공했고,
+  실제 전사도 같은 설정으로 실행했다. 요청 설정 override와 원본 환경 파일 변경은 없다.
+- [0033](decisions/0033-stt-proxy-configuration-compatibility.md)에 이유와 영향을 기록했다.
+  STT 공급자 프로토콜과 기존 `MlapiSttClient` 사이의 불일치는 없어 전사 클라이언트는 수정하지 않았다.
+
+### 실제 API 확인
+
+구성된 공급자의 `/openapi.json`에서 전사 경로와 multipart 입력을 확인했다.
+`/docs.json`은 404였으며 이 문서 경로의 부재를 STT 장애로 해석하지 않았다.
+알려진 한국어 문장을 로컬 Windows 음성 합성으로 준비하고 ffmpeg로 WebM/Opus를 만들었다.
+사용자 마이크 녹음·개인정보 입력·외부 TTS 호출·DB 쓰기는 없다.
+
+| 입력 | 실제 결과 |
+| --- | --- |
+| 한국어 WAV, 16kHz·mono·PCM16, 16.91초 | HTTP 200, 클라이언트 완료까지 2.297초. 공백·문장부호 제외 원문 일치 |
+| 같은 음성의 WebM/Opus, FE와 같은 `audio/webm;codecs=opus` | HTTP 200, 1.016초. 공백·문장부호 제외 원문 일치 |
+| 무음 WAV 3초 | 공급자 HTTP 200과 `감사합니다.`·usage.seconds=3. 기존 클라이언트가 `empty_transcript`로 거절 |
+
+기존 제품 `MlapiSttClient`를 사용한 실제 POST는 3회이며, 합계 3.843초다.
+두 형식은 같은 합성 음성 한 건의 변환본이다. 원문 일치를 일반 사용자 인식 정확도 100%로 표현하지 않는다.
+실제 마이크·배경 소음·억양·장시간 답변의 품질이나 브라우저부터 실제 DB·Director까지의 완주를 검증한 것은 아니다.
+무음 검사도 이번 3초 샘플과 알려진 환각 문구에 대한 확인이다.
+
+### 회귀·보존과 남은 작업
+
+- 신규 설정 검사 21개 통과. 수정 전 7개가 실패하는 것을 확인했다.
+- STT·Vision·LLM·설정 관련 회귀 271개 통과. 변경 파일 Ruff·format·mypy 통과.
+- 별도 음성 WS·오디오 버퍼·공통 음성 계약 검사 56개 통과.
+  이 56개는 외부 전사·일부 처리 경계를 대역으로 둔 회귀이며 실제 API 3회와 구분한다.
+- 원본 `.env`와 이전 실제 검증 결과를 보존했다. 오디오·공급자 응답·비민감 확인 정보는
+  Git 제외 `.claude/scratch/stt-live-check-20261107/`에 보존했다.
+  실제 결과는 `run-20261107T040703583086Z/result.json`, 입력은 `fixtures/manifest.json`,
+  회귀는 `backend/report/stt-config-compatibility.xml`과 `stt-live-service-regression.xml`이다.
+- 토큰 문제의 해결 방향은 앞서 실제 확인한 스트리밍·충분한 출력 예산·응답 바이트·시간 설정의 조합이다.
+  이번에는 원본 LLM 설정을 변경하지 않았으며 아직 비스트리밍·출력 1024다.
+- 외부 연결 기준으로 LLM·Vision·Tavily·STT의 실제 호출을 확인했다. TTS는 미검증이다.
+  Director의 후보 거절 후 진행 보완, 실제 연속 9턴과 최종 리포트 근거 전파는 계속 별도 남은 범위다.
+
+<a id="llm-xhigh-limit-20261107"></a>
+
+## 2026-11-07 — 사용자 지정 xhigh·최대 출력 설정과 실제 재검증
+
+사용자가 원본 `.env`의 추론 강도를 `xhigh`, 출력 예산을 최대 상한으로 변경하도록 명시 요청했다.
+공식 `gpt-6-luna` 사양의 출력 한도 128,000토큰을 확인하고 같은 Elice endpoint의 작은 요청으로
+`stream=true`·`xhigh`·`max_output_tokens=128000` 수락 및 정상 완료를 확인했다.
+큰 정수도 수락되므로 프록시의 요청 파라미터 validation을 모델의 실제 출력 한도라고 해석하지 않았다.
+확인 근거는 [공식 모델 사양](https://developers.openai.com/api/docs/models/gpt-6-luna)과
+Git 제외 `.claude/scratch/llm-max-settings-20261107/run-20261107T041656505540Z/result.json`이다.
+최대 분량 생성을 요구한 검사는 없으며 작은 경계 probe의 실제 출력은 요청당 15토큰이다.
+
+### 실제 적용
+
+원본 `ktc4-chonnam-3/backend/.env`에서 아래 6개 필드만 수정했다.
+
+| 필드 | 변경 전 | 변경 후 |
+| --- | --- | --- |
+| LLM_REASONING_EFFORT | 미지정 | xhigh |
+| LLM_STREAM | false | true |
+| LLM_MAX_OUTPUT_TOKENS | 1024 | 128000 |
+| LLM_TIMEOUT_SECONDS | 30 | 50 |
+| LLM_MAX_INPUT_BYTES | 32768 | 262144 |
+| LLM_MAX_RESPONSE_BYTES | 131072 | 67108864 |
+
+자격증명·다른 공급자 설정·주석을 포함한 비대상 행을 바이트 단위로 보존했다.
+저장 직전 동시 수정 여부를 검사하고 임시 파일로 교체했으며, 저장 후 Settings로 다시 읽어 적용값을 대조했다.
+환경 파일 자체는 버전 관리에 추가하지 않았다. 실행 중인 API·worker에는 설정 재읽기가 필요하다.
+설정의 이유와 유한한 실행 가드는 [0034](decisions/0034-local-llm-xhigh-output-limit.md)에 기록했다.
+
+### 최신 원본 설정 그대로의 실제 리포트 재검증
+
+이전에 원본 설정에서 잘렸던 같은 합성 9문답으로 점수 판정과 서술 생성을 실행했다.
+설정 override 없이 최신 원본 `.env`를 사용했고, 테스트 DB는 `transaction_read_only=on`으로 확인했다.
+
+| task | 실제 결과 |
+| --- | --- |
+| report_score | HTTP 200·response.completed·제품 validator 통과. 입력 5837, 출력 4049 중 추론 3809토큰. 43.625초, SSE 246000바이트 |
+| report | HTTP 200·response.completed·제품 validator 통과. 입력 4821, 출력 5371 중 추론 3624토큰. 40.969초, SSE 702405바이트 |
+
+병렬 실제 HTTP 호출은 2회, 전체 44.015초이며 점수 6개·Persona 피드백 3개를 검증했다.
+기존 실패 결과를 보존했고, 이번에는 제품 코드·DB 쓰기·STT·TTS 호출을 하지 않았다.
+설정 변경 후 실제 호출 중 환경 파일 해시도 동일했다.
+상세 결과는 `.claude/scratch/llm-max-settings-20261107/report-20261107T041920204799Z/`에 보존했다.
+변경 전후의 비민감 설정과 보존 확인은 같은 상위 디렉터리의 `environment-change.json`에 있다.
+
+### 완료 판단의 범위
+
+외부 공급자 LLM·Vision·Tavily·STT의 실제 호출과 대표 기능 실행은 확인했다.
+그러나 이를 **TTS를 제외한 서비스 전체 검증 완료**로 확대하지 않는다.
+
+- 기존 실제 Director 흐름은 2턴 답변 분석 뒤 다음 질문 후보 검수에서 중단됐다. 정상 연속 9턴 완주가 아니다.
+- 이번 성공 리포트는 별도 합성 9문답이며 T3 분석·코드·Claim·검색 근거가 비어 있는 입력이다.
+  실제 면접의 전체 근거가 최종 리포트로 전달되는 통합 검증을 대신하지 않는다.
+- 이전 프로필·레포·문서·T3의 성공 측정을 새 전역 `xhigh` 설정의 재검증으로 옮기지 않는다.
+  이번 새 설정에서는 출력 경계 probe와 합성 리포트 두 task만 실제 실행했다.
+- 128,000은 공식 모델 출력 예산이다. 50초·64MiB 등 실행 가드는 계속 적용되며,
+  모든 입력에서 그 분량 전체를 생성하거나 완료할 수 있음을 증명한 검사가 아니다.
+
+<a id="issue196-followup-20261107"></a>
+
+## 2026-11-07 — #196 실측 공유와 실행 제한의 근거 정리
+
+사용자 요청에 따라 [#196 댓글](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/196#issuecomment-6702412478)에
+비스트리밍 제약 재현, 스트리밍·명시적 추론 강도 지원, 실제 리포트 결과와 미실행 범위를 게시했다.
+본문은 UTF-8 파일로 준비하고 독립 대조 후 게시했으며 원격 댓글 원문과 파일의 정확한 일치를 확인했다.
+연결된 GitHub 앱은 이슈 쓰기가 403으로 거절돼, 기존 로컬 Git Credential Manager의 같은 사용자
+`gdh0730` 인증을 확인한 뒤 GitHub API로 한 번 게시했다. 토큰은 메모리에서만 사용했다.
+이슈 상태는 변경하지 않았으며 로컬 미게시 구현을 공유 브랜치·운영 반영 완료로 설명하지 않았다.
+
+### 50초와 64MiB의 의미
+
+- 50초는 모델 HTTP 시도 1회의 전체 수신 제한이다. 재시도·대기·큐·면접 전체 제한과 다르다.
+  실제 최신 호출 43.625초·40.969초는 이 안에서 성공했지만, 두 측정으로 p95/p99나 최적값을 판단하지 않는다.
+- 기존 준비 worker 600초, 리포트 잠금 300초 등 실행 경계도 함께 고려했다.
+  문서 Claim·primary 수집·L2·Director를 포함한 590초 계산은 호출 예산 추정이다.
+  DB·큐·JSON 처리·취소 정리까지 엄밀히 제한한 전체 완료 보장식으로 해석하지 않는다.
+- 응답 바이트에는 최종 JSON뿐 아니라 SSE 이벤트·delta·완료 응답이 포함된다.
+  실측 246000·702405바이트는 이전 128KiB 상한도 초과하므로 상향 근거가 있다.
+- 64MiB 자체는 통계적으로 도출된 최적값이 아니라, 출력 예산 확대에 맞춰 둔 넉넉하고 유한한 보호선이다.
+  실측 최대의 약 95.5배이며 그 크기를 미리 할당하지는 않는다. 수신·문자열 변환·파싱 중 복사로
+  피크 메모리는 실제 수신량보다 커질 수 있어 동시 호출을 포함해 별도 측정해야 한다.
+- 후속 조정은 task·모델·추론 강도·입력 규모별 지연과 응답 크기 분포, timeout·재시도율,
+  동시 실행 메모리를 측정하고 사용자 대기·worker·잠금 예산에 맞춰 수행한다.
+
+### 환경 예제와 모델 우선순위
+
+작업본 `backend/.env.example`의 LLM 관련 값만 현재 원본 `.env`에 맞췄다.
+`OPENAI_MODEL=gpt-6-luna`, 추론 `xhigh`, 스트리밍, 출력 128000, 시간 50초,
+입력 262144바이트, 응답 67108864바이트의 실제 적용값 일치를 확인했다.
+실제 키·토큰·비공개 공급자 주소는 복사하지 않았다. 원본 저장소의 develop 작업 파일과 원본 `.env`는 변경하지 않았다.
+
+비교는 `Settings`의 기본 필드가 아니라 실제 소비 경로 `require_llm()`을 기준으로 했다.
+기본 `LLM_DEFAULT_MODEL=gpt-5.6-luna`보다 명시한 `OPENAI_MODEL`이 우선하므로,
+현재 실제 모델은 계속 `gpt-6-luna`이며 환경 파일 전체 해시도 이전 설정 변경 직후와 동일했다.
+현재 모델 목록 조회와 작은 실제 Responses 요청으로도 요청·응답 모델 `gpt-6-luna`를 확인했다.
+명세의 다른 모델을 검증했다고 확대하지 않는다.
+
+공급자 LLM·Vision·Tavily·STT의 실제 연결·대표 호출 확인과 전체 Director 연속 9턴·최종 근거 리포트 검증은 계속 구분한다.
+댓글 원본·게시 결과·예제 대조·작은 모델 확인은 Git 제외 `.claude/scratch/issue196-followup-20261107/`에 보존했다.
+
+## 2026-11-07 — 최종 AI 실행 연결의 후속 구현과 sol 검증
+
+### 작업 원본과 범위
+
+기존 `feature/ai-final-service-20261107`의 미게시 변경을 patch·index·untracked 묶음으로 보존했다.
+최신 로컬 develop `99635268fe86b3ef3762a6a2b5dcd9ba67b6b9ce`에서
+`feature/ai-final-service-complete-20261107` worktree를 만들고 이전 구현과 #201·#204의 잠금·WS 복구를 결합했다.
+이 기록은 로컬 통합 구현이며 커밋·push·PR·병합·운영 배포 결과가 아니다.
+초기 설계·task·testing 문서는 구현 완료 표기로 변경하지 않았다.
+정책은 [0035](decisions/0035-final-runtime-budgets-and-report-revisions.md)에 남긴다.
+
+사용자의 `sol` 지정은 서비스 모델이다. 기존 세 번째 모델·주소 설정을 `LLM_CONNECTION_SLOT=3`으로
+함께 선택하도록 연결했다. 원본 로컬 `.env`에는 해당 선택값과 작업별 시간 상한만 추가했고,
+키·공통 토큰·공급자 주소를 출력하거나 예제에 복사하지 않았다.
+본 절 이후의 실제 모델 검증은 새 worktree의 `require_llm()`과 `gpt-6.1-sol`을 기준으로 한다.
+이전 절의 luna 검증과 혼합하지 않는다.
+
+### 이번에 연결·보완한 기능
+
+| 범위 | 실제 변경과 코드 위치 |
+| --- | --- |
+| Director | `ai/src/devon_ai/agents/director/runtime.py`와 v4 프롬프트에서 현재 답변·질문 계약·평가 기회를 분리하고 명시적 과거 v1/v2 호환을 유지한다. 마지막 답변의 새 검색 요청은 `director_service.py`에 미실행 상태로 저장한다. |
+| 레포 수집·분석 | `repository_sources.py`, `source_segments.py`에서 SHA·본문·범위를 확인해 구간 캐시를 재사용한다. L1 v3 프롬프트는 공고와 비교할 기술명을 설명문과 분리한다. 다른 언어는 지원한 정적 해석 또는 원문 구간과 한계를 사용한다. |
+| 이미지 공고 | Wanted의 허용 본문 이미지 수집 → 기존 Vision → `jd_extract_image` → 전사 인용·위치 검증 → `source_blocks`·`JdRequirement.source_refs` 저장을 연결했다. 본문과 이미지의 충돌은 기록한다. |
+| 문서 주장 대조 | `documents/claim_comparison.py`와 AI `claim_code`를 연결했다. 선택 문서의 Claim과 실제 코드 Evidence만 비교하며 역할·성과·미열람 코드는 미확인으로 남긴다. 실행별 결과와 과거 참조를 보존한다. |
+| 답변 분석 | 실제 실행에서 발견한 근거 ID·충분성의 모순을 v6의 생성 전용 구조와 원문 구간 ID로 제한한다. 저장용 `AnswerAnalysis`는 그대로이며, 기존 의미 검증·실패 비재시도와 감사 raw 보존을 유지한다. |
+| 면접 중단·재도전 | 기존 계약의 `POST /interviews/{id}/abandon`을 구현했다. DB 상태·중단 턴·WS 소유권을 확정하고 늦은 T3·Director 결과를 폐기한다. 시작 전 중단은 재도전 대상에서 제외한다. |
+| 리포트 | 영구 생성 요청·명시적 실패 재시도·이의 제기 revision·운영자 검토·별도 재평가·이전 결과 보존을 구현했다. `report/generation.py`, `reviews.py`, `revisions.py`, `service.py`, `scripts/review_report.py`를 사용한다. |
+| 프로필 | 답변·프롬프트 등 실제 요약 입력의 지문과 실행 당시 상한을 보존한다. 입력이 바뀐 동안 생성한 결과가 새 결과를 덮어쓰지 못하게 한다. |
+| FE | 문서 종류·선택 입력을 유지하고 리포트 이의 제기·실패 생성 재시도·revision 변경 안내를 실제 API 계약에 맞춰 연결했다. |
+| 평가 | 서비스 실행과 Judge의 별도 예산·감사 기록을 연결했다. 승인된 기존 control 교정은 서비스 입력이 없어도 가능하지만 서비스 실행 결과와 구분한다. 미검수 사례·미확정 release gate를 그대로 유지한다. |
+
+추가 영구 모델은 `0008_document_claim_comparison` → `0009_jd_image_sources` →
+`0010_report_review_runtime` → `0011_profile_generation_limits`로 이어진다.
+공유 계약에는 리포트 revision·명시 재생성 요청 등이 추가되어 FE·BE 팀 검토가 필요하다.
+실행용 DB 모델과 공유 명세의 변경을 게시 시 같은 범위로 취급하지 않는다.
+
+### 실행 예산과 실패 보존
+
+실제 sol 정밀 분석은 기존 50초 상한에서 실패했다. `repo_deep`, `answer_analysis`, `director`를
+각 120초로 두었다. 실제 9턴 리포트의 점수·서술이 공통 50초에서 각각 두 번 타임아웃되어,
+`report_score`·`report`는 별도 180초로 조정했다. 그 외 작업과 `profile_summary`는 공통 50초다.
+스트리밍·xhigh·출력 128000·입력 262144바이트·
+응답 67108864바이트는 유지한다. 이 수치는 제한된 실제 실행을 위한 시작값이며 성능 SLO가 아니다.
+준비 worker 1800초와 내부 deadline 1770초, 준비의 최대 계획 검사, WS 작업 잠금 수명도 함께 조정했다.
+STT는 전체 업로드·수신 timeout과 최대 응답 1048576바이트를 적용한다.
+
+실제 검증 중 실패한 면접·모델 시도는 삭제하거나 질문·답변을 다시 쓰지 않았다.
+제품 중단·재도전 경로로 새 면접을 만들었다. T3 v3의 등록된 인코딩 오류 본문도 덮어쓰지 않고,
+정상 UTF-8 본문을 v4로 분리했다. v3 원문은 DB와 Git 제외 `verification/retired-prompts/`에
+해시가 같은 상태로 보존하고 제품 프롬프트 목록에서는 제외했다. v2·v4는 보존했다.
+v4의 실제 실행은 첫 5개 답변까지 정상 처리됐으나 여섯 번째에서 일반 설계 설명을
+`supported`·빈 코드 근거로 분류해 차단됐다. 실패를 통과시키지 않고 새 v5에서 해당 상태를
+생성 스키마부터 거절하도록 보완했다. 실제 실패 출력은 v4 생성 스키마가 허용하고 v5가
+거절함을 JSON Schema로 재현했다.
+
+v5의 실제 실행에서는 두 번째 답변에서 `partial`과 빈 `missing_points`의 모순을 확인했다.
+새 v6는 충분성·필수 항목·누락 항목·판단 상태를 함께 생성하고, 답변 인용은 원문 ID로 선택한다.
+서버는 선택한 원문과 명시된 판단을 기존 저장 형식으로 복원한다. 판정값이나 답변을 교정하지 않는다.
+미확인 기여의 사유는 모델이 쓴 문장 그대로 한계에 옮기고, 조회 필요 flag는 실제 요청 배열에서 정한다.
+이전 버전·실패 원본은 보존했다. 현재 recipe는 v6를 선택한다.
+
+감사 raw도 v6 원본 그대로 남는다. 다음 Director와 리포트는 당시 버전·질문·답변에 맞춰 복원한다.
+같은 claim quote ID의 중복 판정은 v6에서 거절하고, 기존 v1~v5 prior 분석의 관용 복원과
+기존 report의 strict 복원은 유지했다. 실패했던 동일 질문·답변의 별도 실제 진단은 v6에서
+1회 호출로 canonical 검증을 통과했으며, 이전 실패·답변·분석 DB를 수정하지 않았다.
+
+추가 독립 검토에서는 이미지 JD의 읽기 한계가 리포트에서 빠지는 문제를 확인했다.
+`report/jd_sources.py`는 실제 질문에서 참조한 요구사항만 저장 전사와 해시로 복원한다.
+본문은 블록별 4KiB·전체 16KiB로 제한하고 일부 구간이면 원래 전체 좌표를 그대로 붙이지 않는다.
+원문 누락·해시 불일치와 OCR·원문 충돌은 서술·점수 판정 모두에 별도의 `JDSourceNote`와 한계로 전달한다.
+
+### 실제 공급자 확인
+
+Git 제외 원본은 새 worktree의 `.claude/scratch/final-service-execution/`에 보존했다.
+키·비공개 주소를 기록하지 않고, 기존 GitHub 자격은 메모리에서만 사용했다.
+
+- sol 모델 조회와 작은 Responses 스트리밍 요청이 HTTP 200으로 완료됐다.
+  실제 요청·응답 모델은 `gpt-6.1-sol`이며 출력 128000개를 실제 생성한 검증은 아니다.
+- 인증된 실제 GitHub에서 고정 SHA `9963526…`의 원문을 수집했다.
+  레포 L1, 실제 구조를 바탕으로 한 파일 선정, 원문 8개를 사용한 L2가 성공했고 분석 영역 5개를 생성했다.
+  로컬 Git 원문으로 대체하거나 모의 GitHub 응답으로 성공시킨 검증이 아니다.
+- 같은 실제 수집 입력으로 L1 v3를 별도 호출했다. 합성 공고 태그 `Python`·`TypeScript`·`Docker`가
+  기존 설명문 목록에서는 0개, 기술명 목록에서는 3개 매칭됐다. 실제 사용자 추천 품질의 평가 결과는 아니다.
+- 현재 설정 그대로 STT에 기존 합성 WAV·WebM을 제출했고 둘 다 공백·문장부호 정규화 기준으로 일치했다.
+  무음은 `empty_transcript`로 거절됐다. 실제 마이크·잡음·여러 화자의 정확도를 검증한 것은 아니다.
+- Vision은 합성 PNG를 실제 전사해 751자·원문 블록 5개와 원본 해시를 반환했다.
+  `visual_regions_not_transcribed`, `unread_document_regions`가 있어 상태는 partial이다.
+- Tavily는 PostgreSQL 공식 도메인 검색 1건과 본문 수집 1건에 성공했다.
+  공식 출처를 찾은 사실이 내용의 영구 최신성·개별 답변의 정답을 보증하지 않는다.
+- 별도 Judge 예산 2회로 승인 control의 허용·금지 출력을 실제 sol이 각각 accept·reject했다.
+  나머지 control은 예산 부족 상태다. 서비스 입력이 없는 11사례의 서비스 실행은 모두 not_executed이며,
+  이 2건으로 Judge 타당성이나 서비스 release gate를 통과시켰다고 판단하지 않는다.
+
+**실제 TTS 호출은 사용자의 요청에 따라 보류했다.** Persona별 목소리 설정과 예산·캐시·실패 처리의
+모의 검증은 실제 Google Cloud 인증·음질·결제 검증을 대신하지 않는다.
+
+### 남은 검증과 승인 경계
+
+연속 9턴·리포트·프로필의 실제 모델 실행과 최종 전체 회귀는 아래 최종 검증 기록으로 확정한다.
+현재 단계의 개별 API·mock·PG 성공 수치를 그 결과로 대신 사용하지 않는다.
+실제 Wanted 이미지 공고 전체 흐름, 다양한 외부 레포의 모든 언어·규모 조합,
+사람의 rubric·평가셋 검수와 Judge 교정·운영 임계값 승인, 운영 배포는 별도 경계다.
+
+### 코드·저장·화면 회귀 검증
+
+검증 원본과 지문은 Git 제외 `verification/`에 보존했다. 과거 실행·겹치는 후속 실행을 더해
+하나의 최신 전체 테스트 통과 수로 쓰지 않는다.
+
+| 검증 | 실제 결과와 범위 |
+| --- | --- |
+| AI 최신 v6 | 전체 `pytest` 750개 통과. Ruff·format 111파일·mypy 26소스 통과. |
+| BE 전체와 후속 검증 | v5 고정본 전체는 2269 통과·3 실패·1 스킵이었다. 발견한 Git 부재·설정 예시 기대값을 수정하고 최신 영향 195개, 최종 prior 호환 42개, runtime recipe 3개, 별도 migration 1개가 통과했다. 최신 수집 2282개와 XML을 사례 ID로 대조해 미검증·미해결 실패·남은 스킵 0을 확인했다. 최신 단일 실행 2282 통과 결과는 아니다. `backend-linux-final-matrix.json` 참조. |
+| 리포트 시간 설정 후속 | 실제 타임아웃에 따라 `report_score`·`report`를 180초로 조정한 뒤 설정·연결 선택·manifest·실행 recipe 관련 103개가 통과했다. 이전 전역 결과에 합산하지 않는다. |
+| BE 정적 검사 | 최신 Ruff·format 507파일·mypy app 206소스 통과. 검사 전후 소스 지문이 같다. |
+| FE | tsc·build·eslint·프록시 회귀 4개 통과. 전체 Playwright는 143/144였고 자동 종료의 임시 UI 기대 1건을 수정했다. 179999ms의 미제출 상태, 다음 1ms의 자동 종료·영구 답변 저장·질문2·마이크 해제를 확인한 뒤 영향 음성 파일 31개가 모두 통과했다. 수정 후 전체 144개를 다시 실행한 결과는 아니다. |
+| 계약 | 기존 검사 환경으로 스키마 2개·부분 OpenAPI·양/음성 fixture 7개 통과. 전체 서비스 API 호환성 승인은 아니다. |
+| 마이그레이션 | 새 DB에서 head0011 → 빈 스키마0006 → head0011 왕복과 두 번의 Alembic 모델 대조 통과. 실제 profile 감사가 있으면 downgrade를 거절하고 감사 행이 남는 것을 확인했다. 별도 독립 PG에서는 Task11의 분석 작업·페이지·partial unique 보존 검증도 통과했다. |
+| Docker | 기존 runtime 이미지에 최신 소스를 읽기 전용으로 연결하고 network none에서 모듈·worker 6종·cron 3종·runtime prompt 11종을 확인했다. 새 이미지 빌드나 운영 배포 검증은 아니다. |
+| 독립 검토 | 수정한 중복 claim 판정·legacy prior 호환을 포함한 원문/버전/감사 재생 경계 probe 28개 통과. 사람의 서비스 품질 승인과 구분한다. |
+
+BE 평가 도구는 Git이 없거나 실행할 수 없을 때 `source_revision=null`, 상태·한계를 남기고
+파일별·전체 작업 소스 지문은 계속 기록한다. 원래 OS 예외나 비공개 접속 정보를 출력하지 않는다.
+운영 예시 `.env.example`의 sol·xhigh·상한을 설정 클래스의 미설정 fallback과 혼동하지 않도록
+허용한 차이와 비공개 입력의 빈값도 검증했다.
+
+### 실제 9턴·작업 큐·리포트·프로필 확인 결과
+
+격리 DB·Redis와 실제 `gpt-6.1-sol`에서 새 면접을 처음부터 끝까지 실행했다.
+지원자 답변은 검증용 합성 입력이며 사용자 개인의 실제 경험·기여·성과 자료가 아니다.
+LLM 응답을 모의로 바꾸거나 실패한 과거 턴을 수정해 이어가지 않았다.
+
+- 제품 면접 준비가 성공한 뒤 질문 생성·독립 검토·답변 분석을 연속 처리했다.
+  **9개 답변·9개 분석, 기술 6·도메인 2·HR 1**을 저장하고 `completed`로 종료했다.
+- 완료 면접의 lazy 리포트 요청을 실제 Redis/ARQ 큐에 넣었다.
+  최초 작업의 점수·서술은 기본 50초 상한에서 실패했고, 요청 행·시도·실패는 그대로 보존했다.
+- 작업별 상한을 180초로 조정하고 제품의 명시적 `generation.enqueue(mode=retry)` 경로로 새 요청을 만들었다.
+  실제 worker가 점수·서술과 후속 프로필을 실행해 작업 2개가 완료됐다.
+  점수 6개·리포트 revision1·불변 revision 기록1개·프로필 입력 지문·실제 생성 상한이 저장됐다.
+  이전 `failed`와 새 `succeeded` 요청 행이 모두 남아 있다.
+- 성공한 실호출은 `report_score` 약120.9초·서술 약103.1초였다.
+  프로필의 실제 모델도 sol이고 시간 상한은 공통 50초다.
+  이는 이번 입력 한 건의 관찰값이며 p95·SLO·동시 실행 성능을 검증한 수치가 아니다.
+- 리포트를 두 번 다시 읽어 `ReportResponse`를 받았고, 프로필은 `role_kept`와 추가 모델 호출 0회로 재사용했다.
+  프로필은 가상 역할 설정과 실제 기여 미확인, 저장소 언어 비율과 개인 기여 비율을 구분했다.
+- 실제 TTS는 호출하지 않았다. 이번 검증은 내부 서비스 함수·실제 공급자·PG·Redis/ARQ의 연결이며,
+  사용자 로그인·브라우저 마이크·배포 환경 전체를 거친 실사용 E2E와 구분한다.
+
+원본은 `interview/result.json`, `report-attempt-01-50s/`, `report-queue-result.json`,
+`final-report-storage.json`이다. Windows 검증 도우미의 ARQ 종료 중 `SIGUSR1` 정리 오류는
+`handle_signals=True`로 수정해 본래 timeout과 구분했다. 제품 코드를 바꾼 장애 수정은 아니다.
+
+기존 작업 worktree의 tracked patch·status 해시가 초기 보존본과 같은 것도 확인했다.
+이번 결과는 새 로컬 작업 브랜치에 보존하며 PR·병합·운영 배포를 수행한 결과로 기록하지 않는다.
+
+## 2026-11-08 — Chirp 3 HD 채택과 로컬 서비스 설정
+
+사용자가 직접 청취한 TTS를 채택하고 서비스 설정을 요청했다.
+선택과 활성화 경계는 [0036](decisions/0036-chirp3-service-configuration.md)에 기록한다.
+이 절은 앞선 실제 9턴 검증의 TTS 보류 기록 이후 상태이며 과거 결과를 덮어쓰지 않는다.
+
+### 설정과 보존
+
+- 공급자는 `google_cloud`, 언어는 `ko-KR`로 선택했다.
+- 기술 면접관은 `ko-KR-Chirp3-HD-Charon`, 도메인은 `ko-KR-Chirp3-HD-Kore`,
+  HR은 `ko-KR-Chirp3-HD-Aoede`로 배정했다.
+- 앱의 월 상한은 100만 문자로 두었다. 이는 확인된 Cloud 잔여량이 아니다.
+- 원본 로컬 `backend/.env`에 선택값을 추가하고 새 worktree의 Git 제외 `backend/.env`에도
+  같은 설정을 준비했다. 기존 키와 비TTS 설정이 유지되고 두 파일이 같은 것을 확인했다.
+  공개 `.env.example`에는 선택값만 반영하며 키·접속 주소·프로젝트는 복사하지 않았다.
+- 실제 Cloud 프로젝트와 이번 달 무료 잔여량은 미확인이다. `TTS_BUDGET_PROJECT`는 빈 값으로
+  두고 Redis 월 예산을 초기화하지 않았다. 사용자에게 필요한 정보를 요청한 상태다.
+  현재 합성 요청은 `budget_unconfigured`로 차단되므로 서비스 활성화 완료로 보고하지 않는다.
+
+### 실제 공급자 확인과 이번 회귀
+
+앞선 단독 검증에서는 실제 Google 키로 한국어 음성 목록 조회와 세 음성의 합성이 성공했다.
+한국어 입력의 MP3 세 개를 디코딩했고 STT 재전사도 공백·문장부호 정규화 기준으로 일치했다.
+첫 인코딩 오류의 세 요청은 한국어 검증에서 제외해 보존했다. 전체 전송량은 174문자다.
+원본은 Git 제외 `tts-verification-20261107/result.json`, `roundtrip-stt.json`과 MP3에 있다.
+이는 공급자 단독 진단이며 서비스 월 예산이나 브라우저 전체 면접을 검증한 결과가 아니다.
+
+이번 실행 산출물은 Git 제외 `.claude/scratch/tts-service-20261108/`에 보존했다.
+
+| 검증 | 이번 결과와 범위 |
+| --- | --- |
+| TTS 회귀 | 신규 격리 PostgreSQL DB와 테스트 Redis DB에서 60개 통과. 어댑터·예산·캐시·질문 API·재생 복구·계약을 확인하며 Google 합성은 모의 응답이다. |
+| 설정 | `test_config.py`·`test_final_provider_settings.py` 36개 통과. 선택값을 무설정 fallback과 구분해 정확히 검사한다. |
+| 정적 검사 | 수정한 설정 테스트의 Ruff와 format 검사 통과. |
+| FE | 기존 브라우저 회귀 중 음성 재생·공급자 실패·자동재생 차단의 3개 통과. 모의 API를 사용하며 실제 Google 연결 E2E는 아니다. |
+| 실제 API 차단 | 실제 앱 인증·Redis 세션과 기존 실검증 DB의 저장 질문으로 무인증 401, 본인 질문의 예산 미설정 409/not_ready, 없는 턴 404와 원문 보존을 확인했다. Google은 호출하지 않았다. |
+
+실제 API 차단 검증은 별도 검증 DB·Redis를 명시했다. `.env`의 평상시 DB·Redis가 실행 중이거나
+새 API/worker가 기동됐음을 뜻하지 않는다. 설정을 읽은 기존 API는 재시작해야 하며,
+배포 환경의 `.env.deploy`나 원격 설정은 이번에 변경하지 않았다.
+
+### 남은 활성화와 검증
+
+1. 실제 Cloud 프로젝트와 다른 앱 사용을 포함한 이번 달 잔여량·진행 중 합성을 확인한다.
+2. API가 사용하는 Redis가 준비되면 같은 DB 번호에 확인한 잔여량으로 월 예산을 초기화한다.
+   새 달이나 Redis 교체 때도 명시적으로 확인하며 자동으로 새 무료량을 부여하지 않는다.
+3. 실제 질문 음성 API에서 세 페르소나 합성과 같은 질문의 캐시 재사용·추가 문자 소비 없음을 확인한다.
+4. 브라우저에서 실제 인증·재생·녹음 시작 시 음성 정지·실패 시 텍스트 대체를 확인한다.
+
+추가 조회 판단 외에도 실제 이미지 JD·문서 원문 경로, 다양한 레포·SHA 캐시,
+프로세스 중단·중복 요청, Task-12 사람 검수·Judge 교정·품질 gate, 운영 배포·동시성은 남아 있다.
+이번 60·36·3개 결과를 과거 전체 테스트나 전체 모델 품질 통과 수치로 합산하지 않는다.
+커밋·push·PR 게시·병합·배포는 수행하지 않았다.
+
+### 프로젝트 ID 제공 이후
+
+사용자가 제공한 프로젝트 ID를 원본과 새 worktree의 비공개 `TTS_BUDGET_PROJECT`에 반영했다.
+키와 그 외 환경 값의 보존, 두 파일의 일치, 실제 `Settings.require_tts`와 음성 입력 검증을 확인했다.
+이는 사용자 제공 프로젝트의 등록이며, 키의 소속·Cloud 무료 잔여량을 별도로 조회한 결과는 아니다.
+잔여량과 다른 앱·프로젝트의 사용 이력은 미확인이므로 월 예산은 초기화하지 않았다.
+사용자에게 같은 결제계정의 Chirp 3 HD 사용이 기록된 샘플 6건·174자뿐인지 확인을 요청했다.
+Google 합성은 추가 호출하지 않았다. 산출물은 `tts-service-20261108/project-configuration.json`이다.
+
+### 전체 이력 확인과 실제 질문 API 활성화
+
+사용자는 같은 결제계정의 다른 앱·프로젝트까지 포함한 이번 달 Chirp 3 HD 사용이
+기록된 샘플 6건·174자뿐이라고 명시적으로 확인했다. 이 근거의 범위는
+[0037](decisions/0037-tts-complete-history-budget.md)에 기록한다.
+
+- 원본 `.env`의 API Redis 대상은 로컬 56379 포트의 DB 0이며 당시 실행 중인 서버가 없었다.
+  기존 데이터를 삭제·이동하지 않고 캐시된 `redis:7` 이미지로 전용 로컬 Redis를 실행했다.
+  AOF는 별도 Docker volume에 보존한다. 평상시 DB나 API·worker를 새로 기동한 것은 아니다.
+- 최초 예산은 `1,000,000 - 174 = 999,826`으로 산정했다. 기존 `initialize_budget`을 사용했고
+  Cloud 조회 확인 플래그는 사용하지 않았다. 근거는 `user_confirmed_complete_history`로 남겼다.
+- 초기화 도우미는 이번 기간의 최초 1회만 허용하고 기존 카운터나 초기화 기록이 있으면 중단한다.
+  사용자 확인 뒤 실제 API를 통한 신규 소비는 같은 Redis 카운터에 누적한다.
+
+실제 앱·인증·저장 질문·Google 합성·위 Redis를 연결한 유한 검증이 성공했다.
+DB는 기존 실제 9턴의 격리 PostgreSQL을 명시했으며 평상시 DB 설정을 바꾸지 않았다.
+호출 횟수 계측만 추가하고 Google 응답을 모의로 대체하지 않았다.
+
+| 확인 | 실제 결과 |
+| --- | --- |
+| 페르소나 합성 | 저장된 HR 1턴·기술 2턴·도메인 6턴의 질문 음성 GET이 모두 200. Aoede·Charon·Kore 배정을 실제 전송에서 확인했다. |
+| 원문·형식 | 저장 질문을 그대로 전송하고 질문 원문은 변경되지 않았다. 세 MP3 모두 디코딩 성공, 응답은 `audio/mpeg`·`private, no-store`다. |
+| 캐시·동시 요청 | 같은 질문의 반복 GET과 HR 질문의 동시 GET이 같은 음성을 반환했다. 질문마다 Google 합성 1회이며 반복 조회의 문자 소비는 0이다. |
+| 인증 | 무인증 401을 확인했다. 검증 DB에 다른 활성 사용자가 없어 이번 실호출의 타인 소유권 검사는 미실행이며 앞선 자동 회귀와 구분한다. |
+| 문자 예산 | 신규 사용량은 126+156+184=466자. `used=466`, `pending=0`, `uncertain=0`, 초기 상한 999,826을 확인했다. |
+| 누적·잔여 | 앞선 174자를 포함한 기록상 누적 사용량 640자, 남은 앱 예산 999,360자다. 공급자 사용량 직접 조회값은 아니다. |
+
+원본은 Git 제외 `tts-service-20261108/history-budget-initialization.json`, `live-route.json`과
+`live-*-turn-*.mp3`다. 이번 검증은 실제 공급자를 사용하는 인증된 ASGI API 경로이며,
+사람의 브라우저·마이크로 9턴 전체를 진행하거나 운영 환경에 배포한 결과는 아니다.
+평상시 `.env`의 PostgreSQL과 API/worker의 기동, 배포 설정은 별도다.
+
+## 2026-11-08 — 최종 AI 서비스 후속 구현과 통합 검증
+
+앞선 원본 worktree와 실행 기록을 보존하고 `feature/ai-final-service-followups-20261108`에서 진행했다.
+기준은 `develop`의 `18f4105b2e7e9885df118d283badbf59692ec5b4`이며, 필요한 기존 미병합 구현을 로컬에서 결합했다.
+이 절은 새 후속 변경과 검증 기록이다. 커밋·push·PR 게시·병합·운영 배포를 수행한 기록은 아니다.
+결정과 이유는 [0038](decisions/0038-final-service-followups.md)을 참조하고, 초기 설계·task·testing 문서는 유지한다.
+
+### 범위와 협업 근거
+
+- [#206 댓글](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/206#issuecomment-6711527539): 새 환경의 rubric 초기화와 사람 승인 분리.
+- [#207](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/207): 문서 계약과 저장된 text/voice 모드의 일치.
+- [#208](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/208): 보고서 성공 이후 프로필 전달·실행·복구.
+- [#209](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/209): 서비스 실행과 자동 평가 연결, Judge 교정·누출 방지.
+- [#210](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/210): 고정 원문 보완 조회와 전체 실행 검증.
+- [#211](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/issues/211): 배포 prompt 감사 버전의 저장 용량과 보존.
+
+### 구현한 연결
+
+문서 요청에는 종류·선택 자소서 ID·형식별 지원과 상한을 명시했다.
+새 voice 면접의 text WS 입력은 STT·모델·저장 전에 거절하고, 기존 text 면접은 텍스트 화면으로 이어간다.
+text 준비에서는 마이크를 요구하지 않으며 초안·원문 줄바꿈·재접속·질문 텍스트를 보존한다.
+계약과 화면은 [OpenAPI](../shared/contracts/openapi.yaml), [FE API 계약](../../frontend/docs/api-spec.md),
+[WS](../../backend/app/features/interview/ws.py), [진행 화면](../../frontend/src/features/interview/InterviewScreen.tsx)에 연결했다.
+
+보고서와 revision별 프로필 갱신 요청을 같은 transaction에 저장한다.
+큐 전달·worker 인수·완료의 회차와 소유 토큰을 검사하고 총 5회·24시간 안에서 복구한다.
+정지·탈퇴 사용자는 대기 작업 인수 때 영구 종료하고, 직접 호출·기존 job도 모델 실행 전에 차단한다.
+캐시 재사용도 짧은 User 행 잠금으로 활성 상태를 재검사하며 이전 성공 요약은 보존한다.
+근거는 [outbox](../../backend/app/features/profile/refresh_outbox.py),
+[프로필 서비스](../../backend/app/features/profile/service.py), [worker](../../backend/app/workers/tasks/profile_summary.py)다.
+
+준비 복구 두 경로는 한 번에 최대 10페이지×100건을 조회하고 다음 cron에서 이어간다.
+동일 timestamp도 UUID로 순서를 정하며, ARQ의 job별 ctx 복사 사이에서 cursor·cutoff를 공유한다.
+겹친 cron·취소·새 owner·lease 갱신을 재검사하고 DB 잠금을 잡은 채 큐 응답을 기다리지 않는다.
+연결은 [공통 순회](../../backend/app/workers/preparation_candidates.py)와 기존 준비 reaper 두 개를 재사용했다.
+준비 전체 상한 1770초, worker 1800초, lease 90초·heartbeat 20초와 프로필 등록을 유지했다.
+
+고정 commit의 root tree와 실제 파일 경로를 열거하고 선정 경로·주변 후보를 별도로 보존한다.
+재귀 목록도 요청·응답/누적 바이트·항목·깊이 상한 안에서 처리하며, 완전한 부모 목록만 캐시한다.
+경로별 fallback이 항목 상한에서 잘린 부모 목록을 전체 캐시로 쓰던 문제도 보완했다.
+원문을 읽지 않은 후보는 Evidence가 아니며, 저장 전에 사용자·선택 public 레포·SHA·경로를 다시 검사한다.
+근거는 [구조 수집](../../backend/app/features/interview/repository_sources.py),
+[재귀 목록](../../backend/app/features/interview/repository_structure.py),
+[후보](../../backend/app/features/interview/repository_candidates.py), [조회·저장](../../backend/app/features/interview/agent_queries.py)다.
+
+### 새 개발 환경 초기화의 실제 실행
+
+격리 개발 DB에서 다음 8단계를 실제 실행했고 모두 exit 0이었다.
+
+| 단계 | 확인 |
+| --- | --- |
+| 1 | 새 검증 DB 생성 |
+| 2 | Alembic head까지 적용 |
+| 3 | sol 배포 버전으로 runtime prompt 등록 |
+| 4 | 지식 초기화 dry-run |
+| 5 | 미검수 개발 초안 사용을 명시해 적용 |
+| 6 | 같은 지식 초기화 재실행 |
+| 7 | 같은 runtime 등록 재실행 |
+| 8 | Alembic 모델 정합성 확인 |
+
+평가 key 6개와 질문 프레임 21개로 변경 예정 27건·적용 27건·재실행 변경 0건을 확인했다.
+활성 runtime prompt는 11개이며 긴 배포 버전도 100자 저장 용량 안에서 보존했다.
+반복 실행 전후 기준·prompt 본문과 지문이 같았고 rubric 승인 상태는 `unreviewed`다.
+사용 도구는 [지식 초기화](../../backend/scripts/configure_ai_knowledge.py)와
+[runtime 등록](../../backend/scripts/configure_ai_runtime.py)이며 운영 rubric 승인 도구로 해석하지 않는다.
+산출물: `followup-live-20261108/bootstrap-operator/result.json`과 단계별 감사 JSON.
+
+### 실제 레포·면접·보완 조회
+
+공개 `golang/example`과 `spring-guides/gs-rest-service`를 고정 SHA에서 실제 GitHub·sol로 분석했다.
+모델 전송 시도는 세 실행 합계 10회이며 원문 지문·줄 위치·고정 SHA와 분석 입력을 대조했다.
+초기 Go 결과는 구현·설정·테스트를 포함했으나 초기 Java/Kotlin 결과는 설정·문서에 치우쳤다.
+재귀 목록 개선 후 같은 Java SHA를 다시 실행해 Java/Kotlin 구현·설정·테스트 8개 원문을 확인했다.
+Go는 기존 방식의 성공 결과이며 개선한 재귀 방식으로 실제 재실행하지 않았다.
+전체 레포 독해, 모든 언어·빌드 도구, 거대 monorepo·큰 파일 조합, 실제 build/test 실행은 검증하지 않았다.
+개인 저작·기여·성과와 해석의 정확성에 대한 사람 검수도 이 결과에 포함하지 않는다.
+산출물: `followup-live-20261108/repository-diversity/combined-summary.json`과 각 원문·요청 기록.
+
+격리 PG·Redis와 실제 sol로 준비·답변 9개·질문 저장·최종 종료를 실행했다.
+면접은 `completed/current_turn=9`이며 `turn_asked=9`, `turn_answered=9`,
+`interview_started=1`, `interview_completed=1`을 실제 저장에서 확인했다.
+첫 실행의 후보 L1 binding 누락은 검증 fixture 문제로 남기고 제품 가드를 완화하지 않았다.
+산출물: `followup-live-20261108/interview/result.json`, `storage-metadata.json`, 준비 재시도 기록.
+
+별도의 가상 질문·답변 사례에서는 실제 T3가 레포 verification 1건과 외부 조회 1건을 요청했다.
+Tool 요청을 모델 출력에 강제 주입하지 않았으며 실제 GitHub 원문 조회는 `found`였다.
+외부 조회에서 공식 원문 3개를 저장하고 다음 T4 질문의 Director 계획·검수 입력에 반영했다.
+레포 원문을 읽은 뒤 T3를 재분석하지만 외부 자료는 당해 T3 재분석에 소급해 넣지 않는다.
+실제 sol 호출은 총 4회였고 같은 답변 재전송은 같은 턴·다음 질문을 유지하며 추가 HTTP 0회였다.
+이는 기존 9턴에서 보완 요청이 없었던 결과와 구분하는 별도 사례다.
+산출물: `followup-live-20261108/actual-tools-02/result.json`, `postexecution-checks.json`, 모델 입력 4개.
+
+### 실제 리포트·프로필과 이미지 JD
+
+실제 worker와 sol로 최초 리포트·프로필을 만들고 이의 제기·운영자 검토 경로로 revision 2를 생성했다.
+revision 1·2, 점수 6개, 이전 revision 1의 같은 해시, 바뀐 프로필 입력 지문을 확인했다.
+총 공급자 호출 6회이며 반복 조회·프로필 재사용의 추가 호출은 0회였다.
+검증용 운영자가 재평가 절차를 행사했으며 `human_quality_or_score_approval=false`다.
+따라서 실제 서비스 검토 기능의 실행 검증이며 사람의 점수·내용 품질 승인은 아니다.
+산출물: `followup-live-20261108/report-profile-revision-02/combined-verification.json`과 revision 저장 기록.
+
+이미지 JD는 합성 Wanted 응답·이미지 전달과 실제 Vision·sol·PG를 연결한 혼합 검증을 수행했다.
+Vision 원문 블록 13개에서 sol 1회로 요구사항 6개를 저장하고 출처·인용·이미지/텍스트 해시를 확인했다.
+같은 공고 캐시 재사용의 공급자 추가 호출은 0회였다.
+상류 Wanted 응답과 CDN 전달을 합성했으므로 실제 공개 Wanted 이미지 공고를 종단 검증한 결과는 아니다.
+첫 시도와 최종 `wanted-image-functional-20261108-02/result.json`을 각각 보존했다.
+
+### 컨테이너·브라우저 연결
+
+새 [서비스 이미지](../../backend/Dockerfile)와 [평가 이미지](../../backend/Dockerfile.evaluation)를 빌드했다.
+평가 이미지는 사례·holdout·비밀값을 내장하지 않으며 읽기 전용 입력과 네트워크 차단으로 실행했다.
+합성 서비스 사례 32개의 dry-run 입력 계약이 통과했고 실제 모델 실행·품질 합격은 그 검사 범위가 아니다.
+실제 이미지 worker의 기능 6개·cron 4개 등록과 `role_kept` 재사용, 기존 프로필 보존을 확인했다.
+산출물: `followups-final-validation/images/`, `followup-live-20261108/runtime/worker-result-02.json`.
+
+실제 컨테이너 API·시험 인증 세션·브라우저에서 text 경로 6개 확인이 통과했다.
+무인증 401, 인증 조회, 기존 text 면접, 실제 WS 질문·입력, MSW/TTS 미사용, 홈 API·화면을 확인했다.
+`runtime/browser-result.json`의 결과이며 GitHub OAuth 교환을 실행한 것은 아니다.
+
+`runtime/voice-browser-result-03.json`에서는 실제 Google 질문 음성을 브라우저로 재생했다.
+가상 마이크를 통해 MediaRecorder로 녹음하고 실제 STT→sol 분석·Director→질문 2까지 진행했다.
+MSW를 사용하지 않았고 실제 음성 API·바이너리 전송·전사·답변 저장을 확인했다.
+이는 사람의 육성·실제 장치 사용성이나 음성으로 9턴 전체 진행을 검증한 결과와 구분한다.
+같은 Redis의 기존 TTS 예산을 사용했으며 이번 후속 검증에서 예산을 추가 초기화한 횟수는 0회다.
+최신 사용량·잔여 예산은 별도 후속 기록에서 확인한다.
+
+### 전체 자동 회귀와 판정 범위
+
+다음은 JudgeContext 보완 전 동결본의 각 전체 실행 결과이며 이전 부분 검사와 합산하지 않는다.
+
+| 검사 | 결과와 범위 |
+| --- | --- |
+| AI | 758개 통과, Ruff·format 111파일·mypy 26소스 통과. 실제 공급자 품질 검사는 아니다. |
+| FE | Playwright 147개 통과, 실패·skip·flaky 0. MSW 회귀이며 위 실제 브라우저 실행과 구분한다. |
+| FE 정적·기반 | 강제 TypeScript 검사·build·ESLint와 proxy 4개 통과. |
+| BE | Linux `final02` 한 번의 전체 실행에서 2405개 통과, 실패·오류·skip 0. |
+| BE 정적 | 전체 Ruff 통과, format 530파일·mypy app 212소스 통과. |
+| 공통 계약 | 스키마 2개·fixture 7개 통과. 부분 OpenAPI 검사이며 전체 런타임·TS 호환성 승인은 아니다. |
+
+BE `final01`의 2403통과·깊이 제한 fixture 불일치 1건과 수정 후 `final02`는 별도 보존했다.
+두 번째 snapshot은 승인된 fixture 파일 1개만 달랐고 제품·테스트 guard·timeout은 변경하지 않았다.
+`final02`의 snapshot 705파일은 실행 전후 같았다. 결과는 `followups-final-validation/backend/`에 있다.
+나머지 전체 결과와 소스 지문은 `followups-final-validation/summary.json` 및 검사별 폴더에 있다.
+앞선 준비 fixture 누락·도우미 인자/종료 오류·실패 시도도 각 artifact에 남기며 성공 횟수에 합산하지 않는다.
+
+### 진행 중인 평가와 남은 승인
+
+위 통과 결과는 자동 검증 완료이며 사람의 기준·출력 품질 검수는 별도 보류 상태다.
+실제 서비스 사례 32개 실행과 근거를 포함하는 JudgeContext 보완·재교정은 이 절 작성 시 진행 중이다.
+기존 서비스 출력·control·라벨·Judge 버전은 보존하며 기존 결과를 새 판정으로 덮어쓰지 않는다.
+해당 실행 결과·변경 후 영향 회귀와 새 Judge 교정 수치는 후속 절에서 별도로 추가한다.
+운영 환경 배포, 사람의 음성 사용성·내용 품질 검수, 운영 SLO·동시성 검증은 별도 완료 조건이다.
+
+### 실제 화면·예산 및 32개 서비스 실행의 확정 결과
+
+실제 API의 revision 2 리포트는 점수 6개·면접관 피드백 3개·턴 9개를 반환했다.
+반복 GET의 응답이 같았고 브라우저의 리포트·마이페이지가 오류 없이 표시됐다.
+홈 응답의 프로필 역할 요약도 확인했다. `runtime/report-browser-result.json`에 기록했다.
+voice 세션에 text 답변을 보낸 별도 실제 WS 검사는 `answer_rejected`를 반환했고
+현재 턴·영구 답변은 그대로였다. 제품 가드를 실제 녹음 성공 경로와 따로 확인한 결과다.
+
+실제 음성 경로에서 답변 1개·분석·다음 질문을 저장했고 LLM 기록 2개에 sol 시도 3개가 남았다.
+공식 원문 재검색은 같은 출처 3개를 재사용하며 추가 HTTP 0회였다.
+보완 코드 원문은 고정 SHA `99635268fe86b3ef3762a6a2b5dcd9ba67b6b9ce`의
+`backend/tests/test_config.py:1~158`과 내용 해시를 저장했다.
+
+TTS 신규 소비는 138자이며 기존 Redis는 `limit=999826`, `used=604`, `pending=0`, `uncertain=0`이다.
+초기화 이전 174자를 포함한 기록상 누적은 778자, 남은 앱 예산은 999,222자다.
+Cloud 잔여량 직접 조회값이 아니며 기존 예산을 다시 초기화하지 않았다.
+원본은 `runtime/final-live-storage.json`이다.
+
+원문 전달 보완 전 실제 서비스 32개 실행은 입력 계약 32개 통과·서비스 성공 31개·후보 거절 1개였다.
+리포트 형식 13개가 통과했고 진단 Judge는 성공 출력 31개를 판정했다.
+원래 판정은 accept 12·ambiguous 4·reject 15이며 사람 검수·품질 승인 결과가 아니다.
+서비스 모델은 128시도 예산 중 57회, Judge는 별도 64시도 중 31회를 사용했다.
+
+`q-0006.v2`는 계획·독립 검토 2회 후 `director_candidate_replan`으로 안전하게 거절됐다.
+같은 입력을 별도 단 한 번 진단 실행했을 때는 계획·검토 2회로 성공했다.
+32개 원실행을 32통과로 고치거나 두 실행을 합쳐 한 번의 전체 성공으로 계산하지 않는다.
+원본은 `eval-service32-live.json`과 `q0006-rejection-diagnostic/`에 각각 보존했다.
+
+### 평가 이미지 실행 방법의 명시
+
+평가 compose는 같은 checkout에서 빌드한 runtime 이미지를 `EVAL_RUNTIME_IMAGE`로 받는다.
+deploy compose가 생성하지 않는 `devon-backend:local`을 기본으로 추측하지 않는다.
+저장소 루트 PowerShell에서 다음과 같이 입력 검증만 실행할 수 있다.
+
+```powershell
+docker build -f backend/Dockerfile -t devon-backend:local .
+$env:EVAL_RUNTIME_IMAGE = 'devon-backend:local'
+$env:EVAL_CASES_DIR = (Resolve-Path 'ai/evals/service_regression').Path
+New-Item -ItemType Directory -Force '.claude/scratch/eval-input-check' | Out-Null
+$env:EVAL_OUTPUT_DIR = (Resolve-Path '.claude/scratch/eval-input-check').Path
+docker compose -f compose.evaluation.yaml --profile evaluation build
+docker compose -f compose.evaluation.yaml --profile evaluation run --rm evaluation
+```
+
+이 기본 실행은 검증 전용 manifest와 네트워크 차단을 사용하며 모델을 호출하지 않는다.
+실제 평가에는 설정에서 만든 모델 manifest와 명시적 시도 예산을 따로 사용한다.
+미검수 자료의 실행 성공은 `자동 검증 완료`, 사람의 기준·해석 검수는 `사람 검수 대기`로 구분한다.
+
+### Judge 원문 전달·저장 출력 재판정의 최종 확인
+
+실제 사례의 원문·위치·질문 계약·면접관 역할·Tool 상태를 64KiB 이내의
+`judge-context.v1`로 전달한다. 없는 원문은 채우지 않고 이전 분석·거절 후보는 원문과 구분한다.
+정답·다른 control·검수자 메타데이터는 전달하지 않는다.
+[context 투영](../../ai/evals/judge_context.py), [Judge](../../backend/scripts/ai_model_judge.py),
+[실행기](../../ai/evals/eval_runner.py)와 [CLI](../../backend/scripts/run_ai_evaluation.py)에 연결했다.
+
+기존 성공 출력 31개는 input·expectation·binding·output 해시를 확인한 뒤 v2 Judge로 재판정했다.
+서비스 모델 호출은 0회, Judge는 64시도 상한 중 31회였고 실행 실패는 없었다.
+판정은 accept 18·reject 12·ambiguous 1이며 원래 실패한 q-0006은 그대로 남았다.
+원본 결과와 새 `eval-service32-grounded-rejudge.json`은 별도 파일이다.
+재판정 완료를 서비스 재실행이나 생성 내용 전체의 품질 합격으로 세지 않는다.
+
+기존 승인 사례 11개의 제어 출력 34개를 v2 Judge로 다시 교정했다.
+실행 34개 성공·재시도 0개·기존 라벨 일치 33/34였다.
+허용 11개와 거절 대상 22개는 일치했고, 기대값 ambiguous인 `e-0002.v1/control2`를 reject했다.
+앞선 v1의 31/34와 새 v2의 33/34는 각각 보존했다.
+고정 순서의 각 1회 측정이며 일반 정확도, 순열·반복 안정성, 사람 품질 승인을 뜻하지 않는다.
+산출물은 `approved-controls-grounded-20261108-01/`에 있다.
+
+판정 12개 거절의 원인을 대조하자 기준과 관찰 범위의 문제가 함께 확인됐다.
+q2·q5는 기존 검토 이견이 남아 있고, q3는 허용하는 주제 전환 범위를 재검수해야 한다.
+q7의 기존 평가는 T4 질문 생성만 실행해 선행 조회 판단을 관찰하지 않았다.
+r1~r8의 v2 입력에는 원래 전역 자료 m1/m2가 빠져 있었고,
+리포트 평탄화 후에는 원래 검증된 내부 참조도 Judge에 보이지 않았다.
+이 결과만으로 운영이 조회를 생략하거나 보고서 내부 참조가 없다고 결론내리지 않는다.
+
+### 보고서 자료 연결과 내부 관찰의 추가 보완
+
+기존 v1·v2 자료와 실제 실행·판정은 보존하고 별도
+[보고서 v3 코호트](../../ai/evals/report_source_binding_cohort/binding-manifest.json)를 구성했다.
+원래 m1/m2 원문과 명시 경로·줄 표기를 그대로 사용한다.
+새 연결은 가상 평가의 사용 가능 자료라는 전제이며 원래 질문 당시 사용 이력의 복원이 아니다.
+필요한 ref는 기존 합성 snapshot에 연결하고 실제 코드 버전을 증명한 것으로 취급하지 않는다.
+질문·답변·질문 계약·허용/금지 기준·control은 바꾸지 않고 검수는 `unreviewed`로 유지한다.
+
+평가 bridge는 실제 모델의 검증된 `ReportNarrative`를 같은 입력으로 다시 검증한 뒤
+`validated-report-claims.v1` artifact를 만든다. 문구·section·persona·claim_index·turn_refs·
+evidence_refs를 함께 보존하고 공개 `output_hash`와 별도의 `artifacts_hash`를 기록한다.
+공개 보고서·DB·서비스 런타임을 변경하거나 공개 문자열에서 참조를 만들어 붙이지 않는다.
+[artifact 검증](../../ai/evals/eval_artifacts.py)과 재판정은 형식·버전·해시 쌍·변조를 검사하고,
+원래 artifact가 없는 결과에는 숨은 근거를 만들어 채우지 않는다.
+
+이 관찰을 읽는 v3 Judge는 기존 기본 v2와 분리했다.
+`--judge-prompt ai/prompts/evaluation-judge-v3.md --judge-prompt-version evaluation-judge-v3`를 명시한다.
+내부에만 있는 항목이 공개 응답에 표시됐다고 간주하거나 공개 누락을 대신 충족할 수는 없다.
+
+[q7 v3 코호트](../../ai/evals/component_regression/binding-manifest.json)는
+`director_verification` 단계의 실제 `verification_decision`만 실행한다.
+요청·경로·SHA는 입력과 일치했고 model factory·HTTP·다음 Director는 모두 0회였다.
+이는 조회 판단 함수의 자동 검증이며 실제 원문 조회는 앞선 별도 실검증 결과를 참조한다.
+새 manifest의 출처 지문은 `utf8_lf`로 정규화하고 원본 raw 지문은 별도로 보존했다.
+Windows CRLF·Linux LF에서 같은 의미의 자료가 해시 차이만으로 실패하지 않는 회귀도 확인했다.
+
+추가 보완 후 AI 전체 782개, BE 평가 관련 42개가 통과했다.
+기존 전체 BE 2409개 이후의 평가 연결 변경에 대한 별도 영향 검사이며 두 수치를 합산하지 않는다.
+Ruff 전체·format 530파일·mypy app+scripts 228소스도 통과했고 검사 대상 713파일은 전후 같았다.
+원본 58개 자료, v2 코호트 66개 JSON과 BE app 212파일도 이전 동결본과 같았다.
+산출물은 `report-source-observation-verification-01/`과
+`followups-final-validation/backend-static-post-artifacts/`에 있다.
+
+### 최종 이미지와 임시 검증 프로세스
+
+추가 평가 코드와 v3 prompt를 포함한 runtime·평가 이미지를 새로 빌드했다.
+평가 이미지의 실제 실행 파일 7개 해시가 작업본과 같았고 키·사례·holdout 내장 파일은 없었다.
+네트워크 없이 기존 32개·새 보고서 8개·조회 결정 1개의 입력 계약이 모두 통과했다.
+그 실행에서는 서비스·Judge 예산을 생성하지 않았다. 실제 모델 실행과는 별도 결과다.
+산출물은 `followups-final-validation/images-artifacts-final/`에 있다.
+
+시험 로그인 세션을 폐기하고 임시 API 컨테이너·Vite를 종료했다.
+DB·Redis의 검증 이력과 TTS 예산은 보존했으며 5173·8000 포트는 해제됐다.
+이는 평상시 `.env`의 DB 적용이나 운영 배포를 완료한 상태가 아니다.
+정리 도우미의 인코딩·부분 정리 후 재실행 오류도 기록하고 마지막 정리 결과와 구분했다.
+산출물은 `runtime/cleanup/attempt-03/result.json`이다.
+
+### 자료·관찰 보완 후 실제 9개 검증의 확정 결과
+
+`source-binding-observation-live-01/`에서 기존 실행과 분리해 실제 sol로 검증했다.
+새 보고서 v3 8개와 조회 결정 q7 v3 1개이며 기존 공개 출력·기준을 고쳐 통과시키지 않았다.
+
+| 항목 | 실제 결과 |
+| --- | --- |
+| 입력·실행 | 9/9 통과. 조회 결정 1개는 실제 함수만 실행했고 model factory·HTTP·다음 Director는 0회였다. |
+| 보고서 형식 | 8/8 통과. 점수·서술 모델은 각각 8회, 총 16/20시도를 사용했다. |
+| 내부 근거 | 실제 검증된 모델 Narrative와 최종 artifact의 문구·구분·담당·순번·턴/Evidence 참조가 8/8 일치했다. 별도 artifact 해시·참조 그래프 대조도 통과했다. |
+| Judge 실행 | 명시한 v3 Judge 9/9 실행 성공, 9/16시도 사용. 재시도·실행 실패 0회다. |
+| 진단 판정 | accept 8·reject 1. 사람의 정답 승인이나 전체 서비스 품질 합격으로 승격하지 않는다. |
+| 보존 | 기존 자료·v2 결과·31개 재판정·제어 출력 교정과 새 실행 전후 소스 지문이 같다. |
+
+남은 reject는 `r-0008.v3`이다. m1/m2가 실제 모델 입력에 모두 있고,
+최종 Claim 24개도 검증된 모델 결과와 같지만 구조화된 evidence_refs에는 m2만 사용했다.
+Redis 보완 관찰은 실제 턴 2·6으로 연결했고 `build.gradle:38~43`은 한계 문장에만 언급했다.
+Judge는 해당 a3의 m1 근거 연결을 충족하지 못했다고 판정했다.
+이제 자료 누락·관찰 손실과 구분되는 특정 인용 품질 진단이며, 기준은 여전히 미검수다.
+사람 기여·성과를 확정하거나 환각이라고 단정하지 않았고 재실행·기준 완화로 결과를 바꾸지 않았다.
+
+이번 후속 구현과 기능·형식·참조·실행의 상태는 **자동 검증 완료**다.
+내용의 모든 품질 판정이 통과한 것은 아니며 사람의 rubric·평가셋 검수는 **사람 검수 대기**로 유지한다.
+운영 적용·게시·배포, 실제 공개 Wanted 이미지 공고, 물리 마이크의 전체 9턴,
+모든 언어·규모와 운영 동시성·SLO는 이번 완료 범위에서 확인하지 않았다.
+
+원본 모델 입력·결과·판정과 독립 대조는 `source-binding-observation-live-01/`의
+`result.json`, `summary.json`, `preservation.json`에 있다.
+겹치는 검사 수를 합산하지 않은 최종 색인은 `followups-final-validation/final-summary.json`이다.
+원본 worktree 371파일·patch·status는 그대로이며 공개 대상 1104파일에서 실제 키 값은 검출되지 않았다.
+
+
+## 2026-11-08 — 게시 PR #212~#219의 의존 관계 정리
+
+사용자 요청에 따라 게시 당시 신규 403경로만 대상으로 정리한다.
+게시 후 별도로 변경한 45경로는 원본 그대로 보존하고 이번 게시에서 제외한다.
+기존 PR 번호와 develop 기준은 유지하며 원본 8개 HEAD 뒤에 후속 커밋을 추가한다.
+
+- 공통 모델·마이그레이션·런타임 프롬프트·검색·준비 lease·이벤트 기반은
+  #213에서 제공하고 문서·JD → Director·레포 → 리포트·프로필 순으로 소비한다.
+- 평가 실행은 #214, 데이터 의존 검사와 CI 연결은 #215, REST·WebSocket과
+  음성·FE 최종 통합 검사는 #219에 둔다. 파일별 신규 변경의 소유자는 한 곳이다.
+- 준비 실패 후 실제 REST·큐·worker 재시도를 확인하는 테스트 한 개만
+  `test_director_prepare.py`에서 `test_director_ws.py`로 옮긴다.
+  기존 검사 본문·fixture·도우미와 전체 테스트 정의를 보존한다.
+- 선행 PR과 겹치는 19개 패치는 미적용 후속 변경이다. 선행 반영 이후
+  적용·재기준화·통합 재검증이 필요하며, 단독 CI 통과나 즉시 병합 가능으로
+  보고하지 않는다. 이번 변경으로 선행 PR을 병합하지 않는다.
+
+원동결 1104파일에서 새로 실행한 자동 검증은 AI 782건 통과, BE 2413건 수집,
+AI·BE Ruff/format/mypy, 공통 계약 검사와 앱 import 검사 통과다.
+Windows 표준 asyncio socketpair를 차단했던 검증 도구 오류는 제품 변경 없이
+검증 도구만 고쳐 해당 검사를 재실행했다. 초기 실패 기록도 보존한다.
+테스트 이동 후 통합 전수 검증과 각 게시본 단독 검증은 별도로 실행·기록하며,
+기존 실제 공급자 실행 결과를 이번 변경의 새 결과로 재사용하지 않는다.
+외부 모델·STT·TTS·Vision·검색 유료 호출과 사람 평가는 이번에 실행하지 않는다.
+지속되는 결정은 [0041](decisions/0041-published-pr-dependency-order.md)에 남긴다.
+
+
+## 2026-11-08 — 기존 작업의 신규 변경 게시와 실제 자료 후속 보완
+
+사용자 요청에 따라 기존 작업을 먼저 게시하고, 별도 `feature/ai-real-source-hardening-20261108`에서 후속 구현을 시작했다.
+기존 통합본·index·원본 1104파일과 선행 PR은 보존했다. 초기 설계·task·testing 문서는 변경하지 않는다.
+후속 결정은 [0039](decisions/0039-real-source-coverage-and-official-snapshots.md)다.
+
+### 신규 부분만 게시한 PR
+
+모든 base는 `develop@18f4105b2e7e9885df118d283badbf59692ec5b4`다.
+선행 기준본과 동결 원본을 대조한 신규 변경은 403경로이며 추가 263·수정 140·삭제 0이다.
+직접 변경 384개·후속 patch 19개와 적용 안내 12개로 총 415경로를 게시했고 그룹 간 중복은 0개다.
+선행 tip·상속 커밋은 제외했으며 341커밋 모두 추가+삭제가 300줄 이하이고 최대 270줄이다.
+독립 재생에서 403개를 모두 적용한 전체 1104파일이 동결본과 UTF-8 LF 지문까지 일치했다.
+
+| PR | 범위 | 파일 | 커밋 | 추가/삭제 |
+| --- | --- | ---: | ---: | ---: |
+| [#212](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/212) | 공개 API와 AI 내부 계약 정의 | 5 | 3 | +337/-23 |
+| [#213](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/213) | 공급자·실행 설정 및 개발 초기화 | 44 | 80 | +4749/-28 |
+| [#214](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/214) | 평가 실행·근거 기반 Judge·CLI·CI | 26 | 23 | +3786/-18 |
+| [#215](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/215) | 서비스 평가 사례·원문 연결·회귀 자료 | 98 | 83 | +15742/-0 |
+| [#216](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/216) | Director·답변 분석·레포 원문·근거 Tool | 104 | 41 | +7549/-218 |
+| [#217](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/217) | 문서 Claim·공고 이미지·도메인 연결 | 52 | 26 | +4762/-161 |
+| [#218](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/218) | 리포트 재시도·검토·버전과 프로필 갱신 | 47 | 71 | +5045/-170 |
+| [#219](https://github.com/kakaotechcampus-4/ktc4-chonnam-3/pull/219) | 질문 음성·예산과 FE 계약 실행 연결 | 39 | 14 | +2451/-235 |
+
+8개 모두 Draft다. **patch는 PR 병합만으로 실행되지 않는다.** 선행 반영, 기준 지문 확인, 신규 patch 적용과 최종 통합 검증이 필요하다.
+원격 HEAD·base·Draft·전체 파일 목록·커밋 목록·규모·UTF-8 본문을 게시 후 실제 다시 읽어 대조했다.
+직접 게시 Python·JSON·YAML 329개, 그룹별 diff 검사와 현재 materialized 공통 형식 검사는 통과했다.
+후속 patch 계약까지 검증한 결과는 아니며 구현 그룹의 단독 수집 실패도 그대로 PR에 기록했다.
+원격 #212의 BE CI는 1736통과·1skip, migration CI도 통과했다.
+#213~219의 CI 실패 13 job은 제외한 선행·다른 그룹·비활성 patch 누락으로 설명됐으며 실패 상태를 통과로 바꾸지 않았다.
+완전한 게시 조합의 CI 통과나 잔존 결함 0을 증명한 것은 아니다.
+공개 415파일을 실제 민감 설정 10개와 메모리에서 대조해 값 일치 0건을 확인했고 private 환경 파일은 게시하지 않았다.
+근거는 보존한 `ai-final-publication-20261108/`의 `publication-verification.json`, `branch-verification.json`, `validation-summary.json`, `remote-prs.json`, `remote-ci-audit.json`이다.
+
+### 게시 전 실제 자료 검증에서 확인한 범위
+
+- Memos는 실제 8원문·58659bytes·1698줄을 읽었다. Umami도 실제 8원문을 분석했다. 전체 레포 실행·개인 기여 검증은 아니다.
+- Healthchecks의 기본 L1 50초 timeout과 개행 전용 겹침 구간 오류는 보존했다. 별도 timeout 진단 성공을 원래 실행 성공으로 바꾸지 않았다.
+- Halo의 옛 L2는 설정 8개에 편중됐으며 Java·테스트 원문은 0개였다. 이를 전체 Java 프로젝트 분석 성공으로 세지 않는다.
+- 실제 Wanted 개발자 공고 361487은 API→제품→격리 DB에서 요구사항 20건의 원문 인용을 확인했다. 구조화 본문이므로 모델·Vision 0회가 정상이며 기존 9턴의 합성 JD와 다른 검증이다.
+- 자소설의 2015년 실제 이미지 공고는 Vision 31블록·sol 후보 6개를 얻었지만 기존 분류 제목 검사에서 최종 0개를 채택했다. 후보의 인용·참조 6/6은 맞았다. Wanted 이미지나 새 사이트 adapter 완료 증거가 아니다.
+
+### 별도 개발본의 후속 보완
+
+이미지 제목의 명시 별칭·bullet을 인식하도록 보완했다. 저장된 실제 출력 재생에서 업무 2·우대 4·필수 0이며 인용·참조·기술명은 그대로다.
+문장 속 단어, 우대의 필수 승격, 모호한 절과 불일치 인용은 계속 거절한다. 회귀 18 RED 뒤 관련 35 GREEN, 이 변경 후 AI 전체 809·Ruff·format·mypy가 통과했다. 외부 모델 재호출은 0회다.
+별도 Halo 구조 진단은 같은 SHA의 공개 GET 1회로 1111590bytes·4209항목·일반 파일 3323·Java 1386·test Java 383을 확인했다.
+이 진단은 구조 크기·범위 계측이며 실제 collector의 canonical tree chain이나 선정·L2 성공으로 세지 않는다.
+L1 180초·기타 작업 시간 예시를 정렬했고 설정/준비 deadline 31개 회귀가 통과했다. sol·xhigh·stream·출력 128000과 worker 1800초는 보존했다.
+FE API 문서의 revision·이의제기·명시 리포트 재시도 설명을 실제 동작에 맞추고 GET report의 기존 404 누락을 OpenAPI에 추가했다. 공개 동작을 새로 만들지 않았다.
+이후 구조 inventory/window 분리와 공유 공식 snapshot 경로를 구현했다. 구체적인 검증 범위는 아래와 같다.
+이 후속 변경은 #212~219에 추가 게시하지 않았다. 사람 검수는 계속 `사람 검수 대기`이며 자동 통과만 `자동 검증 완료`로 기록한다.
+
+### 실제 구조·원문과 공식 자료의 후속 검증
+
+준비 collector의 구조 응답·전체 수집·원문·모델 입력 예산을 분리했다.
+`repository_sources.py`와 `repository_source_selection.py`는 전체 inventory와 실제 모델 선정 window를 따로 보존한다.
+`prepare._save_analysis`는 경로·SHA·전달 범위·미확인 범위를 저장하며 기존 면접 중 조회 권한을 확장하지 않는다.
+저장된 Halo 실제 tree의 오프라인 계측에서는 4209항목 중 후보 3328개를 1437개 window로 제한한 요청이 262127/262144bytes였다.
+별도 live matrix의 실제 선정 요청은 후보 1435개·262141/262144bytes·HTTP 200이었다. 사전 계측과 실제 모델 전송 수치를 같은 회차로 합치지 않는다.
+Java 1386개·test Java 383개를 전체 목록에서 확인했고, 실제 선정된 8원문에는 Java·테스트·설정·frontend가 포함됐다.
+개행 전용 겹침 구간은 빈 SourceDocument로 만들지 않으며 원래 줄 위치와 생략 한계를 보존한다.
+
+새 실제 레포 matrix에서 Healthchecks·Umami·Memos는 L1→실제 파일 선정→L2 각각 5개 관찰의 저장용 결과까지 성공했다.
+Halo는 L1·선정 성공 후 L2 120초 timeout으로 실패했다. 이 원본 실패는 그대로 보존했다.
+같은 저장 입력·schema·전송 body의 별도 180초 진단은 약 113초에 5개 관찰로 완료됐다.
+입력 토큰 대부분이 cache hit였으므로 180초가 필수이거나 timeout 확대만이 성공 원인이라고 해석하지 않는다.
+matrix 12회와 별도 진단 1회로 총 실제 모델 13/16회를 사용했고 진단의 GitHub·DB 호출은 0회다.
+독립 대조는 32파일·34구간에서 SHA·경로·줄 위치·모델 입력·저장용 UUID/참조를 확인했다.
+30파일은 전체 Git blob을 대조했고 Healthchecks와 Memos의 큰 파일 각 1개는 prefix 범위만 확인했다.
+Python AST·JSON reader와 나머지 원문 구간 처리는 검증했지만 모든 언어의 전용 해석기나 TOML 실자료 검증을 주장하지 않는다.
+
+공식 자료는 `official_catalog.json`의 8개 항목과 명시 CLI→Tavily 추출→공유 불변 snapshot→면접별 소유 원문 경로를 추가했다.
+JS shell인 TourAPI 항목은 부적합으로 남기고, URL 접근 확인을 실제 본문·요청 절 추출 성공과 구분했다.
+`OfficialSourceSnapshot`은 사용자·면접 FK 없이 원문·추출 Markdown 줄·hash·시각·한계를 저장한다.
+기존 `InterviewExternalSource`에는 snapshot FK를 남기며 소유권·인용·검색 상태·부족 시 Tavily fallback을 유지한다.
+실제 MDN·Python URL의 Tavily 추출 1회는 HTTP 200이었다. MDN 원문 4306자를 격리 PostgreSQL에 저장했고
+첫 수집 시 사용자·면접 행이 없는 상태와 이후 면접별 원문 복사·재사용을 추가 외부 HTTP 0회로 확인했다.
+Python의 실제 캡처는 링크가 포함된 Markdown 제목 때문에 최초 절 추출에 실패했다.
+제목 인식 수정 후 같은 캡처 재생에서 Task Groups 절 165~201줄을 확인했다. 추가 API·DB 쓰기는 0회다.
+모든 catalog 항목의 provider 실추출 성공이나 다국어 의미 매칭의 완전성을 증명한 결과는 아니다.
+legacy 캐시 키 순서, 유데이터 downgrade 거절, CLI URL query 우회 거절·실제 DB 확인도 회귀로 보완했다.
+관련 70개 테스트·정적 검사·migration 정합성 검증이 통과했으며 기존 원문과 최초 실패 기록을 덮어쓰지 않았다.
+
+### 긴 실제 면접에서 확인한 입력 중복과 재검증
+
+실제 Wanted 361487의 요구사항 20건과 고정 SHA의 Umami 원문·분석을 재사용했다.
+사용자·소유 관계와 지원자 답변은 검증용 합성 입력이다. 실제 개인의 기여·성과 검증은 아니다.
+`actual-01`은 3턴 뒤 지원자 답변 생성용 검증 입력의 50초 timeout으로 중단됐다.
+별도 명시한 `actual-02`는 미답변 4번 질문부터 정상 답변을 제출했지만 6턴 분석 뒤 질문 7의 입력 상한에서 중단됐다.
+당시 Director 요청 264553bytes가 262144 상한을 초과해 provider 시도 0회로 거절됐고, 6개 답변·분석과 호출 기록은 남았다.
+이 두 회차의 실패를 완료로 변경하지 않았으며 누적 실제 모델 호출은 26회였다.
+
+[0040](decisions/0040-director-single-copy-source-input.md)에 따라 `agent._model_reference_texts`와 `runtime._input_payload`에서
+Context의 같은 원문을 `reference_texts`에 중복 전달하는 부분만 제거했다.
+서버의 전체 참조 검증 map, 모든 Context·원문 위치·SHA·문답 이력·기여 정정과 현재·과거 분석은 그대로다.
+Context 밖에서 허용한 `job_posting` 원문은 별도로 전달하며 출력 계약·프롬프트·독립 Plan/Review 두 시도는 바꾸지 않았다.
+실제 실패 입력의 무모델 재구성은 264553→174853bytes였으며 상한 확대나 과거 이력 삭제는 하지 않았다.
+9번째 질문·8이력·큰 원문·최신 기여 정정·위조 근거 ID의 실제 gateway 회귀는 2 RED→2 GREEN이었다.
+수정 뒤 AI 전체 809개와 Ruff·format 119파일·mypy 28소스, root의 동일 gateway 회귀 2개가 통과했다.
+
+수정 전 전체 BE 검사에서는 격리 DB 이름의 fixture 조건 불일치와 의미가 부족한 원문 mock을 먼저 발견했다.
+실패 회차를 보존하고 DB 접두사·실제 의미 원문 fixture·MYPYPATH를 올바르게 지정한 별도 실행에서
+2472통과·1skip, 전체 Ruff·format·mypy 235소스·공통 형식 검사를 확인했다. 외부 provider 호출은 0회다.
+이는 Director 중복 제거 전 결과다. 수정 후 별도 BE 전수 회차는 2474통과·1skip·12warning이었다.
+전체 Ruff·format·mypy 235소스·공통 계약 부분 형식 검사도 통과했고, 검사 전후 537개 Python 소스 지문이 일치했다.
+격리 PostgreSQL/Redis와 외부 네트워크 차단으로 실행했으며 provider 호출 0회다.
+실제 모델의 새 9턴 검증과 단독 게시본의 CI 성공으로 이 결과를 확대하지 않는다.
+
+수정 후 runtime/evaluation 이미지를 새 `20261108-director-budget` 태그로 빌드했다.
+외부 네트워크 없이 실제 설치된 AI와 각각 305·313파일의 지문·catalog 8개·민감 환경 파일 미포함을 확인했다.
+컨테이너의 평가 입력 계약 검사는 `--split all`로 32+8+1=41건 `validated_only`이며 모델·DB 호출 0회다.
+최초 기본 dev split 29건만 검사한 명령의 단언 실패는 보존하고 전체 split 검사와 구분했다.
+이 검사는 Judge 내용 평가·사람 승인·운영 release gate 통과를 뜻하지 않는다.
+
+### 수정 후 새 정상 면접의 최종 실행
+
+`actual-03`은 이전 실패 세션의 Director를 강제로 다시 실행하지 않았다.
+제품 `abandon_interview`→`retry_interview`로 새 세션을 만들고, 전용 Redis의 실제 queue에서
+`interview_prep` ARQ 작업 1건을 소비했다. 준비 작업은 complete 1·failed 0이었다.
+새 세션의 기본 `answer_mode=voice`는 보존했으며, 이후 문답은 STT 뒤의 텍스트 입력에 해당하는
+`process_answer` 서비스 함수로 검증했다. 실제 STT/TTS·브라우저·OAuth의 전체 경로 검증은 아니다.
+리포트·프로필도 실제 서비스 함수를 호출했으며 해당 후처리 ARQ worker 전체 실행으로 세지 않는다.
+
+실제 Wanted 요구사항과 Umami 고정 SHA의 유효한 분석을 재사용했다.
+이번 준비에서 새 L1/L2 모델을 재실행한 것으로 세지 않으며, 새 9턴의 모델 호출은 실제 연결이다.
+지원자 답변·사용자·소유 관계는 검증용 합성 입력이다.
+
+| 저장·실행 항목 | 실제 결과 |
+| --- | --- |
+| 면접 | `completed`, 문답 9개·답변 분석 9개 |
+| 페르소나 | HR 1·기술 6·도메인 2 |
+| 리포트 | `created`, 점수 6개와 본문 저장 |
+| 프로필 | `updated`, 저장 행 존재 |
+| 모델 호출 | 신규 39회, 이전 실패 회차 26회를 계승해 누적 65/90회 |
+| 입력 상한 | 신규 39개 실제 wire의 최대 189194/262144bytes |
+| 원본 보존 | 이전 6답변·13호출 기록과 모든 `actual-01/02` 산출물 불변 |
+| 실행본 보존 | 305개 제품 파일·private 환경 파일 지문 불변, cleanup/export 오류 0 |
+
+7~9번 질문의 실제 Plan/Review 요청은 각각 174184/174916, 178024/179179, 187656/189194bytes였다.
+독립 감사에서 39개 전송 body의 실제 byte/hash와, 72회 문답 이력·페르소나·과거 분석 대조가 일치했다.
+Evidence 5개도 원래 L2 원문·줄 범위·고정 SHA와 일치했다. 새 조회 허용 범위나 개인 기여를 추정하지 않았다.
+이번 9턴의 추가 레포 조회 요청·외부 검색 요청·Tool trace·외부 원문 행은 모두 0건이었다.
+따라서 이 체인이 검색·보완 분석 분기의 실재발생까지 검증했다고 표현하지 않는다.
+해당 분기의 이전 별도 검증과 이번 공식 snapshot 수집·재사용 검증은 서로 구분한다.
+
+이 결과는 해당 입력·모델·설정에서의 기능 실행 **자동 검증 완료**다.
+미검수 rubric에 따른 점수·질문 내용의 품질 승인과 사람 검수는 대체하지 않는다.
+기존 `r-0008.v3`의 reject나 사람 검수 대기 상태도 새 기능 성공으로 변경하지 않았다.
+원본 실행·DB export·보존 기록은 `hardening/real-service-chain/actual-03/`,
+전수 검사는 `backend-verification-director/`, 새 이미지 검사는 `image-checks-director/`에 보존했다.
+게시한 PR 8개는 앞선 동결본의 신규 부분이며, 여기의 후속 보완은 별도 로컬 개발본에만 있다.
+선행 반영·후속 patch 적용·게시 조합 재검증과 운영 배포를 이번 로컬 실행 완료로 대신하지 않는다.
+
+## 2026-11-09 — 두 모델의 새 전체 연쇄 검증과 Director 입력 보완
+
+### 범위와 설계 결정
+
+기존 로컬 hardening 원본을 보존하고 별도 `ai-full-model-validation-20261108` 작업본에서 진행한다.
+사용자 요청의 기본 방향은 개발에 Luna를 사용하면서 Sol과 같은 조건으로 실제 기능 연쇄를 확인하는 것이다.
+설계 결정은 [0043](decisions/0043-director-turn-state-and-reference-constraints.md)에 기록했다.
+이 절은 공개 PR 게시·병합이나 운영 DB·환경 적용 완료를 뜻하지 않는다.
+
+Director의 [runtime](../../ai/src/devon_ai/agents/director/runtime.py)은 확정된 이력으로
+`next_question_no`, `answered_turn_count`, 직전 답변의 번호·ID와 남은 질문 수를 계산한다.
+8개 답변 이후의 9번 질문과 9개 답변을 모두 받은 종료 시점을 구분하며, 종료 권한은 Controller에 둔다.
+v6 Plan schema `director-plan.v3`는 실제 등록된 근거 종류별 ID·Evidence·JD·과거 parent·허용 페르소나를
+선택하도록 제한한다. 기존 semantic 검증과 Plan/Review 총 2시도는 유지하며 UUID 자동 보정은 하지 않는다.
+`director-runtime-v4.md`·v5 본문은 보존하고 새 v6 본문과 runtime recipe를 사용한다.
+공개 API와 기존 `Context` dataclass는 변경하지 않았다.
+
+[개발 환경 예시](../../backend/.env.example)는 Luna slot 1과 `OPENAI_MODEL=gpt-6-luna`를 기본 방향으로 두고
+Sol slot 3을 보존한다. 실제 task 모델은 DB 프롬프트에서 읽으므로 각 검증 DB에 모델별 새 deployment를 등록한다.
+각 실제 모델 실행 동안 private 환경 파일과 제품 소스를 고정했다.
+완료 뒤 수행한 로컬 기본 모델 전환은 아래의 실제 활성화 결과와 구분해 기록한다.
+
+### 완료된 자동 검사와 독립 task 실호출
+
+v6 반영 후 AI 전체 **840개**, BE 영향 검사 **56개**와 관련 정적 검사가 통과했다.
+이 수치는 해당 코드의 **자동 검증 완료**이며 새 전체 면접 연쇄의 완료 결과와 합산하지 않는다.
+원문 인용·참조 ID·마지막 질문·구버전 호환의 검증을 유지했고, 기존 의미 검증을 완화하지 않았다.
+
+고정 입력 재생에서 별도로 남았던 아래 네 task는 Sol/Luna 각각 실제 공급자로 실행했다.
+각 모델에서 task당 1회, 총 4회 호출로 모두 제품 검증을 통과했다.
+
+| 독립 task | 확인한 범위 |
+| --- | --- |
+| `domain_category` | 원문 기반 분류와 실패 없는 계약 반환 |
+| `doc_claims` | 합성 문서의 Claim 추출과 원문 줄 연결 |
+| `claim_code` | 기술 주장과 공개 코드 대조, 개인 역할·성과의 미확인 보존 |
+| `jd_extract_image` | 제공한 이미지 추출 블록에서 JD 요구사항과 참조 구성 |
+
+검증 입력은 공개 자료와 합성 문서·주장 fixture가 포함된 독립 사례다.
+새 사이트 URL adapter 지원이나 실제 개인 기여 검증, 모든 이미지 레이아웃의 성공으로 확대하지 않는다.
+산출물은 private `full-validation/tasks-{luna,sol}-01/tasks/summary.json`에 보존했다.
+
+### 모델이 요청한 보완 조회 분기의 실제 연결
+
+별도 자연 발생 조회 사례에서 각 모델은 실제 T3→레포 원문 조회→T3 재분석→다음 Plan/Review의 4회 모델 호출을 수행했다.
+모델이 요청한 Umami 고정 SHA의 구현·테스트 원문 2개를 실제 GitHub 응답과 blob hash로 대조했다.
+같은 원문·ID가 재분석 T3와 다음 Plan/Review 입력에 전달됐고, 다음 질문은 새 코드 근거 2개를 참조했다.
+이는 합성 질문·지원자 답변·소유 관계 fixture에서 제품 `process_answer`를 실행한 결과다.
+
+외부 자료 검색은 그 T3 재분석 이후에 실행되고 결과·한계가 다음 Director 입력으로 전달됐다.
+Luna의 해당 질의는 `insufficient_analysis`, `query_terms_missing`, 채택 원문 0건이었다.
+Sol은 MDN 원문 1건을 `found`로 전달했다. Sol의 다음 질문이 그 외부 원문을 별도로 인용한 것은 아니다.
+부족한 검색 결과를 `found`로 승격하거나 외부 자료가 당해 T3에 이미 반영됐다고 기록하지 않는다.
+두 모델의 코드 원문 전달·외부 상태·wire/참조 무결성에 대한 저장 산출물 감사는 통과했다.
+근거는 `full-validation/tool-natural-{luna,sol}-01/`과 `tool-natural-binding-audit-02.json`이다.
+이 독립 분기의 성공은 새 전체 9턴에서 같은 분기가 반드시 발생한다는 보장이 아니다.
+
+### 첫 전체 실행의 실패 보존과 같은 조건의 재검증
+
+첫 회차는 새 DB·Redis·DB 프롬프트에서 L1을 새로 생성하고, 그 모델이 선정한 원문으로 L2와 면접을 이어 갔다.
+Wanted 361487의 실제 요구사항 20건과 Umami SHA `559e3c607c23d2c72d9bd4f6481bda428255323c`를 사용했다.
+두 실행의 Wanted 원문·요구사항 hash가 일치했다. 과거 L1/L2 분석 결과는 서비스에 주입하지 않았다.
+지원자 답변은 두 실행 모두 별도 Luna 모델·같은 공개 원문 사실은행·합성 팀 역할을 사용했다.
+실제 개인의 경력·운영 경험·성과는 확인한 것으로 처리하지 않는다.
+
+- `luna-full-01`: 실제 모델 17회 후 3번 답변의 다음 Plan에서 Evidence UUID 오타가 semantic 검증에 걸려 중단됐다.
+  올바른 basis ID가 함께 있더라도 잘못된 `evidence_refs`를 자동 보정하거나 저장하지 않았다.
+- `sol-full-01`: 실제 모델 4회 후 L2가 원본 설정의 120초 한도에서 timeout되어 준비가 중단됐다.
+  L1·파일 선정 성공과 L2 실패를 구분하며, 200 stream 응답의 미완료 상태를 분석 성공으로 세지 않았다.
+
+두 회차의 DB·모델 입출력·호출 비용·원문·실패 상태는 그대로 보존했다.
+새 v6와 L1 180초/L2 160초를 양 모델에 공통 적용한 `luna-full-02`·`sol-full-02`를 별도로 실행했다.
+검증 중에는 프로세스 설정만 바꾸고 원본 환경 파일과 첫 회차의 설정·실패 기록은 보존했다.
+재검증은 첫 회차와 조건이 다르므로 최초 비교의 실패를 없애거나 같은 조건의 승리로 바꾸지 않는다.
+
+재검증의 목표는 새 L1→자체 파일 선정·실원문→새 L2→9턴 T3/Director→실제 report ARQ→profile outbox worker다.
+모델별 새 DB·Redis·deployment, 총 60회 호출·2400초 상한과 동일한 후보 응답 정책을 적용한다.
+
+### 실제 전체 연쇄 결과와 복구 경로
+
+| 실행 | 실제 결과 | 분리해서 해석할 사항 |
+| --- | --- | --- |
+| `luna-full-02` | 자체 새 L1/L2와 7답변·7분석 저장 후 다음 질문의 독립 Review가 `replan`으로 반려 | 질문이 `identify`의 조건부 identity 갱신을 무조건으로 표현했다. 원문 기반 안전 반려이며 schema 오류와 다르다. |
+| `sol-full-02` | 자체 새 L1/L2→9답변·9분석→6점수·리포트 저장 | burst 검증기가 report 완료 중 추가된 profile job을 다시 poll하지 않아 중단했다. 제품 report 생성 실패로 분류하지 않는다. |
+| `sol-profile-continue-01` | 실제 만료 delivery 소비→공식 reaper 재전달→profile worker 성공 | 기존 9문답·리포트·점수·원 호출 행 전체 불변, outbox `succeeded`, 캐시 GET 추가 모델 0회. 새 모델 1회. |
+| `luna-public-retry-01` | 공개 abandon→retry로 새 면접을 시작해 9답변·9분석 완료 | 원래 7문답은 보존하고 자기 유효 L1/L2를 재사용한 warm 복구다. 리포트 입력 복원 오류로 당시 report/profile은 생성되지 않았다. |
+| `luna-report-retry-01` | 아래 제품 수정 후 같은 9문답에서 공개 report retry→report worker→profile worker 완료 | 원 실패 요청 불변·새 retry 요청 1개 성공·6점수·report/profile/outbox 저장·캐시 GET 2회의 추가 모델 0회. 새 모델 3회. |
+
+두 최종 면접 모두 HR 1·기술 6·도메인 2의 9문답이며 마지막 답변까지 저장·분석한 뒤 종료됐다.
+Luna의 단일 cold 실행 완주나 Sol의 최초 burst 실행 완주로 기록하지 않는다.
+위 복구는 현재 공개 정책과 공식 큐 재전달 경로를 사용했고, 내부 질문 재생성 우회나 DB 상태 강제 변경은 없다.
+각 실패의 `campaign-result.json`은 실패 상태 그대로 보존했다.
+
+기본 연쇄 안에서도 실제 보완 조회가 발생했다.
+Luna cold 2회차의 첫 답변은 `route.test.ts:1–925` 1개 원문을 조회했고, public retry의 8번 답변은
+`getEventData.ts:1–150`·`getEventDataEvents.ts:1–157` 2개 원문을 조회했다.
+GitHub blob·원문·좌표·wire 지문과 후속 T3/Plan/Review 입력의 동일 원문을 대조했다.
+두 회차에서 바로 다음 질문이 새 source ID를 직접 인용한 것은 아니므로, 입력 반영과 직접 인용을 구분한다.
+앞의 독립 자연 발생 Tool 사례에서는 두 모델 모두 새 코드 근거를 다음 질문에서 직접 참조했다.
+
+### 실제 검증에서 발견한 리포트 복원 오류와 수정
+
+[report history](../../backend/app/features/report/history.py)는 기존 Evidence와 L2 경로만으로
+과거 T3의 `verification_requests`를 재검증해, 면접 당시 허용한 주변 후보 경로를 누락했다.
+실제 실패 요청의 6경로는 모두 저장한 16개 후보와 고정 SHA에 포함됐지만 `verification scope`에서 거절됐다.
+report 모델 호출 전의 제품 입력 구성 오류이며, 모델의 잘못된 출력으로 분류하지 않는다.
+
+공통 `repository_candidates.STATE_KEY`·`snapshot_paths`를 재사용해 소유한 선택 레포의 같은 SHA 후보만 복원했다.
+후보는 조회 권한으로만 사용하고 Evidence·Tool item·원문을 만들지 않는다.
+프롬프트·ID·schema·semantic 검증과 저장된 분석·원응답은 유지했다.
+새 독립 PostgreSQL DB에서 정상 후보 실패를 RED로 재현하고, 같은 SHA 정상·다른 SHA·손상 후보·미선택 레포·
+snapshot 누락·다른 소유자의 6개 회귀를 GREEN으로 확인했다.
+이어서 report/profile·AI facade·answer wire history 관련 **201개**가 단일 실행에서 통과했다.
+Ruff·format 2파일과 mypy 1소스도 통과했다. 앞의 AI 840·BE 56과 겹치는 범위가 있어 수치를 합산하지 않는다.
+실제 실패 DB에서는 read-only transaction으로 입력 구성 3단계를 다시 검증했고 모델 호출·DB 쓰기는 0회였다.
+
+### 사용량·참고 비용과 비교의 범위
+
+2026-11-09 KST 최종 감사는 이번 15개 campaign의 실제 HTTP 원응답·SSE usage·요청 지문을 대조했다.
+이전 고정 입력 36회 비교는 포함하지 않는다. 같은 입력으로 실제 재호출한 요청은 중복으로 삭제하지 않았다.
+
+| 실제 호출 모델 | 시도 | 확인된 사용량의 참고액 |
+| --- | ---: | ---: |
+| Luna | 110 | 732.585043원 |
+| Sol | 47 | 5,975.973231원 + usage 미상 1건 |
+| 합계 | 157 | **6,708.558274원 + 미상 비용** |
+
+156회는 usage를 확인했고 초기 Sol L2 timeout 1회는 확인하지 못했다.
+서비스 호출 129회의 참고액은 6,552.035143원, 검증용 합성 지원자 생성 28회는 156.523131원이다.
+독립 task·Tool·실패·복구 비용까지 포함한 실험 합계이며 서비스 면접 1회의 평균 비용은 아니다.
+2026-11-08 Elice에 표시된 100만 토큰당 원화 단가(Luna 입력141/캐시14/출력708,
+Sol 입력2835/캐시141/출력14175)로 계산했다. 추론 토큰은 출력에 이미 포함돼 중복 가산하지 않았다.
+실제 청구액·VAT·별도 캐시 쓰기 단가·비LLM API 비용은 이 계산으로 확정하지 않는다.
+Luna의 안전 반려와 복구·자기 캐시 재사용, 모델별로 달라진 질문·출력을 고려해야 하므로
+이 한 사례로 모델 품질의 동등성이나 운영 평균 지연·완주율을 확정하지 않는다.
+
+### 로컬 Luna 활성화와 새 프로세스 검증
+
+원본 환경 파일을 private 영역에 보존한 뒤 원본·검증 작업본의 `backend/.env`를 같은 설정으로 맞췄다.
+`LLM_CONNECTION_SLOT=1`, Luna 연결, L1 180초·L2 160초를 적용하고 Sol slot 3·다른 공급자 설정은 보존했다.
+기존 로컬 DB 주소 55432/devon_local과 Redis 56379를 유지했다.
+이전에 연결할 DB가 없어 새 전용 PostgreSQL container·volume을 만들고 migration 0014까지 적용했다.
+검증 면접을 이 서비스 DB로 복사하지 않았으며 초기 사용자 fixture는 0명이다.
+이 개발 DB에 새 deployment `luna-local-v6-20261109`의 **11개 활성 task 프롬프트**를 등록했다.
+개발 지식은 `unreviewed`로 보존하며 사람 승인으로 바꾸지 않았다.
+
+새 작업본 소스로 Uvicorn 프로세스를 띄워 실제 HTTP health·OpenAPI·미로그인 `/api/me`의 401을 확인했다.
+DB SELECT 1·migration·Redis PING, 설정과 11개 task/model/version의 정확한 일치 및 준비 시간 예산도 통과했다.
+스모크 검사의 외부 공급자 호출·DB/Redis 쓰기는 0회이며 생성한 API 프로세스는 검사 후 종료했다.
+실행 대상은 이 통합 작업본이며 원본 `develop`에 구현을 병합·게시한 상태를 뜻하지 않는다.
+
+### 판정과 근거 산출물
+
+실제 공급자·PostgreSQL·Redis·ARQ를 사용한 위 AI 기능 연쇄와 독립 task·Tool 경로는
+명시한 입력·복구 경로·설정 범위에서 **자동 검증 완료**다.
+이번 회차에서 STT·Vision·TTS 공급자를 새로 호출하거나 음성 9턴·실제 로그인·FE 브라우저 전체 흐름을 검사하지 않았다.
+이미지 JD 독립 task는 이전 실제 공개 이미지에서 추출·보존한 블록을 사용했다.
+이번 모델 비교의 주 레포는 고정 Umami 1개이며, 이 결과를 모든 언어·규모의 레포와 부하/SLO로 확대하지 않는다.
+사람의 질문·평가 품질 검수, 기존 `r-0008.v3` reject, 운영 배포·원격 PR/CI 상태는 별도 범위다.
+
+산출물은 작업본의 `.claude/scratch/full-validation/`에 보존했다.
+전체 감사 `campaign-usage-audit-04.json/.md`, 독립 scope `privatefinal-scope-audit.json/.md`,
+보완 회귀 `report-scope-fix-result.json`, 원인 재현 `luna-public-retry-report-readonly-diagnosis-{01,03}.json`,
+각 campaign의 원입출력·usage·DB export, 활성화 `runtime-activation/{activation-result,smoke-result}.json`이 근거다.
+공통 계약 검사는 기존 전용 venv를 재사용해 schema 2개·positive/negative fixture 7개·부분 OpenAPI가 통과했다.
+backend venv에 해당 검사 패키지가 없어 첫 시도는 미실행(exit 2)이었으며 새 패키지는 설치하지 않았다.
+초기 설계·testing 원본은 보존했고 구현 결과는 이 절로 통일했다. 커밋·push·PR은 수행하지 않았다.
+
 <a id="jd-heading-fix-20261109"></a>
 
 ## 2026-11-09 JD 소제목 추출 오류와 기존 캐시 보완
@@ -1816,3 +3299,204 @@ Wanted HTTP는 모의 응답을 사용했고 기존·운영 DB는 수정하지 �
 사용자의 후속 PR 게시·조건부 병합 요청에 따라 원본 브랜치를 보존하고 최신 develop 기반
 `fix/jd-heading-cache-repair` 게시용 브랜치에 이번 변경만 분리한다. 게시 후 CI와 병합 결과는
 해당 후속 PR의 실행·검증 기록에서 확인한다. 기존 통합본과 미병합 선행 코드는 포함하지 않는다.
+
+## 2026-11-09 — 실제 계정의 로컬 이용 환경과 최소 진단
+
+사용자가 서비스만 이용하고 실행·확인은 에이전트가 맡도록 별도 로컬 worktree
+`work/manual-ai-service-20261109`를 구성했다. 기존 전체 작업의 원본 1,127파일은
+SHA256 비교에서 변경 0이며, 원본 HEAD/작업 파일을 덮어쓰지 않았다.
+통합 환경은 기존 전체 구현과 develop `31a18d28`을 결합한 로컬 실행본이다.
+커밋·push·PR 게시를 수행한 변경은 아니다.
+
+### 실행과 진단
+
+- 같은 소스의 API·`analysis_app.WorkerSettings` 단일 worker·MSW 비활성 FE를 실행했다.
+  로컬 PostgreSQL/Redis와 기존 프롬프트·루브릭·도메인 프레임·TTS 예산 원장을 재사용했다.
+- 활성 프롬프트 11개는 task 목록·본문이 현재 소스와 일치하고 모델은 모두 `gpt-6-luna`다.
+  비활성 v1 프롬프트의 upstream 본문을 기존 활성 버전에 덮어쓰지 않았다.
+- `backend/app/core/logging.py`에 API/worker 공통 안전 예외 출력과 HTTP 결과 관측을 연결했다.
+  예외는 종류·파일/함수/줄만, HTTP는 고정 라우트·메서드·상태·시간·request ID만 기록한다.
+  `LOG_JSON`은 config/main/worker startup에 연결했다.
+- Git 제외 `manual-ai-runtime-20261109/supervisor.py`가 소유 프로세스·health·worker heartbeat와
+  시작 후 업무 상태를 약 5초마다 확인한다. 업무 DB 관측은 읽기 전용이다.
+  자식 stdout도 허용된 필드·enum·UUID만 별도 JSONL로 저장한다.
+- 같은 위치의 `vite.manual.config.mjs`는 원본 Vite 설정·프록시를 재사용하고
+  localhost:5173의 dev 실행에만 HTTP/JS 진단 스크립트를 주입한다.
+  원래 fetch Promise/응답/오류는 유지하고, 메타데이터는 exact Origin·loopback·8KiB 상한으로 검증한다.
+  동적 경로는 템플릿으로 바꾸며 사건별 기록과 중복 억제한 alert를 구분한다.
+  진단 로그 상한은 32MiB다. 원격 브라우저 진단 포트를 사용하지 않는다.
+- 브라우저 자동 실행 명령은 도구의 자동 정책에서 차단됐다. 사용자에게 로컬 로그인 링크를 안내했다.
+  실제 로그인·OAuth 동의·마이크 허용은 사용자가 직접 수행한다.
+
+### 최신 변경 통합과 평가 자료 보존
+
+#197의 JD 참조 검증은 기존 v2 보고서/채점 타입·Narrative·evaluation_keys를 유지한 채 결합했다.
+#175 canonical 19쌍과 검수 상태는 최신 develop을 유지했다.
+과거 코호트가 참조하는 58JSON+사실표는 동결 snapshot으로 보존하고 출처 resolver를 분리했다.
+이 snapshot은 현재 승인된 평가자료로 직접 로드할 수 없으며, 과거 코호트의 지문을
+새 자료에 맞춰 변경하거나 과거 검수 상태를 현재 품질 승인으로 승격하지 않았다.
+
+### 이번 검증과 범위
+
+| 범위 | 이번 실행 결과 |
+| --- | --- |
+| AI 전체 | 864 passed, Ruff/format 124파일·mypy 29소스 통과 |
+| BE AI import·평가 연결/출처 | 35 passed |
+| 안전 로그·HTTP 결과·기존 관련 회귀 | 최종 53 passed, 관련 Ruff/format/mypy 통과 |
+| JD 추출 순수 회귀 | 42 passed, 실제 DB·Wanted·모델 호출 없음 |
+| supervisor 개인정보·정리 경계 | 최종 9 passed, 모의 프로세스·임시 파일·라우트 prefix 검증 |
+| 로컬 화면 진단 | 10개 mock 회귀·문법·원본 Vite config 로드 통과 |
+| FE | TypeScript 검사와 실제 API 설정의 production build 통과 |
+| 실행 확인 | API/proxy health 200, 로그인 HTML 200, 인증 전 profile 401(정상), worker heartbeat·큐 정상 |
+| 진단 실제 저장 | 스크립트 주입/JS 제공 확인, 실제 health의 request ID 메타데이터 POST 204 및 JSONL 저장 확인 |
+| 기존 원본 보존 | 원본 1,127파일 변경 0, 과거 코호트 입력/기대 82파일과 기존 지문 보존 |
+
+범위가 겹치는 검사 수를 전체 서비스 테스트 수로 합산하지 않는다.
+이번 준비 과정에서 공급자 호출은 0이며 설정 유효성과 기존 DB의 일치를 확인했다.
+실제 사용자 계정의 전체 이용, 브라우저 DOM/클라이언트 스크립트 실행은 사용자 테스트 전까지 미실행이다.
+기동 중 일시적인 health 실패와 사전 확인 중 Windows 연결 reset 기록은 보존했고,
+최종 실행의 health 정상과 구분한다. 이를 실제 면접 성공으로 해석하지 않는다.
+
+현재 실행 상태·PID·준비 검증은 Git 제외 runtime의 `status.json`·`services.json`·`readiness.json`,
+검사 근거는 `agent-A/`·통합본의 `.claude/scratch/logging-verification/`·runtime의 TAP에 있다.
+운영 확인 순서는 runtime의 `OPERATIONS.md`에 둔다. 수집기가 계속 실행돼도 대화 에이전트가
+턴 종료 후 상주하며 자동 판단·수정하는 것은 아니다. 의미상 질문 오류는 사용자 관찰과 업무 원본을 검토한다.
+관련 결정은 [0042](decisions/0042-local-user-test-observability.md)에 기록한다.
+
+실제 FastAPI `include_router`가 `scope.route.path`에 prefix 전 고정 template을 보관하는 것도
+mock DB/API 없이 실제 ASGI 앱으로 재현했다. supervisor 소비 계층에서 알려진 router의 고정
+template에 `/api`를 복원하고 공식 Reason enum 값만 수용하도록 보완했다.
+서비스 기능은 변경하지 않았으며, 현재 진행 작업·큐가 없는 상태에서 수집기를 재시작했다.
+최종 준비 검사에서 실제 401 요청의 canonical route·상태·request ID가 함께 저장되는 것도 확인했다.
+
+## 2026-11-09 — 저장 답변 보존과 다음 질문의 자동 복구
+
+실제 계정 면접에서 네 답변을 저장한 뒤 5번 후보가 독립 Review에서 반려됐다.
+질문에는 원인·재발 방지·검증을 물었지만 QuestionContract에는 불일치의 회복까지 요구했다.
+원 실패를 보존하고, 사용자가 요청한 자동 재생성과 같은 면접 이어가기를 별도 로컬 worktree
+`work/manual-ai-recovery-20261109`에 구현했다. 원 실행본과 기존 전체 작업본은 보존한다.
+정책·공개 계약의 후속 결정은 [공통 0012](../shared/decisions/0012-bounded-question-recovery.md)에 둔다.
+
+### 변경 경계
+
+- `director_service.process_answer`는 안전한 `director_candidate_rewrite` 반려에 자동 1라운드를
+  허용한다. 최초·자동·명시 수동을 합쳐 대상 질문당 Plan/Review 최대 6회다.
+  독립 Review와 원문·허용 ID·질문 계약 검증을 생략하지 않는다.
+- `question_retry.py`는 기존 `context_state`의 유한 원장으로 요청 UUID·대상 턴·소유권·실패 호출·
+  기한·결과를 연결한다. PostgreSQL row lock, 입력 지문, 늦은 결과 폐기, 동일 요청 재생과
+  새 realtime 세션 발급을 처리한다. STT·답변 분석·레포 분석은 재실행하지 않는다.
+- Director v7은 v6 원문을 보존한 후속 프롬프트다. 검증된 이전 후보와 반려 사유는 새 Plan에만
+  참고자료로 주며 새 독립 Review·원문 사실·허용 근거에는 섞지 않는다.
+- `POST /api/interviews/{id}/question/retry`와 GET의 선택 필드 `canRetryQuestion`·
+  `questionRetryCount`를 추가했다. FE는 저장된 답변으로 이어가기, 요청 중 중복 행동 차단,
+  응답을 확인하지 못했을 때 같은 UUID로 결과 확인, 새 세션 재접속을 제공한다.
+- 신규 업무 테이블·마이그레이션은 없다. 기존 질문/답변/분석/근거/선택 SHA와 실패 기록을
+  보존한다. 정상 진행에 필요한 직전 턴의 decision·현재 턴·context 갱신은 허용한다.
+
+### 자동 검증과 한계
+
+AI 전체 896개, BE 기존 면접·WebSocket·REST·음성·계약 관련 182개가 통과했다.
+BE 복구 전용 최종 검사는 PostgreSQL·Redis에서 23개 전부 통과했다. 질문 commit 직후 같은
+요청이 재전송되는 두 경로는 수정 전 2개 실패를 재현하고 수정 후 통과했다.
+기존 182개는 마지막 동시성 두 경계 보완 전의 검사이며 최종 23개와 구분한다.
+FE는 새 복구 시나리오 8개를 포함한 모의 API 브라우저 회귀 52개와 타입·빌드가 통과했다.
+이후 오류 문구와 주석만 정리한 변경은 관련 브라우저 18개와 포맷 검사를 다시 통과했다.
+BE 전체 mypy는 219소스 통과, AI Ruff/format 125파일·mypy 29소스가 통과했다.
+공통 계약의 2스키마·7 fixture·부분 OpenAPI 검사도 통과했다.
+서로 겹치는 검사 수를 서비스 전체 테스트 수로 합산하지 않는다.
+
+DB 회귀는 별도 PostgreSQL 테스트 DB와 별도 Redis DB15에서 수행한다.
+모델·HTTP 응답은 모의 입력이며 이 구현 검증에서 유료 공급자를 호출하지 않았다.
+실제 사용자 면접의 네 문답·T3·기존 근거·선택 레포 분석·원 실패 기록은 읽기 전용 해시로
+적용 전후 비교한다. 실제 Luna 복구·음성 면접 완주와 사람의 질문 품질 검수는 이 자동 검사와
+구분한다. 초기 설계·testing 원본은 수정하지 않았으며 커밋·push·PR은 수행하지 않았다.
+
+### 로컬 적용 확인
+
+처리 중 큐가 없는 상태에서 소유 API·worker·Vite만 종료하고 복구 실행본으로 전환했다.
+활성 프롬프트는 Director만 `director_v7@luna-question-recovery-20261109`로 등록했다.
+기존 Director v6와 다른 10개 활성 task 프롬프트는 보존했으며 기본 모델은 Luna다.
+기동 후 API/proxy health 200, worker heartbeat, 실제 API의 retry POST 등록,
+진단 주입·204 저장과 원본 전체 작업본 1,127파일·이전 실행본 1,173파일 불변을 확인했다.
+업무 DB의 기존 네 문답·T3·근거·선택 레포 분석·원 실패 기록도 적용 전후 해시가 일치했다.
+기존 실패의 저장된 Plan/Review는 새 코드에서 안전 rewrite 피드백으로 복원되며,
+읽기 전용 검사에서 현재 면접의 `canRetryQuestion=true`·수동 횟수 0을 확인했다.
+이 시점에는 실제 Luna 재생성과 사용자 화면의 이어가기 클릭은 아직 수행하지 않았다.
+
+이후 사용자가 이어가기를 실행해 같은 면접의 5번 질문이 생성됐다. 실제 Luna의 신규 Plan 1회와
+독립 Review 1회가 성공했고, Review의 plan/context/wording/contract 검사가 모두 true다.
+이번 경로는 원장의 manual 1회 성공이며, 새 자동 복구 경로를 실모델로 실행한 사례는 아니다.
+질문에는 불일치의 복구·재발 방지·검증을 모두 명시하고 실제 트랜잭션 경계·장애 여부는
+확인되지 않은 가정으로 구분했다. 생성 후에도 기존 네 문답·T3·근거·선택 레포 분석·원 실패
+기록의 해시가 모두 보존됐다. 읽기 전용 근거는 runtime의 `actual-question5-recovery.json`과
+`preserved-interview-after_question.json`이다. 당시 5번은 답변 대기 중이며 9턴 완주 증거는 아니다.
+
+### 실제 계정 음성 면접의 9턴 종료와 리포트 확인
+
+같은 면접에서 9개 답변과 각 답변의 분석을 저장하고, 마지막 `next_step=finish`와
+`completed/current_turn=9`를 확인했다. 10번 질문은 없으며 배분은 HR 1·기술 6·도메인 2다.
+최초 5번 실패와 명시 이어가기 성공을 포함한 완주로, 무장애 완주나 새 자동 복구의 실모델
+실행으로 해석하지 않는다. 종료 후에도 기존 네 문답·T3·근거·선택 레포 분석·원 실패 기록의
+해시가 모두 일치했다.
+
+리포트 화면의 GET은 생성 중 202 응답 21회 뒤 200 응답 1회였고, 서버와 클라이언트의 마지막
+request ID도 일치했다. 최초 조회에서 완료 응답까지 약 64초이며 이 경로의 4xx·5xx는 없다.
+생성 요청은 initial 1건 succeeded/error_code=null이고 실제 Luna의 `report_score`·`report`
+호출 결과도 성공이다. 점수 6개·페르소나 피드백 3개·리비전 1개와 원본 snapshot의 일치를
+확인했다. 저장 총점과 실제 응답 재구성값은 모두 66점이다.
+프로필 갱신 outbox도 revision 1에서 succeeded이며 Luna 모델·프롬프트·입력 지문·역할 요약이
+보존됐다. 역할 요약은 설계 제안과 실제 기여를 구분하고 본인의 구현 주장은 진술로 표시한다.
+
+실행 성공과 별도로 다음 품질 문제를 남긴다.
+
+- 사용자 확인상 말하지 않은 1번의 뉴스 문구가 STT 전사에 포함됐고 리포트가 무관한 마지막
+  문구를 전달력 부족으로 지적했다. 전사 오류가 평가 근거에 섞인 문제다. 해당 문구가 수치
+  점수에 끼친 영향은 아직 분리 검증하지 않았다. 원 음성 미보존으로 발생 원인도 미확정이다.
+- `POST`·`EventService` 발음과 5번 쉼표 경계의 이어 읽기는 사용자 관찰로 기록했다.
+  현재 합성은 원문 `input.text`이며 음성 전용 발음·쉼 보완은 적용하지 않았다.
+- 준비 완료 후에도 준비 제목의 spinner가 남는 FE 표시 오류는 아직 수정하지 않았다.
+- 3번 충분성의 단계별 구체화 요구와 8번 피드백의 실행 가능한 Python 표현 요구는 질문 계약
+  밖의 감점인지 추가 연습 조언인지 구분해 재검토할 후보이며 확정 품질 오류와 구분한다.
+- JD coverage는 20개 중 명시 연결 2개다. 역량 충족률이나 합격률이 아니며 직무 항목을
+  넓게 다룬 면접이라고 해석하지 않는다.
+- Windows proactor의 간헐적 ConnectionResetError는 보존했고 원인·이용 영향은 미확정이다.
+  최종 API/proxy health·worker·queue 정상 및 리포트 조회 오류 없음과 구분한다.
+
+이번 사후 감사는 DB read-only와 기존 진단 기록을 사용했으며 공급자 추가 호출·업무 기록
+수정·리포트 재생성을 하지 않았다. 원문 전사와 리포트는 그대로 보존했다.
+근거는 runtime의 `completed-practice-audit.json`·`preserved-interview-after_completion.json` 및
+서비스/클라이언트 메타데이터이며 화면 DOM·원 음성 청취나 사람의 품질 승인을 대체하지 않는다.
+
+
+## 2026-11-09 — 후속 변경 게시 검증
+
+- 실행 중인 manual/recovery 원본, 기존 PR #212~#219, 실제 면접 기록을 보존했다.
+- develop `31a18d2`에서 별도 게시 브랜치를 만들고 후속 신규 변경만 분리한다.
+- 손상된 미게시 v7은 로컬 원본·지문으로 보존하고 정상 UTF-8 v8을 게시한다. 저장된 v7의 호환은 유지한다.
+- 과거 평가 snapshot은 원본 바이트를 유지하고 디렉터리별 Git 속성을 적용했다. 실제 commit·checkout 왕복을 검증했다.
+- 현재 canonical 평가 사례는 develop 기준을 유지한다. 과거 snapshot은 출처 연결용이며 현재 정답 데이터가 아니다.
+- 새 통합본 AI 전체 테스트는 912개 통과, 실패·건너뜀 0개다. v8의 실제 공급자 실행은 하지 않았다.
+- 분리 게시본의 단독 검사와 통합 검증은 구분한다. 과거 실제 9턴의 수동 이어가기 성공을 새 자동 복구 실행으로 보고하지 않는다.
+- 선행 #215 통합 시 최신 develop의 canonical 사례를 유지해야 한다. 이전 브랜치의 과거 canonical 자료로 되돌리지 않는다.
+- 기존 게시 수리 기록을 보존하고 미게시 Director ADR을 0043으로 정리했다. 문자·바이트 보존 결정은 ADR 0044를 따른다.
+- 리포트 문장·요구사항 표시, 연동 관리, TTS 발음, STT 무발화 문구 대응은 후속 작업이다.
+
+### 최종 게시 전 자동 검증
+
+- 새 통합본에서 AI 전체 912개, BE 고유 216개, FE 면접 브라우저 75개 자동 검증을 완료했다.
+- BE는 본체 186개와 설정 30개를 환경별로 나눴고 최초 216개와 최종 사례 집합이 정확히 같다. 별도 재검증한 부분 집합을 중복 합산하지 않았다.
+- 최초 BE 213통과·3실패 기록을 보존했다. v8 기대값 1줄을 수정하고, 설정 검사에서 검증용 DB 환경 주입을 분리했다. 동시성 검사는 기존 조건·5초 제한 그대로 재통과했다.
+- 전체 BE Ruff·format 및 app+scripts mypy 236소스, FE lint·build를 통과했다. AI 정적 검증은 위 기록과 같다.
+- 게시 범위 159개 원본 경로를 직접 변경과 37개 후속 패치로 재생해 새 통합본 전체와 일치함을 확인했다. 적용 안내를 포함한 게시 파일은 175개다.
+- 단독 게시본의 AST·수집·타입 검사 결과는 통합본 실행 결과와 구분한다. 필요한 선행 import가 없는 실패와 검사 환경 미준비도 PR 본문에 기록한다.
+- 후속 패치는 자동 활성화되지 않는다. 선행 구현 반영, 지문 확인, 실제 코드 적용과 통합·CI 재검증 전까지 Draft를 유지한다.
+
+
+<a id="review-followups-20261109"></a>
+## 2026-11-09 PR 리뷰 후속 수정
+
+- 대상: #212, #213, #216, #217, #218의 인라인 44개와 일반 리뷰. [결정 0045](decisions/0045-review-runtime-activation-and-source-recovery.md)에 실행·게시 경계를 기록했다.
+- 구현: 설치된 소비자 검사 후 프롬프트 활성화, 구형 계약 기본값 호환, 작업별 ARQ 제한, 선택 개발 설정, 검색 실행 정책·질의 정규화, TTS 정산 장애·취소 마무리, L1 파일 크기 사전 검사, Claim 실행 만료·좌표 복원, PDF native 우선, 이미지 실패 캐시, 자소서 단독 처리, 도메인 판정 실패 구분, 리포트 읽기 잠금·영속 종료·연결 JD 의미 보존.
+- 기존 원문·면접·요구사항 ID와 과거 계약 복원을 자동 수정하지 않는다. 기존 서비스 작업본·비밀 설정은 보존했다. 실제 외부 공급자를 추가 호출하지 않고 전용 PostgreSQL·Redis와 HTTP 대역으로 회귀 검증했다.
+- 게시 시 통합 구현과 선행 미병합으로 비활성인 후속 패치를 구분한다. OpenAPI와 대응 REST 문서, outbox 생산자와 소비자의 부분 활성화를 피하고 후속 패치의 적용 전·후 지문도 재확인한다.
+- 수치·명령·통과/실패/미실행과 커밋 근거는 각 원래 리뷰 스레드 및 종합 리뷰에 기록한다. 과거 실측·기존 테스트 수치를 이번 수정의 신규 결과로 재사용하지 않는다.

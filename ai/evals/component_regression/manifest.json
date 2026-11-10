@@ -1,0 +1,9 @@
+{
+  "prompts": [],
+  "limits": {
+    "timeout_seconds": 30,
+    "max_output_tokens": 4096,
+    "max_input_bytes": 262144,
+    "max_response_bytes": 1048576
+  }
+}

@@ -1,10 +1,13 @@
 import { HttpResponse, delay, http, type PathParams } from 'msw';
 
+import { createRequestId } from '@/shared/requestId';
 import type {
   CreateInterviewRequest,
   CreateInterviewResponse,
   FeedbackDisagreementRequest,
   InterviewDetailResponse,
+  RetryQuestionRequest,
+  RetryQuestionResponse,
   ReportGeneratingResponse,
   ReportResponse,
 } from '@/types/api';
@@ -54,6 +57,69 @@ const selectableRepositoryIds = new Set(
 );
 
 export const interviewHandlers = [
+  http.post<IdParams, RetryQuestionRequest, Res<RetryQuestionResponse>>(
+    path('/interviews/:id/question/retry'),
+    async ({ params, request }) => {
+      const record = getInterview(String(params.id));
+      if (!record) return errorResponse(404, 'not_found', '면접을 찾을 수 없어요.');
+      const { requestId } = await request.json();
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId ?? '')
+      ) {
+        return errorResponse(400, 'invalid_request', '요청 ID를 확인해주세요.');
+      }
+      const saved = record.questionRetryState;
+      if (saved?.requestId === requestId) {
+        if (saved.status === 'running')
+          return errorResponse(409, 'question_retry_in_progress', '질문을 준비하고 있어요.');
+        if (saved.status === 'failed')
+          return errorResponse(409, 'question_retry_failed', '질문을 만들지 못했어요.');
+        const current = record.liveTurns?.at(-1);
+        if (current?.turn !== saved.turnNo || current.answer !== null)
+          return errorResponse(409, 'question_retry_unavailable', '현재 질문에 사용할 수 없어요.');
+        return HttpResponse.json({
+          interviewId: record.interviewId,
+          sessionId: record.sessionId,
+          turnNo: saved.turnNo,
+        });
+      }
+      if ((record.questionRetryCount ?? 0) >= 1)
+        return errorResponse(409, 'question_retry_limit', '이어가기 횟수를 사용했어요.');
+      const previous = record.liveTurns?.at(-1);
+      if (
+        interviewStatus(record) !== 'in_progress' ||
+        record.questionRetryEligible === false ||
+        !previous?.answer ||
+        previous.turn >= TOTAL_TURNS
+      ) {
+        return errorResponse(409, 'question_retry_unavailable', '현재 상태에서 이어갈 수 없어요.');
+      }
+      const turnNo = previous.turn + 1;
+      record.questionRetryCount = 1;
+      record.questionRetryState = {
+        requestId,
+        turnNo,
+        status: 'running',
+        expiresAt: new Date(Date.now() + 255_000).toISOString(),
+      };
+      if (record.questionRetryMode === 'running')
+        return errorResponse(409, 'question_retry_in_progress', '질문을 준비하고 있어요.');
+      await delay(700);
+      if (record.questionRetryMode === 'failed') {
+        record.questionRetryState.status = 'failed';
+        return errorResponse(409, 'question_retry_failed', '질문을 만들지 못했어요.');
+      }
+      record.liveTurns!.push({ ...structuredClone(completedTurns[turnNo - 1]), answer: null });
+      record.sessionId = `sess_retry_${createRequestId()}`;
+      record.questionRetryState.status = 'succeeded';
+      return HttpResponse.json({
+        interviewId: record.interviewId,
+        sessionId: record.sessionId,
+        turnNo,
+      });
+    },
+  ),
+
   http.post<PathParams, CreateInterviewRequest, Res<CreateInterviewResponse>>(
     path('/interviews'),
     async ({ request }) => {
@@ -114,8 +180,7 @@ export const interviewHandlers = [
         sessionId: record.sessionId,
         runId: record.runId,
         status: interviewStatus(record),
-        // Sprint 2부터 음성 면접만 남는다(0007 Proposed).
-        answerMode: 'voice',
+        answerMode: record.answerMode ?? 'voice',
         position: record.position,
         companyName: record.companyName,
         repositoryNames: interviewRepositoryNames(record),
@@ -124,6 +189,18 @@ export const interviewHandlers = [
         remainingSeconds: interviewRemainingSeconds(record),
         turns: interviewTurns(record),
         lastError: interviewLastError(record),
+        ...(record.questionRetrySupported === false
+          ? {}
+          : {
+              canRetryQuestion:
+                record.questionRetryEligible !== false &&
+                interviewStatus(record) === 'in_progress' &&
+                (record.questionRetryCount ?? 0) < 1 &&
+                !!record.liveTurns?.length &&
+                record.liveTurns.at(-1)?.answer != null,
+              questionRetryCount: record.questionRetryCount ?? 0,
+              questionRetryState: record.questionRetryState ?? null,
+            }),
       });
     },
   ),
@@ -157,6 +234,9 @@ export const interviewHandlers = [
       if (interviewStatus(record) !== 'completed') {
         return errorResponse(409, 'report_unavailable', '아직 리포트를 만들 수 없는 면접이에요.');
       }
+      if (record.reportFailed) {
+        return errorResponse(409, 'report_unavailable', '리포트 생성에 실패했어요.');
+      }
       if (!reportReady(record)) {
         return HttpResponse.json<ReportGeneratingResponse>(
           { status: 'generating', retryAfter: 3 },
@@ -167,18 +247,44 @@ export const interviewHandlers = [
       await delay(200);
       return HttpResponse.json<ReportResponse>({
         interviewId: record.interviewId,
+        revision: record.reportRevision ?? 1,
         position: record.position,
         positionLabel: reportPositionLabel,
         totalScore: reportTotalScore,
         headline: reportHeadline,
         summary: reportSummary,
         scores: reportScores,
-        agentFeedbacks: reportFeedbacks,
+        agentFeedbacks: reportFeedbacks.map((feedback) => ({
+          ...feedback,
+          disagreementSubmitted:
+            record.reportDisagreements?.some(
+              (item) =>
+                item.persona === feedback.persona && item.revision === (record.reportRevision ?? 1),
+            ) ?? false,
+        })),
         coverage: reportCoverage,
         turns: completedTurns,
         repositoryNames: reportRepositoryNames,
         completedAt: reportCompletedAt,
       });
+    },
+  ),
+
+  http.post<IdParams, never, Res<ReportGeneratingResponse>>(
+    path('/interviews/:id/report/retry'),
+    async ({ params }) => {
+      const record = getInterview(String(params.id));
+      if (!record) return errorResponse(404, 'not_found', '면접을 찾을 수 없어요.');
+      const pending = record.reportRequestedAt !== undefined && !reportReady(record);
+      if (interviewStatus(record) !== 'completed' || (!record.reportFailed && !pending)) {
+        return errorResponse(409, 'report_unavailable', '다시 생성할 수 없는 리포트예요.');
+      }
+      if (!pending) record.reportRequestedAt = Date.now();
+      record.reportFailed = false;
+      return HttpResponse.json<ReportGeneratingResponse>(
+        { status: 'generating', retryAfter: 3 },
+        { status: 202 },
+      );
     },
   ),
 
@@ -265,10 +371,7 @@ export const interviewHandlers = [
     },
   ),
 
-  /**
-   * 피드백 이의 제기. 화면은 Sprint 1에서 버튼을 비활성으로 두지만(spec/frontend/features/report.md),
-   * 계약과 api 클라이언트에는 이미 있어 핸들러가 없으면 활성화하는 순간 catch-all 501에 걸린다.
-   */
+  /** 보고 있던 리포트 버전을 확인해 의견만 접수한다. 점수는 변경하지 않는다. */
   http.post<IdParams, FeedbackDisagreementRequest, Res<undefined>>(
     path('/interviews/:id/feedback-disagreements'),
     async ({ params, request }) => {
@@ -276,17 +379,47 @@ export const interviewHandlers = [
       if (!record) {
         return errorResponse(404, 'not_found', '면접을 찾을 수 없어요.');
       }
-      if (interviewStatus(record) !== 'completed') {
+      if (interviewStatus(record) !== 'completed' || record.reportFailed || !reportReady(record)) {
         return errorResponse(409, 'report_unavailable', '아직 리포트가 없는 면접이에요.');
       }
 
       const body = await request.json();
-      if (!body?.persona || !body?.reasonType) {
-        return errorResponse(400, 'internal_error', 'persona와 reasonType은 필수입니다.');
+      if (
+        !body ||
+        !['tech_lead', 'domain_lead', 'hr_manager'].includes(body.persona) ||
+        ![
+          'factual_error',
+          'insufficient_basis',
+          'overly_harsh',
+          'unclear_intent',
+          'other',
+        ].includes(body.reasonType) ||
+        !Number.isInteger(body.expectedRevision) ||
+        body.expectedRevision < 1
+      ) {
+        return errorResponse(400, 'invalid_request', '의견 유형과 리포트 정보를 확인해주세요.');
       }
-      if (body.comment && body.comment.length > 500) {
-        return errorResponse(400, 'internal_error', '의견은 500자까지 쓸 수 있어요.');
+      if (
+        body.comment !== undefined &&
+        (typeof body.comment !== 'string' || body.comment.length > 500)
+      ) {
+        return errorResponse(400, 'invalid_request', '의견은 500자까지 쓸 수 있어요.');
       }
+      if (body.expectedRevision !== (record.reportRevision ?? 1)) {
+        return errorResponse(409, 'report_unavailable', '리포트가 변경됐어요.');
+      }
+      const submitted = record.reportDisagreements ?? [];
+      if (
+        submitted.some(
+          (item) => item.persona === body.persona && item.revision === body.expectedRevision,
+        )
+      ) {
+        return errorResponse(409, 'already_submitted', '이미 의견이 접수됐어요.');
+      }
+      record.reportDisagreements = [
+        ...submitted,
+        { revision: body.expectedRevision, persona: body.persona },
+      ];
 
       await delay(200);
       return new HttpResponse(null, { status: 204 });

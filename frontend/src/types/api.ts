@@ -139,6 +139,7 @@ export type InterviewListResponse = {
 // 4-v2 공고 입력 POST /documents/preview
 
 export type DocumentStatus = 'succeeded' | 'partial' | 'failed';
+export type DocumentType = 'portfolio' | 'cover_letter';
 
 export type DocumentPreviewResponse = {
   documentId: string;
@@ -149,8 +150,9 @@ export type DocumentPreviewResponse = {
 
 export type CreateAnalysisRunRequest = {
   postingUrl: string;
-  // Sprint 1 에서는 포트폴리오만 분석에 반영한다. 자소서 연결은 Sprint 2 설계 때 결정한다.
+  // 포트폴리오의 레포 추천 힌트와 두 문서의 면접 Claim은 구분한다.
   documentId?: string;
+  coverLetterDocumentId?: string;
 };
 
 export type CreateAnalysisRunResponse = {
@@ -311,6 +313,28 @@ export type InterviewDetailResponse = {
   remainingSeconds: number;
   turns: InterviewTurn[];
   lastError: InterviewLastError | null;
+  /** 구버전 응답에서는 생략된다. 저장 T3 이후 질문 생성만 복구할 때 서버가 허용한다. */
+  canRetryQuestion?: boolean;
+  questionRetryCount?: number;
+  questionRetryState?: {
+    requestId: string;
+    turnNo: number;
+    status: 'running' | 'succeeded' | 'failed';
+    expiresAt: string;
+  } | null;
+};
+
+export type QuestionRetryFailureReason =
+  | 'question_retry_unavailable'
+  | 'question_retry_in_progress'
+  | 'question_retry_failed'
+  | 'question_retry_limit';
+
+export type RetryQuestionRequest = { requestId: string };
+export type RetryQuestionResponse = {
+  interviewId: string;
+  sessionId: string;
+  turnNo: number;
 };
 
 // 4. WebSocket 메시지 타입 — frontend/docs/api-spec.md #18
@@ -329,6 +353,7 @@ export type PrepareStepStatus = Exclude<StepStatus, 'skipped'>;
  * 준비 실패 재시도는 WS 메시지가 아니라 `POST /interviews/{id}/prepare/retry` 다(0010 결정).
  */
 export type WsClientMessage =
+  | { type: 'answer'; turn: number; text: string }
   | { type: 'answerStart'; turn: number; mimeType: string }
   | { type: 'answerEnd'; turn: number };
 
@@ -342,8 +367,8 @@ export type WsClientMessage =
  * `stt_unavailable`, answer_too_long의 `audio_too_long`(+`limitSeconds`)이 있다.
  */
 export type WsErrorMessage = { type: 'error' } & InterviewLastError & {
-  details?: Record<string, unknown>;
-};
+    details?: Record<string, unknown>;
+  };
 
 export type WsServerMessage =
   | { type: 'prepareStep'; key: PrepareStepKey; status: PrepareStepStatus }
@@ -396,6 +421,7 @@ export type ReportCoverage = {
 
 export type ReportResponse = {
   interviewId: string;
+  revision: number;
   position: string;
   positionLabel: string;
   totalScore: number;
@@ -415,10 +441,11 @@ export type ReportGeneratingResponse = {
   retryAfter: number;
 };
 
-// POST /reports/{id}/feedback-disagreements
+// POST /interviews/{id}/feedback-disagreements
 
 export type FeedbackDisagreementRequest = {
   persona: Persona;
   reasonType: ReasonType;
+  expectedRevision: number;
   comment?: string;
 };

@@ -78,7 +78,8 @@ def executed(monkeypatch):
     calls: list[tuple[int, str]] = []
     outcome: dict = {"raise": None}
 
-    async def fake(connection, user_id, turn, text):
+    async def fake(connection, user_id, turn, text, *, answer_mode):
+        assert answer_mode in {"voice", "text"}
         calls.append((turn, text))
         if outcome["raise"] is not None:
             raise outcome["raise"]
@@ -87,6 +88,7 @@ def executed(monkeypatch):
         return AnswerExecution(uuid4(), None, None, False, None, None, True)
 
     monkeypatch.setattr(ws, "_execute", fake)
+    _patch_state(monkeypatch, current_turn=3, answerable=3)
     return SimpleNamespace(calls=calls, outcome=outcome)
 
 
@@ -295,7 +297,12 @@ async def test_restart_on_same_turn_drops_the_unfinished_audio(executed, monkeyp
 def _patch_state(monkeypatch, *, current_turn: int, answerable: int | None) -> None:
     async def read_state(socket, user_id, interview_id):
         question = {"turn": answerable} if answerable is not None else None
-        return SimpleNamespace(question=question, snapshot={"currentTurn": current_turn})
+        return SimpleNamespace(
+            status="in_progress",
+            answer_mode="voice",
+            question=question,
+            snapshot={"currentTurn": current_turn},
+        )
 
     monkeypatch.setattr(ws, "_read_state", read_state)
 

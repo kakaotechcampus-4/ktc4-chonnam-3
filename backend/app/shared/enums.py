@@ -61,8 +61,17 @@ class Reason(StrEnum):
     PREP_IN_PROGRESS = "prep_in_progress"
     SESSION_EXPIRED = "session_expired"
 
+    # 저장한 답변을 보존하는 다음 질문 이어가기
+    QUESTION_RETRY_UNAVAILABLE = "question_retry_unavailable"
+    QUESTION_RETRY_IN_PROGRESS = "question_retry_in_progress"
+    QUESTION_RETRY_FAILED = "question_retry_failed"
+    QUESTION_RETRY_LIMIT = "question_retry_limit"
+
     # 면접 조회
     NOT_FOUND = "not_found"
+
+    # 명시적 면접 중단
+    ALREADY_COMPLETED = "already_completed"
 
     # 재시도
     ORIGINAL_NOT_COMPLETED = "original_not_completed"

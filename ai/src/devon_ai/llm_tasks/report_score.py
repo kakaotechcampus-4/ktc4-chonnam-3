@@ -8,12 +8,20 @@ from dataclasses import asdict
 from typing import get_args
 
 from devon_ai import contracts as c
+from devon_ai.prompt_versions import base_prompt_version
 
 type ScoreChecked = c.ContractChecked[c.ScoreJudgments]
+SUPPORTED_PROMPT_VERSIONS = frozenset({"report_score_v1", "report_score_v2", "report_score_v3"})
 
 # 점수를 낼 수 없는 key가 있어 실패했을 때의 error_code. 공통 호출 계층은 검증 실패를 일반 코드로
 # 바꾸므로 판정 task가 이 코드로 다시 구분해 BE 실패 기록이 사유를 잃지 않게 한다.
 UNSCORABLE_CODE = "report_score_unscorable"
+
+
+def _referenced_jd(turn: c.ScoreTurn) -> frozenset[str]:
+    return frozenset(item.id for item in turn.jd_requirements) | frozenset(
+        ref.id for ref in turn.question_contract.basis_refs if ref.kind == "jd_requirement"
+    )
 
 
 def _output_schema() -> dict[str, object]:
@@ -50,23 +58,67 @@ def check_input(turns: tuple[c.ScoreTurn, ...], rubric: tuple[c.RubricLevel, ...
 
 
 def _payload(
-    turns: tuple[c.ScoreTurn, ...], rubric: tuple[c.RubricLevel, ...]
+    turns: tuple[c.ScoreTurn, ...],
+    rubric: tuple[c.RubricLevel, ...],
+    supplemental_sources: tuple[c.SupplementalSource, ...] = (),
+    limitations: tuple[str, ...] = (),
+    evidence: tuple[c.Evidence, ...] = (),
+    tool_results: tuple[c.ReportToolResult, ...] = (),
+    source_notes: tuple[c.JDSourceNote, ...] = (),
+    *,
+    scoped: bool = False,
 ) -> dict[str, object]:
     # Persona는 후보 key를 정하는 데만 쓰고 모델에는 후보 key 목록으로만 전달한다.
-    return {
-        "turns": [
-            {
-                "turn_id": turn.turn_id,
-                "question": turn.question,
-                "answer": turn.answer,
-                "question_contract": asdict(turn.question_contract),
-                "jd_requirements": [asdict(item) for item in turn.jd_requirements],
-                "candidate_keys": list(c.SCORE_CANDIDATE_KEYS[turn.persona]),
-            }
-            for turn in turns
-        ],
+    turn_payloads: list[dict[str, object]] = [
+        {
+            "turn_id": turn.turn_id,
+            "question": turn.question,
+            "answer": turn.answer,
+            "question_contract": asdict(turn.question_contract),
+            "candidate_keys": list(c.score_candidate_keys(turn)),
+            "jd_requirement_ids": list(turn.jd_requirement_ids),
+            "jd_requirements": [asdict(item) for item in turn.jd_requirements],
+        }
+        for turn in turns
+    ]
+    payload: dict[str, object] = {
+        "turns": turn_payloads,
         "rubric": [asdict(item) for item in rubric],
+        "supplemental_sources": [asdict(item) for item in supplemental_sources],
+        "limitations": list(limitations),
+        "evidence": [asdict(item) for item in evidence],
+        "tool_results": [asdict(item) for item in tool_results],
+        "source_notes": [asdict(item) for item in source_notes],
     }
+    if scoped:
+        registered = {item.evidence_id: item for item in evidence}
+        for item, turn in zip(turn_payloads, turns, strict=True):
+            results = tuple(result for result in tool_results if result.turn_id == turn.turn_id)
+            refs = set(turn.evidence_refs) | {
+                found.evidence_id for result in results for found in result.result.items
+            }
+            item.update(
+                evidence_refs=sorted(reference for reference in refs if reference is not None),
+                evidence=[asdict(value) for key, value in registered.items() if key in refs],
+                tool_results=[asdict(result.result) for result in results],
+                supplemental_sources=[
+                    asdict(source)
+                    for source in supplemental_sources
+                    if any(
+                        ref.kind == source.kind and ref.id == source.source_id
+                        for ref in turn.question_contract.basis_refs
+                    )
+                ],
+                source_notes=[
+                    asdict(note)
+                    for note in source_notes
+                    if note.requirement_id in _referenced_jd(turn)
+                ],
+            )
+        # v3は各ターンに許可された原文だけを付け、全体の原文一覧を送らない。
+        for name in ("evidence", "tool_results", "supplemental_sources", "source_notes"):
+            payload.pop(name)
+    return payload
 
 
 async def judge_scores(
@@ -77,6 +129,11 @@ async def judge_scores(
     limits: c.CallLimits,
     model_call: c.ModelCall[ScoreChecked],
     max_attempts: int = 2,
+    supplemental_sources: tuple[c.SupplementalSource, ...] = (),
+    limitations: tuple[str, ...] = (),
+    evidence: tuple[c.Evidence, ...] = (),
+    tool_results: tuple[c.ReportToolResult, ...] = (),
+    source_notes: tuple[c.JDSourceNote, ...] = (),
 ) -> c.ModelResult[ScoreChecked]:
     """턴별 단계 판정 후보를 만들고 validate_score_judgments를 통과한 값만 반환한다.
 
@@ -89,9 +146,47 @@ async def judge_scores(
         if type(limits) is not c.CallLimits:
             raise c.ContractError("schema", "report_score limits")
         check_input(turns, rubric)
+        c.validate_jd_source_notes(
+            source_notes,
+            requirement_ids=frozenset(
+                identifier for turn in turns for identifier in _referenced_jd(turn)
+            ),
+        )
+        c.validate_supplemental_input(
+            supplemental_sources,
+            contracts=tuple(turn.question_contract for turn in turns),
+            limitations=limitations,
+        )
+        if type(evidence) is not tuple or any(type(item) is not c.Evidence for item in evidence):
+            raise c.ContractError("schema", "score evidence")
+        if type(tool_results) is not tuple or any(
+            type(item) is not c.ReportToolResult for item in tool_results
+        ):
+            raise c.ContractError("schema", "score tool results")
+        registered = {item.evidence_id: item for item in evidence if item.evidence_id is not None}
+        if len(registered) != len(evidence) or any(
+            result.turn_id not in {turn.turn_id for turn in turns}
+            or any(
+                item.evidence_id is None or registered.get(item.evidence_id) != item
+                for item in result.result.items
+            )
+            for result in tool_results
+        ):
+            raise c.ContractError("semantic", "score source references")
+        if any(reference not in registered for turn in turns for reference in turn.evidence_refs):
+            raise c.ContractError("semantic", "score turn evidence references")
         request = c.ModelRequest(
             prompt=prompt,
-            payload=_payload(turns, rubric),
+            payload=_payload(
+                turns,
+                rubric,
+                supplemental_sources,
+                limitations,
+                evidence,
+                tool_results,
+                source_notes,
+                scoped=base_prompt_version(prompt.version) == "report_score_v3",
+            ),
             schema_name="ScoreJudgments",
             schema_version="1",
             output_schema=_output_schema(),

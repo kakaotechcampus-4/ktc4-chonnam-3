@@ -1,11 +1,31 @@
 """목적·질문을 함께 제안하고 별도 모델 시도로 검토하는 단일 Director 실행 경로."""
 
+import json
 from collections.abc import Callable, Mapping
-from dataclasses import asdict, dataclass, fields
-from typing import Protocol, cast
+from dataclasses import MISSING, asdict, dataclass, field, fields
+from typing import Any, Protocol, cast, get_args
 
 from devon_ai import contracts as c
-from devon_ai.agents.director.agent import _RECOVERY_CODES, _object_schema, _references
+from devon_ai.agents.director.agent import (
+    _RECOVERY_CODES,
+    _model_reference_texts,
+    _object_schema,
+    _references,
+)
+
+SUPPORTED_PROMPT_VERSIONS = frozenset(
+    {
+        "director_v5",
+        "director_v2",
+        "director_v4",
+        "director_v1",
+        "director_v7",
+        "director_v8",
+        "director_v6",
+        "director_v3",
+    }
+)
+
 
 type Location = tuple[str, str, str]
 
@@ -24,13 +44,127 @@ class DirectorOutcome:
 
 
 @dataclass(frozen=True)
+class RecoveryFeedback:
+    """직전 생성·반려 이력이다. 원문·정답·승인 또는 허용 참조가 아니다."""
+
+    previous_candidate: c.Question = field(repr=False)
+    recovery: c.CandidateRecovery = field(repr=False)
+
+    def __post_init__(self) -> None:
+        _feedback_payload(self)
+
+
+def _feedback_payload(feedback: RecoveryFeedback) -> dict[str, object]:
+    if (
+        type(feedback) is not RecoveryFeedback
+        or type(feedback.previous_candidate) is not c.Question
+        or type(feedback.recovery) is not c.CandidateRecovery
+    ):
+        raise c.ContractError("schema", "Director recovery feedback")
+    candidate = _plan_question(json.loads(json.dumps(asdict(feedback.previous_candidate))))
+    recovery = c.decode_strict(c.CandidateRecovery, asdict(feedback.recovery))
+    payload: dict[str, object] = {
+        "version": "director-recovery.v1",
+        "previous_candidate": asdict(candidate),
+        "recovery": recovery.recovery,
+        "review_reason_summary": recovery.reason_summary,
+    }
+    if len(json.dumps(payload, ensure_ascii=False).encode("utf-8")) > 16384:
+        raise c.ContractError("schema", "Director recovery feedback size")
+    return payload
+
+
+def _feedback_json(raw: str) -> object:
+    def pairs(items: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError("duplicate feedback key")
+            result[key] = value
+        return result
+
+    def invalid_constant(value: str) -> object:
+        raise ValueError("invalid feedback constant")
+
+    if len(raw.encode("utf-8")) > 131072:
+        raise ValueError("feedback raw size")
+    return json.loads(raw, object_pairs_hook=pairs, parse_constant=invalid_constant)
+
+
+def recovery_feedback_from_attempts(
+    attempts: object, *, failure_code: str
+) -> RecoveryFeedback | None:
+    """저장된 두 원시 시도를 엄격히 복원한다. 불명확한 이력은 자동 복구 근거로 쓰지 않는다."""
+    if type(attempts) not in (list, tuple) or failure_code not in _RECOVERY_CODES.values():
+        return None
+    items = cast(list[object] | tuple[object, ...], attempts)
+    if len(items) != 2:
+        return None
+    try:
+        records = []
+        for item in items:
+            if type(item) is c.AttemptMetadata:
+                item.__post_init__()
+                records.append(item)
+                continue
+            # AttemptMetadata는 _Contract가 아니므로 필드 집합과 생성자 검증을 사용한다.
+            data = _plan_object(
+                item,
+                {entry.name for entry in fields(c.AttemptMetadata)},
+                "recovery attempt metadata",
+                frozenset(
+                    entry.name
+                    for entry in fields(c.AttemptMetadata)
+                    if entry.default is not MISSING
+                ),
+            )
+            records.append(c.AttemptMetadata(**cast(dict[str, Any], data)))
+        generated, reviewed = records
+        if (
+            generated.schema_version
+            not in {"director-plan.v1", "director-plan.v2", "director-plan.v3"}
+            or reviewed.schema_version != "director-review.v1"
+            or (generated.attempt, reviewed.attempt) != (1, 2)
+            or (generated.provider, generated.model, generated.prompt_version)
+            != (reviewed.provider, reviewed.model, reviewed.prompt_version)
+            or any(item.error_stage is not None or item.error_code is not None for item in records)
+            or generated.raw_output is None
+            or reviewed.raw_output is None
+        ):
+            return None
+        raw = _plan_object(
+            _feedback_json(generated.raw_output),
+            {"question", "intent", "reason_summary"},
+            "DirectorPlan",
+        )
+        candidate = _plan_question(raw["question"])
+        c.DirectorDecision(
+            "ask",
+            cast(str, raw["intent"]),
+            candidate.persona,
+            candidate.question_contract.purpose,
+            (),
+            cast(str, raw["reason_summary"]),
+        )
+        assessment = _assessment(_feedback_json(reviewed.raw_output), candidate)
+        if (
+            type(assessment) is not c.CandidateRecovery
+            or _RECOVERY_CODES[assessment.recovery] != failure_code
+        ):
+            return None
+        return RecoveryFeedback(candidate, assessment)
+    except (c.ContractError, ValueError, TypeError, RecursionError):
+        return None
+
+
+@dataclass(frozen=True)
 class _Plan:
     question: c.Question
     intent: str
     reason_summary: str
 
 
-def _plan_schema() -> dict[str, object]:
+def _plan_schema(coverage: bool = False) -> dict[str, object]:
     text = {"type": "string"}
     texts = {"type": "array", "items": text}
     contract = _object_schema(
@@ -47,12 +181,7 @@ def _plan_schema() -> dict[str, object]:
                     {
                         "kind": {
                             "type": "string",
-                            "enum": [
-                                "evidence",
-                                "jd_requirement",
-                                "job_posting",
-                                "answer_turn",
-                            ],
+                            "enum": list(get_args(c.BasisKind)),
                         },
                         "id": text,
                     }
@@ -61,6 +190,12 @@ def _plan_schema() -> dict[str, object]:
             "evaluation_scope": text,
         }
     )
+    if coverage:
+        cast(dict[str, object], contract["properties"])["evaluation_keys"] = {
+            "type": "array",
+            "items": {"type": "string", "enum": list(get_args(c.ScoreKeyId))},
+        }
+        cast(list[str], contract["required"]).append("evaluation_keys")
     question = _object_schema(
         {
             "persona": {"type": "string", "enum": ["hr_manager", "tech_lead", "domain_lead"]},
@@ -71,6 +206,14 @@ def _plan_schema() -> dict[str, object]:
             "jd_requirement_ids": texts,
         }
     )
+    if coverage:
+        cast(dict[str, object], question["properties"]).update(
+            {
+                "question_type": {"type": "string", "enum": ["main", "follow_up"]},
+                "parent_turn_id": {"type": ["string", "null"]},
+            }
+        )
+        cast(list[str], question["required"]).extend(("question_type", "parent_turn_id"))
     return _object_schema({"question": question, "intent": text, "reason_summary": text})
 
 
@@ -92,19 +235,77 @@ def _review_schema() -> dict[str, object]:
     )
 
 
-def _plan_object(raw: object, expected: set[str], name: str) -> dict[str, object]:
-    if type(raw) is not dict or set(raw) != expected:
+def _bounded_plan_schema(
+    context: c.Context, sources: Mapping[c.BasisRef, str], coverage: bool
+) -> dict[str, object]:
+    """v6에서만 실제 입력의 식별자를 선택하게 한다. 기존 버전 스키마는 보존한다."""
+    schema = _plan_schema(coverage)
+    question = cast(dict[str, object], cast(dict[str, object], schema["properties"])["question"])
+    props = cast(dict[str, object], question["properties"])
+    contract = cast(dict[str, object], props["question_contract"])
+    contract_props = cast(dict[str, object], contract["properties"])
+    grouped: dict[str, list[str]] = {}
+    for ref in sorted(sources, key=lambda item: (item.kind, item.id)):
+        grouped.setdefault(ref.kind, []).append(ref.id)
+
+    def identifiers(kind: str) -> dict[str, object]:
+        values = grouped.get(kind, [])
+        if not values:
+            # 빈 enum 대신 빈 배열만 허용해 공급자 스키마의 유효성도 유지한다.
+            return {"type": "array", "items": {"type": "string"}, "maxItems": 0}
+        return {"type": "array", "items": {"type": "string", "enum": values}}
+
+    props["persona"] = {"type": "string", "enum": list(context.allowed_personas)}
+    props["evidence_refs"] = identifiers("evidence")
+    props["jd_requirement_ids"] = identifiers("jd_requirement")
+    if grouped:
+        contract_props["basis_refs"] = {
+            "type": "array",
+            "items": {
+                "anyOf": [
+                    _object_schema(
+                        {
+                            "kind": {"type": "string", "enum": [kind]},
+                            "id": {"type": "string", "enum": values},
+                        }
+                    )
+                    for kind, values in grouped.items()
+                ]
+            },
+        }
+    else:
+        cast(dict[str, object], contract_props["basis_refs"])["maxItems"] = 0
+    props["question_type"] = {"type": "string", "enum": ["main", "follow_up"]}
+    props["parent_turn_id"] = {
+        "type": ["string", "null"],
+        "enum": [None, *(turn.turn_id for turn in context.history)],
+    }
+    required = cast(list[str], question["required"])
+    required.extend(name for name in ("question_type", "parent_turn_id") if name not in required)
+    return schema
+
+
+def _plan_object(
+    raw: object, expected: set[str], name: str, optional: frozenset[str] = frozenset()
+) -> dict[str, object]:
+    if type(raw) is not dict or not expected - optional <= set(raw) <= expected:
         raise c.ContractError("schema", name)
     return cast(dict[str, object], raw)
 
 
 def _plan_question(raw: object) -> c.Question:
     # 공통 decode의 부가 필드 무시 정책을 바꾸지 않고 새 planner의 중첩 출력만 엄격히 검사한다.
-    question = _plan_object(raw, {item.name for item in fields(c.Question)}, "Question")
+    question = _plan_object(
+        raw,
+        {item.name for item in fields(c.Question)},
+        "Question",
+        frozenset(item.name for item in fields(c.Question) if item.default is not MISSING),
+    )
     contract = _plan_object(
         question["question_contract"],
         {item.name for item in fields(c.QuestionContract)},
         "QuestionContract",
+        frozenset(item.name for item in fields(c.QuestionContract) if item.default is not MISSING),
     )
     for name, expected in (
         ("required_points", {item.name for item in fields(c.RequiredPoint)}),
@@ -122,8 +323,9 @@ def _validate_candidate(
     candidate: c.Question,
     context: c.Context,
     sources: Mapping[c.BasisRef, str],
+    coverage: bool = False,
 ) -> c.Question:
-    return c.validate_question_candidate(
+    c.validate_question_candidate(
         candidate,
         allowed_personas=context.allowed_personas,
         evidence_refs=frozenset(
@@ -134,6 +336,22 @@ def _validate_candidate(
             ref.id for ref in candidate.question_contract.basis_refs if ref.kind == "jd_requirement"
         ),
     )
+    if candidate.parent_turn_id is not None:
+        parent = next(
+            (item for item in context.history if item.turn_id == candidate.parent_turn_id), None
+        )
+        if parent is None or parent.persona != candidate.persona:
+            raise c.ContractError("semantic", "question parent")
+    if coverage:
+        expected = next(
+            (item.keys for item in context.evaluation_targets if item.persona == candidate.persona),
+            (),
+        )
+        if not expected or set(candidate.question_contract.evaluation_keys) != set(expected):
+            raise c.ContractError("semantic", "question evaluation keys")
+        if "company_job_fit" in expected and not candidate.jd_requirement_ids:
+            raise c.ContractError("semantic", "job fit JD references")
+    return candidate
 
 
 def _assessment(raw: object, candidate: c.Question) -> c.QuestionReview | c.CandidateRecovery:
@@ -153,6 +371,33 @@ def _assessment(raw: object, candidate: c.Question) -> c.QuestionReview | c.Cand
     return c.CandidateRecovery("rewrite", reason)
 
 
+def _turn_state(context: c.Context) -> dict[str, object]:
+    """다음 질문 번호와 이미 확정된 답변 수를 혼동하지 않도록 코드에서 계산한다."""
+    answered = len(context.history)
+    if context.turn_no != answered + 1:
+        raise c.ContractError("semantic", "next question turn")
+    if context.current_turn_id != (context.history[-1].turn_id if answered else None):
+        raise c.ContractError("semantic", "last answered turn")
+    observed = {turn.persona for turn in context.history}
+    counts = {item.persona: item.count for item in context.persona_counts}
+    if any(
+        counts.get(persona, 0) != sum(turn.persona == persona for turn in context.history)
+        for persona in observed | counts.keys()
+    ):
+        raise c.ContractError("semantic", "answered persona counts")
+    return {
+        "phase": "generate_next_question",
+        "next_question_no": context.turn_no,
+        "answered_turn_count": answered,
+        "last_answered_turn_no": answered or None,
+        "last_answered_turn_id": context.current_turn_id,
+        "total_questions": context.total_turns,
+        "remaining_questions": context.total_turns - answered,
+        "is_final_question": context.turn_no == context.total_turns,
+        "finish_authority": "controller_after_final_answer",
+    }
+
+
 def _input_payload(
     context: c.Context,
     prompt: c.PromptSpec,
@@ -166,6 +411,8 @@ def _input_payload(
         raise c.ContractError("schema", "Director context")
     if type(prompt) is not c.PromptSpec or prompt.task_name != "director":
         raise c.ContractError("schema", "Director prompt")
+    if prompt.version.partition("@")[0] not in SUPPORTED_PROMPT_VERSIONS:
+        raise c.ContractError("schema", "unsupported Director prompt version")
     if type(limits) is not c.CallLimits:
         raise c.ContractError("schema", "Director limits")
     if type(tool_results) is not tuple or any(
@@ -205,15 +452,35 @@ def _input_payload(
             if type(checked) is not c.ContractChecked or type(checked.data) is not c.AnswerAnalysis:
                 raise c.ContractError("schema", "checked prior analysis")
             previous[turn_id] = c.to_data(checked)
-    return {
+    current_answer = None
+    if context.current_turn_id is not None:
+        # 직전 발언을 분석 요약·다른 턴과 섞지 않고 두 모델 시도에 같은 원문으로 제공한다.
+        current = tuple(turn for turn in context.history if turn.turn_id == context.current_turn_id)
+        if len(current) != 1 or context.current_question_contract is None:
+            raise c.ContractError("semantic", "current answered turn")
+        current_answer = {
+            "turn_id": current[0].turn_id,
+            "question": current[0].question,
+            "answer": current[0].answer,
+            "question_contract": asdict(context.current_question_contract),
+        }
+    payload: dict[str, object] = {
         "context": asdict(context),
-        "reference_texts": [
-            {"kind": ref.kind, "id": ref.id, "text": text} for ref, text in sources.items()
-        ],
+        "current_answer": current_answer,
+        "reference_texts": _model_reference_texts(sources),
         "answer_analysis": analysis,
         "prior_analyses": previous,
         "tool_results": [asdict(result) for result in tool_results],
-    }, sources
+    }
+    if prompt.version.partition("@")[0] in {
+        "director_v5",
+        "director_v6",
+        "director_v7",
+        "director_v8",
+    }:
+        # 기존 버전의 입력을 바꾸지 않고 새 배포에만 명시적인 턴 의미를 제공한다.
+        payload["turn_state"] = _turn_state(context)
+    return payload, sources
 
 
 async def run_director(
@@ -226,6 +493,7 @@ async def run_director(
     reference_texts: Mapping[c.BasisRef, str] | None = None,
     prior_analyses: Mapping[str, c.ContractChecked[c.AnswerAnalysis]] | None = None,
     tool_results: tuple[c.ToolResult, ...] = (),
+    recovery_feedback: RecoveryFeedback | None = None,
 ) -> c.ModelResult[DirectorOutcome]:
     """목적·계약·초안을 한 번 생성하고 남은 한 번으로 독립 검토한다.
 
@@ -242,6 +510,13 @@ async def run_director(
             reference_texts,
             prior_analyses,
             tool_results,
+        )
+        # 과거 프롬프트에는 복구 참고자료의 취급 지침이 없으므로 입력을 소급 확장하지 않는다.
+        feedback = (
+            _feedback_payload(recovery_feedback)
+            if recovery_feedback is not None
+            and prompt.version.partition("@")[0] in {"director_v7", "director_v8"}
+            else None
         )
     except c.ContractError as exc:
         return c.ModelResult(
@@ -264,10 +539,15 @@ async def run_director(
             (),
         )
 
+    # 구형 출력 계약만 보존하고 새 버전·배포 suffix에서는 평가 기회 검증을 유지한다.
+    legacy = prompt.version.partition("@")[0] in {"director_v1", "director_v2"}
+    coverage = bool(context.evaluation_targets) and not legacy
+    bounded_ids = prompt.version.partition("@")[0] in {"director_v6", "director_v7", "director_v8"}
+
     def validate_plan(raw: object) -> _Plan:
         if type(raw) is not dict or set(raw) != {"question", "intent", "reason_summary"}:
             raise c.ContractError("schema", "DirectorPlan")
-        candidate = _validate_candidate(_plan_question(raw["question"]), context, sources)
+        candidate = _validate_candidate(_plan_question(raw["question"]), context, sources, coverage)
         # 자유 텍스트인 의도·사유도 기존 결정 계약의 타입 검사로 검증한다.
         proposal = c.DirectorDecision(
             "ask",
@@ -282,10 +562,20 @@ async def run_director(
     generated = await model_call(
         c.ModelRequest(
             prompt,
-            {**payload, "operation": "plan"},
+            {
+                **payload,
+                "operation": "plan",
+                **({"recovery_feedback": feedback} if feedback is not None else {}),
+            },
             "DirectorPlan",
-            "director-plan.v1",
-            _plan_schema(),
+            "director-plan.v3"
+            if bounded_ids
+            else "director-plan.v2"
+            if coverage
+            else "director-plan.v1",
+            _bounded_plan_schema(context, sources, coverage)
+            if bounded_ids
+            else _plan_schema(coverage),
             limits,
             max_attempts=1,
         ),
@@ -297,7 +587,7 @@ async def run_director(
     if type(plan) is not _Plan:
         raise TypeError("ModelCall did not return a validated Director plan")
     try:
-        _validate_candidate(plan.question, context, sources)
+        _validate_candidate(plan.question, context, sources, coverage)
     except c.ContractError as exc:
         return c.ModelResult(
             None,
@@ -382,6 +672,17 @@ async def run_director(
             attempts,
         )
     return c.ModelResult(DirectorOutcome(decision, checked, generated.attempts[-1]), None, attempts)
+
+
+def external_verification_queries(
+    context: c.Context, analysis: c.ContractChecked[c.AnswerAnalysis]
+) -> tuple[c.ExternalQueryRequest, ...]:
+    """검증된 현재 답변의 보완 요청만 외부 Tool 후보로 넘긴다. 검색 실행은 BE 책임이다."""
+    if type(context) is not c.Context or context.current_turn_id is None:
+        raise c.ContractError("semantic", "external query turn")
+    if type(analysis) is not c.ContractChecked or type(analysis.data) is not c.AnswerAnalysis:
+        raise c.ContractError("schema", "checked analysis")
+    return analysis.data.external_queries if analysis.data.needs_verification else ()
 
 
 def verification_decision(

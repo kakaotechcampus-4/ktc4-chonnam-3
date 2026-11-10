@@ -193,6 +193,50 @@ test('답변 오디오가 서버 길이 상한을 넘으면 안내하고 같은 
   await expect(page.getByTestId('transcript-final')).toHaveText(FIRST_ANSWER);
 });
 
+test('첫 WS 질문이 늦게 오면 녹음을 기다렸다가 같은 턴 길이 초과를 복구한다', async ({ page }) => {
+  await stubMic(page);
+  await page.goto('/home');
+  await page.waitForFunction(() => 'msw' in window);
+  await page.evaluate((id) => {
+    const control = (window as unknown as { msw: { scenario: (name: string) => void } }).msw;
+    control.scenario('ws-audio-too-long');
+    const OriginalSocket = window.WebSocket;
+    let held = false;
+    window.WebSocket = new Proxy(OriginalSocket, {
+      construct(Target, args) {
+        const socket = Reflect.construct(Target, args) as WebSocket;
+        socket.addEventListener('message', (event) => {
+          const message = JSON.parse(String(event.data)) as { type: string };
+          if (held || message.type !== 'question') return;
+          held = true;
+          event.stopImmediatePropagation();
+          Object.assign(window, {
+            __releaseInitialQuestion: () =>
+              socket.dispatchEvent(new MessageEvent('message', { data: event.data })),
+          });
+        });
+        return socket;
+      },
+    });
+    history.pushState(null, '', `/interview/${id}/session`);
+    dispatchEvent(new PopStateEvent('popstate'));
+  }, SEED_IN_PROGRESS);
+  await page.waitForFunction(() => '__releaseInitialQuestion' in window);
+  // REST의 미답변 질문만으로는 수신 준비가 끝난 연결이라고 판단하지 않는다.
+  await expect(page.getByRole('button', { name: '답변 시작' })).toBeDisabled();
+  expect(await liveMics(page)).toBe(0);
+  await page.evaluate(() =>
+    (window as unknown as { __releaseInitialQuestion: () => void }).__releaseInitialQuestion(),
+  );
+  await expect(page.getByRole('button', { name: '답변 시작' })).toBeEnabled();
+  await page.getByRole('button', { name: '답변 시작' }).click();
+  await expect(page.getByRole('alert')).toContainText('답변이 너무 길어요');
+  await expect.poll(() => liveMics(page)).toBe(0);
+  await page.getByRole('button', { name: '다시 답변하기' }).click();
+  await answerOnce(page);
+  await expect(page.getByTestId('transcript-final')).toHaveText(FIRST_ANSWER);
+});
+
 test('다시 듣기를 요청하면 같은 질문으로 돌아간다', async ({ page }) => {
   await stubMic(page);
   await openSession(page, 'ws-repeat-request');
@@ -310,10 +354,34 @@ test('180초가 지나면 녹음이 저절로 끝나고 제출된다', async ({ 
   await page.clock.install();
   await stubMic(page);
   await openSession(page);
+  // 화면 로딩을 마친 뒤 시간을 멈춰 180초 경계 전후를 정확히 나누어 검사한다.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 10_000));
   await page.getByRole('button', { name: '답변 시작' }).click();
   await expect(page.getByTestId('transcript-partial')).toBeVisible();
-  await page.clock.runFor(180_000);
-  await expect(page.getByTestId('transcript-final')).toHaveText(FIRST_ANSWER);
+  const readInterview = () =>
+    page.evaluate(async (id) => {
+      const response = await fetch(`/api/interviews/${id}`);
+      return { status: response.status, body: await response.json() };
+    }, SEED_IN_PROGRESS);
+
+  // 표시용 반복 타이머를 모두 재생하지 않고 종료 타이머의 경계 직전으로 이동한다.
+  await page.clock.fastForward(179_999);
+  await expect(page.getByRole('button', { name: '답변 끝내기' })).toBeVisible();
+  await expect(page.getByText('질문 1 / 9 · 인사팀')).toBeVisible();
+  await expect(page.getByTestId('transcript-final')).toHaveCount(0);
+  await expect.poll(() => liveMics(page)).toBe(1);
+  await page.clock.runFor(1);
+  await page.clock.resume();
+  // 최종 전사는 다음 질문에서 지워진다. 자동 제출 결과는 영구 복구 응답으로 확인한다.
+  await expect(page.getByText('질문 2 / 9 · 개발팀')).toBeVisible({ timeout: 10_000 });
+  expect(await readInterview()).toMatchObject({
+    status: 200,
+    body: {
+      currentTurn: 2,
+      turns: expect.arrayContaining([expect.objectContaining({ turn: 1, answer: FIRST_ANSWER })]),
+    },
+  });
+  await expect.poll(() => liveMics(page)).toBe(0);
 });
 
 test('녹음 중 새로고침하면 끊김 안내와 함께 같은 턴부터 다시 시작한다', async ({ page }) => {
@@ -404,7 +472,14 @@ test('새로고침하면 새로고침 전 턴부터 이어서 시작한다', asy
   await answerOnce(page);
   await expect(page.getByText('질문 2 / 9 · 개발팀')).toBeVisible({ timeout: 10_000 });
   await page.getByRole('button', { name: '답변 시작' }).click();
-  await expect(page.getByTestId('transcript-partial')).toBeVisible();
+  // 복구 전제는 실제 녹음 시작과 현재 턴의 표식이다. 임시 전사 도착은 필요하지 않다.
+  await expect(page.getByRole('button', { name: '답변 끝내기', exact: true })).toBeEnabled();
+  await expect.poll(() => liveMics(page)).toBe(1);
+  await expect
+    .poll(() =>
+      page.evaluate(() => JSON.parse(sessionStorage.getItem('devon.recordingAnswer') ?? 'null')),
+    )
+    .toEqual({ interviewId: SEED_IN_PROGRESS, turn: 2 });
 
   await page.reload();
   await expect(page.getByText('질문 2 / 9 · 개발팀')).toBeVisible();
@@ -470,9 +545,7 @@ test('녹음 중 복구 불가 오류가 오면 마이크와 녹음 표시를 �
   await openSession(page);
   await page.getByRole('button', { name: '답변 시작' }).click();
   await expect(page.getByTestId('transcript-partial')).toBeVisible();
-  await page.evaluate(() =>
-    (window as unknown as { msw: { failWs: () => void } }).msw.failWs(),
-  );
+  await page.evaluate(() => (window as unknown as { msw: { failWs: () => void } }).msw.failWs());
 
   await expect.poll(() => liveMics(page)).toBe(0);
   await expect(page.getByText(/^녹음 중/)).toHaveCount(0);

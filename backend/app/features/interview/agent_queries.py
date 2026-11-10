@@ -17,6 +17,7 @@ from app.db.models import (
     User,
 )
 from app.features.interview.agent_context import AgentStateError
+from app.features.interview.repository_candidates import STATE_KEY, snapshot_paths
 
 
 async def _interview(db: AsyncSession, user_id: UUID, interview_id: UUID, *, lock: bool) -> None:
@@ -78,6 +79,12 @@ async def _scope(
         analyses = analyses.with_for_update()
         existing = existing.with_for_update()
     paths = {path for path in await db.scalars(existing) if path is not None}
+    state = await db.scalar(
+        select(InterviewSession.context_state).where(InterviewSession.id == interview_id)
+    )
+    candidates = state.get(STATE_KEY, {}) if isinstance(state, dict) else {}
+    if isinstance(candidates, dict):
+        paths.update(snapshot_paths(candidates.get(str(repository_id)), ref))
     for areas in await db.scalars(analyses):
         if isinstance(areas, list):
             paths.update(

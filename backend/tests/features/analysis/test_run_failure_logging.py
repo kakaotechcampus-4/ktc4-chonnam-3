@@ -169,12 +169,13 @@ async def test_final_output_has_error_location_but_no_exception_text(
     with caplog.at_level(logging.INFO):
         await runner(monkeypatch, _statement_error())
 
-    output = "\n".join(caplog.messages)
+    rendered = [caplog.handler.format(record) for record in caplog.records]
+    output = "\n".join(rendered)
     assert "StatementError" in output  # 예외 타입
     assert "test_run_failure_logging.py" in output  # 호출 위치(파일)
     assert SECRET not in output
     assert "INSERT INTO" not in output  # SQL 문
     assert "Traceback" not in output
     if json_logs:
-        [line] = [m for m in caplog.messages if "error_chain" in m]
+        [line] = [line for line in rendered if "error_chain" in line]
         assert json.loads(line)["error_chain"][0]["frames"]

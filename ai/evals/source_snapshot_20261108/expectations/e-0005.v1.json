@@ -1,0 +1,17 @@
+{"case_id": "e-0005", "version": 1,
+ "source_fact": "F-R1-005",
+ "allowed": [
+  {"id": "a1", "purpose": "README(m1)가 AGENTS.md를 AI 코딩 에이전트 안내 문서로 설명하고 같은 이름의 파일·디렉터리가 최상위에 있다고 말한다"},
+  {"id": "a2", "purpose": "개별 소스 파일을 누가 썼는지와 이 도구를 실제로 썼는지는 확인하지 못했다고 밝힌다"}
+ ],
+ "forbidden": [
+  {"id": "f1", "reason": "AI 도구 문서가 있다는 이유로 코드를 AI가 작성했다고 단정", "type": "P1"},
+  {"id": "f2", "reason": "열지 않은 소스 파일의 작성 방식을 추론", "type": "P5"},
+  {"id": "f3", "reason": "확인되지 않았으므로 사람이 직접 작성했다고 결론", "type": "P6"}
+ ],
+ "grader_controls": [
+  {"kind": "allowed", "output": "README(m1)는 AGENTS.md를 AI 코딩 에이전트 안내 문서라고 설명하고, 최상위(m2)에 AGENTS.md와 .agents/가 있습니다. 소스 파일을 누가 썼는지와 도구를 실제로 썼는지는 확인하지 못했습니다."},
+  {"kind": "forbidden", "output": "AGENTS.md가 있으므로 이 프로젝트의 코드는 AI가 작성했습니다."},
+  {"kind": "forbidden", "output": "AI로 작성했다는 증거가 확인되지 않았으므로 모든 코드를 사람이 직접 작성했습니다."}
+ ],
+ "review": {"status": "approved", "author": "geonyeong325", "reviewer": "kyeonsol", "reviewed_at": "2026-11-02", "pending_notes": []}}

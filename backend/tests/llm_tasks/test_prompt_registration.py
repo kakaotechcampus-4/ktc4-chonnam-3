@@ -10,6 +10,20 @@ from tests.llm_tasks.test_prompt_seed import _SeedSession
 PROMPT = PromptSpec("repo_shallow", "repo_shallow_v2", "local-model", "검수된 L1 본문")
 
 
+def test_registry_uses_one_hundred_character_versions():
+    from app.db.models.knowledge import PromptVersion
+
+    assert PromptVersion.__table__.c.version.type.length == 100
+    assert getattr(seeds, "PROMPT_VERSION_MAX_LENGTH", None) == 100
+
+
+async def test_oversized_version_is_rejected_before_any_database_access():
+    session = _SeedSession()
+    with pytest.raises(seeds.PromptSeedValidationError):
+        await seeds.register_prompt_versions(session, [replace(PROMPT, version="v" * 101)])
+    assert session.sql == []
+
+
 async def test_registers_one_explicit_version_idempotently_from_an_iterable():
     session = _SeedSession()
 

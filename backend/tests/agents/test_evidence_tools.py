@@ -1,6 +1,7 @@
 """고정 SHA의 허용 파일만 읽는 실제 HTTP 경계. DB와 외부 네트워크는 사용하지 않는다."""
 
 import asyncio
+import hashlib
 import json
 from dataclasses import replace
 
@@ -124,6 +125,29 @@ async def test_fixed_commit_regular_file_and_original_text_have_verified_provena
     ]
     assert sum(req.url.path.endswith(ROOT_TREE) for req in seen) == 1
     assert all("recursive" not in req.url.params for req in seen)
+
+
+async def test_large_file_returns_partial_evidence_and_insufficient_status(scope, limits):
+    text = b"implemented\n" * 10000
+    blob = hashlib.sha1(f"blob {len(text)}\0".encode() + text).hexdigest()
+    responses = replies()
+    responses[f"{REPO}/git/trees/{ROOT_TREE}"]["tree"][0].update(sha=blob, size=len(text))
+
+    async def handler(request):
+        if "/contents/" in request.url.path:
+            if request.headers.get("accept") == "application/vnd.github.raw+json":
+                return httpx.Response(200, content=text)
+            return httpx.Response(200, json={"content": "x" * 20000})
+        return httpx.Response(200, json=responses[request.url.path])
+
+    result, _ = await run(scope, limits, handler=handler)
+    assert result.status == "insufficient_analysis"
+    assert len(result.items) == 1
+    actual = result.items[0]
+    assert actual.content.encode() == text[: len(actual.content.encode())]
+    assert actual.start_line == 1 and actual.end_line == actual.content.count("\n")
+    assert len(actual.content.encode()) <= limits.max_response_bytes
+    assert result.limitations and result.error_code is None
 
 
 @pytest.mark.parametrize(

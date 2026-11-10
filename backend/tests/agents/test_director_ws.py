@@ -20,12 +20,14 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from app.core.config import Settings
 from app.db.models import Evidence, InterviewSession, InterviewTurn, LLMCallRecord
 from tests.agents.director_helpers import analysis, contract, response, seed_turns
+from tests.agents.test_director_prepare import Transport, run, settings
+from tests.agents.test_director_prepare import ready as ready
 
 
 @pytest.fixture
 def connect_ws(agent_sessions, agent_seed, test_redis_url):
     @contextmanager
-    def connect(handler=None, *, user_id=None):
+    def connect(handler=None, *, user_id=None, answer_mode="text"):
         from app.features.interview.service import _issue_session_id
         from app.main import create_app
 
@@ -49,6 +51,9 @@ def connect_ws(agent_sessions, agent_seed, test_redis_url):
             app.state.http_client = http
 
             async def setup():
+                async with agent_sessions.begin() as db:
+                    interview = await db.get(InterviewSession, agent_seed["interview_id"])
+                    interview.answer_mode = answer_mode
                 sid = await app.state.sessions.create(user_id or agent_seed["owner"])
                 realtime = await _issue_session_id(
                     app.state.redis,
@@ -69,6 +74,38 @@ def connect_ws(agent_sessions, agent_seed, test_redis_url):
 
 def unexpected_model(request):
     pytest.fail("저장된 질문 재전달에서 모델을 호출했다")
+
+
+@pytest.mark.parametrize("mode", ["text", "voice"])
+async def test_stored_mode_rejects_opposite_input_before_model_or_answer_storage(
+    agent_sessions, agent_seed, connect_ws, mode
+):
+    await seed_turns(agent_sessions, agent_seed)
+    with connect_ws(answer_mode=mode) as (client, _, path, _, _):
+        with client.websocket_connect(path, headers={"origin": "http://localhost:5173"}) as socket:
+            assert socket.receive_json()["type"] == "question"
+            if mode == "voice":
+                socket.send_json({"type": "answer", "turn": 1, "text": "잘못된 모드의 답변"})
+            else:
+                socket.send_json({"type": "answerStart", "turn": 1, "mimeType": "audio/webm"})
+            rejected = socket.receive_json()
+            assert rejected["type"] == "error"
+            assert rejected["reason"] == "answer_rejected"
+            assert rejected["recoverable"] is True
+    async with agent_sessions() as db:
+        turn = await db.scalar(
+            select(InterviewTurn).where(
+                InterviewTurn.interview_session_id == agent_seed["interview_id"]
+            )
+        )
+        assert turn.answer_text is None
+        assert (
+            await db.scalars(
+                select(LLMCallRecord).where(
+                    LLMCallRecord.interview_session_id == agent_seed["interview_id"]
+                )
+            )
+        ).all() == []
 
 
 async def test_reconnect_replays_stored_question_and_rebuilds_snapshot_without_a_model(
@@ -109,6 +146,60 @@ async def test_reconnect_replays_stored_question_and_rebuilds_snapshot_without_a
             ]
 
         assert all(value > 7000 for value in client.portal.call(ttl))
+
+
+@pytest.mark.parametrize("change", ["mode", "abandoned", "answered", "text_mode"])
+async def test_live_db_state_is_rechecked_before_stt_or_model_processing(
+    agent_sessions, agent_seed, connect_ws, change
+):
+    await seed_turns(agent_sessions, agent_seed)
+    stt_calls, model_calls = [], []
+
+    class Stt:
+        async def transcribe(self, data, mime):
+            stt_calls.append((data, mime))
+            return "팀원 담당입니다"
+
+    def model(request):
+        model_calls.append(request)
+        return response(asdict(analysis()))
+
+    initial = "text" if change == "text_mode" else "voice"
+    with connect_ws(model, answer_mode=initial) as (client, app, path, _, _):
+        app.state.stt_client = Stt()
+        with client.websocket_connect(path, headers={"origin": "http://localhost:5173"}) as socket:
+            assert socket.receive_json()["type"] == "question"
+            if initial == "voice":
+                socket.send_json({"type": "answerStart", "turn": 1, "mimeType": "audio/webm"})
+                # 같은 연결의 다음 프레임 응답으로 answerStart 처리가 끝났음을 확인한다.
+                socket.send_json({"type": "invalid-input-barrier"})
+                assert socket.receive_json()["reason"] == "answer_rejected"
+
+            async def update():
+                async with agent_sessions.begin() as db:
+                    row = await db.get(InterviewSession, agent_seed["interview_id"])
+                    if change in {"mode", "text_mode"}:
+                        row.answer_mode = "voice" if initial == "text" else "text"
+                    elif change == "abandoned":
+                        row.status = "abandoned"
+                    else:
+                        turn = await db.scalar(select(InterviewTurn))
+                        turn.status, turn.answer_text = "answered", "기존 답변"
+
+            client.portal.call(update)
+            if initial == "voice":
+                socket.send_bytes(b"x" * 5000)
+                socket.send_json({"type": "answerEnd", "turn": 1})
+            else:
+                socket.send_json({"type": "answer", "turn": 1, "text": "잘못된 모드"})
+            rejected = socket.receive_json()
+            assert rejected["type"] == "error"
+            assert rejected["reason"] in {"answer_rejected", "answer_stale_turn"}
+    assert stt_calls == [] and model_calls == []
+    async with agent_sessions() as db:
+        turn = await db.scalar(select(InterviewTurn))
+        assert turn.answer_text == ("기존 답변" if change == "answered" else None)
+        assert (await db.scalars(select(LLMCallRecord))).all() == []
 
 
 @pytest.mark.parametrize("case", ["missing_cookie", "origin", "other_user"])
@@ -648,3 +739,67 @@ async def test_evidence_check_is_sent_only_after_actual_evidence_is_committed(
 
             assert client.portal.call(stored) == ("hello\n", sha)
             assert socket.receive_json() == {"type": "interviewEnd"}
+
+
+async def test_failed_question_retries_through_real_rest_queue_and_worker(
+    agent_sessions,
+    ready,
+    test_redis_url,
+):
+    from uuid import uuid4
+
+    from arq.connections import RedisSettings, create_pool
+    from fastapi import FastAPI
+
+    from app.core.deps import current_user
+    from app.db.models import User
+    from app.db.session import get_db
+    from app.features.interview.router import router
+    from app.workers.tasks.interview_prep import interview_prep
+
+    invalid = Transport(ready)
+    invalid.outputs[0]["question"]["text"] = ""
+    assert not await run(agent_sessions, ready, invalid)
+    async with agent_sessions() as db:
+        row = await db.get(InterviewSession, ready["interview_id"])
+        assert row.status == "preparing_failed" and "prepare_job_id" not in row.context_state
+        original = await db.scalar(select(Evidence.id))
+    queue = "arq:director-prepare-test:" + uuid4().hex
+    broker = await create_pool(RedisSettings.from_dsn(test_redis_url), default_queue_name=queue)
+    app = FastAPI()
+    app.include_router(router, prefix="/api")
+    app.state.redis = broker
+
+    async def database():
+        async with agent_sessions() as db:
+            yield db
+
+    async def owner():
+        async with agent_sessions() as db:
+            return await db.get(User, ready["owner"])
+
+    app.dependency_overrides[get_db] = database
+    app.dependency_overrides[current_user] = owner
+    jobs = []
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as api:
+            result = await api.post(f"/api/interviews/{ready['interview_id']}/prepare/retry")
+        assert result.status_code == 204
+        jobs = await broker.queued_jobs()
+        assert len(jobs) == 1 and jobs[0].function == "interview_prep"
+        transport = Transport(ready)
+        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as http:
+            await interview_prep(
+                dict(session_factory=agent_sessions, settings=settings(), http_client=http),
+                jobs[0].args[0],
+            )
+        async with agent_sessions() as db:
+            row = await db.get(InterviewSession, ready["interview_id"])
+            assert row.status == "in_progress"
+            assert (await db.scalars(select(Evidence.id))).all() == [original]
+        assert transport.model_operations == ["plan", "review"]
+    finally:
+        await broker.delete(queue, *("arq:job:" + item.job_id for item in jobs))
+        await broker.aclose()

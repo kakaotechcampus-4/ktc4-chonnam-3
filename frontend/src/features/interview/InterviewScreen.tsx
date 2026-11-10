@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { BASE, api } from '@/shared/api';
 import { queryKeys } from '@/shared/queryKeys';
+import { createRequestId } from '@/shared/requestId';
 import { queryClient, refreshMeIfTokenInvalid } from '@/shared/queryClient';
 import Header from '@/shared/components/Header';
 import Footer from '@/shared/components/Footer';
@@ -14,7 +15,13 @@ import { MAX_ANSWER_MS, useAnswerRecorder } from '@/features/interview/useAnswer
 import { QUESTION_TEXT_KEY, readQuestionText } from '@/features/interview/questionText';
 import { abandonInterview, type ReselectState } from '@/features/interview/abandon';
 import { RESTART_REASONS, RETRY_ERROR } from '@/features/interview/retryErrors';
-import { isApiError, type InterviewLastError, type MeResponse, type Persona } from '@/types/api';
+import {
+  isApiError,
+  type InterviewLastError,
+  type MeResponse,
+  type Persona,
+  type QuestionRetryFailureReason,
+} from '@/types/api';
 
 /**
  * 진행 중 오류 문구. 다시 답하면 되는 답변 실패(stt_failed·answer_rejected·answer_too_long)는
@@ -27,14 +34,31 @@ const ERROR_MESSAGE: Record<string, string> = {
 };
 
 /**
- * recoverable: false일 때 문구가 달라지는 reason. question_failed는 연결 교체·서버 오류면 true로
- * 와서 재연결로 이어가고, 진행 중 분석·질문 생성이 실패하면 false로 와서 이어갈 수 없다(공통 0010).
+ * STT 사용 불가일 때는 소켓을 유지하되 답변을 차단한다. 저장 T3 이후의 질문 실패는 공통 0012에 따라
+ * 서버가 허용한 경우에만 REST로 이어갈 수 있다. T3 실패·영구 오류·한도 소진은 기존 안내를 따른다.
  */
 const FATAL_ERROR_MESSAGE: Record<string, string> = {
-  question_failed: '다음 질문을 만들지 못해 면접을 이어갈 수 없어요.',
+  question_failed: '다음 질문을 준비하지 못했어요.',
   // details.cause: stt_unavailable. STT 설정 누락·인증 오류라 다시 답해도 풀리지 않는다.
   stt_failed: '음성 인식을 사용할 수 없어 면접을 이어갈 수 없어요.',
 };
+
+const QUESTION_RETRY_MESSAGE: Record<QuestionRetryFailureReason, string> = {
+  question_retry_in_progress:
+    '질문을 준비하고 있어요. 같은 요청으로 처리 결과를 다시 확인해주세요.',
+  question_retry_failed: '다음 질문을 다시 준비하지 못했어요. 나가거나 새 면접을 시작해주세요.',
+  question_retry_limit:
+    '이 질문의 이어가기 횟수를 모두 사용했어요. 나가거나 새 면접을 시작해주세요.',
+  question_retry_unavailable: '현재 상태에서는 저장된 답변으로 질문을 이어갈 수 없어요.',
+};
+function questionRetryFailureMessage(reason: string | null) {
+  return reason && Object.hasOwn(QUESTION_RETRY_MESSAGE, reason)
+    ? QUESTION_RETRY_MESSAGE[reason as QuestionRetryFailureReason]
+    : undefined;
+}
+
+const QUESTION_RETRY_UNKNOWN =
+  '결과를 확인하지 못했어요. 같은 요청으로 처리 결과를 다시 확인해주세요.';
 
 /** 30초간 다른 메시지가 없으면 근거 확인 배너를 내린다. */
 const EVIDENCE_TIMEOUT_MS = 30_000;
@@ -49,6 +73,10 @@ const TIPS = [
   '답변 시작을 누르면 녹음이 시작돼요.',
   '답변 끝내기를 누르면 답변이 제출돼요.',
   '질문을 다시 들으려면 면접관에게 다시 들려달라고 답변하셔도 좋아요.',
+];
+const TEXT_TIPS = [
+  '답변을 작성한 뒤 제출해주세요.',
+  '한 답변은 최대 2,000자까지 입력할 수 있어요.',
 ];
 
 type LiveQuestion = {
@@ -127,9 +155,14 @@ export default function InterviewScreen() {
     queryKey: queryKeys.interview(id),
     queryFn: () => api.getInterview(id),
     enabled: !!id,
+    refetchInterval: (query) =>
+      query.state.data?.questionRetryState?.status === 'running' ? 2000 : false,
   });
 
   const [liveQuestion, setLiveQuestion] = useState<LiveQuestion | null>(null);
+  const [questionReadySession, setQuestionReadySession] = useState<string | null>(null);
+  // 재연결 때 같은 턴의 미제출 초안을 보존한다. 다음 턴에는 이전 초안을 보내지 않는다.
+  const [textDraft, setTextDraft] = useState<{ turn: number; text: string } | null>(null);
   /** question을 받을 때마다 올린다. 같은 턴이 다시 오면(다시 듣기) 음성을 처음부터 재생한다. */
   const [playKey, setPlayKey] = useState(0);
   /** 전사 대기 확인 조회가 실패했을 때 올려 같은 확인을 한 주기 더 돌린다. */
@@ -146,6 +179,13 @@ export default function InterviewScreen() {
   const [thinking, setThinking] = useState(false);
   const [evidence, setEvidence] = useState<{ repository: string; file: string } | null>(null);
   const [error, setError] = useState<InterviewLastError | null>(null);
+  const [questionRetryMessage, setQuestionRetryMessage] = useState<string | null>(null);
+  const [questionRetryUnknown, setQuestionRetryUnknown] = useState(false);
+  const [questionRetryBlocked, setQuestionRetryBlocked] = useState(false);
+  const [awaitingRetriedQuestion, setAwaitingRetriedQuestion] = useState(false);
+  // 응답을 못 받았을 때도 같은 UUID를 유지해 모델 재실행 없이 결과를 확인한다.
+  const questionRetryIdRef = useRef<string | null>(null);
+  const questionRetrySendingRef = useRef(false);
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
   // abandon 응답을 기다리는 동안 모달을 열어 두고 버튼으로 진행 중임을 보여준다.
   const [leaving, setLeaving] = useState(false);
@@ -155,6 +195,7 @@ export default function InterviewScreen() {
   const [now, setNow] = useState(() => Date.now());
 
   const status = interview?.status;
+  const isTextMode = interview?.answerMode === 'text';
 
   /**
    * 준비 화면에서 막 넘어온 직후에는 캐시의 status가 아직 preparing이다.
@@ -195,12 +236,14 @@ export default function InterviewScreen() {
     send,
     sendBinary,
     close: closeSocket,
+    reconnect: reconnectSocket,
   } = useInterviewSocket({
     interviewId: id,
     sessionId: interview?.sessionId,
     enabled: status === 'in_progress',
     // 녹음·전사 중 끊기면 서버가 받던 오디오를 버린다. 같은 턴에 다시 답해야 한다(0007).
     onDrop: () => {
+      setQuestionReadySession(null);
       recorderRef.current?.cancel();
       markRecording(id, null);
       setAnswer((prev) =>
@@ -215,6 +258,12 @@ export default function InterviewScreen() {
       if (message.type !== 'thinking') setThinking(false);
 
       if (message.type === 'question') {
+        setQuestionReadySession(interview?.sessionId ?? null);
+        setAwaitingRetriedQuestion(false);
+        setQuestionRetryUnknown(false);
+        setQuestionRetryBlocked(false);
+        setQuestionRetryMessage(null);
+        questionRetryIdRef.current = null;
         // 녹음 중에 다른 턴 질문이 오면 그 녹음은 쓸 곳이 없다. 마이크를 닫는다.
         if (recordingTurnRef.current !== null && recordingTurnRef.current !== message.turn) {
           recorderRef.current?.cancel();
@@ -267,8 +316,18 @@ export default function InterviewScreen() {
       } else if (message.type === 'interviewEnd') {
         navigate(`/interview/${id}/report`, { replace: true });
       } else if (message.type === 'error') {
+        setAwaitingRetriedQuestion(false);
         // WS 오류는 전역 오류 처리를 거치지 않는다.
         refreshMeIfTokenInvalid(message.reason);
+        if (isTextMode && message.reason === 'answer_stale_turn') {
+          setTextDraft(null);
+          setAnswer(null);
+          setThinking(false);
+          markRecording(id, null);
+          setError(null);
+          void refetchInterview();
+          return;
+        }
         // recoverable: false(stt_unavailable)는 다시 답해도 같으므로 아래 치명 오류로 넘긴다.
         if (message.reason === 'stt_failed' && message.recoverable) {
           fail(message.details?.cause === 'empty_transcript' ? 'empty' : 'stt');
@@ -300,6 +359,10 @@ export default function InterviewScreen() {
           recoverable: message.recoverable,
           occurredAt: message.occurredAt,
         });
+        if (message.reason === 'question_failed' && !message.recoverable) {
+          // 오류 전 상세 캐시에는 복구 가능 여부가 없으므로 서버의 최신 판정을 읽는다.
+          void refetchInterview();
+        }
       }
     },
   });
@@ -367,7 +430,7 @@ export default function InterviewScreen() {
       ? snapshotQuestion
       : liveQuestion;
 
-  const questionAudio = useQuestionAudio(question?.audioUrl ?? null, playKey);
+  const questionAudio = useQuestionAudio(isTextMode ? null : (question?.audioUrl ?? null), playKey);
 
   /** 지금 턴의 답변 상태. 턴이 바뀌면 듣기부터 시작한다. */
   const liveAnswer: AnswerState =
@@ -424,14 +487,22 @@ export default function InterviewScreen() {
 
   /**
    * recoverable: false면 보통 서버가 세션을 닫는다. stt_unavailable은 연결을 유지하지만 다시 답해도
-   * 같은 오류라 똑같이 답변을 막는다.
+   * 같은 오류라 똑같이 답변을 막는다. 저장 답변의 REST 이어가기는 따로 판단한다.
    */
   const fatal = !!error && !error.recoverable;
-  const canStart = !fatal && !!question && wsStatus === 'open' && current.phase === 'listening';
+  // REST 질문이 먼저 보여도 현재 연결이 질문을 재전달하기 전에는 녹음을 시작하지 않는다.
+  // 늦은 최초 question이 진행 중 답변을 다시 듣기 상태로 초기화하는 경합을 막는다.
+  const canStart =
+    !fatal &&
+    !!question &&
+    questionReadySession === interview?.sessionId &&
+    wsStatus === 'open' &&
+    current.phase === 'listening';
   const elapsedSeconds = recorder.startedAt
     ? Math.floor(Math.min(MAX_ANSWER_MS, now - recorder.startedAt) / 1000)
     : 0;
-  const showText = showQuestionText || questionAudio.state === 'failed';
+  const showText = isTextMode || showQuestionText || questionAudio.state === 'failed';
+  const draft = question && textDraft?.turn === question.turn ? textDraft.text : '';
 
   /**
    * 조건부로 나타나는 요소에 aria-live를 달면 삽입 시점을 놓치는 조합이 있다.
@@ -442,7 +513,9 @@ export default function InterviewScreen() {
     : current.phase === 'recording'
       ? '녹음 중이에요'
       : current.phase === 'transcribing'
-        ? '답변을 정리하고 있어요'
+        ? isTextMode
+          ? '답변 저장을 확인하고 있어요'
+          : '답변을 정리하고 있어요'
         : wsStatus === 'reconnecting'
           ? '연결이 끊겼어요. 다시 연결하는 중이에요'
           : thinking
@@ -450,11 +523,24 @@ export default function InterviewScreen() {
             : '';
 
   function handleStartAnswer() {
-    if (!question || !canStart) return;
+    if (isTextMode || !question || !canStart) return;
     questionAudio.stop();
     recordingTurnRef.current = question.turn;
     setAnswer({ turn: question.turn, phase: 'recording', partial: '', final: null, failure: null });
     void recorder.start();
+  }
+
+  function handleSubmitText() {
+    if (!isTextMode || !question || !canStart || !draft.trim() || draft.length > 2000) return;
+    // 공백·줄바꿈을 포함한 작성 원문을 보낸다. 서버 저장 확인은 음성 모드와 같은 경로를 쓴다.
+    const sent = send({ type: 'answer', turn: question.turn, text: draft });
+    setAnswer({
+      turn: question.turn,
+      phase: sent ? 'transcribing' : 'failed',
+      partial: '',
+      final: draft,
+      failure: sent ? null : 'disconnected',
+    });
   }
 
   function handleRetryAnswer() {
@@ -463,8 +549,8 @@ export default function InterviewScreen() {
   }
 
   /**
-   * 이어갈 수 없는 질문 생성 실패에서 같은 레포로 새 면접을 만든다. 실패한 면접은 in_progress로
-   * 남아 있어 먼저 abandon해야 재도전(시작 후 중단된 abandoned만 허용)이 열린다(공통 0009·0010).
+   * 저장 답변 이어가기를 선택하지 않거나 허용되지 않을 때 같은 레포로 새 면접을 만든다.
+   * 기존 면접은 in_progress이므로 먼저 abandon해야 재도전이 열린다(공통 0009·0012).
    */
   const restart = useMutation({
     mutationFn: async () => {
@@ -477,6 +563,91 @@ export default function InterviewScreen() {
     },
   });
   const restartReason = isApiError(restart.error) ? restart.error.error.reason : null;
+
+  const questionRetry = useMutation({
+    mutationFn: () => {
+      questionRetryIdRef.current ??= createRequestId();
+      return api.retryQuestion(id, { requestId: questionRetryIdRef.current });
+    },
+    onSuccess: async () => {
+      setAwaitingRetriedQuestion(true);
+      setQuestionRetryUnknown(false);
+      setQuestionRetryMessage(null);
+      const refreshed = await refetchInterview();
+      if (refreshed.isError) {
+        setAwaitingRetriedQuestion(false);
+        setQuestionRetryUnknown(true);
+        setQuestionRetryMessage(QUESTION_RETRY_UNKNOWN);
+      }
+      if (!refreshed.isError && refreshed.data?.sessionId === interview?.sessionId) {
+        reconnectSocket();
+      }
+      // 새 sessionId로 다시 연결한다. 새 question 전에는 기존 fatal 입력 차단을 유지한다.
+    },
+    onError: async (failure) => {
+      setAwaitingRetriedQuestion(false);
+      const reason = isApiError(failure) ? failure.error.reason : null;
+      const terminal =
+        reason !== null &&
+        [
+          'question_retry_unavailable',
+          'question_retry_failed',
+          'question_retry_limit',
+          'not_found',
+          'unauthenticated',
+          'account_suspended',
+          'account_withdrawn',
+        ].includes(reason);
+      setQuestionRetryBlocked(terminal);
+      setQuestionRetryUnknown(!terminal);
+      setQuestionRetryMessage(
+        questionRetryFailureMessage(reason) ||
+          (terminal ? QUESTION_RETRY_MESSAGE.question_retry_unavailable : QUESTION_RETRY_UNKNOWN),
+      );
+      await refetchInterview();
+    },
+    onSettled: () => {
+      questionRetrySendingRef.current = false;
+    },
+  });
+  useEffect(() => {
+    const saved = interview?.questionRetryState;
+    if (saved?.status !== 'running') return;
+    // 새로고침 뒤에도 서버가 저장한 UUID만 재사용한다. 새 수동 라운드를 만들지 않는다.
+    questionRetryIdRef.current = saved.requestId;
+  }, [interview?.questionRetryState]);
+
+  useEffect(() => {
+    if (!awaitingRetriedQuestion) return;
+    const timer = setTimeout(() => {
+      setAwaitingRetriedQuestion(false);
+      setQuestionRetryUnknown(true);
+      setQuestionRetryMessage(QUESTION_RETRY_UNKNOWN);
+      void refetchInterview();
+    }, SAVE_CONFIRM_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [awaitingRetriedQuestion, id, refetchInterview]);
+
+  const displayedRetryMessage =
+    questionRetryMessage ??
+    (error?.reason === 'question_failed' && interview?.questionRetryState?.status === 'running'
+      ? QUESTION_RETRY_MESSAGE.question_retry_in_progress
+      : null);
+  const questionRetryBusy = questionRetry.isPending || awaitingRetriedQuestion;
+  // 공통 0012의 자동 복구는 서버가 먼저 실행하며, FE의 명시 수동 이어가기는 질문당 1회다.
+  const canContinueQuestion =
+    fatal &&
+    error?.reason === 'question_failed' &&
+    !questionRetryBlocked &&
+    (questionRetryUnknown ||
+      interview?.questionRetryState?.status === 'running' ||
+      (interview?.canRetryQuestion === true && (interview.questionRetryCount ?? 0) < 1));
+
+  function continueQuestion() {
+    if (questionRetryBusy || questionRetrySendingRef.current) return;
+    questionRetrySendingRef.current = true;
+    questionRetry.mutate();
+  }
 
   async function handleLeave() {
     // 명시적 이탈은 REST abandon으로 알린다(공통 0009). 재연결 중에도 보낼 수 있다.
@@ -585,23 +756,25 @@ export default function InterviewScreen() {
               : '다음 질문 준비 중'}
           </span>
           <span className="flex-1" />
-          <label className="flex items-center gap-2">
-            <span className="text-[11px] text-muted">질문 텍스트</span>
-            <input
-              type="checkbox"
-              role="switch"
-              checked={showQuestionText}
-              onChange={(event) => {
-                setShowQuestionText(event.target.checked);
-                try {
-                  localStorage.setItem(QUESTION_TEXT_KEY, String(event.target.checked));
-                } catch {
-                  /* 시크릿 창 등에서 저장이 막히면 이번 세션에만 적용한다. */
-                }
-              }}
-              className="h-6 w-11 shrink-0 appearance-none rounded-full bg-line-soft transition-colors before:ml-0.5 before:block before:h-5 before:w-5 before:translate-y-0.5 before:rounded-full before:bg-surface before:transition-transform checked:bg-accent checked:before:translate-x-5"
-            />
-          </label>
+          {!isTextMode && (
+            <label className="flex items-center gap-2">
+              <span className="text-[11px] text-muted">질문 텍스트</span>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={showQuestionText}
+                onChange={(event) => {
+                  setShowQuestionText(event.target.checked);
+                  try {
+                    localStorage.setItem(QUESTION_TEXT_KEY, String(event.target.checked));
+                  } catch {
+                    /* 시크릿 창 등에서 저장이 막히면 이번 세션에만 적용한다. */
+                  }
+                }}
+                className="h-6 w-11 shrink-0 appearance-none rounded-full bg-line-soft transition-colors before:ml-0.5 before:block before:h-5 before:w-5 before:translate-y-0.5 before:rounded-full before:bg-surface before:transition-transform checked:bg-accent checked:before:translate-x-5"
+              />
+            </label>
+          )}
         </div>
 
         {showText ? (
@@ -610,7 +783,7 @@ export default function InterviewScreen() {
               {question?.text ?? '다음 질문을 준비하고 있어요'}
             </p>
             {/* 텍스트를 꺼 뒀는데 보이는 이유를 알린다. 토글이 고장 난 것처럼 보이지 않게 한다. */}
-            {!showQuestionText && question && (
+            {!isTextMode && !showQuestionText && question && (
               <p className="mt-2 text-[11px] text-muted">
                 질문 음성을 재생하지 못해 텍스트로 보여드려요
               </p>
@@ -630,7 +803,7 @@ export default function InterviewScreen() {
       <aside className="rounded-card bg-accent-soft px-4 py-3 text-[12px] leading-relaxed text-accent xl:fixed xl:left-[calc(50%+408px)] xl:top-1/3 xl:w-52">
         <b>Tip</b>
         <ul className="mt-1 list-disc space-y-0.5 pl-4">
-          {TIPS.map((tip) => (
+          {(isTextMode ? TEXT_TIPS : TIPS).map((tip) => (
             <li key={tip}>{tip}</li>
           ))}
         </ul>
@@ -639,11 +812,19 @@ export default function InterviewScreen() {
       {error && (
         <div role="alert" className="rounded-card border border-error/30 bg-error-soft px-3 py-2.5">
           <p className="text-[12px] font-bold text-error">
-            {(fatal && FATAL_ERROR_MESSAGE[error.reason]) ??
+            {(canContinueQuestion
+              ? '답변은 저장됐어요. 다음 질문을 다시 준비할 수 있어요.'
+              : null) ??
+              (fatal && FATAL_ERROR_MESSAGE[error.reason]) ??
               ERROR_MESSAGE[error.reason] ??
               '면접 중 문제가 생겼어요.'}
           </p>
         </div>
+      )}
+      {displayedRetryMessage && (
+        <p role="alert" className="text-[12px] text-error">
+          {displayedRetryMessage}
+        </p>
       )}
       {restart.isError && (
         <div className="flex items-center gap-3">
@@ -670,10 +851,25 @@ export default function InterviewScreen() {
             current.phase === 'recording' ? 'border-error' : 'border-line-soft'
           }`}
         >
-          {current.final !== null ? (
+          {isTextMode && current.phase === 'listening' ? (
+            <textarea
+              aria-label="답변"
+              value={draft}
+              maxLength={2000}
+              rows={5}
+              disabled={!canStart}
+              onChange={(event) =>
+                question && setTextDraft({ turn: question.turn, text: event.target.value })
+              }
+              className="w-full resize-y bg-transparent outline-none disabled:opacity-60"
+              placeholder="답변을 작성해주세요"
+            />
+          ) : current.final !== null ? (
             <>
               <span data-testid="transcript-final">{current.final}</span>
-              <span className="mt-2 block text-[11px] text-muted">최종 전사로 평가해요</span>
+              <span className="mt-2 block text-[11px] text-muted">
+                {isTextMode ? '제출한 답변이에요' : '최종 전사로 평가해요'}
+              </span>
             </>
           ) : current.partial ? (
             <span
@@ -696,7 +892,9 @@ export default function InterviewScreen() {
         </div>
 
         {current.phase === 'transcribing' && (
-          <p className="text-[11px] text-muted">답변을 정리하고 있어요…</p>
+          <p className="text-[11px] text-muted">
+            {isTextMode ? '답변 저장을 확인하고 있어요…' : '답변을 정리하고 있어요…'}
+          </p>
         )}
 
         {current.phase === 'failed' && current.failure && (
@@ -718,9 +916,8 @@ export default function InterviewScreen() {
           <span className="flex-1" />
           {fatal ? (
             /*
-              recoverable: false의 복구 경로는 reason마다 다르다
-              (spec/frontend/features/interview.md:201-202). 홈으로만 보내면 같은 오류를
-              다시 만난다. 레포 재선택은 새 세션을 만들고 이 세션은 abandoned가 된다(:64).
+              닫힌 소켓의 복구 경로는 reason마다 다르다. 공통 0012의 저장 답변 이어가기는
+              같은 면접을 보존한다. 레포 재선택·새 면접은 기존 세션을 abandon한 뒤 만든다.
             */
             error?.reason === 'github_token_invalid' ? (
               <a
@@ -742,10 +939,26 @@ export default function InterviewScreen() {
                 레포 다시 선택하기
               </button>
             ) : error?.reason === 'question_failed' ? (
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                {(canContinueQuestion || questionRetryBusy) && (
+                  <button
+                    type="button"
+                    disabled={leaving || restart.isPending || questionRetryBusy}
+                    onClick={continueQuestion}
+                    className="flex h-10 items-center gap-2 rounded-lg bg-accent px-5 text-[13px] font-bold text-surface disabled:opacity-50"
+                  >
+                    {questionRetryBusy && (
+                      <span
+                        aria-hidden
+                        className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+                      />
+                    )}
+                    {questionRetryBusy ? '다음 질문을 준비하는 중…' : '저장된 답변으로 계속하기'}
+                  </button>
+                )}
                 <button
                   type="button"
-                  disabled={leaving || restart.isPending}
+                  disabled={leaving || restart.isPending || questionRetryBusy}
                   onClick={() => void handleLeave()}
                   className="h-10 rounded-lg border border-line px-4 text-[13px] font-bold text-muted disabled:opacity-50"
                 >
@@ -753,7 +966,7 @@ export default function InterviewScreen() {
                 </button>
                 <button
                   type="button"
-                  disabled={leaving || restart.isPending}
+                  disabled={leaving || restart.isPending || questionRetryBusy}
                   onClick={() => restart.mutate()}
                   className="h-10 rounded-lg bg-accent px-5 text-[13px] font-bold text-surface disabled:opacity-50"
                 >
@@ -803,11 +1016,11 @@ export default function InterviewScreen() {
           ) : current.phase === 'listening' ? (
             <button
               type="button"
-              disabled={!canStart}
-              onClick={handleStartAnswer}
+              disabled={!canStart || (isTextMode && !draft.trim())}
+              onClick={isTextMode ? handleSubmitText : handleStartAnswer}
               className="h-10 rounded-lg bg-accent-soft px-5 text-[13px] font-bold text-accent disabled:bg-line-soft disabled:text-muted"
             >
-              답변 시작
+              {isTextMode ? '답변 제출' : '답변 시작'}
             </button>
           ) : null}
         </div>

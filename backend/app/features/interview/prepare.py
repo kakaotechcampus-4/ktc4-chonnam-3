@@ -31,10 +31,14 @@ from app.db.models import (
     User,
 )
 from app.features.analysis.analysis_results import resolve_bound_analysis
+from app.features.documents.claim_comparison import prepare_selected_claim_comparisons
+from app.features.documents.claims import prepare_selected_document_claims
 from app.features.interview import prepare_checkpoint, prepare_lease
 from app.features.interview.agent_context import AgentStateError
 from app.features.interview.answer_context import load_answer_context
 from app.features.interview.director_service import log_recovery, start_director
+from app.features.interview.repository_candidates import STATE_KEY
+from app.features.interview.repository_inventory import SourceInventory, stored_inventory
 from app.features.interview.repository_sources import (
     SourceCollection,
     SourcePreparationError,
@@ -61,6 +65,8 @@ class PreparedRepository:
     shallow: c.ShallowRepoAnalysis
     cached: c.DeepRepoAnalysis | None
     invalid_cache: tuple[UUID, dict[str, object] | None, list[dict[str, object]] | None] | None
+    cached_sources: tuple[c.SourceDocument, ...] = ()
+    cached_inventory: SourceInventory | None = None
 
 
 def _steps(completed: int, failed: bool = False) -> list[dict[str, object]]:
@@ -237,6 +243,8 @@ async def _snapshot(
             if index >= 2:
                 continue
             cached: c.DeepRepoAnalysis | None = None
+            cached_inventory: SourceInventory | None = None
+            cached_sources: tuple[c.SourceDocument, ...] = ()
             invalid_cache = None
             for row in analyses:
                 if (
@@ -254,14 +262,44 @@ async def _snapshot(
                             and value.repository_id == str(repo.id)
                             and value.head_sha == l1.head_sha
                             and 1 <= len(value.notable_areas) <= 5
-                            and len({area.path for area in value.notable_areas})
+                            and len({(area.path, area.scope) for area in value.notable_areas})
                             == len(value.notable_areas)
-                            and all(area.scope == "entire file" for area in value.notable_areas)
                             and tuple(
                                 c.decode(c.NotableArea, area) for area in row.notable_areas or ()
                             )
                             == value.notable_areas
                         ):
+                            stored = (row.result or {}).get("_source_snapshot")
+                            if stored is None:
+                                # 구형 전체 파일 캐시는 고정 SHA의 전체 원문 재조회로 검증한다.
+                                if not all(
+                                    area.scope == "entire file" for area in value.notable_areas
+                                ):
+                                    raise c.ContractError("semantic", "cache source snapshot")
+                                cached_sources = ()
+                            else:
+                                if (
+                                    not isinstance(stored, dict)
+                                    or stored.get("head_sha") != l1.head_sha
+                                    or not isinstance(stored.get("sources"), list)
+                                ):
+                                    raise c.ContractError("semantic", "cache source snapshot")
+                                cached_sources = tuple(
+                                    c.decode(c.SourceDocument, item) for item in stored["sources"]
+                                )
+                                c.validate_deep_analysis(
+                                    value,
+                                    source=c.DeepRepoInput(
+                                        str(repo.id), l1.head_sha, shallow, cached_sources
+                                    ),
+                                )
+                            cached_inventory = stored_inventory(
+                                (row.result or {}).get("_source_inventory"), head_sha=l1.head_sha
+                            )
+                            if cached_inventory is not None and not {
+                                area.path for area in value.notable_areas
+                            } <= set(cached_inventory.paths):
+                                raise c.ContractError("semantic", "cache source inventory")
                             cached = value
                     except c.ContractError:
                         pass
@@ -275,6 +313,8 @@ async def _snapshot(
                     shallow,
                     cached,
                     invalid_cache,
+                    cached_sources if cached is not None else (),
+                    cached_inventory if cached is not None else None,
                 )
             )
         if await load_active_prompt(db, "repo_deep") != prompt:
@@ -439,6 +479,7 @@ async def _save_analysis(
     failures: list[str],
     repository_limitations: dict[str, list[str]],
     step: str,
+    prompt_version: str,
 ) -> bool | None:
     async with sessions.begin() as db:
         row = await _unchanged(db, user_id, interview_id, job_id, snapshot)
@@ -452,9 +493,62 @@ async def _save_analysis(
         for repo, row_values in pending_rows:
             await _store_analysis(db, repo, row_values)
         for repo, analysis, sources in collected:
-            by_path = {item.path: item for item in sources.item.sources}
+            # 후보 경로는 원문 Evidence와 분리하고 선택한 고정 SHA에만 묶어 둔다.
+            state = dict(row.context_state or {})
+            previous = state.get(STATE_KEY, {})
+            candidates = dict(previous) if isinstance(previous, dict) else {}
+            candidates[repo.scope.repository_id] = {
+                "head_sha": repo.scope.git_ref,
+                "paths": list(sources.candidate_paths),
+                "limitations": list(sources.limitations),
+            }
+            # 전체 목록은 분석 행에 한 번만 두고 자주 갱신하는 세션에는 작은 참조만 둔다.
+            previous_inventory = state.get("repository_source_inventories", {})
+            inventory = (
+                {
+                    key: value
+                    for key, value in previous_inventory.items()
+                    if isinstance(value, dict) and "sha256" in value and "paths" not in value
+                }
+                if isinstance(previous_inventory, dict)
+                else {}
+            )
+            if sources.inventory_paths:
+                observed = SourceInventory(
+                    repo.scope.git_ref,
+                    sources.inventory_paths,
+                    sources.selection_paths,
+                    sources.inventory_limitations,
+                )
+                stored = await db.scalar(
+                    select(RepoAnalysis)
+                    .where(
+                        RepoAnalysis.repository_id == UUID(repo.scope.repository_id),
+                        RepoAnalysis.analysis_level == "l2",
+                        RepoAnalysis.head_sha == repo.scope.git_ref,
+                        RepoAnalysis.prompt_version == prompt_version,
+                    )
+                    .with_for_update()
+                )
+                if stored is None or not isinstance(stored.result, dict):
+                    raise SourcePreparationError("repository_inventory_unavailable")
+                original = stored_inventory(
+                    stored.result.get("_source_inventory"), head_sha=repo.scope.git_ref
+                )
+                if original is not None and original != observed:
+                    # 같은 키의 다른 관찰을 조용히 덮거나 기록하지 않은 후보를 게시하지 않는다.
+                    raise SourcePreparationError("repository_inventory_changed")
+                if original is None:
+                    stored.result = {**stored.result, "_source_inventory": observed.payload()}
+                inventory[repo.scope.repository_id] = observed.reference(stored.prompt_version)
+            row.context_state = {
+                **state,
+                STATE_KEY: candidates,
+                "repository_source_inventories": inventory,
+            }
+            by_scope = {(item.path, item.read_scope): item for item in sources.item.sources}
             for area in analysis.notable_areas:
-                source = by_path.get(area.path)
+                source = by_scope.get((area.path, area.scope))
                 if source is None or source.kind != "file" or source.read_scope != area.scope:
                     continue
                 existing = await db.scalar(
@@ -478,8 +572,9 @@ async def _save_analysis(
                             snippet=source.content,
                             summary=area.observation,
                             tool_name=None,
-                            start_line=1,
-                            end_line=max(1, len(source.content.splitlines())),
+                            start_line=source.start_line,
+                            end_line=source.end_line
+                            or source.start_line + max(1, len(source.content.splitlines())) - 1,
                         )
                     )
             failures.extend(sources.limitations)
@@ -507,6 +602,29 @@ async def prepare_interview(
     settings: Settings,
     http_client: httpx.AsyncClient,
 ) -> bool:
+    """단계별 상한 외에 준비 전체의 대기를 제한하고 기존 취소 정리를 수행한다."""
+    try:
+        async with asyncio.timeout(prepare_lease.PREPARATION_DEADLINE_SECONDS):
+            return await _prepare_interview(
+                sessions,
+                user_id=user_id,
+                interview_id=interview_id,
+                settings=settings,
+                http_client=http_client,
+            )
+    except TimeoutError:
+        logger.warning("interview_prepare_deadline_exceeded", interview_id=str(interview_id))
+        return False
+
+
+async def _prepare_interview(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    user_id: UUID,
+    interview_id: UUID,
+    settings: Settings,
+    http_client: httpx.AsyncClient,
+) -> bool:
     """외부 호출은 transaction 밖에서 하고 현재 선택·상태가 같은 결과만 적용한다."""
     job_id, step = uuid4(), "analyze_repo"
     call_records: list[LLMCallRecord] = []
@@ -521,7 +639,11 @@ async def prepare_interview(
         try:
             llm = settings.require_llm()
             prepare_lease.validate_timeout(
-                settings.director_prepare_timeout_seconds, llm.llm_timeout_seconds
+                settings.director_prepare_timeout_seconds,
+                llm.call_limits("director").timeout_seconds,
+                deep_seconds=llm.call_limits("repo_deep").timeout_seconds,
+                claim_seconds=llm.call_limits("claim_code").timeout_seconds,
+                document_seconds=llm.call_limits("doc_claims").timeout_seconds,
             )
         except (ValidationError, ValueError) as error:
             # 검증 오류의 input·본문·비밀값 대신 허용한 설정 이름만 기록한다.
@@ -550,6 +672,10 @@ async def prepare_interview(
             )
             return False
         heartbeat = prepare_lease.heartbeat(sessions, interview_id, job_id)
+        # 문서 Claim은 별도 호출 예산을 사용하며 레포별 경로 선정·분석 예산과 섞지 않는다.
+        await prepare_selected_document_claims(
+            sessions, interview_id, settings, http_client, job_id=job_id
+        )
         async with sessions.begin() as db:
             row = await _unchanged(db, user_id, interview_id, job_id, snapshot)
             if row is None:
@@ -575,7 +701,11 @@ async def prepare_interview(
                     attempt_sink=active_attempts,
                     paths=None
                     if repo.cached is None
-                    else tuple(area.path for area in repo.cached.notable_areas),
+                    else tuple(dict.fromkeys(area.path for area in repo.cached.notable_areas)),
+                    read_scopes=None
+                    if repo.cached is None
+                    else tuple((area.path, area.scope) for area in repo.cached.notable_areas),
+                    inventory=repo.cached_inventory,
                 )
                 repository_limitations[repo.scope.repository_id] = list(sources.limitations)
                 if repo.cached is None:
@@ -607,8 +737,38 @@ async def prepare_interview(
                 else:
                     # 다시 읽지 못한 area만 빼고 나머지 관찰은 쓴다(0008 관찰 분리, 0010 준비 기준).
                     # 못 읽은 경로는 sources.limitations에 남고 Evidence 출발점에서 빠진다.
-                    read = {source.path for source in sources.item.sources}
-                    kept = tuple(a for a in repo.cached.notable_areas if a.path in read)
+                    read = {
+                        (source.path, source.read_scope): source for source in sources.item.sources
+                    }
+                    expected = {
+                        (source.path, source.read_scope): source for source in repo.cached_sources
+                    }
+                    # 범위 이름뿐 아니라 과거 모델이 읽은 원문과 실제 재조회 본문도 대조한다.
+                    kept = tuple(
+                        area
+                        for area in repo.cached.notable_areas
+                        if (actual := read.get((area.path, area.scope))) is not None
+                        and (
+                            not expected
+                            or (
+                                (stored := expected.get((area.path, area.scope))) is not None
+                                and actual.content == stored.content
+                                and actual.start_line == stored.start_line
+                                and (
+                                    actual.end_line
+                                    or actual.start_line + len(actual.content.splitlines()) - 1
+                                )
+                                == (
+                                    stored.end_line
+                                    or stored.start_line + len(stored.content.splitlines()) - 1
+                                )
+                            )
+                        )
+                    )
+                    if len(kept) != len(repo.cached.notable_areas):
+                        note = "캐시 관찰 중 실제 재조회 원문과 일치하지 않는 범위는 제외했습니다."
+                        sources = replace(sources, limitations=(*sources.limitations, note))
+                        repository_limitations[repo.scope.repository_id] = list(sources.limitations)
                     analysis = c.validate_deep_analysis(
                         replace(repo.cached, notable_areas=kept), source=sources.item
                     ).data
@@ -648,12 +808,16 @@ async def prepare_interview(
                 failures,
                 repository_limitations,
                 step,
+                prompt.version,
             )
             if saved is None:
                 return False
             records_saved = True
             if not collected:
                 raise SourcePreparationError(failures[0] if failures else "l2_unavailable")
+        await prepare_selected_claim_comparisons(
+            sessions, interview_id, settings, http_client, job_id=job_id
+        )
         for index, phase in ((2, "build_persona"), (3, "set_criteria")):
             if resumed >= index:
                 continue

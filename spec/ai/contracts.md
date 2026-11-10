@@ -12,6 +12,37 @@
 
 ## 계약 계층
 
+### 최종 서비스 확장 계약 — 검토안
+
+[ADR 0031](decisions/0031-final-service-runtime-boundaries.md)의 후속 제안이다.
+아래 확장은 내부 호출·저장의 명시적 계약이며 기존 Accepted 기본 계약을 일괄 대체하지 않는다.
+공유 API에 해당하는 문서 선택·질문 음성 경로는 OpenAPI의 해당 정의를 함께 검토한다.
+구현 현황·실행 결과는 이 문서에 중복하지 않고 [구현 기록](implementation.md)에서 관리한다.
+
+| 객체 | 추가 필드와 의미 |
+| --- | --- |
+| `CallLimits` | 선택 `reasoning_effort`, `stream=false`. 공급자가 지원하는 추론량만 설정하며, stream은 SSE를 전체 수신·검증한 결과 하나로 반환하는 전송 방식이다. 시간·입출력 바이트·시도 상한은 동일하게 적용한다 |
+| `Context` | `evaluation_targets`, `supplemental_sources`, `external_searches`, `supplemental_limitations`. 모두 기본 빈 목록이며 서버가 검증한 현재 자료·평가 기회·검색 상태·미확인 범위를 전달한다 |
+| `QuestionContract` | 선택 `evaluation_keys=[]`. 질문이 제공한 평가 기회이며 답변의 관찰·충분성·점수가 아니다. 옛 계약을 읽을 때 생략을 허용한다 |
+| `Question` | `question_type=main`, `parent_turn_id=null`. 후속이면 실제 이전 턴·같은 persona·허용 depth를 검증한다. 자유 문장의 intent에서 관계를 추정하지 않는다 |
+| `AnswerAnalysis` | `external_queries=[]`의 항목은 `query`, `purpose`다. 실제 조회 결과가 아닌 확인 요청이며 `needs_verification`과 일치해야 한다. 기존 답변 원문 인용·질문 범위 검증은 유지한다 |
+| `BasisRef.kind` | 기존 종류에 `document_claim`, `document_visual`, `document_claim_comparison`, `external_source`를 추가한다. 실제 등록 ID만 허용하며 모두 개인 구현·기여의 확정 증명이 아니다 |
+| `SupplementalSource` | `source_id`, `kind`, `content`, `location`, `version`, `limitations`, 선택 `title`, `retrieved_at`. version은 저장 원문 또는 원본 파일의 SHA-256이며 생성 설명과 전사 원문을 구분한다 |
+| `ExternalSearchStatus` | `status`, `source_ids`, `searched_scope`, `limitations`, 선택 `error_code`. found/not_found/insufficient_analysis/tool_error를 실제 실행 상태대로 유지한다 |
+| `ToolResult` | insufficient_analysis에도 실제 읽고 검증한 부분 `items`를 담을 수 있다. 한계는 필수이며 미확인 꼬리 영역을 부재로 판정하지 않는다. 동일 ID 재조회는 동일 원문일 때만 재사용한다 |
+| `ReportInput` | 선택 `limitations=[]`, `source_notes=[]`. 최종 보강 분석과 실제 턴별 ToolResult는 저장 원문·질문·답변에 재검증한 뒤 전달하며 최초 분석을 덮어쓰지 않는다. 공고 전사 출처는 별도 `JDSourceNote`로 유지한다 |
+| `ReportTurn` | 선택 `jd_requirement_ids=[]`. 실제 질문에서 요구한 JD만 서술·점수 판정 원문에 연결한다. 예전 저장 입력은 빈 값으로 호환한다 |
+| `JDSourceNote` | `requirement_id`, `block_id`, `source_field=job_posting.source_blocks`, `content`, `location`, `text_hash`, `image_hash`, `limitations`, `read_scope=entire_block/prefix_excerpt`. 저장 전사·원본 이미지 해시와 위치를 보존한다. 일부 구간이면 한계가 필수이며 전체 좌표를 해당 구간의 좌표로 추정하지 않는다. 코드·개인 기여 Evidence로 쓰지 않는다 |
+
+현재 모델 Context는 유한한 원문 예산을 사용한다. 과거 인용 복원에 사용하는 전체 registry를
+그대로 모델 입력에 넣지 않는다. 문서 추출 prompt 변경 후에는 현재 Claim 집합을 다시 정하되
+과거 질문이 참조한 Claim·위치·원문 버전을 삭제하지 않는다.
+
+문서 Claim·시각 해석·외부 자료의 실패와 미확인 범위는 사용자 역량의 부족으로 환산하지 않는다.
+공개 점수 nullable 표현과 품질 gate는 이 확장에서 자동 승인하지 않는다.
+
+### 기존 기본 계약
+
 | 계층 | 내용 | 결정 상태 |
 | --- | --- | --- |
 | 공개 REST | OpenAPI의 요청·응답 | 기존 FIX, 명시된 PENDING 제외 |

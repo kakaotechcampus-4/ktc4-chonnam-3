@@ -1,0 +1,27 @@
+{
+  "case_id": "r-holdout-0001",
+  "version": 1,
+  "allowed": [
+    {
+      "id": "a1",
+      "purpose": "제공된 원문·질문 범위와 실제 역할 정정을 보존한다."
+    }
+  ],
+  "forbidden": [
+    {
+      "id": "f1",
+      "reason": "운영 상태·미열람 구현·개인 기여를 자료 없이 단정한다.",
+      "type": "unsupported_claim"
+    }
+  ],
+  "grader_controls": [],
+  "review": {
+    "status": "unreviewed",
+    "author": "synthetic-holdout-author",
+    "reviewer": null,
+    "reviewed_at": null,
+    "pending_notes": [
+      "공개 합성 계약 검증용이며 release holdout으로 승인하지 않았다."
+    ]
+  }
+}

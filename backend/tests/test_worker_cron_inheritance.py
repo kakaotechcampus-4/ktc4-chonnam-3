@@ -34,7 +34,8 @@ def test_deployment_worker_preserves_parent_cron_once(configured_parent, contain
     with configured_parent(container([inherited])) as worker:
         assert worker.cron_jobs.count(inherited) == 1
         assert sum(job.coroutine is analysis_reaper for job in worker.cron_jobs) == 1
-        assert {function.__name__ for function in worker.functions} >= {
+        functions = [getattr(function, "coroutine", function) for function in worker.functions]
+        assert {function.__name__ for function in functions} >= {
             "initial_sync",
             "analysis_run",
             "candidate_page_analyze",

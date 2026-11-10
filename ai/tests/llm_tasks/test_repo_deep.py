@@ -123,7 +123,7 @@ def test_invalid_areas_are_split_without_dropping_verified_area() -> None:
     rejected = [(item.path, item.stage, item.reason_summary) for item in data.rejected_areas]
     assert rejected == [
         ("missing.py", "semantic", "invalid field: unread source"),
-        ("src/services", "semantic", "invalid field: duplicate path"),
+        ("src/services", "semantic", "invalid field: read scope mismatch"),
         ("../secrets.py", "schema", "invalid field: path"),
         ("src/services", "schema", "invalid field: line"),
     ]

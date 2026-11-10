@@ -53,6 +53,38 @@ async def test_saves_report_and_six_scores(app, db, ctx, prompt):
     assert len(rows[0].evidence_turn_ids) == 1
 
 
+async def test_report_success_also_commits_durable_profile_refresh(app, db, ctx, prompt):
+    from app.db.models import ProfileRefreshRequest
+
+    assert await _generate(app, ctx, FakeGenerator()) == "created"
+    report = await db.scalar(select(InterviewReport))
+    signal = await db.scalar(select(ProfileRefreshRequest))
+    assert signal is not None
+    assert (signal.report_id, signal.report_revision, signal.status) == (report.id, 1, "pending")
+
+
+async def test_profile_enqueue_failure_keeps_report_and_pending_signal(
+    app, db, ctx, prompt, monkeypatch
+):
+    from unittest.mock import AsyncMock
+
+    from redis.exceptions import ConnectionError
+
+    from app.db.models import ProfileRefreshRequest
+    from app.workers.tasks.report_generate import _enqueue_profile_summary
+
+    assert await _generate(app, ctx, FakeGenerator()) == "created"
+    monkeypatch.setattr(
+        app.state.redis, "enqueue_job", AsyncMock(side_effect=ConnectionError("down"))
+    )
+    await _enqueue_profile_summary(
+        {"session_factory": app.state.session_factory, "redis": app.state.redis}, ctx[0].id
+    )
+    assert await db.scalar(select(func.count()).select_from(InterviewReport)) == 1
+    signal = await db.scalar(select(ProfileRefreshRequest))
+    assert signal.status == "pending" and signal.last_error == "queue_unavailable"
+
+
 async def test_payload_has_only_fixed_score_keys_and_turns(app, ctx, prompt):
     generator = FakeGenerator()
     await _generate(app, ctx, generator)
@@ -126,11 +158,43 @@ async def test_fewer_than_six_active_rubrics_fails(app, db, ctx, prompt, active_
     assert await _counts(db) == (0, 0)
 
 
-async def test_model_call_factory_gives_each_call_its_own_budget(app, ctx, prompt):
+async def test_model_call_factory_gives_each_call_its_own_budget(app, ctx, prompt, monkeypatch):
+    from devon_ai import contracts as c
+
+    from app.features.report import service
+
+    observed = []
+
+    async def call(request, validator, *, budget, **kwargs):
+        observed.append(budget)
+        metadata = c.AttemptMetadata(
+            1,
+            "fixture",
+            request.prompt.model,
+            request.prompt.version,
+            request.schema_version,
+            1,
+            1,
+            1,
+        )
+        return c.ModelResult(7, None, (metadata,))
+
+    monkeypatch.setattr(service, "call_model", call)
     generator = FakeGenerator()
     await _generate(app, ctx, generator)
     first, second = generator.factory(), generator.factory()
-    assert first.keywords["budget"] is not second.keywords["budget"]
+    request = c.ModelRequest(
+        c.PromptSpec("report", "fixture", "fixture-model", "t"),
+        {},
+        "fixture",
+        "1",
+        {"type": "object"},
+        c.CallLimits(1, 10, 1000, 1000),
+    )
+    await first(request, lambda _: 7)
+    await first(request, lambda _: 7)
+    await second(request, lambda _: 7)
+    assert observed[0] is observed[1] and observed[0] is not observed[2]
 
 
 async def test_coverage_counts_requirements_asked(app, db, ctx, prompt):
@@ -218,14 +282,14 @@ async def test_invalid_output_saves_nothing(app, db, ctx, prompt, mutate):
     assert await _counts(db) == (0, 0)
 
 
-async def test_payload_includes_unanswered_turn_with_empty_answer(app, db, ctx, prompt):
+async def test_payload_includes_unanswered_turn_as_null(app, db, ctx, prompt):
     interview, _ = ctx
     await make_turn(db, interview, 2, persona="domain_lead")
     await db.commit()
     generator = FakeGenerator()
     await _generate(app, ctx, generator)
     turns = generator.calls[0]["turns"]
-    assert [(t["turn_no"], t["answer"]) for t in turns] == [(1, "답변 1"), (2, "")]
+    assert [(t["turn_no"], t["answer"]) for t in turns] == [(1, "답변 1"), (2, None)]
 
 
 async def test_payload_evidence_carries_repository_and_location_fields(app, db, ctx, prompt):

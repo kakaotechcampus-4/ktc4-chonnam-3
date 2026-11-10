@@ -49,7 +49,7 @@ function questionMessage(record: InterviewRecord, turn: InterviewTurn): WsServer
     turn: turn.turn,
     mainIndex: turn.mainIndex,
     followUpDepth: turn.followUpDepth,
-    audioUrl: questionAudioUrl(record.interviewId, turn.turn),
+    audioUrl: record.answerMode === 'text' ? null : questionAudioUrl(record.interviewId, turn.turn),
   };
 }
 

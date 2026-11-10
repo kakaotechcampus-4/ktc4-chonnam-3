@@ -79,6 +79,10 @@ export function createAnswerHandler(
 
   return (data: unknown) => {
     if (typeof data !== 'string') {
+      if (record.answerMode === 'text') {
+        send(client, wsError('answer_rejected', 'ERR_ANSWER_REJECTED', { recoverable: true }));
+        return;
+      }
       if (!pending) return;
       // 서버 길이 상한 초과. 받던 오디오를 버리고 같은 턴 answerStart를 기다린다(error-reasons.md).
       if (takeAnswerFault(socketPath, 'too-long')) {
@@ -104,6 +108,29 @@ export function createAnswerHandler(
     const message = parseClientMessage(data);
     if (!message) {
       console.warn('[msw] 해석할 수 없는 WS 메시지', data);
+      return;
+    }
+    if (message.type === 'answer') {
+      if (record.answerMode !== 'text' || !message.text.trim() || message.text.length > 2000) {
+        send(client, wsError('answer_rejected', 'ERR_ANSWER_REJECTED', { recoverable: true }));
+        return;
+      }
+      const rejection = takeAnswerFault(socketPath, 'reject');
+      if (rejection) {
+        send(client, wsError(rejection.reason ?? 'answer_rejected', rejection.code ?? 'ERR_ANSWER_REJECTED', { recoverable: true }));
+        return;
+      }
+      if (takeAnswerFault(socketPath, 'no-ack')) return;
+      if (takeAnswerFault(socketPath, 'drop-before-ack')) {
+        recordAnswer(record, message.turn, message.text);
+        client.close();
+        return;
+      }
+      void handleAnswer(client, record, message.turn, message.text);
+      return;
+    }
+    if (record.answerMode === 'text') {
+      send(client, wsError('answer_rejected', 'ERR_ANSWER_REJECTED', { recoverable: true }));
       return;
     }
     if (message.type === 'answerStart') {

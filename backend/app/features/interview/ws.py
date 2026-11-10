@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from math import ceil
+from math import isfinite
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -23,7 +23,7 @@ from sqlalchemy import select
 from starlette.responses import JSONResponse
 
 from app.agents.director.tools import EvidenceLimits
-from app.core.config import INTERVIEW_MAX_TURNS
+from app.core.config import INTERVIEW_MAX_TURNS, LLMSettings, Settings
 from app.core.deps import current_user
 from app.core.errors import AppError
 from app.core.logging import get_logger
@@ -42,6 +42,8 @@ from app.features.interview.answer_audio import (
 )
 from app.features.interview.director_service import AnswerExecution, log_recovery, process_answer
 from app.features.interview.queries import list_turns
+from app.features.interview.question_audio import question_audio_url
+from app.features.interview.question_replay import ExplicitReplayCommands, should_replay
 from app.features.interview.schemas import InterviewLastError
 from app.features.interview.service import (
     REALTIME_SESSION_TTL_SECONDS,
@@ -56,6 +58,10 @@ router = APIRouter(prefix="/ws/interviews", tags=["interview"])
 logger = get_logger(__name__)
 _SESSION_ID = re.compile(r"[A-Za-z0-9_-]{43}")
 _LEASE_SECONDS = 30
+_WORK_HEARTBEAT_SECONDS = _LEASE_SECONDS / 3
+_WORK_LOCAL_SECONDS = 30
+_WORK_CLEANUP_SECONDS = 30
+_WORK_TASKS: set[asyncio.Task[AnswerExecution]] = set()
 _PREPARE_POLL_SECONDS = 1.0
 _REFRESH = """
 if redis.call('GET', KEYS[1]) ~= ARGV[1]
@@ -83,6 +89,34 @@ or redis.call('GET', KEYS[4]) ~= ARGV[3] then return 0 end
 if redis.call('SET', KEYS[2], ARGV[1], 'NX', 'EX', ARGV[4]) then return 1 end
 return 0
 """
+_REFRESH_WORK = """
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+return redis.call('EXPIRE', KEYS[1], ARGV[2])
+"""
+
+
+def _answer_work_seconds(config: Settings, llm: LLMSettings) -> float:
+    # T3는 두 시도와 최대 한 번의 Retry-After 대기, T4는 최초·자동 rewrite 각각
+    # plan/review 두 호출이다. 외부 조회는 실제 설정된 전체 호출 상한을 공유한다.
+    # DB·콜백 등 로컬 작업에는 전체 실행 deadline 안에서 별도 30초만 허용한다.
+    external_calls = min(config.tavily_max_calls, config.external_max_calls_per_interview)
+    seconds = (
+        3 * llm.call_limits("answer_analysis").timeout_seconds
+        + 4 * llm.call_limits("director").timeout_seconds
+        + config.director_evidence_timeout_seconds
+        + external_calls * config.tavily_timeout_seconds
+        + _WORK_LOCAL_SECONDS
+    )
+    if not isfinite(seconds):
+        raise AgentStateError("answer_work_budget_invalid")
+    return seconds
+
+
+def _work_finished(task: asyncio.Task[AnswerExecution]) -> None:
+    # DB 정리가 기한을 넘겨도 작업을 보존하고 뒤늦은 예외를 반드시 회수한다.
+    _WORK_TASKS.discard(task)
+    if not task.cancelled():
+        task.exception()
 
 
 @dataclass(frozen=True)
@@ -92,6 +126,7 @@ class _State:
     snapshot: dict[str, object]
     last_error: dict[str, object] | None
     prepare_steps: tuple[tuple[str, str], ...]
+    answer_mode: str = "voice"
 
 
 def _preparation_steps(raw: object) -> tuple[tuple[str, str], ...]:
@@ -209,7 +244,7 @@ async def _read_state(socket: WebSocket, user_id: UUID, interview_id: UUID) -> _
             and pending is None
         ):
             main_index, follow_up_depth = turn_position(
-                [(turn.turn_no, turn.depth) for turn in turns], current.turn_no
+                [(turn.turn_no, turn.depth, turn.parent_turn_no) for turn in turns], current.turn_no
             )
             question = {
                 "type": "question",
@@ -218,8 +253,13 @@ async def _read_state(socket: WebSocket, user_id: UUID, interview_id: UUID) -> _
                 "turn": current.turn_no,
                 "mainIndex": main_index,
                 "followUpDepth": follow_up_depth,
-                # 질문 음성(TTS)은 이번 범위 밖이다. FE가 질문 텍스트를 보여 준다(0007).
-                "audioUrl": None,
+                # 텍스트를 즉시 전달하고 음성은 인증된 별도 요청에서 합성·캐시한다.
+                "audioUrl": question_audio_url(
+                    socket.app.state.settings.api_prefix, interview_id, current.turn_no
+                )
+                if interview.answer_mode == "voice"
+                and getattr(socket.app.state.settings, "tts_provider", None)
+                else None,
             }
         snapshot = {
             "status": interview.status,
@@ -242,6 +282,7 @@ async def _read_state(socket: WebSocket, user_id: UUID, interview_id: UUID) -> _
             snapshot,
             interview.last_error,
             _preparation_steps(interview.prepare_steps),
+            interview.answer_mode,
         )
 
 
@@ -383,6 +424,19 @@ class _Connection:
             if not valid:
                 await self.close(1011)
 
+    async def work_heartbeat(self) -> None:
+        # 소켓·로그인 세션이 교체돼도 이미 접수한 작업은 자기 nonce로만 갱신한다.
+        while True:
+            await asyncio.sleep(_WORK_HEARTBEAT_SECONDS)
+            try:
+                valid = await _script(
+                    self.redis, _REFRESH_WORK, 1, self.work, self.nonce, _LEASE_SECONDS
+                )
+            except RedisError:
+                valid = False
+            if not valid:
+                raise AgentStateError("answer_work_ownership_lost")
+
     async def preparation(self, state: _State, user_id: UUID) -> _State:
         """DB 스냅샷과 변경분을 복원하며 재연결로 준비 작업을 재실행하지 않는다."""
         observed: dict[str, str] = {}
@@ -427,6 +481,10 @@ class _Connection:
         if not self.connected:
             return False
         state = await _read_state(self.socket, user_id, self.interview_id)
+        if state.status == "abandoned":
+            # 중단 알림이 유실돼도 DB의 확정 상태에서 과거 질문을 다시 전달하지 않는다.
+            await self.close()
+            return False
         preparing = state.status == "preparing"
         if preparing:
             state = await self.preparation(state, user_id)
@@ -525,6 +583,9 @@ async def _answer_start(
 ) -> None:
     """지금 답변할 수 있는 턴일 때만 새 오디오를 받기 시작한다. 거절해도 받던 오디오는 둔다."""
     state = await _read_state(connection.socket, user_id, connection.interview_id)
+    if state.status != "in_progress" or state.answer_mode != "voice":
+        await connection.send(_error("answer_rejected"))
+        return
     current_turn = cast(int, state.snapshot["currentTurn"])
     answerable = cast(int, state.question["turn"]) if state.question is not None else None
     reason = turn_rejection(start.turn, current_turn, answerable)
@@ -575,6 +636,16 @@ async def _answer_end(
     except AnswerAudioTooLong:
         await _audio_too_long(connection, end.turn)
         return True
+    current = await _read_state(connection.socket, user_id, connection.interview_id)
+    if (
+        current.status != "in_progress"
+        or current.answer_mode != "voice"
+        or current.question is None
+        or current.question["turn"] != end.turn
+    ):
+        # 녹음 도중 중단·턴 확정·입력 모드 변경이 일어나면 유료 전사를 시작하지 않는다.
+        await connection.send(_error("answer_rejected"))
+        return True
     try:
         text = await _stt_client(connection.socket).transcribe(audio.data, audio.mime_type)
     except SttError as exc:
@@ -608,11 +679,30 @@ async def _answer_end(
 
 
 async def _run_answer(
-    connection: _Connection, user_id: UUID, turn: int, text: str, invalid_turn_reason: str
+    connection: _Connection,
+    user_id: UUID,
+    turn: int,
+    text: str,
+    invalid_turn_reason: str,
+    *,
+    answer_mode: str = "voice",
 ) -> bool:
     """저장·분석·다음 질문 복구까지 수행한다. 연결을 더 쓸 수 없으면 False."""
+    classifier = getattr(connection.socket.app.state, "replay_intent_classifier", None)
+    if answer_mode == "voice" and (
+        ExplicitReplayCommands().is_explicit(text) or classifier is not None
+    ):
+        current = await _read_state(connection.socket, user_id, connection.interview_id)
+        question = current.question
+        if current.answer_mode == "voice" and question is not None and question["turn"] == turn:
+            if await should_replay(text, str(question["text"]), classifier):
+                # 분류 대기 중 다른 턴이 확정됐으면 오래된 질문을 다시 전달하지 않는다.
+                latest = await _read_state(connection.socket, user_id, connection.interview_id)
+                if latest.question is not None and latest.question == question:
+                    await connection.send(latest.question)
+                    return True
     try:
-        result = await _execute(connection, user_id, turn, text)
+        result = await _execute(connection, user_id, turn, text, answer_mode=answer_mode)
     except AgentStateError as exc:
         if exc.reason == "answer_turn_invalid":
             # 저장되지 않았으므로 answerReceived는 가지 않았다. 텍스트는 stale, 음성은 rejected.
@@ -631,11 +721,18 @@ async def _run_answer(
     return await connection.restore(user_id)
 
 
-async def _execute(connection: _Connection, user_id: UUID, turn: int, text: str) -> AnswerExecution:
+async def _execute(
+    connection: _Connection, user_id: UUID, turn: int, text: str, *, answer_mode: str
+) -> AnswerExecution:
     state = connection.socket.app.state
     config = state.settings
     current = await _read_state(connection.socket, user_id, connection.interview_id)
-    if current.question is None or current.question["turn"] != turn:
+    if (
+        current.status != "in_progress"
+        or current.answer_mode != answer_mode
+        or current.question is None
+        or current.question["turn"] != turn
+    ):
         raise AgentStateError("answer_turn_invalid")
     try:
         llm = config.require_llm()
@@ -657,11 +754,8 @@ async def _execute(connection: _Connection, user_id: UUID, turn: int, text: str)
         )
         raise
     # WS 전송 수명 취소가 이미 시작한 DB·모델 처리를 중단하지 않게 한다.
+    lifetime = _answer_work_seconds(config, llm)
     with CancelScope(shield=True):
-        # 연결 인계용 유한 표식이다. 호출·재시도 대기·근거 조회 예산과 정리 여유를 포함한다.
-        lifetime = ceil(
-            6 * llm.llm_timeout_seconds + config.director_evidence_timeout_seconds + 120
-        )
         claimed = await _script(
             connection.redis,
             _BEGIN_WORK,
@@ -673,12 +767,12 @@ async def _execute(connection: _Connection, user_id: UUID, turn: int, text: str)
             connection.nonce,
             connection.raw_session,
             connection.session_id,
-            lifetime,
+            _LEASE_SECONDS,
         )
         if not claimed:
             raise AgentStateError("connection_replaced_or_busy")
-        try:
-            result = await process_answer(
+        processing = asyncio.create_task(
+            process_answer(
                 state.session_factory,
                 user_id=user_id,
                 interview_id=connection.interview_id,
@@ -686,6 +780,7 @@ async def _execute(connection: _Connection, user_id: UUID, turn: int, text: str)
                 text=text,
                 call_id=uuid4(),
                 settings=llm,
+                external_settings=config,
                 http_client=state.http_client,
                 evidence_limits=EvidenceLimits(
                     config.director_evidence_max_requests,
@@ -697,10 +792,87 @@ async def _execute(connection: _Connection, user_id: UUID, turn: int, text: str)
                 on_answer_saved=connection.answer_saved,
                 on_evidence_check=connection.evidence_checked,
             )
+        )
+        _WORK_TASKS.add(processing)
+        processing.add_done_callback(_work_finished)
+        heartbeat = asyncio.create_task(connection.work_heartbeat())
+        try:
+            async with asyncio.timeout(lifetime):
+                done, _ = await asyncio.wait(
+                    (processing, heartbeat), return_when=asyncio.FIRST_COMPLETED
+                )
+                if heartbeat in done:
+                    heartbeat.result()
+                result = await processing
+        except TimeoutError:
+            raise AgentStateError("answer_execution_timeout") from None
         finally:
-            with suppress(RedisError):
-                await _script(connection.redis, _RELEASE, 1, connection.work, connection.nonce)
+            # 취소된 모델·자동 rewrite의 DB claim과 외부 조회 예약 정리를 먼저 합류한다.
+            # 정리 중에도 heartbeat를 유지하고, 새 작업 소유자의 표식은 건드리지 않는다.
+            async def finish() -> None:
+                processing.cancel()
+                try:
+                    done, _ = await asyncio.wait((processing,), timeout=_WORK_CLEANUP_SECONDS)
+                    if not done:
+                        processing.cancel()
+                        # DB 정리가 끝났다고 간주하지 않는다. 갱신을 멈추고 유한 lease로 만료한다.
+                        raise AgentStateError("answer_work_cleanup_timeout")
+                finally:
+                    heartbeat.cancel()
+                    await asyncio.gather(heartbeat, return_exceptions=True)
+                with suppress(RedisError):
+                    await _script(connection.redis, _RELEASE, 1, connection.work, connection.nonce)
+
+            cleanup = asyncio.create_task(finish())
+            canceled = False
+            while True:
+                try:
+                    # asyncio의 반복 취소도 정리 작업에는 전달하지 않고 완료 뒤 전파한다.
+                    await asyncio.shield(cleanup)
+                    break
+                except asyncio.CancelledError:
+                    if cleanup.cancelled():
+                        raise
+                    canceled = True
+            if canceled:
+                raise asyncio.CancelledError
     return result
+
+
+async def _handle_input(
+    connection: _Connection,
+    user_id: UUID,
+    audio: AnswerAudioBuffer,
+    raw_answer: object,
+    answer_mode: str,
+) -> bool:
+    """세션의 고정 입력 모드를 전사·평가·저장 전에 검사한다."""
+    if isinstance(raw_answer, bytes):
+        if answer_mode != "voice":
+            await connection.send(_error("answer_rejected"))
+            return True
+        await _answer_chunk(connection, audio, raw_answer)
+        return True
+    voice = parse_voice_message(raw_answer)
+    if isinstance(voice, (AnswerStart, AnswerEnd)):
+        if answer_mode != "voice":
+            await connection.send(_error("answer_rejected"))
+            return True
+        if isinstance(voice, AnswerStart):
+            await _answer_start(connection, user_id, audio, voice)
+            return True
+        return await _answer_end(connection, user_id, audio, voice)
+    if answer_mode != "text":
+        await connection.send(_error("answer_rejected"))
+        return True
+    parsed = _answer(raw_answer)
+    if isinstance(parsed, str):
+        await connection.send(_error(parsed))
+        return True
+    turn, text = parsed
+    return await _run_answer(
+        connection, user_id, turn, text, "answer_stale_turn", answer_mode=answer_mode
+    )
 
 
 @router.websocket("/{session_id}")
@@ -769,24 +941,7 @@ async def interview_socket(socket: WebSocket, session_id: str) -> None:
             if not await connection.refresh():
                 await connection.close(1008)
                 return
-            if isinstance(raw_answer, bytes):
-                await _answer_chunk(connection, audio, raw_answer)
-                continue
-            voice = parse_voice_message(raw_answer)
-            if isinstance(voice, AnswerStart):
-                await _answer_start(connection, user_id, audio, voice)
-                continue
-            if isinstance(voice, AnswerEnd):
-                if not await _answer_end(connection, user_id, audio, voice):
-                    return
-                continue
-            # 텍스트 answer는 5단계(answer_mode → voice)에서 0007에 맞춰 제거한다. 그 전까지 유지.
-            parsed = _answer(raw_answer)
-            if isinstance(parsed, str):
-                await connection.send(_error(parsed))
-                continue
-            turn, text = parsed
-            if not await _run_answer(connection, user_id, turn, text, "answer_stale_turn"):
+            if not await _handle_input(connection, user_id, audio, raw_answer, initial.answer_mode):
                 return
     except WebSocketDisconnect:
         connection.connected = False

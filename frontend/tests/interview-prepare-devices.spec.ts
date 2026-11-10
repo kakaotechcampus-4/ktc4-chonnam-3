@@ -56,7 +56,7 @@ async function openPrepare(page: Page, mic: MicResult) {
           sessionId: 'ses-1',
           runId: 'run-1',
           status: 'preparing',
-          answerMode: 'text',
+          answerMode: 'voice',
           position: 'BE',
           companyName: null,
           repositoryNames: [],
@@ -121,9 +121,13 @@ test('권한이 있으면 장치 목록을 보여주고 마이크는 녹음 중�
 test('녹음은 최대 시간이 지나면 저절로 끝난다', async ({ page }) => {
   await page.clock.install();
   await openPrepare(page, 'ok');
+  // 첫 초의 일시 표시를 놓치지 않도록 정지한 시계에서 실제 경계를 검사한다.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
   await page.getByRole('button', { name: '마이크 테스트' }).click();
   await expect(page.getByRole('button', { name: '녹음 끝내기 (5)' })).toBeVisible();
-  await page.clock.runFor(5000);
+  await page.clock.runFor(4999);
+  await expect.poll(() => micStates(page)).toEqual([false, true]);
+  await page.clock.runFor(1);
   await expect.poll(() => micStates(page)).toEqual([false, false]);
 });
 

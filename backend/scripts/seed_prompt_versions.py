@@ -6,6 +6,8 @@ from devon_ai.contracts import PromptSpec
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.knowledge import PROMPT_VERSION_MAX_LENGTH
+
 PROMPT_VERSIONS = {
     "repo_shallow": "repo_shallow_v1",
     "repo_deep": "repo_deep_v1",
@@ -21,6 +23,10 @@ PROMPT_VERSIONS = {
 # report_score는 리포트 점수 판정 task이며 version 이름은 작성자가 제안한 값이다.
 ADDITIONAL_PROMPT_VERSIONS = {
     "report_score": "report_score_v1",
+    "doc_claims": "doc_claims_v1",
+    "domain_category": "domain_category_v1",
+    "claim_code": "claim_code_v1",
+    "jd_extract_image": "jd_extract_image_v1",
 }
 
 
@@ -142,6 +148,10 @@ def _validate_registration(prompts: list[PromptSpec]) -> None:
         raise PromptSeedValidationError("at least one reviewed prompt is required")
     seen: set[str] = set()
     for prompt in prompts:
+        if len(prompt.version) > PROMPT_VERSION_MAX_LENGTH:
+            raise PromptSeedValidationError(
+                f"prompt version must not exceed {PROMPT_VERSION_MAX_LENGTH} characters"
+            )
         if prompt.task_name not in PROMPT_VERSIONS | ADDITIONAL_PROMPT_VERSIONS:
             raise PromptSeedValidationError(f"unknown prompt task: {prompt.task_name}")
         if prompt.task_name in seen:
@@ -157,6 +167,7 @@ def _validate_registration(prompts: list[PromptSpec]) -> None:
 __all__ = [
     "ADDITIONAL_PROMPT_VERSIONS",
     "PROMPT_VERSIONS",
+    "PROMPT_VERSION_MAX_LENGTH",
     "PromptSeedValidationError",
     "PromptVersionConflictError",
     "register_prompt_versions",

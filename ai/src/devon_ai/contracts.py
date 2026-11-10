@@ -7,6 +7,8 @@ from re import fullmatch
 from types import UnionType
 from typing import Literal, Union, cast, get_args, get_origin, get_type_hints
 
+from devon_ai.query_policy import ExternalQueryError, canonical_external_query
+
 FailureStage = Literal["parse", "schema", "semantic"]
 CallFailureStage = Literal["timeout", "provider", "parse", "schema", "semantic", "budget"]
 
@@ -49,6 +51,8 @@ class CallLimits:
     max_output_tokens: int
     max_input_bytes: int
     max_response_bytes: int
+    reasoning_effort: Literal["none", "minimal", "low", "medium", "high", "xhigh"] | None = None
+    stream: bool = False
 
     def __post_init__(self) -> None:
         timeout = self.timeout_seconds
@@ -56,6 +60,10 @@ class CallLimits:
             raise ContractError("schema", "timeout_seconds")
         for name in ("max_output_tokens", "max_input_bytes", "max_response_bytes"):
             _positive_int(getattr(self, name), name)
+        if self.reasoning_effort not in (None, "none", "minimal", "low", "medium", "high", "xhigh"):
+            raise ContractError("schema", "reasoning_effort")
+        if type(self.stream) is not bool:
+            raise ContractError("schema", "stream")
 
 
 @dataclass(frozen=True)
@@ -91,12 +99,43 @@ class CallFailure:
     stage: CallFailureStage
     error_code: str
     reason_summary: str
+    provider_status: int | None = None
+    provider_cause: (
+        Literal[
+            "transport",
+            "timeout",
+            "transient_http",
+            "rate_limit",
+            "quota_exhausted",
+            "permanent_http",
+            "unclassified_http",
+        ]
+        | None
+    ) = None
+    # 공통 호출의 남은 자동 시도와 별개로 새로운 수동 라운드를 허용하는지 나타낸다.
+    manual_retryable: bool | None = None
 
     def __post_init__(self) -> None:
         if self.stage not in ("timeout", "provider", "parse", "schema", "semantic", "budget"):
             raise ContractError("schema", "stage")
         _text(self.error_code, "error_code")
         _text(self.reason_summary, "reason_summary")
+        if self.provider_status is not None and (
+            type(self.provider_status) is not int or not 100 <= self.provider_status <= 599
+        ):
+            raise ContractError("schema", "provider_status")
+        if self.provider_cause is not None and self.provider_cause not in (
+            "transport",
+            "timeout",
+            "transient_http",
+            "rate_limit",
+            "quota_exhausted",
+            "permanent_http",
+            "unclassified_http",
+        ):
+            raise ContractError("schema", "provider_cause")
+        if self.manual_retryable is not None and type(self.manual_retryable) is not bool:
+            raise ContractError("schema", "manual_retryable")
 
 
 @dataclass(frozen=True)
@@ -252,13 +291,62 @@ def _unique(values: tuple[object, ...], name: str) -> None:
 
 
 PersonaId = Literal["tech_lead", "hr_manager", "domain_lead"]
-BasisKind = Literal["evidence", "jd_requirement", "job_posting", "answer_turn"]
+BasisKind = Literal[
+    "evidence",
+    "jd_requirement",
+    "job_posting",
+    "answer_turn",
+    "document_claim",
+    "document_claim_comparison",
+    "external_source",
+    "document_visual",
+]
 
 
 @dataclass(frozen=True)
 class BasisRef(_Contract):
     kind: BasisKind
     id: str
+
+
+@dataclass(frozen=True)
+class SupplementalSource(_Contract):
+    """문서 주장·외부 원문은 저장소 코드 근거와 다른 출처로 보존한다."""
+
+    source_id: str
+    kind: Literal[
+        "document_claim", "document_claim_comparison", "document_visual", "external_source"
+    ]
+    content: str = field(repr=False)
+    location: str
+    version: str
+    limitations: tuple[str, ...]
+    title: str | None = None
+    retrieved_at: str | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if fullmatch(r"[0-9a-f]{64}", self.version) is None:
+            raise ContractError("schema", "supplemental version")
+
+
+@dataclass(frozen=True)
+class ExternalSearchStatus(_Contract):
+    """외부 검색의 실제 실행 상태. 미발견과 오류는 서로 다른 결과다."""
+
+    status: Literal["found", "not_found", "insufficient_analysis", "tool_error"]
+    source_ids: tuple[str, ...]
+    searched_scope: tuple[str, ...]
+    limitations: tuple[str, ...]
+    error_code: str | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _unique(cast(tuple[object, ...], self.source_ids), "external source IDs")
+        if self.status == "found" and not self.source_ids:
+            raise ContractError("semantic", "external found sources")
+        if self.status == "not_found" and self.source_ids:
+            raise ContractError("semantic", "external missing sources")
 
 
 @dataclass(frozen=True)
@@ -295,6 +383,8 @@ class QuestionContract(_Contract):
     assumptions: tuple[str, ...]
     basis_refs: tuple[BasisRef, ...]
     evaluation_scope: str
+    # 빈 값은 과거 질문이다. 없던 평가 범위를 사후에 만들어 채우지 않는다.
+    evaluation_keys: "tuple[ScoreKeyId, ...]" = ()
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -302,6 +392,7 @@ class QuestionContract(_Contract):
             raise ContractError("schema", "required_points")
         _unique(tuple(point.key for point in self.required_points), "required_points")
         _unique(self.basis_refs, "basis_refs")
+        _unique(cast(tuple[object, ...], self.evaluation_keys), "evaluation keys")
 
 
 @dataclass(frozen=True)
@@ -312,6 +403,13 @@ class Question(_Contract):
     question_contract: QuestionContract
     evidence_refs: tuple[str, ...]
     jd_requirement_ids: tuple[str, ...]
+    question_type: Literal["main", "follow_up"] = "main"
+    parent_turn_id: str | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if (self.question_type == "main") != (self.parent_turn_id is None):
+            raise ContractError("semantic", "question relation")
 
 
 @dataclass(frozen=True)
@@ -430,6 +528,24 @@ class VerificationRequest(_Contract):
 
 
 @dataclass(frozen=True)
+class ExternalQueryRequest(_Contract):
+    query: str
+    purpose: str
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if len(self.query) > 1000 or len(self.purpose) > 2000:
+            raise ContractError("schema", "external query length")
+
+    def validate_for_execution(self) -> str:
+        # 과거 저장 원문 복원은 유지하고 새 실행·전송 경계에서만 정책을 적용한다.
+        try:
+            return canonical_external_query(self.query)
+        except ExternalQueryError as exc:
+            raise ContractError("semantic", str(exc)) from None
+
+
+@dataclass(frozen=True)
 class AnswerAnalysis(_Contract):
     evaluation_status: Literal["evaluated", "needs_clarification", "not_evaluable"]
     sufficiency: Literal["sufficient", "partial", "insufficient"] | None
@@ -441,6 +557,14 @@ class AnswerAnalysis(_Contract):
     needs_verification: bool
     verification_requests: tuple[VerificationRequest, ...]
     limitations: tuple[str, ...]
+    external_queries: tuple[ExternalQueryRequest, ...] = ()
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _unique(
+            tuple(item.query.strip().casefold() for item in self.external_queries),
+            "external queries",
+        )
 
 
 def _checked_data[T](value: ContractChecked[T], expected: type[T]) -> T:
@@ -540,7 +664,9 @@ def validate_analysis(
             raise ContractError("semantic", "claim evidence required")
         if claim.status == "unverified" and not claim.limitations:
             raise ContractError("semantic", "claim limitations")
-    if candidate.needs_verification != bool(candidate.verification_requests):
+    if candidate.needs_verification != bool(
+        candidate.verification_requests or candidate.external_queries
+    ):
         raise ContractError("semantic", "needs_verification")
     _requests(candidate.verification_requests, allowed_locations)
     for request in candidate.verification_requests:
@@ -653,17 +779,18 @@ class ToolResult(_Contract):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        if self.status in ("found", "not_found") and not self.searched_scope:
+        if (self.status in ("found", "not_found") or self.items) and not self.searched_scope:
             raise ContractError("semantic", "searched_scope")
         if self.status == "found" and (not self.items or self.error_code is not None):
             raise ContractError("semantic", "found result")
-        if self.status in ("not_found", "insufficient_analysis") and (
-            self.items or self.error_code is not None
-        ):
+        if self.status == "not_found" and (self.items or self.error_code is not None):
             raise ContractError("semantic", "empty result")
         if self.status == "tool_error" and (self.error_code is None or not self.limitations):
             raise ContractError("semantic", "tool error")
-        if self.status == "insufficient_analysis" and not self.limitations:
+        # 읽은 구간의 근거는 남기되 미확인 구간을 조회 성공으로 바꾸지 않는다.
+        if self.status == "insufficient_analysis" and (
+            not self.limitations or self.error_code is not None
+        ):
             raise ContractError("semantic", "analysis limitations")
 
 
@@ -685,6 +812,50 @@ class JDRequirement(_Contract):
     category: Literal["required", "preferred", "responsibility"]
     source_field: str
     tech_tags: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class JDSourceNote(_Contract):
+    """공고 이미지의 저장된 전사이며 지원자의 코드·개인 기여 Evidence가 아니다."""
+
+    requirement_id: str
+    block_id: str
+    source_field: Literal["job_posting.source_blocks"]
+    content: str
+    location: str
+    text_hash: str
+    image_hash: str
+    limitations: tuple[str, ...]
+    read_scope: Literal["entire_block", "prefix_excerpt"] = "entire_block"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        from hashlib import sha256
+
+        if any(
+            fullmatch(r"[0-9a-f]{64}", value) is None for value in (self.text_hash, self.image_hash)
+        ):
+            raise ContractError("schema", "JD source hash")
+        if (
+            self.read_scope == "entire_block"
+            and sha256(self.content.encode()).hexdigest() != self.text_hash
+        ):
+            raise ContractError("semantic", "JD source content hash")
+        if (
+            self.read_scope == "prefix_excerpt"
+            and "jd_source_context_excerpt" not in self.limitations
+        ):
+            raise ContractError("semantic", "JD source excerpt limitation")
+
+
+def validate_jd_source_notes(
+    notes: tuple[JDSourceNote, ...], *, requirement_ids: frozenset[str]
+) -> None:
+    if type(notes) is not tuple or any(type(item) is not JDSourceNote for item in notes):
+        raise ContractError("schema", "JD source notes")
+    _unique(tuple((item.requirement_id, item.block_id) for item in notes), "JD source notes")
+    if any(item.requirement_id not in requirement_ids for item in notes):
+        raise ContractError("semantic", "unasked JD source")
 
 
 @dataclass(frozen=True)
@@ -731,6 +902,18 @@ class ContextLimits(_Contract):
 
 
 @dataclass(frozen=True)
+class EvaluationTarget(_Contract):
+    persona: PersonaId
+    keys: "tuple[ScoreKeyId, ...]"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not self.keys:
+            raise ContractError("schema", "evaluation targets")
+        _unique(cast(tuple[object, ...], self.keys), "evaluation targets")
+
+
+@dataclass(frozen=True)
 class Context(_Contract):
     interview_id: str
     current_turn_id: str | None
@@ -745,6 +928,10 @@ class Context(_Contract):
     evidence: tuple[Evidence, ...]
     domain_frames: tuple[DomainFrame, ...]
     limits: ContextLimits
+    evaluation_targets: tuple[EvaluationTarget, ...] = ()
+    supplemental_sources: tuple[SupplementalSource, ...] = ()
+    external_searches: tuple[ExternalSearchStatus, ...] = ()
+    supplemental_limitations: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -753,6 +940,13 @@ class Context(_Contract):
             raise ContractError("semantic", "turn range")
         _unique(tuple(item.persona for item in self.persona_counts), "persona_counts")
         _unique(cast(tuple[object, ...], self.allowed_personas), "allowed_personas")
+        _unique(tuple(item.persona for item in self.evaluation_targets), "evaluation personas")
+        if any(item.persona not in self.allowed_personas for item in self.evaluation_targets):
+            raise ContractError("semantic", "evaluation personas")
+        _unique(
+            tuple((item.kind, item.source_id) for item in self.supplemental_sources),
+            "supplemental sources",
+        )
 
 
 def _sha(value: str, name: str = "head_sha") -> None:
@@ -791,12 +985,25 @@ class ShallowRepoInput(_Contract):
     commit_count: int | None
     user_commit_count: int | None
     collection_errors: tuple[str, ...]
+    structure: tuple[str, ...] = ()
+    supporting_files: "tuple[SourceDocument, ...]" = ()
+    source_limitations: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         super().__post_init__()
         _sha(self.head_sha)
         _unique(tuple(item.name for item in self.languages), "languages")
         _unique(cast(tuple[object, ...], self.collection_errors), "collection_errors")
+        _unique(cast(tuple[object, ...], self.structure), "structure")
+        for path in self.structure:
+            # 구조 수집기의 디렉터리 표시만 허용한다. 실제 파일 근거의 경로 규칙은 유지한다.
+            _repository_path(path[:-1] if path.endswith("/") else path)
+        _unique(
+            tuple((item.path, item.read_scope) for item in self.supporting_files),
+            "supporting source scopes",
+        )
+        if any(item.kind != "file" for item in self.supporting_files):
+            raise ContractError("semantic", "supporting file")
         for name in ("commit_count", "user_commit_count"):
             value = getattr(self, name)
             if value is not None:
@@ -805,8 +1012,16 @@ class ShallowRepoInput(_Contract):
 
 @dataclass(frozen=True)
 class ShallowBasis(_Contract):
-    kind: Literal["readme", "description", "languages", "commit_metadata"]
+    kind: Literal[
+        "readme", "description", "languages", "commit_metadata", "structure", "supporting_file"
+    ]
     claim: str
+    source_path: str | None = None
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.source_path is not None:
+            _repository_path(self.source_path)
 
 
 @dataclass(frozen=True)
@@ -882,7 +1097,7 @@ def validate_shallow_batch(
             reason = "head_sha mismatch"
         elif (
             candidate is not None
-            and (source.collection_errors or source.readme_truncated)
+            and (source.collection_errors or source.readme_truncated or source.source_limitations)
             and not candidate.limitations
         ):
             reason = "collection limitations missing"
@@ -891,12 +1106,20 @@ def validate_shallow_batch(
                 "readme": source.readme_text is not None,
                 "description": source.description is not None,
                 "languages": bool(source.languages),
+                "structure": bool(source.structure),
+                "supporting_file": bool(source.supporting_files),
                 "commit_metadata": (
                     source.commit_count is not None or source.user_commit_count is not None
                 ),
             }
             if any(not available[item.kind] for item in candidate.basis):
                 reason = "analysis basis unavailable"
+            elif any(
+                item.kind == "supporting_file"
+                and item.source_path not in {file.path for file in source.supporting_files}
+                for item in candidate.basis
+            ):
+                reason = "analysis basis source unavailable"
         if reason is None and candidate is not None:
             succeeded.append(candidate)
         else:
@@ -1029,10 +1252,22 @@ class SourceDocument(_Contract):
     kind: Literal["file", "directory"]
     content: str
     read_scope: str
+    start_line: int = 1
+    end_line: int | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
         _repository_path(self.path)
+        _positive_int(self.start_line, "source line range")
+        if self.end_line is not None:
+            _positive_int(self.end_line, "source line range")
+            if (
+                self.kind != "file"
+                or self.end_line != self.start_line + len(self.content.splitlines()) - 1
+            ):
+                raise ContractError("semantic", "source line range")
+        elif self.start_line != 1:
+            raise ContractError("semantic", "source line range")
 
 
 @dataclass(frozen=True)
@@ -1050,7 +1285,7 @@ class DeepRepoInput(_Contract):
             or self.shallow.head_sha != self.head_sha
         ):
             raise ContractError("semantic", "shallow repository ref")
-        _unique(tuple(source.path for source in self.sources), "source paths")
+        _unique(tuple((source.path, source.read_scope) for source in self.sources), "source scopes")
 
 
 @dataclass(frozen=True)
@@ -1134,7 +1369,10 @@ def parse_deep_analysis(
         else None
         for item in raw_areas
     ]
-    source_by_path = {item.path: item for item in source.sources}
+    source_by_scope = {(item.path, item.read_scope): item for item in source.sources}
+    scopes = [
+        (item.get("path"), item.get("scope")) if type(item) is dict else None for item in raw_areas
+    ]
     area_keys = {item.name for item in fields(NotableArea)}
     areas: list[NotableArea] = []
     rejected: list[AreaFailure] = []
@@ -1145,13 +1383,13 @@ def parse_deep_analysis(
                 # 줄 번호·함수 위치는 읽은 범위로 확인할 수 없는 근거라 받지 않는다.
                 raise ContractError("schema", min(extra))
             area = decode(NotableArea, item)
-            if paths.count(area.path) > 1:
+            if scopes.count((area.path, area.scope)) > 1:
                 raise ContractError("semantic", "duplicate path")
-            matched = source_by_path.get(area.path)
+            matched = source_by_scope.get((area.path, area.scope))
             if matched is None:
+                if any(item.path == area.path for item in source.sources):
+                    raise ContractError("semantic", "read scope mismatch")
                 raise ContractError("semantic", "unread source")
-            if matched.read_scope != area.scope:
-                raise ContractError("semantic", "read scope mismatch")
             # 디렉터리 목록만으로는 파일 동작을 확인할 수 없어 한계 없는 관찰을 받지 않는다.
             if matched.kind == "directory" and not area.limitations:
                 raise ContractError("semantic", "directory limitations missing")
@@ -1178,11 +1416,13 @@ def validate_deep_analysis(
         raise ContractError("semantic", "repository ref")
     if not 1 <= len(candidate.notable_areas) <= 5:
         raise ContractError("semantic", "notable area count")
-    _unique(tuple(area.path for area in candidate.notable_areas), "notable area paths")
-    source_by_path = {item.path: item for item in source.sources}
+    _unique(
+        tuple((area.path, area.scope) for area in candidate.notable_areas), "notable area paths"
+    )
+    source_by_scope = {(item.path, item.read_scope): item for item in source.sources}
     for area in candidate.notable_areas:
-        matched = source_by_path.get(area.path)
-        if matched is None or matched.read_scope != area.scope:
+        matched = source_by_scope.get((area.path, area.scope))
+        if matched is None:
             raise ContractError("semantic", "notable area source scope")
     return _checked(candidate)
 
@@ -1246,6 +1486,28 @@ class ScoreTurn(_Contract):
     answer: str | None
     question_contract: QuestionContract
     jd_requirements: tuple[LinkedRequirement, ...] = ()
+    # 기존 여섯 번째 위치 인자의 JD 본문 의미를 유지하고 신규 ID는 뒤에 추가한다.
+    jd_requirement_ids: tuple[str, ...] = ()
+    # 해당 턴이 실제 참조한 근거다. 이전 위치 인자와 과거 입력은 그대로 읽는다.
+    evidence_refs: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _unique(cast(tuple[object, ...], self.evidence_refs), "score evidence references")
+        for reference in self.evidence_refs:
+            _text(reference, "score evidence reference")
+        _references(
+            self.jd_requirement_ids,
+            frozenset(item.id for item in self.jd_requirements),
+            "score JD references",
+        )
+        if "company_job_fit" in self.question_contract.evaluation_keys and not self.jd_requirements:
+            raise ContractError("semantic", "job fit JD references")
+
+
+def score_candidate_keys(turn: ScoreTurn) -> tuple[ScoreKeyId, ...]:
+    """선언된 질문 범위만 평가한다. 구형 저장 계약은 기존 후보 정책으로 읽는다."""
+    return turn.question_contract.evaluation_keys or SCORE_CANDIDATE_KEYS[turn.persona]
 
 
 @dataclass(frozen=True)
@@ -1284,7 +1546,7 @@ def validate_score_judgments(
     if not turns:
         raise ContractError("semantic", "turns")
     _unique(tuple(turn.turn_id for turn in turns), "turn_id")
-    expected = {(t.turn_id, key) for t in turns for key in SCORE_CANDIDATE_KEYS[t.persona]}
+    expected = {(t.turn_id, key) for t in turns for key in score_candidate_keys(t)}
     pairs = tuple((item.turn_id, item.key) for item in candidate.judgments)
     _unique(pairs, "judgment")
     if set(pairs) != expected:
@@ -1325,6 +1587,7 @@ class ReportTurn(_Contract):
     analysis: AnswerAnalysis | None
     evidence_refs: tuple[str, ...]
     question_contract: QuestionContract
+    jd_requirement_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1340,6 +1603,38 @@ class ReportInput(_Contract):
     turns: tuple[ReportTurn, ...]
     evidence: tuple[Evidence, ...]
     tool_results: tuple[ReportToolResult, ...]
+    limitations: tuple[str, ...] = ()
+    supplemental_sources: tuple[SupplementalSource, ...] = ()
+    source_notes: tuple[JDSourceNote, ...] = ()
+
+
+def validate_supplemental_input(
+    sources: tuple[SupplementalSource, ...],
+    *,
+    contracts: tuple[QuestionContract, ...],
+    limitations: tuple[str, ...],
+) -> None:
+    """질문한 자료의 원문만 허용하고 예산 밖 참조는 명시적인 미확인 범위로 둔다."""
+    if type(sources) is not tuple or any(type(item) is not SupplementalSource for item in sources):
+        raise ContractError("schema", "supplemental sources")
+    if type(limitations) is not tuple:
+        raise ContractError("schema", "source limitations")
+    for item in limitations:
+        _text(item, "source limitations")
+    provided = tuple(BasisRef(item.kind, item.source_id) for item in sources)
+    _unique(cast(tuple[object, ...], provided), "supplemental sources")
+    required = {
+        ref
+        for contract in contracts
+        for ref in contract.basis_refs
+        if ref.kind
+        in {"document_claim", "document_claim_comparison", "document_visual", "external_source"}
+    }
+    if not set(provided) <= required:
+        raise ContractError("semantic", "unasked supplemental source")
+    for ref in required - set(provided):
+        if f"supplemental_source_outside_model_budget:{ref.kind}:{ref.id}" not in limitations:
+            raise ContractError("semantic", "missing supplemental source")
 
 
 @dataclass(frozen=True)
@@ -1383,6 +1678,26 @@ def validate_report_input(report_input: ReportInput) -> ReportInput:
     _convert(ReportInput, report_input, "report input", wire=False)
     if not report_input.turns:
         raise ContractError("semantic", "turns")
+    validate_supplemental_input(
+        report_input.supplemental_sources,
+        contracts=tuple(turn.question_contract for turn in report_input.turns),
+        limitations=report_input.limitations,
+    )
+    validate_jd_source_notes(
+        report_input.source_notes,
+        requirement_ids=frozenset(
+            identifier
+            for turn in report_input.turns
+            for identifier in (
+                *turn.jd_requirement_ids,
+                *(
+                    ref.id
+                    for ref in turn.question_contract.basis_refs
+                    if ref.kind == "jd_requirement"
+                ),
+            )
+        ),
+    )
     ids = tuple(turn.turn_id for turn in report_input.turns)
     _unique(ids, "turn_id")
     for index, turn in enumerate(report_input.turns):
@@ -1392,6 +1707,13 @@ def validate_report_input(report_input: ReportInput) -> ReportInput:
         raise ContractError("semantic", "tool result turn")
     registered = tuple(i.evidence_id for i in report_input.evidence if i.evidence_id)
     _unique(registered, "evidence_id")
+    source_by_id = {item.evidence_id: item for item in report_input.evidence if item.evidence_id}
+    for tool in report_input.tool_results:
+        if any(
+            item.evidence_id is None or source_by_id.get(item.evidence_id) != item
+            for item in tool.result.items
+        ):
+            raise ContractError("semantic", "tool result evidence")
     for item in report_input.turns:
         _references(item.evidence_refs, frozenset(registered), "turn evidence_refs")
     return report_input

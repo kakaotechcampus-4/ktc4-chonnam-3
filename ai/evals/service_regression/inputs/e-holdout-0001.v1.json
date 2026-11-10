@@ -1,0 +1,145 @@
+{
+  "case_id": "e-holdout-0001",
+  "version": 1,
+  "control": {
+    "kind": "evidence",
+    "split": "holdout",
+    "source_group_id": "new-package-transport",
+    "synthetic": true
+  },
+  "payload": {
+    "service_task": "answer_analysis",
+    "service_input": {
+      "context": {
+        "interview_id": "e-holdout-0001",
+        "current_turn_id": "holdout-answer",
+        "turn_no": 2,
+        "total_turns": 9,
+        "persona_counts": [],
+        "allowed_personas": [
+          "tech_lead"
+        ],
+        "jd_requirements": [],
+        "repositories": [
+          {
+            "repository_id": "synthetic-repo-new-package-transport",
+            "git_ref": "a54adf175c63868047be746aa35821fe10cf3f71",
+            "primary": true,
+            "analysis_refs": [],
+            "limitations": [
+              "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+              "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+              "이전 후보는 Redis 사용 선언만으로 캐시 설계 경험을 전제하여 거절됐다. 이번에는 새 질문 행동으로만 판정하며 recovery enum을 출력하라고 요구하지 않는다."
+            ]
+          }
+        ],
+        "history": [],
+        "current_question_contract": {
+          "purpose": "선언된 패키지와 실제 운영 버전을 구분해 설명해 주세요.",
+          "required_points": [
+            {
+              "key": "scope",
+              "description": "원문 확인 범위와 미확인 운영 범위"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "h-source"
+            }
+          ],
+          "evaluation_scope": "선언된 패키지와 실제 운영 버전을 구분해 설명해 주세요.",
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ]
+        },
+        "evidence": [
+          {
+            "evidence_id": "h-source",
+            "repository_id": "synthetic-repo-new-package-transport",
+            "git_ref": "a54adf175c63868047be746aa35821fe10cf3f71",
+            "source_kind": "code",
+            "path": "package.json",
+            "metadata_key": null,
+            "content": "{\"dependencies\":{\"express\":\"^4.18.0\"}}",
+            "tool_name": null,
+            "start_line": 1,
+            "end_line": 1
+          }
+        ],
+        "domain_frames": [
+          {
+            "id": "synthetic-domain-frame",
+            "category": "etc",
+            "version": "v2",
+            "text": "가정한 서비스에서 접근 권한·보존 기간·장애 영향을 어떻게 확인할지 묻는다."
+          }
+        ],
+        "limits": {
+          "remaining_calls": 2,
+          "remaining_replans": 0,
+          "policy_version": "explicit-synthetic-v2"
+        },
+        "evaluation_targets": [
+          {
+            "persona": "tech_lead",
+            "keys": [
+              "project_understanding",
+              "communication"
+            ]
+          }
+        ],
+        "supplemental_sources": [],
+        "external_searches": [],
+        "supplemental_limitations": [
+          "합성 평가 원문이며 실제 사용자 경험·운영·개인 기여를 증명하지 않는다.",
+          "제공된 원문 구간 밖의 구현은 확인하지 않았다.",
+          "이전 후보는 Redis 사용 선언만으로 캐시 설계 경험을 전제하여 거절됐다. 이번에는 새 질문 행동으로만 판정하며 recovery enum을 출력하라고 요구하지 않는다."
+        ]
+      },
+      "question": {
+        "persona": "tech_lead",
+        "text": "선언된 패키지와 실제 운영 버전을 구분해 설명해 주세요.",
+        "topic_code": "synthetic-topic",
+        "question_contract": {
+          "purpose": "선언된 패키지와 실제 운영 버전을 구분해 설명해 주세요.",
+          "required_points": [
+            {
+              "key": "scope",
+              "description": "원문 확인 범위와 미확인 운영 범위"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "h-source"
+            }
+          ],
+          "evaluation_scope": "선언된 패키지와 실제 운영 버전을 구분해 설명해 주세요.",
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "h-source"
+        ],
+        "jd_requirement_ids": [],
+        "question_type": "main",
+        "parent_turn_id": null
+      },
+      "turn_id": "holdout-answer",
+      "answer_text": "이 선언만으로 현재 운영 서버가 express 4.18.0을 실행한다고 확정할 수 있습니다.",
+      "allowed_locations": [
+        [
+          "synthetic-repo-new-package-transport",
+          "a54adf175c63868047be746aa35821fe10cf3f71",
+          "package.json"
+        ]
+      ]
+    }
+  }
+}

@@ -1,0 +1,192 @@
+{
+  "format_version": 1,
+  "historical_snapshot": "source_snapshot_20261108",
+  "canonical_basis_commit": "d7ca24ea15c37f2fcf4e086a1580bba4042379b8",
+  "purpose": "Namespace clarification only; neither source changed and historical approval is not current gold",
+  "difference_count": 16,
+  "differences": [
+    {
+      "logical_original_path": "ai/evals/expectations/f-0001.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/expectations/f-0001.v1.json",
+      "historical_raw_sha256": "2a781c4a966b9099e768dbca42088cf6aae445d9dcf4fcffdee5a08e537a7484",
+      "canonical_utf8_lf_sha256": "8055aee0b0d467414d602994c803d216d29cd0fceed673b4d08731869df595e2",
+      "changed_paths": [
+        "/review/reviewed_at",
+        "/review/reviewer",
+        "/review/status"
+      ],
+      "review_status": {
+        "historical": "approved",
+        "canonical": "unreviewed",
+        "historical_status_is_current_approval": false
+      }
+    },
+    {
+      "logical_original_path": "ai/evals/expectations/q-0003.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/expectations/q-0003.v1.json",
+      "historical_raw_sha256": "acee92c0a629571418b69bdf1428f5f642b07b812f145004274b61b8b18499eb",
+      "canonical_utf8_lf_sha256": "dd8307ca00fb0a7da25d06bc6de4674ba6a506b7b04fa7bc99e85afc31de7a63",
+      "changed_paths": [
+        "/allowed/0/purpose",
+        "/forbidden/0/reason",
+        "/grader_controls/1/output",
+        "/review/reviewed_at",
+        "/review/reviewer",
+        "/review/status"
+      ],
+      "review_status": {
+        "historical": "approved",
+        "canonical": "unreviewed",
+        "historical_status_is_current_approval": false
+      }
+    },
+    {
+      "logical_original_path": "ai/evals/expectations/q-0004.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/expectations/q-0004.v1.json",
+      "historical_raw_sha256": "24b51f8418287e5a6191c68549da925601805c6644843fb4fd0a51a27e5e812e",
+      "canonical_utf8_lf_sha256": "21f24feed5f059d6b0ca175e4ac3907d6431f96efe7414f731422b109a791180",
+      "changed_paths": [
+        "/review/reviewed_at",
+        "/review/reviewer",
+        "/review/status"
+      ],
+      "review_status": {
+        "historical": "approved",
+        "canonical": "unreviewed",
+        "historical_status_is_current_approval": false
+      }
+    },
+    {
+      "logical_original_path": "ai/evals/expectations/q-0009.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/expectations/q-0009.v1.json",
+      "historical_raw_sha256": "48da6f785ca118d8167c981df280d129363f3c91be4169c48e582e47f17de70a",
+      "canonical_utf8_lf_sha256": "ffcc2a6de82fbb1c5b978c61cb670f19503ed08c48ff03c684fe5c6f57f946ac",
+      "changed_paths": [
+        "/review/reviewed_at",
+        "/review/reviewer",
+        "/review/status"
+      ],
+      "review_status": {
+        "historical": "approved",
+        "canonical": "unreviewed",
+        "historical_status_is_current_approval": false
+      }
+    },
+    {
+      "logical_original_path": "ai/evals/expectations/q-0010.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/expectations/q-0010.v1.json",
+      "historical_raw_sha256": "1e89b2b3ebd3f07a216f6078f1ec7a6b37d67d58259155b0ed425bb9334a1047",
+      "canonical_utf8_lf_sha256": "d0d4931522cebe4ec0e27296d08bba0cae4abdcbf2d75883dce5b3ca8ea22e49",
+      "changed_paths": [
+        "/review/reviewed_at",
+        "/review/reviewer",
+        "/review/status"
+      ],
+      "review_status": {
+        "historical": "approved",
+        "canonical": "unreviewed",
+        "historical_status_is_current_approval": false
+      }
+    },
+    {
+      "logical_original_path": "ai/evals/inputs/f-0001.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/inputs/f-0001.v1.json",
+      "historical_raw_sha256": "6f0fe1601639637dca43a315bc83a1b31a22880c40ebb11af42c698979d1f163",
+      "canonical_utf8_lf_sha256": "dbb7bffe2bb07c2ce7ed9b37dbeea7ec94293383191e2b3ea3c2891e54938ee7",
+      "changed_paths": [
+        "/payload/persona_left/tech_lead"
+      ]
+    },
+    {
+      "logical_original_path": "ai/evals/inputs/q-0001.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/inputs/q-0001.v1.json",
+      "historical_raw_sha256": "32672d853fee631d24281c01a1007a780331f822c1e80a6b8d41ae7dcb85d554",
+      "canonical_utf8_lf_sha256": "2fb3c5569758645b0a64626abc5db4d8a6f3f59ac16eb4a32a249d671835c930",
+      "changed_paths": [
+        "/payload/persona_left/tech_lead"
+      ]
+    },
+    {
+      "logical_original_path": "ai/evals/inputs/q-0002.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/inputs/q-0002.v1.json",
+      "historical_raw_sha256": "9590aae964bb122d588e85f012519e1521e12c5eb67a799075b00efeed31a5be",
+      "canonical_utf8_lf_sha256": "3e604bf6f028475bc9dd036759acb6e6a7e26f34c19a95951cb47dcfe3292356",
+      "changed_paths": [
+        "/payload/persona_left/tech_lead"
+      ]
+    },
+    {
+      "logical_original_path": "ai/evals/inputs/q-0003.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/inputs/q-0003.v1.json",
+      "historical_raw_sha256": "e0ff911e3f239cd88fec97b38247898d69ead454654af53f8e876eca7e09b916",
+      "canonical_utf8_lf_sha256": "3aad7c9c2d695980ffdc4bf166014c839e0f2adbc145741187545d46c7030827",
+      "changed_paths": [
+        "/payload/history/2/answer",
+        "/payload/latest_analysis/covered_points/1"
+      ]
+    },
+    {
+      "logical_original_path": "ai/evals/inputs/q-0004.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/inputs/q-0004.v1.json",
+      "historical_raw_sha256": "317a594614297ef4d970251d1b5028f2e15c7265caed545e767fde2db367ed62",
+      "canonical_utf8_lf_sha256": "531cef73b2fd2bc7296992a7578b2bf5a52ceb2d4e55822ef487700a90d5eb11",
+      "changed_paths": [
+        "/payload/persona_left/tech_lead"
+      ]
+    },
+    {
+      "logical_original_path": "ai/evals/inputs/q-0005.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/inputs/q-0005.v1.json",
+      "historical_raw_sha256": "1046293a822c4005c921772567a8c29174ee7caa8d6d223d27c7057345129634",
+      "canonical_utf8_lf_sha256": "5c4c1f9da9d99e971de2c58b01c31c1be1f8de07a13b45711d17e298892b2ce4",
+      "changed_paths": [
+        "/payload/persona_left/tech_lead"
+      ]
+    },
+    {
+      "logical_original_path": "ai/evals/inputs/q-0006.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/inputs/q-0006.v1.json",
+      "historical_raw_sha256": "fd7bda7f1e61455c5908348ee2b91776b939843c980dee24430027cf2b984795",
+      "canonical_utf8_lf_sha256": "93c852329a1cd62a14b4ca42b233da4e0ee4d4805c7275b7c6d43c1bfbf2ebaa",
+      "changed_paths": [
+        "/payload/persona_left/tech_lead"
+      ]
+    },
+    {
+      "logical_original_path": "ai/evals/inputs/q-0007.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/inputs/q-0007.v1.json",
+      "historical_raw_sha256": "15f056123d7d3b5d6b2f618469b21101859862a71996f27b6a3d56c3a1e8f6bb",
+      "canonical_utf8_lf_sha256": "a65df9fb020f8cd4f43001399d12401d3b7389bc8295e5ce55863b8989f69661",
+      "changed_paths": [
+        "/payload/persona_left/tech_lead"
+      ]
+    },
+    {
+      "logical_original_path": "ai/evals/inputs/q-0008.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/inputs/q-0008.v1.json",
+      "historical_raw_sha256": "d5757351eec8c016df45186f84efbdb1a5166213767703714f99f1cdc7a3150d",
+      "canonical_utf8_lf_sha256": "30ba3b8d025c16c1b03e88b5f20e86b0461464ee82191ee3d1399ed264b283b5",
+      "changed_paths": [
+        "/payload/persona_left/tech_lead"
+      ]
+    },
+    {
+      "logical_original_path": "ai/evals/inputs/q-0009.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/inputs/q-0009.v1.json",
+      "historical_raw_sha256": "808625f158b2e8e011e6161ec39ed56f09fd9a01c866281814c5f4b2d2485818",
+      "canonical_utf8_lf_sha256": "86c8df2db46ff70633b854cea46b3a4798d7395a0c05d1aaeb072b0a4b87b537",
+      "changed_paths": [
+        "/payload/persona_left/tech_lead"
+      ]
+    },
+    {
+      "logical_original_path": "ai/evals/inputs/q-0010.v1.json",
+      "historical_source": "ai/evals/source_snapshot_20261108/inputs/q-0010.v1.json",
+      "historical_raw_sha256": "9d037ec6a4d4637e7abb3d2ad00f74d44b2ce88b97f2ffb72b628c4f8810032c",
+      "canonical_utf8_lf_sha256": "615e40756344bf97247c6a7eb808ca330e2e24cd4c5675b6fff41d520f20dafa",
+      "changed_paths": [
+        "/payload/persona_left/tech_lead"
+      ]
+    }
+  ]
+}

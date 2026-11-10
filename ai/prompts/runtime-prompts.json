@@ -1,0 +1,13 @@
+{
+  "repo_shallow": {"version": "repo_shallow_v3", "template": "repo-shallow-runtime-v3.md"},
+  "repo_deep": {"version": "repo_deep_v2", "template": "repo-deep-runtime-v2.md"},
+  "domain_category": {"version": "domain_category_v2", "template": "domain-category-v2.md"},
+  "doc_claims": {"version": "doc_claims_v2", "template": "doc-claims-v2.md"},
+  "director": {"version": "director_v8", "template": "director-runtime-v8.md"},
+  "claim_code": {"version": "claim_code_v1", "template": "document-claim-compare-v1.md"},
+  "jd_extract_image": {"version": "jd_extract_image_v1", "template": "jd-extract-image-v1.md"},
+  "answer_analysis": {"version": "answer_analysis_v6", "template": "answer-analysis-runtime-v6.md"},
+  "report_score": {"version": "report_score_v3", "template": "report-score-v3.md"},
+  "report": {"version": "report_v3", "template": "report-runtime-v3.md"},
+  "profile_summary": {"version": "profile_summary_v2", "template": "profile-summary-v2.md"}
+}

@@ -2,6 +2,8 @@
 캐시 재사용 조건(task-05)을 실제 PostgreSQL로 확인한다."""
 
 import asyncio
+import hashlib
+import json
 from dataclasses import asdict, replace
 from uuid import UUID, uuid4
 
@@ -325,9 +327,32 @@ async def test_cached_l2_keeps_reread_areas_when_another_area_cannot_be_read(
         }[fault]
         assert any(expected in note for note in notes)
         row = await db.scalar(select(RepoAnalysis).where(RepoAnalysis.analysis_level == "l2"))
-        # 면접의 사용 범위만 좁히고 같은 SHA의 전역 캐시는 원래 관찰을 보존한다.
-        assert row.status == "succeeded" and row.result == cached
+        # 재조회 실패는 면접 사용 범위만 좁힌다. 전역 캐시의 원래 분석과 구조 관찰은 보존한다.
+        inventory = dict(
+            head_sha=ready["sha"],
+            paths=[PATH, "missing.py"],
+            model_candidate_paths=[],
+            limitations=[],
+        )
+        assert row.status == "succeeded" and row.result == {
+            **cached,
+            "_source_inventory": inventory,
+        }
+        assert row.head_sha == ready["sha"] and row.prompt_version == "repo_deep_v1"
         assert row.notable_areas == [area(), missing]
+        # 세션에는 전체 목록을 복제하지 않고 같은 SHA·관찰의 작은 참조만 연결한다.
+        assert interview.context_state["repository_source_inventories"][str(ready["repo_id"])] == {
+            "head_sha": ready["sha"],
+            "prompt_version": "repo_deep_v1",
+            "sha256": hashlib.sha256(
+                json.dumps(
+                    inventory, sort_keys=True, ensure_ascii=False, separators=(",", ":")
+                ).encode("utf-8")
+            ).hexdigest(),
+            "path_count": 2,
+            "model_candidate_count": 0,
+            "limitation_count": 0,
+        }
 
 
 @pytest.mark.parametrize("fault", ["missing", "http_error", "deadline"])

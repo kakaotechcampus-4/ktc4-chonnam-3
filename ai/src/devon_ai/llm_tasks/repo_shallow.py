@@ -4,6 +4,10 @@ from collections.abc import Callable
 from dataclasses import asdict
 
 from devon_ai import contracts as c
+from devon_ai.source_readers import describe_source
+
+SUPPORTED_PROMPT_VERSIONS = frozenset({"repo_shallow_v2", "repo_shallow_v3", "repo_shallow_v1"})
+
 
 type CacheIdentity = tuple[str, str, str, str]
 type ShallowChecked = c.ContractChecked[c.ShallowBatchResult]
@@ -31,9 +35,17 @@ def _output_schema() -> dict[str, object]:
         {
             "kind": {
                 "type": "string",
-                "enum": ["readme", "description", "languages", "commit_metadata"],
+                "enum": [
+                    "readme",
+                    "description",
+                    "languages",
+                    "commit_metadata",
+                    "structure",
+                    "supporting_file",
+                ],
             },
             "claim": text,
+            "source_path": {"type": ["string", "null"]},
         }
     )
     item = _object(
@@ -60,7 +72,19 @@ def _request(
 ) -> c.ModelRequest:
     return c.ModelRequest(
         prompt=prompt,
-        payload={"repositories": [asdict(item) for item in inputs]},
+        payload={
+            "repositories": [
+                {
+                    **asdict(item),
+                    "source_readers": [describe_source(source) for source in item.supporting_files],
+                    "metadata_scope": (
+                        "languages/commit counts are collection-time metadata, "
+                        "not SHA-pinned source or proof of authorship"
+                    ),
+                }
+                for item in inputs
+            ]
+        },
         schema_name="RepoShallowBatch",
         schema_version="1",
         output_schema=_output_schema(),

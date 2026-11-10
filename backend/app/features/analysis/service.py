@@ -52,24 +52,28 @@ async def create_run(
     account = await db.scalar(select(GithubAccount).where(GithubAccount.user_id == user_id))
     if account is None or account.token_status != "valid":
         raise AppError(Reason.GITHUB_TOKEN_INVALID)
-    if request.document_id is not None:
+    for document_id, doc_type in (
+        (request.document_id, "portfolio"),
+        (request.cover_letter_document_id, "cover_letter"),
+    ):
+        if document_id is None:
+            continue
         document = await db.scalar(
             select(UserDocument).where(
-                UserDocument.id == request.document_id,
+                UserDocument.id == document_id,
                 UserDocument.user_id == user_id,
-                UserDocument.doc_type == "portfolio",
+                UserDocument.doc_type == doc_type,
             )
         )
         if document is None:
             raise AppError(Reason.INVALID_REQUEST)
         if document.extract_status == "failed":
             raise AppError(Reason.DOCUMENT_EXTRACT_FAILED)
-    fingerprint = hashlib.sha256(
-        json.dumps(
-            [str(user_id), url, str(request.document_id) if request.document_id else None],
-            separators=(",", ":"),
-        ).encode()
-    ).hexdigest()
+    inputs = [str(user_id), url, str(request.document_id) if request.document_id else None]
+    # 자소서가 없는 기존 요청의 중복 판정 키는 유지한다.
+    if request.cover_letter_document_id is not None:
+        inputs.append(str(request.cover_letter_document_id))
+    fingerprint = hashlib.sha256(json.dumps(inputs, separators=(",", ":")).encode()).hexdigest()
     while True:
         identity = await db.scalar(
             insert(AnalysisJob)
@@ -80,9 +84,12 @@ async def create_run(
                 status="queued",
                 posting_url=url,
                 document_id=request.document_id,
+                cover_letter_document_id=request.cover_letter_document_id,
                 fingerprint=fingerprint,
                 queued_at=datetime.now(UTC),
-                steps=initial_steps(request.document_id is not None),
+                steps=initial_steps(
+                    request.document_id is not None or request.cover_letter_document_id is not None
+                ),
             )
             .on_conflict_do_nothing(
                 index_elements=["user_id", "fingerprint"],

@@ -52,6 +52,11 @@ class PostingContent:
     """어댑터가 이미 정규화해 준 기술 태그. `jd_requirements.tech_tags` 원천이라
     LLM 의 기술명 추측 불필요 (원티드 한정)"""
 
+    intro: str | None = None
+    source_blocks: list[dict[str, object]] = field(default_factory=list)
+    source_limitations: list[str] = field(default_factory=list)
+    source_metadata: dict[str, object] = field(default_factory=dict)
+
     @property
     def is_structured(self) -> bool:
         """requirements/preferred_points/main_tasks 가 이미 항목별로 분리돼 왔는지
