@@ -312,3 +312,112 @@ class RunnerTests(unittest.TestCase):
             and node.func.attr == "stream"
         ]
         self.assertEqual([node.args[0].value for node in requests], ["GET"])
+
+
+class TransportTests(unittest.TestCase):
+    def test_elapsed_deadline_cancels_without_reading_or_resending(self):
+        transport = importlib.import_module("ssm_transport")
+        calls = []
+        clock = iter([0, 200])
+
+        def aws(arguments):
+            calls.append(arguments)
+            if "send-command" in arguments:
+                return {"Command": {"CommandId": "00000000-0000-4000-8000-000000000000"}}
+            return {"Status": "Cancelled"}
+
+        result = transport.run(
+            "i-00000000000000000",
+            "trusted",
+            lambda *_: {},
+            lambda _: True,
+            aws=aws,
+            sleep=lambda _: None,
+            now=lambda: next(clock),
+        )
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["transportCode"], "remote_timeout")
+        self.assertTrue(result["cancellationConfirmed"])
+        self.assertEqual(sum("send-command" in call for call in calls), 1)
+
+    def test_success_and_initial_invocation_delay_never_resend(self):
+        transport = importlib.import_module("ssm_transport")
+        calls = []
+
+        def aws(arguments):
+            calls.append(arguments)
+            if "send-command" in arguments:
+                return {"Command": {"CommandId": "00000000-0000-4000-8000-000000000000"}}
+            if len(calls) == 2:
+                raise transport.InvocationPending
+            return {
+                "Status": "Success",
+                "ResponseCode": 0,
+                "StandardOutputContent": output(),
+            }
+
+        module = runner()
+        result = transport.run(
+            "i-00000000000000000",
+            "trusted",
+            module.sanitize,
+            lambda value: module.verified(value, DIGEST),
+            aws=aws,
+            sleep=lambda _: None,
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual(sum("send-command" in call for call in calls), 1)
+
+    def test_error_cancels_remote_command_and_does_not_expose_exception(self):
+        transport = importlib.import_module("ssm_transport")
+        calls = []
+
+        def aws(arguments):
+            calls.append(arguments)
+            if "send-command" in arguments:
+                return {"Command": {"CommandId": "00000000-0000-4000-8000-000000000000"}}
+            if "cancel-command" in arguments:
+                return {}
+            raise RuntimeError("private-secret")
+
+        result = transport.run(
+            "i-00000000000000000",
+            "trusted",
+            lambda *_: {},
+            lambda _: True,
+            aws=aws,
+            sleep=lambda _: None,
+        )
+        self.assertFalse(result["ok"])
+        self.assertTrue(any("cancel-command" in call for call in calls))
+        self.assertNotIn("private-secret", json.dumps(result))
+
+    def test_terminal_failure_never_becomes_success(self):
+        transport = importlib.import_module("ssm_transport")
+        for status in (
+            "Failed",
+            "Cancelled",
+            "TimedOut",
+            "Undeliverable",
+            "Cancelling",
+        ):
+            with self.subTest(status=status):
+
+                def aws(arguments, status=status):
+                    if "send-command" in arguments:
+                        return {"Command": {"CommandId": "00000000-0000-4000-8000-000000000000"}}
+                    return {"Status": status, "ResponseCode": 0}
+
+                result = transport.run(
+                    "i-00000000000000000",
+                    "trusted",
+                    lambda *_: {},
+                    lambda _: True,
+                    aws=aws,
+                    sleep=lambda _: None,
+                )
+                self.assertFalse(result["ok"])
+
+
+if __name__ == "__main__":
+    unittest.main()
