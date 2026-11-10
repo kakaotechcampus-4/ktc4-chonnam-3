@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - develop
+    # 진단 도구·워크플로만 등록할 때 기존 서비스 이미지를 교체하지 않는다.
+    paths-ignore: ['.github/**']
   workflow_dispatch:
 
 permissions:

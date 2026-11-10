@@ -1,0 +1,56 @@
+name: Diagnose TTS on EC2
+
+on:
+  pull_request:
+    paths: ['.github/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: devon-tts-diagnostic
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate diagnostic source
+        run: python -m compileall -q .github/scripts
+      - name: Validate transport and read-only boundaries
+        run: python -m unittest discover -s .github/tests -v
+
+  diagnose:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: arn:aws:iam::263051787000:role/DevonGitHubDeployRole
+          aws-region: ap-northeast-2
+          allowed-account-ids: "263051787000"
+          mask-aws-account-id: true
+      - name: Inspect current API TTS without redeployment or synthesis
+        env:
+          INSTANCE_ID: i-0c374fc2186ceacec
+        run: python .github/scripts/diagnose_tts.py --instance-id "$INSTANCE_ID" --revision "$GITHUB_SHA"
