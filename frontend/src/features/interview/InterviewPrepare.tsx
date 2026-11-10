@@ -373,13 +373,20 @@ export default function InterviewPrepare() {
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-error-soft text-sm font-bold text-error">
             !
           </span>
+        ) : ready ? (
+          // 준비 완료(prepareCompleted) 뒤에는 로더를 멈추고 완료로 보여 준다.
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-bold text-surface">
+            ✓
+          </span>
         ) : (
           <span className="h-7 w-7 shrink-0 animate-spin rounded-full border-[3px] border-accent-soft border-t-accent" />
         )}
         <h1 className="flex-1 text-base font-bold">
           {displayError
             ? (FAILURE_TITLE[displayError.reason] ?? '면접 준비에 실패했어요')
-            : '첫 질문을 준비하고 있어요'}
+            : ready
+              ? '첫 질문이 준비됐어요'
+              : '첫 질문을 준비하고 있어요'}
         </h1>
       </div>
 
@@ -436,7 +443,9 @@ export default function InterviewPrepare() {
 
       {!displayError && wsStatus !== 'reconnecting' && (
         <p className="text-[11px] text-muted">
-          보통 1~2분 정도 걸려요 · 기다리는 동안 마이크와 스피커를 확인해주세요
+          {ready
+            ? '마이크와 스피커를 확인하고 면접을 시작하세요.'
+            : '보통 1~2분 정도 걸려요 · 기다리는 동안 마이크와 스피커를 확인해주세요'}
         </p>
       )}
 
