@@ -89,14 +89,9 @@ export default function Home() {
 
             {home.analysisStatus === 'completed' && home.analysis && (
               <>
-                <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-semibold">
-                    GitHub 분석 · 레포 {home.analysis.basedOnRepoCount}개 기반
-                  </h2>
-                  <a href="#" className="text-xs text-muted hover:underline">
-                    연동 관리
-                  </a>
-                </div>
+                <h2 className="text-sm font-semibold">
+                  GitHub 분석 · 레포 {home.analysis.basedOnRepoCount}개 기반
+                </h2>
 
                 <div className="flex gap-8">
                   <div className="flex flex-1 flex-col gap-3.5">
