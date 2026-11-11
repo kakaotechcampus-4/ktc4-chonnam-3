@@ -8,6 +8,16 @@
       "source_id": "I:claim-study/live/A/explicit-fact-and-future-proposal/input.json",
       "sha256": "94172c1dee55a1707d5e5e6f4d5ab782905789f23e196f4ce13b26d2fdba2416",
       "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/A/explicit-fact-and-future-proposal/raw-response.json",
+      "sha256": "1113873f753207043f95a7b98630ef7d095e8c21d0e2a1245bc5b76424c5beeb",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/A/explicit-fact-and-future-proposal/result.json",
+      "sha256": "6abc89adbad448504ddd1bf654d0a4b28e668c505dd94a077f264d900126a349",
+      "original_publicly_included": false
     }
   ]
 }
