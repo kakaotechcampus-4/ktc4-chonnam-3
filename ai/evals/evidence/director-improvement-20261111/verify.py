@@ -295,6 +295,163 @@ def check_service_flow() -> None:
     )
 
 
+def _check_publication_test_reports(value: dict[str, Any]) -> None:
+    for group in (
+        "latest_ai",
+        "prior_actual_rollout_timer_catalog12",
+        "latest_561_catalog11_smoke",
+        "latest_registration_compatibility",
+        "published_core_smoke",
+        "final_backend_full",
+        "ledger_gateway_timing_related",
+    ):
+        report = next(row for row in value["tests"] if row["group"] == group)
+        require(
+            report["status"] == "passed" and report["tests"] > 0, "test report " + group
+        )
+        require(
+            report["passed"] + report["failures"] + report["errors"] + report["skipped"]
+            == report["tests"],
+            "test denominator",
+        )
+    require(
+        value["quality_limits"]["new_holdout_groups_run"] == 0, "holdout still separate"
+    )
+    require(
+        value["quality_limits"]["whole_user_browser_voice_report_e2e"] is False,
+        "partial service scope",
+    )
+    require(
+        all(number == 0 for number in value["export_side_effects"].values()),
+        "export adds no calls",
+    )
+
+
+def _check_publication_backend_execution(value: dict[str, Any]) -> None:
+    binding = value["backend_execution_binding"]
+    require(
+        binding["status"] == "verified_completed",
+        "completed backend execution and source binding",
+    )
+    source = binding["source_copy_verification"]
+    require(
+        source["file_count"]
+        == source["raw_sha256_matches"]
+        == source["git_blobs_verified_exact"]
+        == 1417,
+        "all frozen source copy files checked",
+    )
+    require(
+        source["recorded_git_tree_matches"] is True,
+        "source Git tree locally reconstructed",
+    )
+    require(
+        source["reconstructed_git_tree"] == binding["source_normalized_git_tree"],
+        "source tree equality",
+    )
+    require(
+        source["source_files_modified"] == source["refs_or_commits_created"] == 0,
+        "snapshot leaves original source and refs untouched",
+    )
+    require(
+        source["actual_source_index_modified"] is False,
+        "original source index preserved",
+    )
+    require(
+        source["whole_manifest_publicly_included"] is False,
+        "private full-manifest limit retained",
+    )
+    execution = binding["execution"]
+    require(
+        execution["phase"] == "full" and execution["exit_code"] == 0,
+        "full backend process success",
+    )
+    require(
+        execution["finished_at"] is not None and execution["started_at"] is not None,
+        "full run completed timestamps",
+    )
+    require(
+        execution["source_snapshot_mount_read_only"] is True
+        and execution["executed_source_copy_git_exact"] is True,
+        "read-only exact source copy",
+    )
+    require(
+        execution["postgres_data_tmpfs"] is True
+        and execution["disk_durability_or_crash_test"] is False,
+        "logical tmpfs validation scope",
+    )
+    require(
+        execution["provider_api_calls"] == execution["package_installs"] == 0,
+        "backend validation adds no provider calls or installs",
+    )
+    workspace = binding["workspace_postcheck"]
+    require(
+        workspace["git_exact_files_before_run"] == 1417
+        and workspace["changed_source_files_after_run"] == [],
+        "executed source unchanged after full run",
+    )
+    report = next(row for row in value["tests"] if row["group"] == "final_backend_full")
+    require(
+        binding["xml_sha256"] == report["sha256"]
+        and binding["xml_count_binding_verified"] is True,
+        "execution metadata bound to final XML",
+    )
+    require(
+        report["passed"] == 3302
+        and report["failures"] == report["errors"] == report["skipped"] == 0,
+        "final 3302 full backend tests",
+    )
+    versions = binding["versions"]["runtime_query_receipt"]
+    require(
+        versions["image_id"] == execution["image"]
+        and versions["package_installs"] == versions["provider_model_calls"] == 0,
+        "read-only same-image version receipt",
+    )
+    require(
+        versions["versions"]["python"] == "3.12.15"
+        and versions["versions"]["pytest"] == "9.1.1",
+        "observed Python and pytest versions",
+    )
+    for selected in binding["selected_executed_source_files"]:
+        require(
+            selected["line_ending_relationship_verified"] is True,
+            "selected raw and Git source relationship checked",
+        )
+        require(
+            selected["raw_bytes_equal"] is not selected["only_crlf_to_lf_difference"],
+            "explicit measured byte equality or CRLF-only distinction",
+        )
+        require(
+            (selected["sha256"] == selected["current_working_tree_raw_sha256"])
+            == selected["raw_bytes_equal"],
+            "separate exact source byte hashes",
+        )
+    repo = HERE.parents[3]
+    if (repo / "ai/src/devon_ai").is_dir():
+        for selected in binding["selected_executed_source_files"]:
+            product = repo / selected["path"]
+            allowed_raw_sha = {
+                selected["sha256"],
+                selected["current_working_tree_raw_sha256"],
+            }
+            require(
+                product.is_file()
+                and hashlib.sha256(product.read_bytes()).hexdigest() in allowed_raw_sha,
+                "executed selected source including registration fix",
+            )
+    line_endings = binding["selected_source_line_endings"]
+    require(
+        line_endings["direct_byte_equal_count"]
+        + line_endings["crlf_working_tree_vs_lf_git_count"]
+        == len(binding["selected_executed_source_files"]),
+        "source line-ending denominator",
+    )
+    require(
+        binding["additional_model_or_http_or_business_db_calls"] == 0,
+        "source binding adds no API calls",
+    )
+
+
 def check_publication_validation() -> None:
     path = HERE / "publication-validation.json"
     if not path.exists():
