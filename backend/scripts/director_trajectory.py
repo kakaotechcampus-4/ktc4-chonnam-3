@@ -1,3 +1,69 @@
+async def _execute(
+    state: dict[str, Any],
+    executor: Executor,
+    task: str,
+    payload: dict[str, Any],
+    *,
+    checkpoint: Checkpoint | None = None,
+) -> Execution | None:
+    started = time.perf_counter()
+    event: dict[str, Any] = {"task": task, "input_sha256": content_hash(payload)}
+    try:
+        result = await executor("question" if task == "director" else "evidence", _wire(payload))
+        result = replace(result, output=_wire(result.output))
+    except ExecutionError as error:
+        event.update(
+            status="failed",
+            error_stage=error.stage,
+            error_code=error.code,
+            attempts=list(error.attempts),
+            source_snapshot=error.source_snapshot,
+        )
+        if error.diagnostics is not None:
+            event.update(
+                diagnostics=copy.deepcopy(error.diagnostics),
+                diagnostics_hash=content_hash(error.diagnostics),
+            )
+        state["status"] = "failed"
+        return None
+    except BaseException as error:
+        event.update(
+            status="interrupted",
+            error_code=type(error).__name__,
+            attempts=list(getattr(error, "attempts", ())),
+            source_snapshot=copy.deepcopy(getattr(error, "source_snapshot", None)),
+        )
+        diagnostics = getattr(error, "diagnostics", None)
+        if diagnostics is not None:
+            event.update(
+                diagnostics=copy.deepcopy(diagnostics), diagnostics_hash=content_hash(diagnostics)
+            )
+        state["status"] = "interrupted"
+        raise
+    else:
+        event.update(
+            status="validated_only" if result.validated_only else "succeeded",
+            output=copy.deepcopy(result.output),
+            attempts=list(result.attempts),
+            source_snapshot=copy.deepcopy(result.source_snapshot),
+        )
+        if result.diagnostics is not None:
+            event.update(
+                diagnostics=copy.deepcopy(result.diagnostics),
+                diagnostics_hash=content_hash(result.diagnostics),
+            )
+        state["scope"]["service_ai_core_executed"] = not result.validated_only
+        if result.validated_only:
+            state["status"] = "validated_only"
+            return None
+        return result
+    finally:
+        event["service_latency_ms"] = round((time.perf_counter() - started) * 1000)
+        state["executions"].append(event)
+        if event.get("status") == "interrupted":
+            await _checkpoint(state, checkpoint)
+
+
 async def advance(
     state: dict[str, Any],
     executor: Executor,

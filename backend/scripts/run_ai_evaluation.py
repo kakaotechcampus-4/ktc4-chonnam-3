@@ -17,6 +17,7 @@ from dataclasses import asdict, fields, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "ai" / "evals"))
@@ -33,6 +34,12 @@ from eval_runner import (  # noqa: E402
 )
 
 from app.core.config import Settings, get_settings  # noqa: E402
+from app.integrations.execution_ledger import (  # noqa: E402
+    ExecutionLedger,
+    execution_scope,
+    observe_call,
+    summarize,
+)
 from app.integrations.llm.client import CallBudget, call_model  # noqa: E402
 from scripts.ai_eval_bridge import ServiceExecutor, prepare  # noqa: E402
 from scripts.ai_model_judge import ModelJudge  # noqa: E402
@@ -253,6 +260,32 @@ def _bindings(cases: list[Any]) -> dict[str, dict[str, object]]:
 
 
 async def execute(args: argparse.Namespace) -> dict[str, Any]:
+    ledger_path = getattr(args, "execution_ledger", None)
+    if ledger_path is None or not (args.execute or getattr(args, "llm_judge", False)):
+        return await _execute(args)
+    ledger = await asyncio.to_thread(ExecutionLedger, Path(ledger_path))
+    run_id = str(uuid4())
+    with execution_scope(
+        ledger,
+        run_id=run_id,
+        entrypoint="evaluation_cli",
+        provider=getattr(args, "execution_provider", "openai_compatible"),
+    ):
+        async with observe_call("evaluation_run", kind="stage"):
+            result = await _execute(args)
+    records = [
+        record for record in await asyncio.to_thread(ledger.records) if record.run_id == run_id
+    ]
+    result["execution_metrics"] = summarize(records)
+    result["execution_ledger"] = {
+        "run_id": run_id,
+        "entrypoint": "evaluation_cli",
+        "schema_version": "execution-ledger.v1",
+    }
+    return result
+
+
+async def _execute(args: argparse.Namespace) -> dict[str, Any]:
     llm_judge = getattr(args, "llm_judge", False)
     calibration_only = getattr(args, "calibrate_judge_only", False)
     judge_maximum = getattr(args, "max_judge_attempts", None)
@@ -453,6 +486,8 @@ def main() -> int:
         "--manifest", type=Path, help="서비스 실행·검증에 필요한 프롬프트·CallLimits JSON"
     )
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--execution-ledger", type=Path, help="선택적 로컬 호출 장부")
+    parser.add_argument("--execution-provider", default="openai_compatible")
     parser.add_argument("--split", choices=("dev", "holdout", "all"), default="dev")
     parser.add_argument("--approved-only", action="store_true")
     mode = parser.add_mutually_exclusive_group()
