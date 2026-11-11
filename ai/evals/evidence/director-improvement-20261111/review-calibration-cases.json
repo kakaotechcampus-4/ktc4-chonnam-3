@@ -567,6 +567,185 @@
           "elapsed_ms": 10797
         }
       ]
+    },
+    {
+      "case_id": "review-A-fresh-kubernetes-268685-dont_know",
+      "split": "dev",
+      "synthetic_dialogue_context": true,
+      "question": {
+        "persona": "domain_lead",
+        "text": "공개 Kubernetes 코드를 학습 목적으로 읽었고 직접 기여하지 않았다고 하셨습니다. 제공된 코드 구간은 실패 횟수에 따라 재시도 대기 시간을 늘려 상한으로 제한하고, 마지막 실패 이후 경과 시간을 반영합니다. 공고는 Kubernetes·Docker 기반 표준 플랫폼의 설계·운영과 안정성·가용성·성능 개선을 명시합니다. 이 재시도 대기 방식이 해당 플랫폼 업무에 어떤 측면에서 적용될 수 있고, 실제 운영에 적용하려면 어떤 차이나 보완이 필요하다고 보시나요?",
+        "topic_code": "kubernetes_retry_backoff_job_fit",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "이 재시도 대기 방식이 해당 플랫폼 업무에 어떤 측면에서 적용될 수 있고, 실제 운영에 적용하려면 어떤 차이나 보완이 필요하다고 보시나요?",
+          "required_points": [
+            {
+              "key": "platform_application",
+              "description": "이 재시도 대기 방식이 해당 플랫폼 업무에 어떤 측면에서 적용될 수 있고, 실제 운영에 적용하려면 어떤 차이나 보완이 필요하다고 보시나요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "fresh-kubernetes-e1"
+            },
+            {
+              "kind": "jd_requirement",
+              "id": "fresh-jd-268685-main_tasks-3"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "fresh-kubernetes-e1"
+        ],
+        "jd_requirement_ids": [
+          "fresh-jd-268685-main_tasks-3"
+        ]
+      },
+      "code_sources": [
+        {
+          "evidence_id": "fresh-kubernetes-e1",
+          "git_ref": "c41dac6b0f518f2068c98b323964949fd015e760",
+          "source_kind": "code",
+          "path": "pkg/controller/job/backoff_utils.go",
+          "start_line": 236,
+          "end_line": 276,
+          "repository": "kubernetes/kubernetes",
+          "content_sha256": "eef8bcdec3141397b4165ff160cb03b99e0227317005fda53bac39448881db3b",
+          "content_included_here": false,
+          "public_blob_url": "https://github.com/kubernetes/kubernetes/blob/c41dac6b0f518f2068c98b323964949fd015e760/pkg/controller/job/backoff_utils.go"
+        }
+      ],
+      "oracle": {
+        "expected_source_verdict": "reject",
+        "criterion_results": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "reason": "재시도 계산을 모른다는 정상 답변 뒤에 같은 계산·최대 대기 테스트를 다시 요구하지 않고 JD 플랫폼 업무 적용으로 전환한다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "violated",
+            "reason": "‘어떤 측면에서 적용될 수 있고’와 ‘어떤 차이나 보완이 필요’는 적용 가능성과 별도 차이/조정의 두 답을 각각 요구한다. 실제 적용 판단 하나의 이유만 요구한 경우보다 범위가 넓다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "reason": "적용·차이/보완을 모두 묻는 request 전체가 계약에 그대로 들어가고, preamble은 코드·공고 사실만 제시한다. 요구 개수가 많다는 문제와 literal 계약 일치 여부를 분리했다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "reason": "허용 domain_lead main과 평가 키를 지키며 제공 backoff 방식과 실제 JD 플랫폼 안정성 업무의 관계를 직접 묻는다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "reason": "실패 수별 증가·상한·경과시간 반영은 제공 backoff_utils.go의 내용과 맞고 개인 운영·배포 성과를 전제하지 않는다. 적용은 가능성과 필요 보완의 가정으로 둔다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "reason": "학습 목적과 직접 기여 없음은 t1 발언이다. 코드 계산 요약을 지원자가 알고 있다고 말한 것으로 바꾸지는 않는다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "reason": "원래 재시작 시간 계산과 경계 테스트를 다시 풀라고 하지 않는다. t2의 지연 원인 구별과 달리 코드 방식의 직무 적용을 새로 확인한다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "reason": "모름·미실행을 거짓이나 역량 부족으로 결론내지 않고 다른 평가 목적을 제안한다."
+          }
+        ],
+        "minimum_rejection_criteria": [
+          "allowed:one_goal"
+        ],
+        "expected_recovery": "rewrite",
+        "expected_safe_alternative": true,
+        "wrong_reason_rejection_is_not_semantic_success": true,
+        "scope": "previously exposed development candidate; no relabeling or holdout use"
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "제공 코드의 재시도 대기 처리와 JD의 플랫폼 운영·안정성 개선 업무를 연결해 적용 및 운영 보완을 직접 묻고, 지원자의 학습 목적과 비기여 설명도 정확히 반영합니다.",
+            "point_coverage": [
+              {
+                "key": "platform_application",
+                "status": "asked",
+                "question_excerpt": "이 재시도 대기 방식이 해당 플랫폼 업무에 어떤 측면에서 적용될 수 있고, 실제 운영에 적용하려면 어떤 차이나 보완이 필요하다고 보시나요?"
+              }
+            ]
+          },
+          "expected_verdict": "reject",
+          "actual_verdict": "accept",
+          "decision_match": false,
+          "expected_recovery": "rewrite",
+          "actual_recovery": null,
+          "strict_recovery_match": false,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "fail",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "not_applicable",
+          "source_note": "사유의 재시도 계산·플랫폼 JD·학습/비기여는 실제 원문에 있다. 하지만 적용 측면을 말한 뒤 별도의 운영 차이·보완도 답해야 하므로 wording_valid=true의 승인에는 근거가 부족하다.",
+          "full_quality_success": false,
+          "elapsed_ms": 16696
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": false,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "코드 방식의 업무 적용과 운영상 차이·보완을 각각 답해야 해 중심 판단이 둘로 나뉩니다.",
+            "point_coverage": [
+              {
+                "key": "platform_application",
+                "status": "asked",
+                "question_excerpt": "이 재시도 대기 방식이 해당 플랫폼 업무에 어떤 측면에서 적용될 수 있고, 실제 운영에 적용하려면 어떤 차이나 보완이 필요하다고 보시나요?"
+              }
+            ]
+          },
+          "expected_verdict": "reject",
+          "actual_verdict": "reject",
+          "decision_match": true,
+          "expected_recovery": "rewrite",
+          "actual_recovery": "rewrite",
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "not_applicable",
+          "source_note": "업무 적용과 운영상 차이·보완을 각각 답해야 한다는 사유가 request의 두 독립 의무와 일치한다. wording_valid=false이고 정상 모름을 실패·역량 부족으로 바꾸지 않았다.",
+          "full_quality_success": true,
+          "elapsed_ms": 27676
+        }
+      ]
     }
   ]
 }

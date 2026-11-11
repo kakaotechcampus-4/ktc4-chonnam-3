@@ -1064,6 +1064,112 @@
         ],
         "naturalness_note": "선택과 이유는 분명하지만 멱등성 배경이 다시 길게 제시되어 읽기 부담은 조금 있다. 실제 JD에 있는 메시징을 구체적 적용 대상으로 삼는다."
       }
+    },
+    {
+      "turn_no": 5,
+      "synthetic_answer": true,
+      "question": {
+        "persona": "domain_lead",
+        "text": "고객 메시징 기능을 가정할 때, 메시지 내용과 발신자 식별 정보 중 어떤 항목을 우선 민감하게 보호해야 한다고 판단하시며, 그 이유는 무엇인가요?",
+        "topic_code": "messaging_sensitive_data_priority",
+        "question_contract": {
+          "purpose": "고객 메시징 기능을 가정할 때, 메시지 내용과 발신자 식별 정보 중 어떤 항목을 우선 민감하게 보호해야 한다고 판단하시며, 그 이유는 무엇인가요?",
+          "basis_refs": [
+            {
+              "id": "public-ref-006",
+              "kind": "jd_requirement"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "messaging_sensitive_data_priority",
+              "description": "고객 메시징 기능을 가정할 때, 메시지 내용과 발신자 식별 정보 중 어떤 항목을 우선 민감하게 보호해야 한다고 판단하시며, 그 이유는 무엇인가요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "jd_requirement_ids": [
+          "public-ref-006"
+        ]
+      },
+      "answer_text": "구체적인 수집 항목을 아직 모르는 가정이지만, 고객 상담을 포함하는 메시징이라면 저는 메시지 본문을 우선 민감하게 다루겠습니다. 본문에는 사용자가 직접 적은 연락처나 주소, 상담 내용처럼 서비스가 미리 예상하지 못한 정보도 섞일 수 있기 때문입니다. 발신자 식별 정보도 물론 보호해야 하고, 본문과 연결되면 특정인의 상담 내역이 드러날 수 있습니다. 어느 하나를 공개해도 된다는 뜻이 아니라, 이 상황에서는 내용 자체가 예상보다 많은 정보를 담을 위험을 먼저 점검하겠다는 판단입니다.",
+      "raw_answer_assessment": {
+        "coverage_assessment": {
+          "evaluation_status": "evaluated",
+          "sufficiency": "sufficient",
+          "covered_points": {
+            "messaging_sensitive_data_priority": [
+              "answer:0001",
+              "answer:0002",
+              "answer:0003",
+              "answer:0004"
+            ]
+          },
+          "missing_points": [],
+          "limitations": []
+        },
+        "contribution_scope": {
+          "scope": "unknown",
+          "quote_ids": [
+            "answer:0001",
+            "answer:0004"
+          ],
+          "unknown_reason": "답변은 가정한 메시징 상황에서의 판단을 설명할 뿐, 실제 구현이나 운영에 대한 개인 기여를 진술하지 않습니다."
+        },
+        "claim_checks": [],
+        "verification_requests": [],
+        "external_queries": []
+      },
+      "independent_annotation": {
+        "question_verdict": "accept",
+        "question_criteria": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "rationale": "충분한 메시징 멱등성 설계 선택 뒤 민감 정보 우선 보호라는 새로운 도메인 판단으로 이동한다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "satisfied",
+            "rationale": "민감하게 우선 보호할 항목을 정하는 하나의 판단과 그 이유를 묻는다. 보호 구현·법적 분류·검증 방법을 따로 요구하지 않는다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "rationale": "preamble 없이 request 전체가 최종 질문·purpose·유일 필수점에 일치한다. 직접 요청 이외의 hidden 평가가 없다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "rationale": "실제 JD 고객 플랫폼의 메시징과 Controller의 privacy_sensitive_data frame에 맞는 가정이다. 이미 제시한 company_job_fit 뒤 communication을 묻는 domain main이다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "rationale": "고객 메시징을 가정한다고 명시하며 실제 고객 정보 수집·저장·운영이나 지원자의 경험을 확정하지 않는다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "rationale": "직전 설계 제안을 실제 고객 플랫폼 구현으로 바꾸지 않는다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "rationale": "같은 메시징 맥락이지만 앞선 유지/변경 선택과 다른 민감 정보 우선 판단이다. 특정 항목이 정답이라는 설명을 미리 제공하지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "rationale": "자료 밖의 실제 보안 운영이나 모름을 실패로 해석하지 않고 가정형 판단만 요청한다."
+          }
+        ],
+        "naturalness_note": "조건이 짧고 한 판단과 이유를 명확히 요청한다. 선택지가 두 개라는 이유만으로 둘 중 하나만 민감하다고 단정하지 않는다."
+      }
     }
   ]
 }

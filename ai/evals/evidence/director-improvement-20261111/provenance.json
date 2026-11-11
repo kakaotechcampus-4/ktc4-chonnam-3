@@ -43,6 +43,21 @@
       "source_id": "I:claim-study/live/B/explicit-fact-and-future-proposal/result.json",
       "sha256": "09f19aeb8b095cbda6f8afa1380d4fee3e3e7fda9f1b94f04f6ffd6b5e3b28e7",
       "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/B/hypothetical-scope-selection/raw-response.json",
+      "sha256": "6ba8e60cca0d1ca66cee4047dec9147947e139e52e92d69612abd0776ccb9745",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/B/hypothetical-scope-selection/result.json",
+      "sha256": "fe5da4911357762cfe73ab3dce75ce76cb9fbc35aa0ac600efef10a134f371d9",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/codex-source-grade.json",
+      "sha256": "5c2ebfb5c303bd2f23b0ea6368868c19d143789c6aa832add1686c7a9f619c34",
+      "original_publicly_included": false
     }
   ]
 }
