@@ -850,7 +850,255 @@
           "response_read_complete": true,
           "sse_timing_limited": false
         }
+      },
+      {
+        "physical_id": 27,
+        "phase": "answer:09",
+        "operation": "answer_analysis",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "ee04054f650bd6c1a8f5c8ec26dfcd084c2f23856fa0b9fa8015aed848f7bb63",
+        "prompt_version": "answer_analysis_v7",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 12350,
+        "output_tokens": 1096,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 747,
+        "cache_write_tokens": 9877,
+        "elapsed_seconds": 11.857584499986842,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1134,
+          "first_sse_event_ms": 1139,
+          "first_output_text_delta_ms": 8881,
+          "response_read_ms": 10688,
+          "response_decode_ms": 12,
+          "validation_ms": 1,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
       }
     ]
+  },
+  "api0": {
+    "mode": "api0",
+    "passed": true,
+    "checks": {
+      "completed": true,
+      "nine_answered": true,
+      "sequential": true,
+      "quota": true,
+      "final_finish": true,
+      "raw_db_attempt_binding": true,
+      "all_phases_succeeded": true,
+      "budget": true,
+      "four_preserved_evidence": true,
+      "completion_event": true,
+      "completed_context_snapshot": true,
+      "automatic_recovery_fixture": true,
+      "cache_enrichment_fixture": true,
+      "report_history_v7_decoder": true,
+      "full_catalog_registered": true
+    },
+    "physical_model_calls": 0,
+    "mock_model_responses": 30,
+    "new_github_wanted_tavily_calls": 0,
+    "included_in_actual_calls": false
+  },
+  "audit": {
+    "passed": true,
+    "checks": {
+      "completed": true,
+      "nine_answered": true,
+      "sequential": true,
+      "quota": true,
+      "final_finish": true,
+      "raw_db_attempt_binding": true,
+      "all_phases_succeeded": true,
+      "budget": true,
+      "four_preserved_evidence": true,
+      "completion_event": true,
+      "completed_context_snapshot": true,
+      "report_history_v7_decoder": true,
+      "full_catalog_registered": true
+    },
+    "physical_model_calls": 27,
+    "mock_model_responses": 0,
+    "new_github_wanted_tavily_calls": 0
+  },
+  "sse_audit_wrapper": {
+    "schema": "publication-final-sse-audit-wrapper.v1",
+    "status": "completed",
+    "original_audit": {
+      "status": "failed_before_sse_fix",
+      "exception_type": "JSONDecodeError",
+      "message": "Original scratch audit recognised only data-prefixed SSE; event-prefixed capture was parsed as JSON."
+    },
+    "wrapper_audit_passed": true,
+    "runner_sha256": "f119103dfdc6e14b6a95501f93b54e6f72e68e4625d29225f615a990d187c2a4",
+    "wrapper_sha256": "4f8c48deb350a147303e350e07f8bb3e7de7a72a1be949bedd62bf2cfbabfc24",
+    "shared_parser_repo_path": "backend/app/integrations/llm/client.py",
+    "shared_parser_sha256": "a0177979c6a48261537327b4f60f687fb87685e77a2de9f3885677b7e5987f87",
+    "manifest_sha256": "b7ce104710ddaaa6bdcb3f9f0a605e5644f3bd13fd05eb1bf204727953cab7e1",
+    "final_audit_sha256": "64148a3659342f7e5fd674ba540c6cc40ee54f12966e08f9aa20fba87666abe2",
+    "provider_capture_files_checked": 108,
+    "provider_captures_and_physical_control_unchanged": true,
+    "physical_calls_before": 27,
+    "physical_calls_after": 27,
+    "new_model_or_http_requests": 0,
+    "blocked_http_attempts": 0
+  },
+  "catalog_registration": {
+    "passed": true,
+    "catalog_tasks": 12,
+    "reregister_unchanged": true,
+    "provider_calls": 0
+  },
+  "codex_source_review": {
+    "status": "codex_source_review_completed",
+    "reviewer": "Codex root",
+    "scope": "Post-generation source/question/answer/analysis comparison for this development run; no human expert validation or untouched holdout accuracy claim.",
+    "source": "Mastodon post_status_service.rb full309 fixed commit; preserved Wanted canonical3",
+    "human_review": "not_performed",
+    "untouched_holdout_groups_executed": 0,
+    "linked_distinct_jd_requirements": 1,
+    "provided_jd_requirements": 3,
+    "jd_limit": "실제 질문의 명시적 JD 참조 1/3. 요구사항 전체의 관찰·숙련도를 뜻하지 않는다.",
+    "observations": [
+      {
+        "turn_no": 1,
+        "original_question_sha256": "168627b6469c853bce68fc3b6d9250440d858a7b2f9cd2d54b1c63b75b67f169",
+        "answer_text_sha256": "4931520f99a48b6b22173c5d847da3d0778dcfdddcc09fa5373fd720ffe198c5",
+        "stored_analysis_sha256": "103bc618d554a833cb84984248c1ca142265d34b28f50926db0ef8058fb7a0c5",
+        "note": "자기소개와 대표 사례의 역할 구분을 직접 요청했다. 지원자는 공개 레포 기여·운영과 팀 프로젝트 경험을 부인했고 학습 활동만 자신의 범위로 밝혔다. T3의 self는 그 좁은 학습 주장 인용으로 읽으며 코드 기여 확인으로 확대하지 않는다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 2,
+        "original_question_sha256": "92302b712f7d2aa9c4304ce0b2c5a90242101cd4b10d33563c47b773c8d50766",
+        "answer_text_sha256": "3abae3d5aa0a0c5b41486a74468493f774fa13508a15f1b6c693bdfd6301796c",
+        "stored_analysis_sha256": "6be905d1c42401df33a9440ecf177338ff41e167e4e05932d746ee28e0761089",
+        "note": "멱등 처리의 가정형 적용 선택과 이유를 물었다. 답변의 DB 유일 제약·트랜잭션은 새 제안이며 실제 레포 구현으로 확정되지 않았다. 질문은 260자로 긴 배경과 면책 설명이 남아 있다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 3,
+        "original_question_sha256": "875ecf77df364ada39aa4ab5a297c41f36b0317d8fe2a0f9145923ac0778f986",
+        "answer_text_sha256": "f638d38c29172631ce3a03b2336959029777bd2e4a6625f800a32e46de310817",
+        "stored_analysis_sha256": "26fbc9868aab457aa4d4633f97ba52383a9af440b88b247ef0975e1a3876f68c",
+        "note": "복구 방식과 이유를 직접 물었으나 답변은 재시도 방식만 제시했다. 실제 partial 다음의 Q4는 빠진 이유만 물었으며 새로운 내구성 설계 의무를 필수점으로 추가하지 않았다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 4,
+        "original_question_sha256": "c86ffa1979bee4219a8cb4b3337dc9bb60c1bbace3a836f3a8856a5ff60b8b4c",
+        "answer_text_sha256": "bae234ff72a89844c5b44bc4f10bc73148895674c9126bfa1ac1137a73d95011",
+        "stored_analysis_sha256": "683fe244b41402ff787eaef470539f7f49303daa6ca3cc56d1d918cb7b61ace2",
+        "note": "Q3의 선택 이유만 보완하는 후속이다. 답변은 중복 저장 위험과 실패 단계 재시도를 연결하고 미구현 범위를 구분했다. 실제 수행·운영으로 인정할 근거는 없다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 5,
+        "original_question_sha256": "6d3ff75fe08178bb02376998e15233d8188c30a6fb42235e51c5e3af8cc25993",
+        "answer_text_sha256": "caabb87656acfe1c0022295207d44fce8ab97225a6ea15d5da1064912fb0f2c3",
+        "stored_analysis_sha256": "ecd2417bcb27210680fcaa9a030c03114a774ce0a64222cf125847fc3f9a2476",
+        "note": "첨부파일 중복 ID 정책의 선택과 이유에 대해 모른다고 답했다. 실제 T3는 evaluated/insufficient로 두었고 허위 구현 주장이나 코드 충돌을 만들지 않았다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 6,
+        "original_question_sha256": "1be2ce4e5beabd7602cb142425f92584e7ddff1f258db06121fce2c8628c29fb",
+        "answer_text_sha256": "6b3ca63e5c53d31b2340cef7d7dfbb88b9da194d04a242a9876de285926b0710",
+        "stored_analysis_sha256": "f5aabe0896a1d276e726c76f2b78ed485ac902d2f3d1d78c9ee0d81865567b1b",
+        "note": "실패 상황의 첫 확인과 구별할 가능성을 직접 요청하는 problem_solving main이다. 답변의 'TTL도 5분'은 원문의 1시간과 충돌하고 예약 지연 5분은 맞다. T3가 두 구간을 conflicting/supported로 나눴다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 7,
+        "original_question_sha256": "c7afd759d5b8ca4b8f65bb3477ad67af6fc522fa9fbd0ce71979b42a53ec5997",
+        "answer_text_sha256": "568fa62f46dea32ad3f83df96d39835c57fbe1d37c1ad42b2cb7ffad5d2ca7e6",
+        "stored_analysis_sha256": "38e5a18dd2c60c05314e37eb94a72ac70a7bd183d245fc8fa69ae2d94ce9e7b7",
+        "note": "Q6에서 잘못 읽은 TTL을 원문과 맞춘 뒤 기존 진단의 구별 범위를 다시 설명하게 했다. 지원자가 1시간·5분을 정정하고 TTL 관측만으로 worker 전송 성공까지 알 수 없다고 제한했다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 8,
+        "original_question_sha256": "5d423010bc0d33ee9794dad4c5afc585daad8801e300d63503ef1390878690d4",
+        "answer_text_sha256": "eeb14920baf29dd95a666f3128a97d08f380fd07137d2a8bfec5182bc49078c0",
+        "stored_analysis_sha256": "944a750314fbee5ee6f60b124dfb0f507f77279d64eeb467a17f332a0dd35684",
+        "note": "가정형 연결 누락의 첫 관측과 결과 해석을 요청했다. 원문에는 첨부 UPDATE를 감싸려는 주석과 트랜잭션 안 create!가 있지만 실제 UPDATE의 내부 구현·영향 행·DB 제약은 제공되지 않았다. 질문의 배경 표현을 실제 SQL 실행 증명으로 읽지 않으며 답변도 새 관측 제안으로 제한한다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 9,
+        "original_question_sha256": "2d260878d85213a0da9133e3a6ffc00f2faa56a8d4d1f554acb5c2beacae990a",
+        "answer_text_sha256": "9bfab6dc0d6b9d318b69df2a1deb2e73f6780911ba52c27bfd3a1533e014788e",
+        "stored_analysis_sha256": "e8d2bfcd14f5e17ff96ef2ee27f47b5421cd2adc4c0bc818186a6a758aa2cd63",
+        "note": "고객 메시징에서 민감한 데이터 하나와 이유를 가정형으로 요청했다. 실제 회사 정책·운영 경험을 전제하지 않는다. JD 연결은 Q2와 같은 요구사항으로, 다른 JD 전체를 다룬 결과가 아니다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      }
+    ],
+    "reviewer_also_authored_synthetic_inputs": true,
+    "independent_blind_or_human_review_claimed": false,
+    "original_full_analysis_not_fully_published": true,
+    "hash_scope_note": "Original question/full-analysis hashes were checked against private original snapshot. Published UUIDs and selected analysis fields differ, so separately recompute public_question_sha256/public_selected_analysis_sha256. Answer text SHA is directly recomputable.",
+    "construction_note": {
+      "initial_local_canonical_hash_assertion_failed": true,
+      "correction": "Matched flow_control.digest default JSON separators without changing original data or judgments.",
+      "basis": "Root-reported local preparation history; separate original-failure receipt not included.",
+      "additional_model_calls_for_correction": 0,
+      "counted_as_model_quality_failure": false
+    }
+  },
+  "code_identity": {
+    "product_files_checked": 277
   }
 }

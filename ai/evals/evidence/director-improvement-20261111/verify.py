@@ -190,7 +190,8 @@ def check_generation_and_scope() -> None:
     for row in rows:
         check_quotes(row["question"], row["raw_review"])
         require(
-            len(row["question"]["text"]) == row["question_length_codepoints"], "codepoint length"
+            len(row["question"]["text"]) == row["question_length_codepoints"],
+            "codepoint length",
         )
         verdict, _ = review_outcome(row["raw_review"])
         require(verdict == row["actual_review_verdict"], "probe Review mapping")
@@ -208,7 +209,9 @@ def check_generation_and_scope() -> None:
 def check_review_calibration() -> None:
     evidence = load("review-calibration-cases.json")
     cases = evidence["cases"]
-    require(len(cases) == 8 and evidence["physical_model_calls"] == 16, "J8 pairs/16 calls")
+    require(
+        len(cases) == 8 and evidence["physical_model_calls"] == 16, "J8 pairs/16 calls"
+    )
     counts: Counter[str] = Counter()
     for case in cases:
         for row in case["actual_observations"]:
@@ -227,7 +230,8 @@ def check_review_calibration() -> None:
 def check_answer_scope() -> None:
     evidence = load("answer-scope-cases.json")
     require(
-        len(evidence["cases"]) == 2 and evidence["physical_calls"] == 5, "claim4 plus refinement1"
+        len(evidence["cases"]) == 2 and evidence["physical_calls"] == 5,
+        "claim4 plus refinement1",
     )
     count: Counter[str] = Counter()
     for case in evidence["cases"]:
@@ -238,7 +242,8 @@ def check_answer_scope() -> None:
             )
             for claim in row["codex_source_grade"]["claims"]:
                 require(
-                    claim["claim_text"] in case["answer_text"], "claim literal answer substring"
+                    claim["claim_text"] in case["answer_text"],
+                    "claim literal answer substring",
                 )
             for claim in row["raw"]["claim_checks"]:
                 if "claim_excerpt" in claim:
@@ -249,7 +254,8 @@ def check_answer_scope() -> None:
                     )
     require([count[arm] for arm in ["A", "B"]] == [0, 2], "claim scope comparison")
     require(
-        evidence["targeted_refinement"]["current_contribution_scope"]["raw"]["scope"] == "unknown",
+        evidence["targeted_refinement"]["current_contribution_scope"]["raw"]["scope"]
+        == "unknown",
         "future proposal contribution unknown",
     )
 
@@ -263,7 +269,9 @@ def check_service_flow() -> None:
         == {"hr_manager": 1, "tech_lead": 6, "domain_lead": 2},
         "persona quota",
     )
-    require(len(generations) == evidence["actual_call_count"] == 27, "K27 physical requests")
+    require(
+        len(generations) == evidence["actual_call_count"] == 27, "K27 physical requests"
+    )
     require(
         Counter(row["operation"] for row in generations)
         == evidence["operation_counts"]
@@ -283,7 +291,9 @@ def check_service_flow() -> None:
     for row in turns:
         require(row["synthetic_answer"] is True, "synthetic K answer")
         for claim in row["raw_answer_assessment"]["claim_checks"]:
-            require(claim["claim_excerpt"] in row["answer_text"], "K claim answer substring")
+            require(
+                claim["claim_excerpt"] in row["answer_text"], "K claim answer substring"
+            )
     observed = sum(row["observed_generation_seconds"] for row in generations)
     require(
         math.isclose(
@@ -293,6 +303,27 @@ def check_service_flow() -> None:
         ),
         "observed seconds sum",
     )
+
+
+def _check_publication_runtime(value: dict[str, Any]) -> None:
+    require(
+        value["schema"] == "director-publication-validation.v3",
+        "publication validation schema",
+    )
+    require(value["status"] == "completed_recorded_scope", "complete rollout evidence")
+    require(
+        value["historical_physical_calls_unchanged"] == 1254, "history not rewritten"
+    )
+    require(value["model"] == "gpt-6-luna", "Luna rollout")
+    versions = value["runtime"]["registered_tasks"]
+    for task, expected in (
+        ("director", "director_v17"),
+        ("answer_analysis", "answer_analysis_v7"),
+        ("report", "report_v4"),
+    ):
+        require(
+            versions[task].partition("@")[0] == expected, "runtime selection " + task
+        )
 
 
 def _check_publication_calls(value: dict[str, Any]) -> None:
