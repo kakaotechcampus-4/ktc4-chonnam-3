@@ -886,6 +886,27 @@ def run_version(provider, ctx, *, version="director_v4", **options):
     )
 
 
+@pytest.mark.parametrize("invalid", ["unknown_turn", "unchecked_analysis"])
+def test_v12_rejects_misbound_prior_analysis_before_any_provider_call(invalid):
+    ctx, analysis, candidate = continuation_fixture()
+    prior = {"not-in-history": analysis} if invalid == "unknown_turn" else {"hr-1": {}}
+    provider = Provider(plan(candidate), review())
+    result = run_version(provider, ctx, version="director_v12", prior_analyses=prior)
+    assert result.failure.error_code == "director_input_invalid"
+    assert result.failure.stage == ("semantic" if invalid == "unknown_turn" else "schema")
+    assert result.attempts == () and provider.requests == []
+
+
+def test_only_v12_capability_allows_structured_dialogue_and_automatic_replan():
+    from devon_ai.agents.director.capabilities import prompt_capabilities
+
+    for version in range(1, 12):
+        legacy = prompt_capabilities(f"director_v{version}@deployed")
+        assert legacy.structured_dialogue is False and legacy.auto_replan is False
+    candidate = prompt_capabilities("director_v12@deployed")
+    assert candidate.structured_dialogue is True and candidate.auto_replan is True
+
+
 def completed_turn_context(answered):
     personas = (
         "hr_manager",
