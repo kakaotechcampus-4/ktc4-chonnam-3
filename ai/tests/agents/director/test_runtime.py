@@ -1194,7 +1194,11 @@ def test_v8_restores_readable_feedback_policy_without_rewriting_historical_promp
     ):
         assert policy in suffix
     recipe = json.loads((prompts / "runtime-prompts.json").read_text(encoding="utf-8"))
-    assert recipe["director"] == {"version": "director_v8", "template": "director-runtime-v8.md"}
+    # 보존한 v8 본문과 새 실행의 기본 선택은 별개다.
+    assert recipe["director"] == {
+        "version": "director_v17",
+        "template": "director-runtime-v17-semantic-fit.md",
+    }
 
 
 @pytest.mark.parametrize("keys", [(), ("technical_reasoning", "communication")])
