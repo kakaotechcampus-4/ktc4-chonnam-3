@@ -7,10 +7,8 @@ docs/layer-rules.md 1절 / task-13
 """
 
 import uuid
-from functools import partial
 from typing import Annotated
 
-from devon_ai.contracts import AttemptMetadata
 from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,12 +18,7 @@ from app.core.logging import get_logger
 from app.db.models.user import User
 from app.db.session import get_db
 from app.features.interview import service
-from app.features.interview.question_audio import (
-    QuestionAudioService,
-    load_question,
-    load_question_pronunciation,
-    record_question_pronunciation,
-)
+from app.features.interview.question_audio import QuestionAudioService, load_question
 from app.features.interview.schemas import (
     CreateInterviewRequest,
     CreateInterviewResponse,
@@ -35,7 +28,6 @@ from app.features.interview.schemas import (
 )
 from app.features.interview.tts_budget import RedisCharacterBudget
 from app.integrations.tts.google import BudgetedSpeechSynthesizer, GoogleTTSClient, TtsError
-from app.llm_tasks.question_pronunciation import pronounce_fragments
 from app.shared.enums import Reason
 
 router = APIRouter(prefix="/interviews", tags=["interviews"])
@@ -93,10 +85,8 @@ async def get_question_audio(
         finally:
             await db.rollback()
 
-    attempts: list[AttemptMetadata] = []
     try:
-        app_settings = request.app.state.settings
-        settings = app_settings.require_tts()
+        settings = request.app.state.settings.require_tts()
         if settings.monthly_character_limit is None or not settings.budget_project:
             raise TtsError("budget_unconfigured")
         budget = RedisCharacterBudget(
@@ -110,22 +100,9 @@ async def get_question_audio(
             if injected is None
             else BudgetedSpeechSynthesizer(injected, settings, budget)
         )
-        pronunciation = await load_question_pronunciation(db, app_settings, text=source.text)
-        pronounce, pronunciation_identity = None, None
-        if pronunciation is not None:
-            llm, prompt = pronunciation
-            pronounce = partial(pronounce_fragments, llm, prompt, attempt_sink=attempts)
-            pronunciation_identity = f"{prompt.version}:{prompt.model}"
-        try:
-            audio = await QuestionAudioService(
-                request.app.state.redis,
-                synthesizer,
-                settings,
-                pronounce=pronounce,
-                pronunciation_identity=pronunciation_identity,
-            ).get(source, check_current=still_current)
-        finally:
-            await record_question_pronunciation(db, source, attempts)
+        audio = await QuestionAudioService(request.app.state.redis, synthesizer, settings).get(
+            source, check_current=still_current
+        )
         if not await still_current():
             raise TtsError("source_changed")
     except (TtsError, ValueError) as exc:
