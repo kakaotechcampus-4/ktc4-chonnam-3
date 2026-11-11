@@ -295,6 +295,214 @@ def check_service_flow() -> None:
     )
 
 
+def _check_publication_calls(value: dict[str, Any]) -> None:
+    actual = value["actual"]
+    requests = actual["requests"]
+    require(
+        len(requests) == actual["physical_model_calls"], "actual request denominator"
+    )
+    require(
+        len({row["physical_id"] for row in requests}) == len(requests),
+        "unique ordinals",
+    )
+    require(
+        len({row["request_sha256"] for row in requests}) == len(requests),
+        "unique bodies",
+    )
+    require(not actual["unfinished_or_unbound"], "no unfinished hidden calls")
+    require(
+        len(requests) <= value["runtime"]["maximum_physical_calls"],
+        "bounded actual calls",
+    )
+    require(
+        Counter(row["operation"] for row in requests) == actual["operations"],
+        "operation sum",
+    )
+    for field in ("input_tokens", "output_tokens"):
+        known = [row[field] for row in requests if row[field] is not None]
+        require(sum(known) == actual["usage"][field]["known_sum"], "usage known sum")
+        require(
+            len(requests) - len(known) == actual["usage"][field]["unknown_count"],
+            "unknown usage",
+        )
+    require(actual["actual_billed_cost"] is None, "billing not inferred")
+    require(value["api0"]["physical_model_calls"] == 0, "Mock physical calls zero")
+    require(value["api0"]["included_in_actual_calls"] is False, "Mock separated")
+    require(
+        value["api0"]["passed"] is True and value["audit"]["passed"] is True,
+        "audit proofs",
+    )
+    wrapper = value["sse_audit_wrapper"]
+    require(wrapper["wrapper_audit_passed"] is True, "shared SSE parser audit")
+    require(
+        wrapper["physical_calls_before"]
+        == wrapper["physical_calls_after"]
+        == len(requests),
+        "wrapper no extra calls",
+    )
+    require(
+        wrapper["new_model_or_http_requests"] == wrapper["blocked_http_attempts"] == 0,
+        "wrapper HTTP blocker",
+    )
+    require(
+        wrapper["provider_captures_and_physical_control_unchanged"] is True,
+        "unchanged raw captures",
+    )
+    phases = value["phases"]
+    require(len(phases) == 10, "start plus nine answers")
+    require(
+        [row["phase"] for row in phases]
+        == ["start", *[f"answer:{n:02d}" for n in range(1, 10)]],
+        "phase order",
+    )
+    for phase in phases:
+        require(phase["same_call_replay_no_extra_io"] is True, "same-call replay")
+        require(phase["failed"] is False, "phase failure not hidden")
+        physical = sum(row["phase"] == phase["phase"] for row in requests)
+        require(
+            physical == phase["physical_model_calls_this_phase"], "phase physical calls"
+        )
+
+
+def _check_publication_turns(value: dict[str, Any]) -> None:
+    turns = value["turns"]
+    require(
+        [row["turn_no"] for row in turns] == list(range(1, 10)),
+        "new nine-turn sequence",
+    )
+    require(
+        Counter(row["question"]["persona"] for row in turns)
+        == {"hr_manager": 1, "tech_lead": 6, "domain_lead": 2},
+        "new quota",
+    )
+    for turn in turns:
+        question = turn["question"]
+        canonical = json.dumps(question, ensure_ascii=False, sort_keys=True).encode()
+        require(
+            hashlib.sha256(canonical).hexdigest() == turn["public_question_sha256"],
+            "public question digest",
+        )
+        require(
+            turn["question_length_codepoints"] == len(question["text"]), "new length"
+        )
+        require(turn["synthetic_answer"] is True, "new synthetic answer")
+        require(
+            turn["stored_status"] == "answered" and bool(turn["answer_text"]),
+            "new stored answer",
+        )
+        require(
+            hashlib.sha256(turn["answer_text"].encode()).hexdigest()
+            == turn["answer_text_sha256"],
+            "new answer text SHA",
+        )
+        public_analysis = json.dumps(
+            turn["analysis"], ensure_ascii=False, sort_keys=True
+        ).encode()
+        require(
+            hashlib.sha256(public_analysis).hexdigest()
+            == turn["public_selected_analysis_sha256"],
+            "new selected analysis SHA",
+        )
+        require(
+            turn["original_question_answer_binding_verified"] is True,
+            "private binding assertion",
+        )
+        for claim in turn["analysis"].get("claim_checks", []):
+            require(
+                bool(claim["claim_text"])
+                and claim["claim_text"] in turn["answer_text"],
+                "new claim excerpt",
+            )
+        for point in turn["analysis"].get("covered_points", []):
+            require(
+                all(quote in turn["answer_text"] for quote in point["answer_quotes"]),
+                "new covered point quotes",
+            )
+    notes = value["codex_source_review"]
+    require(
+        notes["human_review"] == "not_performed", "Codex review not human validation"
+    )
+    require(
+        notes["independent_blind_or_human_review_claimed"] is False,
+        "no independent judge inflation",
+    )
+    require(
+        [note["turn_no"] for note in notes["observations"]] == list(range(1, 10)),
+        "nine bound source notes",
+    )
+    for note in notes["observations"]:
+        turn = turns[note["turn_no"] - 1]
+        require(
+            note["original_question_sha256"] == turn["original_question_sha256"],
+            "note original question SHA",
+        )
+        require(
+            note["answer_text_sha256"] == turn["answer_text_sha256"], "note answer SHA"
+        )
+        require(
+            all(note["private_original_binding_checks"].values()),
+            "private source-note binding assertion",
+        )
+    distinct_jd = {
+        identifier
+        for turn in turns
+        for identifier in turn["question"].get("jd_requirement_ids", [])
+    }
+    require(
+        len(distinct_jd)
+        == notes["linked_distinct_jd_requirements"]
+        == value["quality_limits"]["explicit_distinct_jd_refs"],
+        "explicit JD reference count",
+    )
+    require(
+        notes["provided_jd_requirements"]
+        == value["quality_limits"]["provided_jd_requirements"],
+        "provided JD denominator",
+    )
+    for observed in value["quality_limits"]["known_long_questions"]:
+        require(
+            observed["codepoints"]
+            == turns[observed["turn_no"] - 1]["question_length_codepoints"],
+            "long question retained",
+        )
+
+
+def _check_publication_reviews(value: dict[str, Any]) -> None:
+    actual = value["actual"]
+    for row in value["reviews"]:
+        raw, question = row["raw_review"], row["candidate"]
+        require(
+            all(type(raw[key]) is bool for key in (*FLAGS, "safe_alternative")),
+            "new Review flags",
+        )
+        expected_keys = {
+            point["key"] for point in question["question_contract"]["required_points"]
+        }
+        keys = [point["key"] for point in raw["point_coverage"]]
+        require(
+            set(keys) == expected_keys and len(set(keys)) == len(keys),
+            "new Review keys",
+        )
+        for point in raw["point_coverage"]:
+            excerpt = point["question_excerpt"]
+            require(
+                excerpt is None
+                or (
+                    isinstance(excerpt, str)
+                    and bool(excerpt)
+                    and excerpt in question["text"]
+                ),
+                "new Review contiguous quote",
+            )
+            require(
+                point["status"] != "asked" or excerpt is not None, "new asked quote"
+            )
+    require(
+        len(value["reviews"]) == actual["operations"].get("review", 0),
+        "all actual Review outputs",
+    )
+
+
 def _check_publication_session(value: dict[str, Any]) -> None:
     phases = value["phases"]
     session = value["session"]
