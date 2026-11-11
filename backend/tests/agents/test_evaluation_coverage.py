@@ -1,3 +1,4 @@
+from dataclasses import asdict
 from itertools import combinations
 from typing import get_args
 from uuid import uuid4
@@ -52,6 +53,59 @@ def test_legacy_first_question_does_not_gain_unasked_evaluation_keys():
     assert targets((contract(),), ("tech_lead", "domain_lead")) == ()
 
 
+def test_presented_keys_are_unique_question_opportunities_and_do_not_upgrade_legacy_sessions():
+    from app.features.interview.evaluation_coverage import presented_evaluation_keys
+
+    assert presented_evaluation_keys(
+        (
+            contract("contribution_clarity", "communication"),
+            contract("project_understanding", "communication"),
+        )
+    ) == ("contribution_clarity", "communication", "project_understanding")
+    assert presented_evaluation_keys((contract(), contract("project_understanding"))) == ()
+    assert presented_evaluation_keys(()) == ()
+
+
+async def test_context_reads_presented_opportunities_from_saved_question_contracts(
+    agent_sessions, agent_seed
+):
+    from app.db.models import InterviewSession
+    from app.features.interview.agent_context import load_context
+
+    async with agent_sessions.begin() as db:
+        interview = await db.get(InterviewSession, agent_seed["interview_id"])
+        interview.current_turn = 2
+        for number, persona, asked in (
+            (1, "hr_manager", contract("contribution_clarity", "communication")),
+            (2, "tech_lead", contract("project_understanding", "communication")),
+        ):
+            db.add(
+                InterviewTurn(
+                    interview_session_id=interview.id,
+                    turn_no=number,
+                    persona=persona,
+                    question_text="설명해 주세요.",
+                    question_contract=asdict(asked),
+                    topic_code="scope",
+                    status="answered",
+                    answer_text="일부를 설명했습니다.",
+                )
+            )
+    async with agent_sessions() as db:
+        loaded = await load_context(
+            db,
+            user_id=agent_seed["owner"],
+            interview_id=agent_seed["interview_id"],
+            limits=c.ContextLimits(2, 0, "fixture"),
+        )
+    assert loaded.presented_evaluation_keys == (
+        "contribution_clarity",
+        "communication",
+        "project_understanding",
+    )
+    assert loaded.follow_up_options == ()
+
+
 def test_missing_jd_cannot_become_a_job_fit_assumption():
     first = contract("contribution_clarity", "communication")
     assert targets((first,), ("domain_lead",), has_jd=False)[0].keys == ("communication",)
@@ -87,6 +141,74 @@ def test_every_allowed_six_technical_two_domain_order_reserves_all_six_areas(dom
     assert {key for item in presented for key in item.evaluation_keys} == set(
         get_args(c.ScoreKeyId)
     )
+
+
+@pytest.mark.parametrize("domain_positions", list(combinations(range(8), 2)))
+def test_optional_follow_ups_keep_all_six_areas_reachable_in_every_order(domain_positions):
+    from devon_ai.agents.director.policy import with_follow_up_options
+
+    counts = {"hr_manager": 1, "tech_lead": 0, "domain_lead": 0}
+    asked = [contract("contribution_clarity", "communication")]
+    history = [c.HistoryTurn("hr-1", "hr_manager", "역할은?", "팀 작업입니다.", None)]
+    for offset in range(8):
+        persona = "domain_lead" if offset in domain_positions else "tech_lead"
+        target = targets(tuple(asked), (persona,))
+        current = history[-1]
+        ctx = c.Context(
+            "session",
+            current.turn_id,
+            offset + 2,
+            9,
+            tuple(c.PersonaCount(key, value) for key, value in counts.items()),
+            (persona,),
+            (c.JDRequirement("jd-1", "API 설계", "required", "jd_requirements.text", ()),),
+            (),
+            tuple(history),
+            asked[-1],
+            (),
+            (),
+            c.ContextLimits(2, 0, "fixture"),
+            evaluation_targets=target,
+            presented_evaluation_keys=tuple(
+                dict.fromkeys(key for item in asked for key in item.evaluation_keys)
+            ),
+        )
+        candidate = c.AnswerAnalysis(
+            "evaluated",
+            "partial",
+            (c.CoveredPoint("point", (current.answer,)),),
+            ("point",),
+            c.TechnicalAssessment("일부 설명", (current.answer,), (), ()),
+            c.ContributionScope("unknown", ()),
+            (),
+            False,
+            (),
+            ("일부 설명만 확인",),
+        )
+        analysis = c.validate_analysis_for_contract(
+            candidate,
+            contract=asked[-1],
+            answer_text=current.answer,
+            evidence_refs=frozenset(),
+            allowed_locations=frozenset(),
+        )
+        expanded = with_follow_up_options(ctx, analysis)
+        if expanded.follow_up_options:
+            chosen = contract(*expanded.follow_up_options[0].evaluation_keys)
+        else:
+            chosen = contract(*target[0].keys)
+        asked.append(chosen)
+        turn_id = f"turn-{offset + 2}"
+        history.append(c.HistoryTurn(turn_id, persona, "근거는?", "일부 설명입니다.", turn_id))
+        counts[persona] += 1
+    assert {key for item in asked for key in item.evaluation_keys} == {
+        "project_understanding",
+        "technical_reasoning",
+        "problem_solving",
+        "company_job_fit",
+        "contribution_clarity",
+        "communication",
+    }
 
 
 def test_declared_opportunities_reach_report_validation_without_persona_mapping_loss():
