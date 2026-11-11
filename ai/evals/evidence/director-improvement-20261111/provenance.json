@@ -178,6 +178,11 @@
       "source_id": "K:source-quality/mastodon-provenance.frozen.json",
       "sha256": "d56bba7887a81dc10595d04de3cd0e5a57ac85a287bd17bf2549f46b6dea0e87",
       "original_publicly_included": false
+    },
+    {
+      "source_id": "K:source-review/live-grade.json",
+      "sha256": "3bba5bb0799d63b4bc0c20b96154b35f8add26fa97a19b2c50e158722a0c3020",
+      "original_publicly_included": false
     }
   ]
 }

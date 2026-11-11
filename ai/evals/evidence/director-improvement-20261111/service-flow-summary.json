@@ -1170,6 +1170,264 @@
         ],
         "naturalness_note": "조건이 짧고 한 판단과 이유를 명확히 요청한다. 선택지가 두 개라는 이유만으로 둘 중 하나만 민감하다고 단정하지 않는다."
       }
+    },
+    {
+      "turn_no": 6,
+      "synthetic_answer": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "코드 흐름을 근거로, `allowed_mentions`가 설정된 경우 허용 목록과 실제 멘션 사이에 어떤 관계가 강제되는지 어떻게 판단하시겠어요?",
+        "topic_code": "allowed_mentions_guard_scope",
+        "question_contract": {
+          "purpose": "코드 흐름을 근거로, `allowed_mentions`가 설정된 경우 허용 목록과 실제 멘션 사이에 어떤 관계가 강제되는지 어떻게 판단하시겠어요?",
+          "basis_refs": [
+            {
+              "id": "public-ref-003",
+              "kind": "evidence"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "technical_reasoning",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "allowed_mentions_guard_scope",
+              "description": "코드 흐름을 근거로, `allowed_mentions`가 설정된 경우 허용 목록과 실제 멘션 사이에 어떤 관계가 강제되는지 어떻게 판단하시겠어요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "jd_requirement_ids": []
+      },
+      "answer_text": "제 이해로는 허용 목록과 실제 멘션의 계정 ID 목록이 정확히 일치해야 합니다. 허용 목록을 정수 ID로 바꾼 뒤 실제 멘션과 비교하므로, 목록에 없는 계정이 실제로 멘션된 경우뿐 아니라 허용 목록에 있는 계정 하나가 실제 멘션에서 빠진 경우에도 UnexpectedMentionsError로 저장을 막는다고 봤습니다. 그래서 이 설정은 멘션할 계정을 빠짐없이 정확하게 지정하는 계약이라고 판단했습니다.",
+      "raw_answer_assessment": {
+        "coverage_assessment": {
+          "evaluation_status": "evaluated",
+          "sufficiency": "partial",
+          "covered_points": {
+            "allowed_mentions_guard_scope": [
+              "answer:0001",
+              "answer:0002",
+              "answer:0003"
+            ]
+          },
+          "missing_points": [
+            "allowed_mentions_guard_scope"
+          ],
+          "limitations": [
+            "허용 목록을 정수 ID로 바꾸고 실제 멘션 계정과 비교한다는 흐름은 설명했지만, 허용 목록의 모든 계정이 실제 멘션에 있어야 한다는 역방향 조건까지 있다고 판단했습니다. 코드가 강제하는 것은 실제 멘션 계정이 허용 목록에 포함되는 조건뿐이므로, 정확한 관계 설명은 부족합니다."
+          ]
+        },
+        "contribution_scope": {
+          "scope": "unknown",
+          "quote_ids": [],
+          "unknown_reason": "현재 답변은 코드 동작에 대한 해석만 제시하며, 실제 코드 작성이나 운영에 관한 기여를 진술하지 않습니다."
+        },
+        "claim_checks": [
+          {
+            "quote_id": "answer:0001",
+            "claim_excerpt": "허용 목록과 실제 멘션의 계정 ID 목록이 정확히 일치해야 합니다.",
+            "status": "conflicting",
+            "evidence_refs": [
+              "public-ref-003"
+            ],
+            "limitations": []
+          },
+          {
+            "quote_id": "answer:0002",
+            "claim_excerpt": "허용 목록을 정수 ID로 바꾼 뒤 실제 멘션과 비교하므로",
+            "status": "supported",
+            "evidence_refs": [
+              "public-ref-003"
+            ],
+            "limitations": []
+          },
+          {
+            "quote_id": "answer:0002",
+            "claim_excerpt": "허용 목록에 있는 계정 하나가 실제 멘션에서 빠진 경우에도 UnexpectedMentionsError로 저장을 막는다고 봤습니다.",
+            "status": "conflicting",
+            "evidence_refs": [
+              "public-ref-003"
+            ],
+            "limitations": []
+          }
+        ],
+        "verification_requests": [],
+        "external_queries": []
+      },
+      "independent_annotation": {
+        "question_verdict": "accept",
+        "question_criteria": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "rationale": "충분한 도메인 우선순위 답변 뒤 아직 다루지 않은 멘션 검사 범위의 기술 판단으로 이동한다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "satisfied",
+            "rationale": "허용 목록과 실제 멘션의 관계라는 하나의 조건을 코드 흐름으로 판단하게 한다. 별도 구현 개선·운영 증명까지 요구하지 않는다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "rationale": "빈 preamble과 request 하나이며 실제 질문·purpose·유일 필수점 description이 같다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "rationale": "허용 기술 main의 technical_reasoning/communication 키와 원문79~145줄 멘션 검사에 맞는다. 이미 충분한 직무 적합성 선택을 다시 묻지 않는다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "rationale": "allowed_mentions가 설정된 경우로 조건을 한정하며 실제 guard의 관계를 묻는다. 미설정 동작이나 이후 전체 시스템의 보안 보장을 사실로 단정하지 않는다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "rationale": "지원자가 멘션 검사를 구현했다고 하지 않고 제공 코드의 판단만 요청한다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "rationale": "과거 멱등성·메시징 설계·민감정보와 다른 검사 조건이다. 부분집합/일치 여부의 답을 먼저 설명하지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "rationale": "기존 모름이나 실제 보안 운영 미확인을 개인 실패로 바꾸지 않는다."
+          }
+        ],
+        "naturalness_note": "한 판단은 명확하지만 '어떤 관계가 강제되는지 어떻게 판단'은 약간 문어적이다. 기술 식별자와 허용/실제 집합 구분 때문에 읽기 부담1로 기록한다."
+      }
+    },
+    {
+      "turn_no": 7,
+      "synthetic_answer": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "`allowed_mentions`에만 있고 실제 멘션에는 없는 계정도 예외 조건에 포함되는지, 코드의 비교 방향을 근거로 판단을 설명해 주시겠어요?",
+        "topic_code": "allowed_mentions_guard_scope",
+        "question_contract": {
+          "purpose": "`allowed_mentions`에만 있고 실제 멘션에는 없는 계정도 예외 조건에 포함되는지, 코드의 비교 방향을 근거로 판단을 설명해 주시겠어요?",
+          "basis_refs": [
+            {
+              "id": "public-ref-007",
+              "kind": "answer_turn"
+            },
+            {
+              "id": "public-ref-003",
+              "kind": "evidence"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "technical_reasoning",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "allowed_mentions_guard_scope",
+              "description": "`allowed_mentions`에만 있고 실제 멘션에는 없는 계정도 예외 조건에 포함되는지, 코드의 비교 방향을 근거로 판단을 설명해 주시겠어요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "jd_requirement_ids": []
+      },
+      "answer_text": "제가 앞서 두 목록이 정확히 일치해야 한다고 한 설명은 잘못 읽은 것이었습니다. 다시 보면 status.mentions에서 실제 멘션된 계정을 열거하고, 그중 expected_account_ids에 포함된 계정을 reject로 빼고 있습니다. 남는 것은 실제로 멘션됐지만 허용 목록에는 없는 계정뿐입니다. 허용 목록에만 있고 실제 멘션에는 없는 계정은 이 순회 대상이 아니므로, 그 이유만으로 UnexpectedMentionsError가 발생하지 않습니다. 따라서 이 검사에서는 실제 멘션의 계정들이 허용 목록 안에 들어가는 것을 요구하며, 양쪽 목록의 완전한 일치까지 요구하지 않는다고 정정하겠습니다.",
+      "raw_answer_assessment": {
+        "coverage_assessment": {
+          "evaluation_status": "evaluated",
+          "sufficiency": "sufficient",
+          "covered_points": {
+            "allowed_mentions_guard_scope": [
+              "answer:0002",
+              "answer:0003",
+              "answer:0004",
+              "answer:0005"
+            ]
+          },
+          "missing_points": [],
+          "limitations": []
+        },
+        "contribution_scope": {
+          "scope": "unknown",
+          "quote_ids": [],
+          "unknown_reason": "답변은 코드 동작을 해석하지만, 해당 구현을 누가 작성하거나 운영했는지는 밝히지 않습니다."
+        },
+        "claim_checks": [
+          {
+            "quote_id": "answer:0002",
+            "claim_excerpt": "status.mentions에서 실제 멘션된 계정을 열거하고, 그중 expected_account_ids에 포함된 계정을 reject로 빼고 있습니다.",
+            "status": "supported",
+            "evidence_refs": [
+              "public-ref-003"
+            ],
+            "limitations": []
+          },
+          {
+            "quote_id": "answer:0004",
+            "claim_excerpt": "허용 목록에만 있고 실제 멘션에는 없는 계정은 이 순회 대상이 아니므로, 그 이유만으로 UnexpectedMentionsError가 발생하지 않습니다.",
+            "status": "supported",
+            "evidence_refs": [
+              "public-ref-003"
+            ],
+            "limitations": []
+          }
+        ],
+        "verification_requests": [],
+        "external_queries": []
+      },
+      "independent_annotation": {
+        "question_verdict": "accept",
+        "question_criteria": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "rationale": "직전 답변의 실제 오류인 허용 목록의 역방향 조건을 코드 비교 방향으로 확인하게 한다. 이미 맞게 설명한 ID변환·대조 전체를 반복시키지 않는다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "satisfied",
+            "rationale": "허용 목록에만 있는 계정이 예외 조건인지라는 한 판단과 동일 판단의 코드 근거다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "rationale": "request 전체가 본문·purpose·유일 필수점으로 같고 추가 필수 판단은 없다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "rationale": "call019의 실제 complete 옵션인 부모6(146d6280…353e), tech_lead, technical_reasoning/communication, allowed_mentions_guard_scope와 일치한다. 새 main 대상 problem_solving을 follow_up에 잘못 적용하지 않는다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "rationale": "오류 조건이라고 단정하지 않고 포함 여부를 질문한다. actual_mentions에 없는 허용 계정을 검사하는 코드가 있다고 가정하지 않는다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "rationale": "직전 실제 발언의 역방향 조건을 확인하지만 그것을 지원자의 구현이나 의도적 거짓으로 바꾸지 않는다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "rationale": "확인되지 않은 정확한 관계를 한정해 보완한다. 단순한 관점 변경으로 이미 맞게 충족한 판단을 다시 요구하지 않는다. '아니다/부분집합'이라는 정답을 먼저 제공하지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "rationale": "동일 조건의 원문으로 확인되는 코드 해석 오류만 다루며, 미조회나 모름으로 개인 전반 역량을 확정하지 않는다."
+          }
+        ],
+        "naturalness_note": "질문은 한정되어 있으나 '허용 목록에만 있고 실제에는 없는' 집합 조건을 따라야 한다. 정답을 먼저 말하지 않는 중립 확인형이다."
+      }
     }
   ]
 }

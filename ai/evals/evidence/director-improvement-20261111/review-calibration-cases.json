@@ -1465,5 +1465,39 @@
         }
       ]
     }
-  ]
+  ],
+  "summary_from_original_source": {
+    "A": {
+      "responses": 8,
+      "valid_format": 8,
+      "decision_matches": 4,
+      "negative_rejection_matches": 0,
+      "strict_negative_recovery_matches": 0,
+      "false_acceptances": 4,
+      "positive_preserved": 4,
+      "false_rejections": 0,
+      "factual_reason_fidelity_pass": 8,
+      "semantic_flags_grounded": 4,
+      "invented_reason_or_premise": 0,
+      "fabricated_unasked_point": 0,
+      "safe_alternative_protected": 8,
+      "full_quality_success": 4
+    },
+    "B": {
+      "responses": 8,
+      "valid_format": 8,
+      "decision_matches": 8,
+      "negative_rejection_matches": 4,
+      "strict_negative_recovery_matches": 4,
+      "false_acceptances": 0,
+      "positive_preserved": 4,
+      "false_rejections": 0,
+      "factual_reason_fidelity_pass": 8,
+      "semantic_flags_grounded": 8,
+      "invented_reason_or_premise": 0,
+      "fabricated_unasked_point": 0,
+      "safe_alternative_protected": 8,
+      "full_quality_success": 8
+    }
+  }
 }
