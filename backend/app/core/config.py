@@ -309,6 +309,7 @@ class Settings(BaseSettings):
     documents_max_source_chars: LLMInteger = Field(default=262144, gt=0)
 
     tts_provider: str | None = None
+    tts_pronunciation_model: str | None = None
     tts_api_key: SecretStr | None = None
     tts_access_token: SecretStr | None = None
     tts_voice_map: Annotated[dict[str, str], NoDecode] = Field(default_factory=dict)
@@ -487,6 +488,11 @@ class Settings(BaseSettings):
         # 명시 전용 주소의 우선순위는 유지하고 빈 선택값만 미설정으로 취급한다.
         raw = value.get_secret_value() if isinstance(value, SecretStr) else value
         return None if isinstance(raw, str) and not raw.strip() else value
+
+    @field_validator("tts_pronunciation_model", mode="before")
+    @classmethod
+    def _normalize_tts_pronunciation_model(cls, value: object) -> object:
+        return (value.strip() or None) if isinstance(value, str) else value
 
     @field_validator("tts_voice_map", mode="before")
     @classmethod

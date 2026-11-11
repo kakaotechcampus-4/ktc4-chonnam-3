@@ -105,3 +105,4 @@ Director 후속 게시의 코어 경계는 [0023](0023-director-runtime.md), 별
 
 - [0049 통합 리뷰의 최신 기반·실행 복구·배포 일치](0049-integrated-review-runtime-consistency.md): Accepted for local implementation and publication scope, 2026-11-10. 최신 음성 기반, 계약·마이그레이션 정렬, 유한 복구·프로필 재사용 및 배포 순서를 정의한다.
 - [0050 면접 작업 수명과 리뷰 결과의 제한적 복구](0050-review-work-lifetime-and-scoped-recovery.md): Accepted for implementation and publication scope, 2026-11-10. 작업 기한·소유권, 결과 보존 및 대상·감사를 제한한 복구를 정의한다.
+- [0051 질문 낭독의 입력 범위와 발음 보완 복구](0051-question-speech-coverage-and-recovery.md): Accepted for local implementation, 2026-11-11. 숨김·공백·유니코드 입력과 영어 질문, 인용문 보존, 기본 음성 재사용과 제한적 발음 재시도를 정의한다.

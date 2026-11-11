@@ -27,6 +27,7 @@ ADDITIONAL_PROMPT_VERSIONS = {
     "domain_category": "domain_category_v1",
     "claim_code": "claim_code_v1",
     "jd_extract_image": "jd_extract_image_v1",
+    "question_pronunciation": "question_pronunciation_v2",
 }
 
 
