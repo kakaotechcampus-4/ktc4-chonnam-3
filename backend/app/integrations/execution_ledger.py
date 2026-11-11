@@ -1,3 +1,249 @@
+class UsageDetails(TypedDict):
+    input_tokens: int | None
+    output_tokens: int | None
+    cached_input_tokens: int | None
+    reasoning_tokens: int | None
+    cache_write_tokens: int | None
+
+
+def usage_details(raw: object) -> UsageDetails:
+    usage = raw if isinstance(raw, dict) else {}
+    input_tokens = _count(usage.get("input_tokens", usage.get("prompt_tokens")))
+    output_tokens = _count(usage.get("output_tokens", usage.get("completion_tokens")))
+    inputs = usage.get("input_tokens_details", usage.get("prompt_tokens_details"))
+    outputs = usage.get("output_tokens_details", usage.get("completion_tokens_details"))
+    cached = _count(inputs.get("cached_tokens")) if isinstance(inputs, dict) else None
+    reasoning = _count(outputs.get("reasoning_tokens")) if isinstance(outputs, dict) else None
+    cache_write = _count(inputs.get("cache_write_tokens")) if isinstance(inputs, dict) else None
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "cached_input_tokens": cached
+        if input_tokens is not None and (cached or 0) <= input_tokens
+        else None,
+        "reasoning_tokens": reasoning
+        if output_tokens is not None and (reasoning or 0) <= output_tokens
+        else None,
+        "cache_write_tokens": cache_write
+        if cache_write is not None
+        else _count(usage.get("cache_write_tokens")),
+    }
+
+
+@dataclass
+class Observation:
+    record: CallRecord
+
+    def response(self, envelope: Mapping[str, object]) -> None:
+        model = envelope.get("model")
+        self.record = replace(
+            self.record,
+            actual_model=model if isinstance(model, str) else None,
+            **usage_details(envelope.get("usage")),
+        )
+
+    def complete(self, error_code: str | None = None) -> None:
+        self.record = replace(
+            self.record, status="failed" if error_code else "succeeded", error_code=error_code
+        )
+
+
+@dataclass(frozen=True)
+class _Scope:
+    ledger: ExecutionLedger
+    run_id: str
+    entrypoint: str
+    provider: str
+    metadata: dict[str, str | int | bool | None]
+    parent_call_id: str | None = None
+    ignore_io_errors: bool = False
+
+
+_SCOPE: ContextVar[_Scope | None] = ContextVar("execution_ledger_scope", default=None)
+
+
+@contextmanager
+def execution_scope(
+    ledger: ExecutionLedger,
+    *,
+    run_id: str,
+    entrypoint: str,
+    provider: str = "openai_compatible",
+    metadata: dict[str, str | int | bool | None] | None = None,
+    ignore_io_errors: bool = False,
+) -> Iterator[None]:
+    # 평가 실행은 기본 strict다. 선택 관측인 실제 서비스 진입점만 I/O 격리를 켠다.
+    scope = _Scope(
+        ledger,
+        run_id,
+        entrypoint,
+        provider,
+        dict(metadata or {}),
+        ignore_io_errors=ignore_io_errors,
+    )
+    # 잘못된 관측 설정은 유료 실행 전에 검증한다.
+    CallRecord(
+        "scope-validation",
+        run_id,
+        entrypoint,
+        "scope",
+        "stage",
+        0,
+        provider=provider,
+        metadata=scope.metadata,
+    )
+    token = _SCOPE.set(scope)
+    try:
+        yield
+    finally:
+        _SCOPE.reset(token)
+
+
+def _ignore_io_failure(
+    scope: _Scope, error: OSError | sqlite3.OperationalError, *, operation: str, phase: str
+) -> bool:
+    if not scope.ignore_io_errors:
+        return False
+    # 파일 경로·SQL·사용자 원문은 남기지 않는다. 누락 관측을 성공·사용량0으로 만들지 않는다.
+    _logger.warning(
+        "ai_execution_ledger_io_failed",
+        extra={"phase": phase, "operation": operation, "exception_type": type(error).__name__},
+    )
+    return True
+
+
+async def _finish_observation(scope: _Scope, record: CallRecord) -> None:
+    try:
+        await asyncio.to_thread(scope.ledger.finish, record)
+    except (OSError, sqlite3.OperationalError) as error:
+        # ProgrammingError·IntegrityError 등 잘못된 장부 사용은 서비스에서도 숨기지 않는다.
+        if not _ignore_io_failure(scope, error, operation=record.operation, phase="finish"):
+            raise
+
+
+@asynccontextmanager
+async def observe_call(
+    operation: str,
+    *,
+    kind: str = "generation",
+    requested_model: str | None = None,
+    request_sha256: str | None = None,
+    metadata: dict[str, str | int | bool | None] | None = None,
+) -> AsyncIterator[Observation | None]:
+    scope = _SCOPE.get()
+    if scope is None:
+        yield None
+        return
+    started = time.perf_counter()
+    observed = Observation(
+        CallRecord(
+            str(uuid4()),
+            scope.run_id,
+            scope.entrypoint,
+            operation,
+            kind,
+            time.time(),
+            provider=scope.provider,
+            requested_model=requested_model,
+            request_sha256=request_sha256,
+            metadata={**scope.metadata, **(metadata or {})},
+            parent_call_id=scope.parent_call_id,
+        )
+    )
+    try:
+        await asyncio.to_thread(scope.ledger.start, observed.record)
+    except (OSError, sqlite3.OperationalError) as error:
+        if not _ignore_io_failure(scope, error, operation=operation, phase="start"):
+            raise
+        # 시작 기록이 없으면 자식도 같은 실패 장부에 쓰지 않는다. 호출 종료 뒤 부모는 복원한다.
+        token = _SCOPE.set(None)
+        try:
+            yield None
+        finally:
+            _SCOPE.reset(token)
+        return
+    # 비동기 자식 작업에는 현재 단계의 부모 관계만 전파하고 형제 단계와 섞지 않는다.
+    token = _SCOPE.set(replace(scope, parent_call_id=observed.record.call_id))
+    try:
+        yield observed
+    except BaseException as error:
+        observed.record = replace(
+            observed.record,
+            status="cancelled" if isinstance(error, asyncio.CancelledError) else "failed",
+            error_code=type(error).__name__,
+        )
+        raise
+    finally:
+        _SCOPE.reset(token)
+        if observed.record.status == "started":
+            observed.complete()
+        observed.record = replace(observed.record, elapsed_seconds=time.perf_counter() - started)
+        pending = asyncio.create_task(_finish_observation(scope, observed.record))
+        try:
+            await asyncio.shield(pending)
+        except asyncio.CancelledError:
+            await pending
+            raise
+
+
+@dataclass(frozen=True)
+class PriceProfile:
+    provider: str
+    model: str
+    input_per_million: str
+    output_per_million: str
+    source: str
+    as_of: str
+    cached_input_per_million: str | None = None
+    currency: str = "USD"
+
+    def __post_init__(self) -> None:
+        if self.currency != "USD" or not self.source.strip() or not self.as_of.strip():
+            raise ValueError("explicit USD pricing source and date are required")
+        if not isinstance(self.input_per_million, str) or not isinstance(
+            self.output_per_million, str
+        ):
+            raise ValueError("prices must be explicit decimal strings")
+        for value in (
+            self.input_per_million,
+            self.output_per_million,
+            self.cached_input_per_million,
+        ):
+            if value is not None:
+                try:
+                    if (
+                        not isinstance(value, str)
+                        or not Decimal(value).is_finite()
+                        or Decimal(value) < 0
+                    ):
+                        raise ValueError("invalid price")
+                except InvalidOperation:
+                    raise ValueError("invalid price") from None
+
+    def estimate(self, record: CallRecord) -> Decimal | None:
+        if record.cache_write_tokens:
+            # 공급자별 cache-write의 입력 포함 여부·별도 단가를 추정하지 않는다.
+            return None
+        if record.input_tokens is None or (
+            record.kind != "embedding" and record.output_tokens is None
+        ):
+            return None
+        regular = Decimal(self.input_per_million)
+        cached = (
+            Decimal(self.cached_input_per_million)
+            if self.cached_input_per_million is not None
+            else regular
+        )
+        if cached != regular and record.cached_input_tokens is None:
+            return None
+        cached_count = record.cached_input_tokens or 0
+        return (
+            (record.input_tokens - cached_count) * regular
+            + cached_count * cached
+            + (record.output_tokens or 0) * Decimal(self.output_per_million)
+        ) / Decimal(1_000_000)
+
+
 def summarize(
     records: Sequence[CallRecord], *, prices: Sequence[PriceProfile] = ()
 ) -> dict[str, Any]:

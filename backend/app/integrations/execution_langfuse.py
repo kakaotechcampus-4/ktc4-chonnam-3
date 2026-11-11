@@ -1,3 +1,41 @@
+"""저장된 실행 장부만 OTLP로 전송하고 관측 ID·지문·사용량을 다시 읽어 확인한다."""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+from collections import Counter, defaultdict
+from collections.abc import Sequence
+from datetime import datetime
+from typing import Any
+from urllib.parse import urlsplit
+
+import httpx
+
+from app.integrations.execution_ledger import CallRecord, ExecutionLedger, record_data
+
+
+def validate_base_url(value: str) -> str:
+    parsed = urlsplit(value)
+    if (
+        parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+        or any(char.isspace() for char in value)
+        or parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.scheme == "http"
+        and parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
+    ):
+        raise ValueError(
+            "Langfuse requires HTTPS or an explicit loopback address without credentials"
+        )
+    _ = parsed.port
+    return value.rstrip("/")
+
+
 def _hash(value: object) -> str:
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()
