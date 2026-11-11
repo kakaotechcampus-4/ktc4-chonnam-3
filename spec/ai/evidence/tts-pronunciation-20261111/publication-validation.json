@@ -81,22 +81,5 @@
     "mock external providers in automated tests",
     "not a fresh paid provider or production validation",
     "existing contract migration PENDING decisions preserved"
-  ],
-  "currentBaseAtPublication": "b3b2d2264391136971dde2cd5d7bf607bb900c91",
-  "postVerificationBaseRefresh": {
-    "previousBase": "89485416ec72575cf30b2dfdfc3ddfdd84e88243",
-    "newBase": "b3b2d2264391136971dde2cd5d7bf607bb900c91",
-    "changedFiles": [
-      "frontend/src/features/auth/RequireAuth.tsx",
-      "frontend/src/features/home/Home.tsx",
-      "frontend/src/features/mypage/MyPage.tsx",
-      "frontend/src/mocks/fixtures/user.ts",
-      "frontend/tests/analysis-errors.spec.ts",
-      "frontend/tests/auth.spec.ts",
-      "frontend/tests/interview-abandon.spec.ts",
-      "frontend/tests/mypage-layout.spec.ts"
-    ],
-    "backendAndAiTreesUnchanged": true,
-    "verificationNotRerunBecause": "Only frontend files changed in develop; tested backend and ai trees are byte-identical after rebase"
-  }
+  ]
 }

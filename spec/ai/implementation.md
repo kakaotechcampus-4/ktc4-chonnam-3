@@ -3590,4 +3590,3 @@ request ID도 일치했다. 최초 조회에서 완료 응답까지 약 64초이
 - 이번 게시 검증은 실제 서비스 .env나 기존 업무 DB·Redis를 사용하지 않았고 외부 유료 공급자 호출은 0회다. 새로 만든 테스트 컨테이너만 종료했다. 공통 OpenAPI·FE 타입·FE/BE API 문서 변경은 없으며 기존 이관 PENDING 결정은 유지한다.
 - [공개용 실제 로컬 검증](evidence/tts-pronunciation-20261111/local-validation.json)과 [게시본 재검증](evidence/tts-pronunciation-20261111/publication-validation.json)을 구분해 보존한다. 실제 합성 질문 3개의 MP3 63,552바이트는 합성 원문·SHA·바이트와 대조했다. 쿠키·비밀 설정·사용자 및 면접 식별자·로컬 hostname은 공개 근거에서 제외했다.
 - 운영 배포와 전체 면접 완주·사람의 전체 발음 정답 검수는 이번 게시 검증 범위 밖이다.
-- 게시 직전 `develop`에 FE 8개 파일 변경이 추가되어 원래 게시 HEAD를 백업한 뒤 `b3b2d2264391136971dde2cd5d7bf607bb900c91`로 재기준화했다. 앞서 검증한 게시본과 `backend`·`ai` tree가 동일함을 실제 git diff로 확인했다. 실행 기준 `89485416`과 게시 기준 `b3b2d226`을 공개 검증 JSON에서 구분한다.
