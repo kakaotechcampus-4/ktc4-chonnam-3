@@ -183,6 +183,31 @@
       "source_id": "K:source-review/live-grade.json",
       "sha256": "3bba5bb0799d63b4bc0c20b96154b35f8add26fa97a19b2c50e158722a0c3020",
       "original_publicly_included": false
+    },
+    {
+      "source_id": "L:completion-audit.json",
+      "sha256": "a5d7cb39595bd3e974193b299d56d85a600af37b2e397e135ca6a5bbbd5c5a92",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:probe-review/source-grade.json",
+      "sha256": "4d1377c06454653eaaf5564dc9e673d16c6d4ac2a8b897f74efc6590720e3bdd",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:review-study/api0-final/completion.json",
+      "sha256": "266c5432cdc67c547da94dfdbd04ae62fd8a0d3208594bf7d5694fee172e6ac8",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:review-study/probe-api0-final/failure-review.json",
+      "sha256": "79b67cbd08e61911b48cdaa58be63786d757463c354c7bd7b94d77a14e9d9e94",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:review-study/probe-api0-v2/completion.json",
+      "sha256": "70b9cb4b1cb98587ba01755b00155c0f707d1c7eab59f93007e40daa0251a0c8",
+      "original_publicly_included": false
     }
   ]
 }
