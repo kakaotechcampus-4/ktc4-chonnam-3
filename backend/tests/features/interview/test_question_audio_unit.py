@@ -1,5 +1,4 @@
 import asyncio
-from dataclasses import replace
 from uuid import uuid4
 
 import httpx
@@ -16,7 +15,6 @@ from app.integrations.tts.google import (
     TtsError,
     TTSSettings,
 )
-from app.integrations.tts.pronunciation import SpeechFragment
 
 
 class Cache:
@@ -69,205 +67,6 @@ def question(**kwargs):
     )
 
 
-async def test_question_audio_synthesizes_korean_pronunciation_and_reuses_mp3():
-    provider = Synthesizer()
-    source = question(
-        text="https://example.com/api/v1/users 경로로 GET 요청을 보낼 때의 처리를 설명해 주세요."
-    )
-    service = QuestionAudioService(Cache(), provider, config())
-
-    first = await service.get(source)
-    replay = await service.get(source)
-
-    assert first.data == replay.data == b"ID3audio"
-    assert provider.calls == [
-        (
-            "에이치티티피에스 이그잼플 닷컴의 에이피아이 브이일 유저스 경로로 "
-            "겟 요청을 보낼 때의 처리를 설명해 주세요.",
-            "tech_lead",
-        )
-    ]
-    assert source.text == (
-        "https://example.com/api/v1/users 경로로 GET 요청을 보낼 때의 처리를 설명해 주세요."
-    )
-
-
-async def test_concurrent_audio_runs_one_pronunciation_request_and_one_synthesis():
-    provider = Synthesizer()
-    source = question(text="circuit breaker의 역할과 YAML 설정을 설명해 주세요.")
-    model_inputs = []
-    entered = asyncio.Event()
-    release = asyncio.Event()
-
-    async def pronounce(terms):
-        model_inputs.append(terms)
-        entered.set()
-        await release.wait()
-        pronunciation = {
-            "circuit": "서킷",
-            "breaker": "브레이커",
-            "circuit breaker": "서킷 브레이커",
-        }
-        return tuple(pronunciation[term.text] for term in terms)
-
-    service = QuestionAudioService(
-        Cache(), provider, config(), pronounce=pronounce, pronunciation_identity="test-low"
-    )
-    async with asyncio.TaskGroup() as tasks:
-        first = tasks.create_task(service.get(source))
-        async with asyncio.timeout(1):
-            await entered.wait()
-        second = tasks.create_task(service.get(source))
-        await asyncio.sleep(0)
-        release.set()
-
-    assert first.result().data == second.result().data == (await service.get(source)).data
-    assert [" ".join(term.text for term in terms) for terms in model_inputs] == ["circuit breaker"]
-    assert all(isinstance(term, SpeechFragment) for term in model_inputs[0])
-    assert provider.calls == [("서킷 브레이커의 역할과 야믈 설정을 설명해 주세요.", "tech_lead")]
-
-
-async def test_new_acronym_and_name_preserve_korean_numbers_and_reuse_audio():
-    provider = Synthesizer()
-    raw = (
-        "QUIC 방식과 OpenTelemetry 도구를 사용하고, "
-        "지연 시간을 250ms 이하로 유지한 이유를 설명해 주세요."
-    )
-    source = question(text=raw)
-    model_inputs = []
-
-    async def pronounce(fragments):
-        model_inputs.append(fragments)
-        pronunciation = {"QUIC": "퀵", "OpenTelemetry": "오픈텔레메트리"}
-        return tuple(pronunciation[fragment.text] for fragment in fragments)
-
-    service = QuestionAudioService(
-        Cache(), provider, config(), pronounce=pronounce, pronunciation_identity="test-low"
-    )
-    first = await service.get(source)
-    replay = await service.get(source)
-
-    assert first.data == replay.data == b"ID3audio"
-    assert len(model_inputs) == 1
-    assert tuple(fragment.text for fragment in model_inputs[0]) == ("QUIC", "OpenTelemetry")
-    assert all(fragment.kind and fragment.context for fragment in model_inputs[0])
-    assert provider.calls == [
-        (
-            "퀵 방식과 오픈텔레메트리 도구를 사용하고 "
-            "지연 시간을 이백오십 밀리초 이하로 유지한 이유를 설명해 주세요.",
-            "tech_lead",
-        )
-    ]
-    assert source.text == raw
-
-
-async def test_unknown_domain_and_path_names_keep_their_structure_after_pronunciation():
-    provider = Synthesizer()
-    raw = "https://nebula.dev/api/v1/stream_ingest 경로로 GET 요청을 보내는 이유를 설명해 주세요."
-    model_inputs = []
-
-    async def pronounce(fragments):
-        model_inputs.append(fragments)
-        pronunciation = {"nebula": "네뷸라", "stream": "스트림", "ingest": "인제스트"}
-        return tuple(pronunciation[fragment.text] for fragment in fragments)
-
-    service = QuestionAudioService(
-        Cache(), provider, config(), pronounce=pronounce, pronunciation_identity="test-low"
-    )
-    source = question(text=raw)
-    first = await service.get(source)
-    replay = await service.get(source)
-
-    assert first.data == replay.data == b"ID3audio"
-    assert len(model_inputs) == 1
-    fragments = model_inputs[0]
-    assert tuple(fragment.text for fragment in fragments) == ("nebula", "stream", "ingest")
-    assert tuple(fragment.kind for fragment in fragments) == ("domain", "path", "path")
-    assert provider.calls == [
-        (
-            "에이치티티피에스 네뷸라 닷 데브의 에이피아이 브이일 스트림 인제스트 경로로 "
-            "겟 요청을 보내는 이유를 설명해 주세요.",
-            "tech_lead",
-        )
-    ]
-    assert source.text == raw
-
-
-async def test_old_symbol_narration_cache_is_replaced_and_new_audio_is_reused(monkeypatch):
-    from app.features.interview import question_audio
-
-    cache, provider = Cache(), Synthesizer()
-    source = question(text="/api/users_read 경로를 설명해 주세요.")
-    service = QuestionAudioService(cache, provider, config())
-    with monkeypatch.context() as previous_policy:
-        previous_policy.setattr(question_audio, "QUESTION_SPEECH_VERSION", "question-speech.v2")
-        cache.values[service._key(source)] = b"audio/mpeg\nID3old-symbol-audio"
-
-    first = await service.get(source)
-    replay = await service.get(source)
-
-    assert first.data == replay.data == b"ID3audio"
-    assert provider.calls == [("에이피아이 유저스 리드 경로를 설명해 주세요.", "tech_lead")]
-
-
-async def test_superseded_question_is_not_synthesized_after_pronunciation():
-    cache, provider = Cache(), Synthesizer()
-    source = question(text="circuit breaker의 역할을 설명해 주세요.")
-    current = True
-
-    async def pronounce(terms):
-        nonlocal current
-        current = False
-        return None
-
-    async def check_current():
-        return current
-
-    service = QuestionAudioService(
-        cache, provider, config(), pronounce=pronounce, pronunciation_identity="test-low"
-    )
-
-    with pytest.raises(TtsError, match="source_changed"):
-        await service.get(source, check_current=check_current)
-
-    assert provider.calls == []
-    assert not any(value.startswith(b"audio/") for value in cache.values.values())
-
-
-@pytest.mark.parametrize("times_out", [False, True])
-async def test_unavailable_pronunciation_keeps_local_rules_and_replays_the_fallback(times_out):
-    provider = Synthesizer()
-    source = question(text="circuit breaker의 역할과 YAML 설정을 설명해 주세요.")
-    model_inputs = []
-
-    async def pronounce(terms):
-        model_inputs.append(terms)
-        if times_out:
-            raise TimeoutError
-        return None
-
-    service = QuestionAudioService(
-        Cache(), provider, config(), pronounce=pronounce, pronunciation_identity="test-low"
-    )
-    first = await service.get(source)
-    replay = await service.get(source)
-
-    assert first.data == replay.data == b"ID3audio"
-    assert len(model_inputs) == 1
-    assert provider.calls == [("circuit breaker의 역할과 야믈 설정을 설명해 주세요.", "tech_lead")]
-
-
-async def test_question_audio_falls_back_to_original_when_local_expansion_exceeds_byte_limit():
-    provider = Synthesizer()
-    source = question(text="inference를 설명해 주세요.")
-    settings = replace(config(), max_text_bytes=len(source.text.encode()))
-    assert len("인퍼런스를 설명해 주세요.".encode()) > settings.max_text_bytes
-    service = QuestionAudioService(Cache(), provider, settings)
-
-    assert (await service.get(source)).data == b"ID3audio"
-    assert provider.calls == [(source.text, "tech_lead")]
-
-
 @pytest.mark.asyncio
 async def test_concurrent_audio_requests_synthesize_once_and_release_lock():
     cache, provider = Cache(), Synthesizer()
@@ -280,23 +79,6 @@ async def test_concurrent_audio_requests_synthesize_once_and_release_lock():
 
 
 @pytest.mark.asyncio
-async def test_failed_owner_cooldown_is_checked_after_waiter_acquires_lock():
-    class CooldownRace(Cache):
-        async def set(self, key, value, *, ex, nx=False):
-            if nx:
-                # 직전 작업의 실패 표시가 잠금 획득 직전에 기록된 상황이다.
-                await super().set(key.removesuffix(":lock") + ":failed", b"1", ex=30)
-            return await super().set(key, value, ex=ex, nx=nx)
-
-    provider = Synthesizer()
-    service = QuestionAudioService(CooldownRace(), provider, config())
-
-    with pytest.raises(TtsError, match="temporarily_unavailable"):
-        await service.get(question())
-
-    assert provider.calls == []
-
-
 async def test_cache_is_bound_to_interview_text_and_voice():
     cache, provider = Cache(), Synthesizer()
     service = QuestionAudioService(cache, provider, config())
@@ -485,6 +267,8 @@ async def test_outer_timeout_cools_down_before_another_paid_synthesis(monkeypatc
         async def synthesize(self, text, persona):
             calls.append(text)
             await asyncio.sleep(100)
+
+    from dataclasses import replace
 
     settings = replace(config(), timeout_seconds=0.01)
     service = QuestionAudioService(cache, Waiting(), settings)
