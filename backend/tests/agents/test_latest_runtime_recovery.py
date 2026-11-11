@@ -1,3 +1,101 @@
+DIRECTOR = "director_v17@calibrated-review"
+ANALYSIS = "answer_analysis_v7@claim-contribution-scope"
+ANSWER = "팀원 담당입니다"
+PROMPTS = {
+    "director": (DIRECTOR, "director-runtime-v17-calibrated-review.md"),
+    "answer_analysis": (ANALYSIS, "answer-analysis-runtime-v7-claim-contribution-scope.md"),
+}
+
+
+def wire_analysis():
+    return {
+        "coverage_assessment": {
+            "evaluation_status": "evaluated",
+            "sufficiency": "sufficient",
+            "covered_points": {"role": ["answer:0001"]},
+            "missing_points": [],
+            "limitations": [],
+        },
+        "technical_assessment": {
+            "explanation": "역할만 확인하고 코드 구현은 확인하지 않았다.",
+            "quote_ids": [],
+            "evidence_refs": [],
+            "limitations": ["구현 원문 미확인"],
+        },
+        "contribution_scope": {
+            "scope": "teammate",
+            "quote_ids": ["answer:0001"],
+            "unknown_reason": None,
+        },
+        "claim_checks": [
+            {
+                "quote_id": "answer:0001",
+                "claim_excerpt": "팀원 담당",
+                "status": "unverified",
+                "evidence_refs": [],
+                "limitations": ["개인 구현 원문 미확인"],
+            }
+        ],
+        "verification_requests": [],
+        "external_queries": [],
+    }
+
+
+def round_diagnostics(sent, record, recovery):
+    """실제 HTTP 본문과 DB 원시 시도를 라운드별로 결합한다."""
+    summaries = _attempts([c.AttemptMetadata(**row) for row in record.attempts])
+    input_hash = content_hash(sent[0]["payload"])
+    requests = []
+    for observed, attempt in zip(sent, record.attempts, strict=True):
+        body, payload = observed["body"], observed["payload"]
+        requests.append(
+            {
+                "operation": payload["operation"],
+                "prompt_version": attempt["prompt_version"],
+                "prompt_template": body["instructions"],
+                "prompt_template_sha256": hashlib.sha256(body["instructions"].encode()).hexdigest(),
+                "model": body["model"],
+                "schema_version": attempt["schema_version"],
+                "payload": payload,
+                "payload_sha256": content_hash(payload),
+            }
+        )
+    snapshot = {
+        "schema_version": "director-model-sources.v3",
+        "service_input_sha256": input_hash,
+        "requests": requests,
+    }
+    reviewed = record.attempts[1]
+    diagnostic = {
+        "schema_version": "director-diagnostics.v2",
+        "service_input_sha256": input_hash,
+        "source_snapshot_sha256": content_hash(snapshot),
+        "reviews": [
+            {
+                "request_index": 1,
+                "attempt_index": 1,
+                "request_payload_sha256": requests[1]["payload_sha256"],
+                "prompt_version": reviewed["prompt_version"],
+                "prompt_template_sha256": requests[1]["prompt_template_sha256"],
+                "response_raw_sha256": hashlib.sha256(reviewed["raw_output"].encode()).hexdigest(),
+                "response_model": reviewed["model"],
+                "assessment": json.loads(reviewed["raw_output"]),
+                "recovery": recovery,
+            }
+        ],
+    }
+    assert (
+        validate_diagnostics(
+            diagnostic,
+            service_input_sha256=input_hash,
+            source_snapshot=snapshot,
+            attempts=summaries,
+        )
+        == diagnostic
+    )
+    return snapshot, diagnostic, summaries
+
+
 @pytest.mark.parametrize("kind", ["rewrite", "replan"])
 async def test_latest_policies_restore_v7_and_recover_once_without_rewriting_audit(
     agent_sessions, agent_seed, kind

@@ -1,3 +1,37 @@
+async def test_replan_and_rewrite_share_the_same_auto_slot_and_six_director_call_ceiling(
+    agent_sessions, agent_seed
+):
+    await seed(agent_sessions, agent_seed)
+    sent, reviews = [], 0
+
+    async def handle(request):
+        nonlocal reviews
+        item = payload(request)
+        sent.append(item)
+        if "answer" in item:
+            return response(asdict(analysis()))
+        if item["operation"] == "plan":
+            return response(plan("tech_lead"))
+        reviews += 1
+        return response(
+            {**approved_review(), "wording_valid" if reviews == 2 else "plan_valid": False}
+        )
+
+    rid, redis = uuid4(), Redis()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        result = await answer(agent_sessions, agent_seed, http)
+        assert result.failure is not None and len(sent) == 5
+        for request_id in [rid, rid, uuid4()]:
+            with pytest.raises(AppError):
+                await retry(agent_sessions, agent_seed, redis, request_id, http)
+        assert len(sent) == 7
+    async with agent_sessions() as db:
+        row = await db.get(InterviewSession, agent_seed["interview_id"])
+        ledger = row.context_state["question_retry_v1"]
+        assert len(ledger) == 2 and sum(item["kind"] == "auto" for item in ledger.values()) == 1
+        assert len(row.context_state["director_generation_bindings_v1"]) == 3
+
+
 async def test_unshielded_auto_replan_cancellation_terminalizes_owned_slot(
     agent_sessions, agent_seed
 ):

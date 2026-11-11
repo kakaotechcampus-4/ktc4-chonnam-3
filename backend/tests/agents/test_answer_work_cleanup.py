@@ -18,6 +18,24 @@ from tests.agents.director_helpers import analysis, approved_review, plan, respo
 from tests.features.interview.test_ws_work_lifetime import WorkRedis, connection
 
 
+class ControlledWorkTimeout:
+    """WS의 답변 수명만 제어하고 다른 모듈의 asyncio는 그대로 둔다."""
+
+    def __init__(self):
+        self.scope = None
+
+    def timeout(self, seconds):
+        if seconds != 5:
+            return asyncio.timeout(seconds)
+        assert self.scope is None
+        # PG 준비 시간과 관계없이 목표 분기에 도착한 뒤 실제 timeout을 만료시킨다.
+        self.scope = asyncio.timeout(None)
+        return self.scope
+
+    def __getattr__(self, name):
+        return getattr(asyncio, name)
+
+
 @pytest.mark.parametrize("phase", ["automatic_rewrite", "external_lookup"])
 @pytest.mark.parametrize("stop", ["deadline", "cancel"])
 async def test_answer_lifetime_joins_real_claim_ledger_and_reservation_cleanup(
@@ -99,6 +117,8 @@ async def test_answer_lifetime_joins_real_claim_ledger_and_reservation_cleanup(
 
     monkeypatch.setattr(ws, "_read_state", read_state)
     monkeypatch.setattr(ws, "_answer_work_seconds", lambda *args: 5)
+    clock = ControlledWorkTimeout()
+    monkeypatch.setattr(ws, "asyncio", clock)
     monkeypatch.setattr(
         external_knowledge,
         "TavilyClient",
@@ -110,9 +130,15 @@ async def test_answer_lifetime_joins_real_claim_ledger_and_reservation_cleanup(
             ws._execute(old, agent_seed["owner"], 1, "팀원 담당입니다", answer_mode="text")
         )
         try:
-            await asyncio.wait_for(entered.wait(), 4)
+            # 이 대기는 목표 경로의 hang guard이며 제품 답변 수명 예산이 아니다.
+            await asyncio.wait_for(entered.wait(), 30)
+            assert isinstance(clock.scope, asyncio.Timeout) and clock.scope.when() is None
+            assert question_retry.asyncio is asyncio
+            assert old.redis.owner == old.nonce and old.redis.releases == []
             if stop == "cancel":
                 running.cancel()
+            else:
+                clock.scope.reschedule(asyncio.get_running_loop().time())
             expected = AgentStateError if stop == "deadline" else asyncio.CancelledError
             with pytest.raises(expected):
                 await running
@@ -120,7 +146,9 @@ async def test_answer_lifetime_joins_real_claim_ledger_and_reservation_cleanup(
             running.cancel()
             await asyncio.gather(running, return_exceptions=True)
     await assert_settled()
+    assert clock.scope.expired() is (stop == "deadline")
     assert old.redis.owner is None
+    assert old.redis.releases == [old.nonce]
     assert calls == (
         ["analysis", "plan", "review", "plan"]
         if phase == "automatic_rewrite"
