@@ -382,10 +382,10 @@ npm run dev
 | 계층 | 검증 대상 | 도구 · 위치 | 실행 시점 |
 |------|-----------|-------------|-----------|
 | 정적 검사 | 코드 스타일 · 타입 | Ruff · Mypy (backend · ai), ESLint · `tsc` (frontend) | PR · push |
-| 단위 | 순수 로직, 스키마, 쿼터, mock LLM 출력 | pytest · `ai/tests`, `backend/tests/core` · `llm_tasks` · `agents` | PR · push |
-| 통합 (Backend) | PostgreSQL 저장 · 제약, Redis 복구, 워커 · WebSocket · API | pytest-asyncio · `backend/tests/features` · `integrations` · `realtime` | PR · push |
-| 계약 | OpenAPI 스키마와 코드 enum의 값 일치, 계약 형식 | `backend/tests/contract` (`openapi.yaml`을 직접 읽음), `.claude/scripts/check_contracts.py` | PR · push |
-| 마이그레이션 | Alembic 업그레이드 · 스키마 그래프 | `backend/tests/test_analysis_migration.py` · `test_analysis_storage_upgrade.py` 등 | PR · push (backend · ai 변경 시) |
+| 단위 | 순수 로직, 스키마, 쿼터, mock LLM 출력 | pytest · `ai/tests`, `backend/tests/core` · `llm_tasks` | PR · push |
+| 통합 (Backend) | PostgreSQL 저장 · 제약, Redis 복구, 워커 · WebSocket · API, 면접관 연결 | pytest-asyncio · `backend/tests/features` · `agents` · `integrations` · `realtime` (`agents`의 Director 준비 · WS 테스트는 실제 DB · Redis 사용) | PR · push |
+| 계약 | 공개 응답 직렬화(camelCase · 오류 응답 형식)와 `openapi.yaml`의 일치, 계약 문서 형식 | `backend/tests/contract` (`openapi.yaml`을 직접 읽음), `.claude/scripts/check_contracts.py` | PR · push (계약 형식 검사는 계약 파일 변경 PR) |
+| 마이그레이션 | Alembic 업그레이드 · 다운그레이드 · 스키마 그래프 | `backend/tests/test_analysis_migration.py` · `test_analysis_storage_upgrade.py` 등 | PR · push (`test_analysis_migration.py`는 Analysis migration CI) |
 | Frontend 단위 | 순수 로직 · API 래퍼 · 면접 중단 분기 · 작은 컴포넌트 | Vitest + Testing Library (`frontend/src/**/*.test.ts(x)`) | PR · push |
 | Frontend E2E | 화면별 흐름 · 실패 · 재시도 · 음성/텍스트 모드 | Playwright + MSW 목 (`frontend/tests`) | PR · push |
 | 통합 E2E | 실제 앱 · 테스트 DB · Redis의 OAuth 세션 흐름 (GitHub HTTP만 대체) | Playwright (`frontend/tests-integration`) | 로컬 (`npm run test:integration`) |
@@ -393,21 +393,23 @@ npm run dev
 | 부하 스모크 | `/api/health`(세션이 있으면 `/api/me` · `/api/me/home`)의 오류율 · p50 · p95 지연 | `backend/scripts/load_smoke.py` (httpx + asyncio), 계산 · 판정 로직은 `backend/tests/test_load_smoke.py` | 로컬 수동 실행 (운영 서버 제외) |
 | QA (수동) | 실제 수집부터 면접 · 종료 · 리포트까지의 서비스 흐름 | 팀 내부 사용자 문답 검증 | 릴리스 전 |
 
+디렉터리 안에 단위 테스트와 통합 테스트가 섞여 있어, 위 표는 디렉터리의 주된 성격으로 분류했습니다.
+
 <br/>
 
 ### 테스트 환경
 
 | 환경 | 구성 | 용도 |
 |------|------|------|
-| 로컬 개발 | `docker compose up -d db redis` (PostgreSQL 15 · Redis 7, pgcrypto 확장) + API · 워커는 `uv`로 직접 실행 | 통합 테스트, 수동 확인 |
+| 로컬 개발 | `backend/`에서 `docker compose up -d db redis` (PostgreSQL 15 · Redis 7, pgcrypto 확장) + API · 워커는 `uv`로 직접 실행 | 통합 테스트, 수동 확인 |
 | Backend CI | 서비스 컨테이너 `postgres:15` · `redis:7`, 테스트 DB `task10_test`. Ruff check → Ruff format → Mypy → Pytest | PR · push |
 | AI CI | Ruff · Mypy · Pytest 후 평가 입력 계약 · 격리 검사 결과를 아티팩트로 저장 | PR · push |
 | Frontend CI | `check`(lint → build → Vitest)와 `e2e`(Playwright + MSW) job 분리, Node 24 | frontend 변경 PR · push |
 | 프론트엔드 로컬 | 기본은 MSW 목, 통합 E2E는 `VITE_USE_MSW=false`로 로컬 Backend에 연결 | 화면 · 실패 케이스 검증 |
-| 평가 전용 컨테이너 | `compose.evaluation.yaml`: 네트워크 차단(`network_mode: none`), 케이스 · 출력 디렉터리 명시, 기대값은 읽기 전용 마운트 | 기대값이 모델 입력으로 새지 않는 평가 |
+| 평가 전용 컨테이너 | `compose.evaluation.yaml`: 네트워크 차단(`network_mode: none`), 사례 · 출력 디렉터리 명시, 사례 · 참조 자료는 읽기 전용이고 출력 폴더만 쓰기 가능 | 외부 서비스 없이 입력과 계약을 검사하는 평가 |
 | LLM 호출 | 일반 테스트는 mock client만 사용, 실제 모델 평가에서만 provider 사용 | 비용 · 비결정성 격리 |
 
-Backend 테스트에는 격리된 PostgreSQL과 Redis가 필요합니다. `TEST_DATABASE_URL`의 DB 이름은 `task10_test`로 시작해야 하고, `TEST_REDIS_URL`은 13~15번 DB를 지정해야 합니다. 테스트가 테이블을 비우므로 개발용 DB를 지정하지 않습니다. Frontend E2E는 처음 한 번 `npx playwright install chromium`이 필요합니다.
+Backend 테스트에는 격리된 PostgreSQL과 Redis가 필요합니다. `TEST_DATABASE_URL`의 DB 이름은 `task10_test`로 시작해야 하고, `TEST_REDIS_URL`은 13~15번 DB를 지정해야 합니다. 테스트가 테이블을 비우므로 개발용 DB를 지정하지 않습니다. `test_analysis_migration.py`는 별도 DB를 가리키는 `TASK11_MIGRATION_URL`이 있을 때만 실행되고, 없으면 건너뜁니다. Frontend E2E는 처음 한 번 `npx playwright install chromium`이 필요합니다.
 
 <br/>
 
@@ -426,7 +428,7 @@ Backend 테스트에는 격리된 PostgreSQL과 Redis가 필요합니다. `TEST_
 
 `ai/evals`는 모델에 들어가는 입력과 기대 결과를 별도 파일로 나눠 기대값이 프롬프트로 새지 않게 합니다. 개발용(dev)과 최종 검증용(holdout) 사례를 다른 출처로 분리하고, 사례마다 검수 상태를 기록합니다. 채점기 자체도 점검 사례로 확인합니다.
 
-현재 Judge(`ai/prompts/evaluation-judge-v3.md`)는 사례별 허용(allowed) · 금지(forbidden) 기준과 실제 출력을 비교해 `accept` · `reject` · `ambiguous`로 판정하고, 기준별 결과와 근거를 남깁니다.
+Judge 프롬프트(`ai/prompts/evaluation-judge-v*.md`)는 사례별 허용(allowed) · 금지(forbidden) 기준과 실제 출력을 비교해 `accept` · `reject` · `ambiguous`로 판정하고, 기준별 결과와 근거를 남깁니다. 평가 실행기의 기본은 v2이며, 검증된 내부 산출물까지 읽는 v3는 `--judge-prompt`로 지정합니다.
 
 아래 꼬리질문 평가 기준과 골드셋 구성은 Judge를 고도화하기 위한 **평가 설계**이며, 5개 기준의 점수 · 가중 합산은 아직 하네스에 구현되지 않았습니다.
 
@@ -471,7 +473,7 @@ Backend 테스트에는 격리된 PostgreSQL과 Redis가 필요합니다. `TEST_
 |------|------|
 | Backend · AI 단위 · 통합 · 계약 테스트와 CI | 운영 중 |
 | Frontend CI (lint · build · Vitest · Playwright) | 운영 중. PR과 develop push에서 통과 |
-| Frontend E2E | Playwright 스펙 19개 파일 (MSW 목), 통합 E2E 1건 |
+| Frontend E2E | Playwright 스펙 20개 파일 (MSW 목), 통합 E2E 1건 |
 | Frontend 단위 · 컴포넌트 | Vitest + Testing Library 9개 파일 · 45개 테스트 |
 | AI 평가 하네스 | 입력 · 기대 분리, dev / holdout 분리, 검수 상태 관리, 채점기 점검 구현 (사례 종류: evidence · question · flow · report) |
 | Judge | `evaluation-judge` 프롬프트로 allowed · forbidden 기준 판정 |
@@ -487,7 +489,10 @@ Backend 테스트에는 격리된 PostgreSQL과 Redis가 필요합니다. `TEST_
 | [Backend CI](.github/workflows/backend-ci.yml) | `backend/`, `ai/` 변경 | Ruff, Mypy, Pytest (PostgreSQL 15, Redis 7 서비스 컨테이너) |
 | [AI and evaluation CI](.github/workflows/ai-ci.yml) | `ai/`, 평가 스크립트 변경 | Ruff, Mypy, Pytest, 평가 입력 계약 · 격리 검사 |
 | [Frontend CI](.github/workflows/frontend-ci.yml) | `frontend/` 변경 | lint, build, Vitest, Playwright |
-| [Analysis migration CI](.github/workflows/analysis-migration-ci.yml) | `backend/`, `ai/` 변경 | 분석 데이터 마이그레이션 |
+| [Analysis migration CI](.github/workflows/analysis-migration-ci.yml) | `backend/`, `ai/` 변경 | 분석 데이터 마이그레이션 · 다운그레이드 (`TASK11_MIGRATION_URL` 전용 DB) |
+| [Collaboration draft checks](.github/workflows/collaboration-check.yml) | 계약 파일 · 검사 스크립트 변경 PR | `check_contracts.py`, 검사 스크립트 단위 테스트 |
+
+Backend · AI · Frontend · Analysis migration CI는 develop · release 대상 PR과 develop push에서 실행됩니다.
 
 <br/>
 
