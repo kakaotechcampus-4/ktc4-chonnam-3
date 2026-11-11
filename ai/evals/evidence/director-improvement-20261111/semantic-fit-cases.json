@@ -2,5 +2,17 @@
   "schema": "director-semantic-fit-public-cases.v1",
   "mode": "actual_luna",
   "physical_model_calls": 24,
-  "scope": "Twelve exposed fixed candidates in one Mastodon Q8 context; not independent holdout and not end-to-end service."
+  "scope": "Twelve exposed fixed candidates in one Mastodon Q8 context; not independent holdout and not end-to-end service.",
+  "candidate_source": {
+    "repository": "mastodon/mastodon",
+    "commit": "cc76f85b9afc02b1265e68e6ee6c24ab266771b4",
+    "path": "app/services/post_status_service.rb",
+    "raw_url": "https://raw.githubusercontent.com/mastodon/mastodon/cc76f85b9afc02b1265e68e6ee6c24ab266771b4/app/services/post_status_service.rb",
+    "line_count": 309,
+    "byte_count": 10888,
+    "source_sha256": "3f61d6c6d5fb174b0cc1d61f9dedf89ea645cfbd8b394e551bb82d8db0b9387e",
+    "full_blob_sha1": "fce7b6d4c14c836d47f59f6d150fd206c291ed39"
+  },
+  "context_publicly_included": false,
+  "reference_selection_note": "n01 anchors historical K Q8 wording, but references were aligned across candidates; not original whole Question byte replay."
 }

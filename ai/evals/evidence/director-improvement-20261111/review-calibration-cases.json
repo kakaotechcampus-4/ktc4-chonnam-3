@@ -1,5 +1,9 @@
 {
   "schema": "director-public-review-calibration.v1",
   "mode": "actual_luna",
-  "physical_model_calls": 16
+  "physical_model_calls": 16,
+  "candidate_count": 8,
+  "additional_timing_probe_excluded": 1,
+  "judger": "Codex; not independent human review",
+  "cases": []
 }

@@ -700,6 +700,251 @@
         ],
         "naturalness_note": "공손한 실제 면접 도입 질문이며 기술·채점 용어가 노출되지 않는다."
       }
+    },
+    {
+      "turn_no": 2,
+      "synthetic_answer": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "이 파일에서는 idempotency 키가 있을 때 Redis 락 안에서 기존 키를 조회하고, 처리 블록이 끝난 뒤 status ID를 1시간 TTL로 기록합니다. 이 구현에서 idempotency가 중복 생성을 막는 범위를 어떻게 판단하시겠어요? 코드 흐름을 근거로 설명해 주세요.",
+        "topic_code": "idempotency_scope",
+        "question_contract": {
+          "purpose": "이 구현에서 idempotency가 중복 생성을 막는 범위를 어떻게 판단하시겠어요? 코드 흐름을 근거로 설명해 주세요.",
+          "basis_refs": [
+            {
+              "id": "public-ref-005",
+              "kind": "evidence"
+            },
+            {
+              "id": "public-ref-001",
+              "kind": "evidence"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "idempotency_scope",
+              "description": "이 구현에서 idempotency가 중복 생성을 막는 범위를 어떻게 판단하시겠어요? 코드 흐름을 근거로 설명해 주세요."
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "jd_requirement_ids": []
+      },
+      "answer_text": "동시에 들어온 요청에 대해서는 계정 ID와 idempotency 값이 같은 요청끼리 같은 Redis 락을 쓰는 구조로 읽었습니다. 락을 얻은 안쪽에서 기존 키를 조회하고, 값이 있으면 그 값으로 기존 status를 찾아 IdempotencyError에 담습니다. call의 rescue가 그 status를 반환하므로, 그 경로에서는 생성 블록을 다시 실행하지 않는다고 판단했습니다. 다만 제가 지금 설명한 것은 동일 키의 동시 요청을 다루는 흐름까지입니다. 시간 차이를 두고 재시도하거나 처리 중간에 실패하는 경우까지 어디까지 막는지는 아직 정리하지 못했습니다.",
+      "raw_answer_assessment": {
+        "coverage_assessment": {
+          "evaluation_status": "evaluated",
+          "sufficiency": "partial",
+          "covered_points": {
+            "idempotency_scope": [
+              "answer:0001",
+              "answer:0002",
+              "answer:0003",
+              "answer:0004"
+            ]
+          },
+          "missing_points": [
+            "idempotency_scope"
+          ],
+          "limitations": [
+            "동일 계정·idempotency 키의 동시 요청에서 락 안의 기존 키 조회와 중복 경로를 설명했습니다. 다만 처리 블록이 성공적으로 끝난 뒤 status ID를 1시간 TTL로 저장한다는 흐름을 답변에서 다루지 않아, 시간 차가 있는 재시도에 대한 유효 범위를 설명하지 못했습니다.",
+            "처리 블록이 실패해 Redis 기록 전에 끝나는 경우에는 키가 기록되지 않아 재시도에서 블록이 다시 실행될 수 있다는 점도 설명되지 않았습니다. 답변은 이 시간 차 재시도와 실패 경우를 아직 정리하지 못했다고 밝혔습니다."
+          ]
+        },
+        "contribution_scope": {
+          "scope": "unknown",
+          "quote_ids": [],
+          "unknown_reason": "답변은 코드 흐름을 읽고 판단한 내용을 설명하지만, 해당 구현의 작성·운영에 대한 본인이나 팀의 기여를 진술하지 않습니다."
+        },
+        "claim_checks": [
+          {
+            "quote_id": "answer:0001",
+            "claim_excerpt": "동시에 들어온 요청에 대해서는 계정 ID와 idempotency 값이 같은 요청끼리 같은 Redis 락을 쓰는 구조로 읽었습니다.",
+            "status": "supported",
+            "evidence_refs": [
+              "public-ref-005"
+            ],
+            "limitations": []
+          },
+          {
+            "quote_id": "answer:0002",
+            "claim_excerpt": "락을 얻은 안쪽에서 기존 키를 조회하고, 값이 있으면 그 값으로 기존 status를 찾아 IdempotencyError에 담습니다.",
+            "status": "supported",
+            "evidence_refs": [
+              "public-ref-005"
+            ],
+            "limitations": []
+          },
+          {
+            "quote_id": "answer:0003",
+            "claim_excerpt": "call의 rescue가 그 status를 반환하므로, 그 경로에서는 생성 블록을 다시 실행하지 않는다고 판단했습니다.",
+            "status": "supported",
+            "evidence_refs": [
+              "public-ref-001",
+              "public-ref-005"
+            ],
+            "limitations": []
+          }
+        ],
+        "verification_requests": [],
+        "external_queries": []
+      },
+      "independent_annotation": {
+        "question_verdict": "accept",
+        "question_criteria": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "rationale": "충분한 자기소개 뒤 공개 코드의 멱등성 범위라는 새 기술 판단으로 이동한다. 자기 역할을 다시 설명하도록 요구하지 않는다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "satisfied",
+            "rationale": "중복 생성 방지 범위 판단 하나와 그 판단의 코드 근거를 요청한다. 범위 판단의 이유를 독립된 두 번째 목표로 세지 않는다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "rationale": "preamble은 코드 배경 사실이고 직접 요청은 멱등성 범위·코드 근거로 끝난다. request 전체와 purpose·유일 필수점이 일치한다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "rationale": "허용된 기술 main 질문, project_understanding/communication 키와 제공 멱등성 evidence에 맞는다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "rationale": "Redis 락 안의 기존 키 조회, yield 뒤 status ID setex 3600은 원문 246~255줄에서 확인된다. 실제 운영 보장·락 구현·개인 기여를 확정하지 않는다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "rationale": "스터디에서 호출 흐름을 정리했다는 답변을 구현·운영 기여로 바꾸지 않고 코드 자체를 묻는다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "rationale": "첫 기술 질문으로 기존 HR 답변을 반복하지 않는다. 배경은 코드 호출 사실이며 시간·실패 상황까지 포함하는 범위 판단의 답은 미리 제공하지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "rationale": "미확인한 실제 동시 처리 결과나 자료 한계를 역량 부족·기능 부재로 판정하지 않는다."
+          }
+        ],
+        "naturalness_note": "판단 대상은 명확하다. preamble에 idempotency·Redis·status·TTL 용어와 동작 세 가지가 함께 있어 첫 HR보다 읽기 부담은 있으나 독립된 여러 답을 요구하지는 않는다."
+      }
+    },
+    {
+      "turn_no": 3,
+      "synthetic_answer": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "처리 블록이 정상 종료된 뒤 1시간 TTL로 키를 기록하는 흐름과 예외 경로를 근거로, 시간차 재시도에서 이 구현이 중복 생성을 막는 범위를 어떻게 판단하시겠어요?",
+        "topic_code": "idempotency_scope",
+        "question_contract": {
+          "purpose": "처리 블록이 정상 종료된 뒤 1시간 TTL로 키를 기록하는 흐름과 예외 경로를 근거로, 시간차 재시도에서 이 구현이 중복 생성을 막는 범위를 어떻게 판단하시겠어요?",
+          "basis_refs": [
+            {
+              "id": "public-ref-005",
+              "kind": "evidence"
+            },
+            {
+              "id": "public-ref-001",
+              "kind": "evidence"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "idempotency_scope",
+              "description": "처리 블록이 정상 종료된 뒤 1시간 TTL로 키를 기록하는 흐름과 예외 경로를 근거로, 시간차 재시도에서 이 구현이 중복 생성을 막는 범위를 어떻게 판단하시겠어요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "jd_requirement_ids": []
+      },
+      "answer_text": "그 부분은 아직 잘 모르겠습니다. 키가 만료되는 경우와 저장 전후에 예외가 나는 경우를 나눠서 끝까지 따라가 보지 못해서, 시간차 재시도에서 어느 범위까지 중복을 막는지 지금은 근거를 갖고 설명하기 어렵습니다.",
+      "raw_answer_assessment": {
+        "coverage_assessment": {
+          "evaluation_status": "evaluated",
+          "sufficiency": "insufficient",
+          "covered_points": {
+            "idempotency_scope": null
+          },
+          "missing_points": [
+            "idempotency_scope"
+          ],
+          "limitations": [
+            "답변은 키 만료와 저장 전후의 예외 경로를 따라가지 못했다고 밝혔을 뿐, 그 흐름을 근거로 시간차 재시도에서 중복 생성이 막히는 범위를 판단하지 않았습니다."
+          ]
+        },
+        "contribution_scope": {
+          "scope": "unknown",
+          "quote_ids": [],
+          "unknown_reason": "현재 답변은 흐름을 이해하거나 확인하지 못했다는 내용만 담고 있어, 구현·운영의 실제 기여 주체를 밝히지 않습니다."
+        },
+        "claim_checks": [],
+        "verification_requests": [],
+        "external_queries": []
+      },
+      "independent_annotation": {
+        "question_verdict": "accept",
+        "question_criteria": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "rationale": "직전 답변이 정리하지 못했다고 명시한 시간 차 재시도·예외의 방지 범위를 보완한다. 동시 요청 경로의 기존 설명은 유지한다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "satisfied",
+            "rationale": "TTL 기록과 예외 경로는 하나의 시간 차 재시도 범위 판단의 근거다. 별도 운영 경험이나 새로운 설계 선택을 함께 요구하지 않는다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "rationale": "빈 preamble 뒤 request 전체가 본문·purpose·유일 필수점 description과 같다. 숨은 채점 요구가 없다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "rationale": "실제 call007 Controller 옵션의 parent=e02496f8…1922, tech_lead, project_understanding/communication, missing idempotency_scope, complete와 일치한다. main의 새 technical_reasoning 키를 follow_up에 잘못 강제하지 않는다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "rationale": "정상 yield 뒤 setex 3600과 예외 시 이후 코드 미도달은 원문에서 확인 가능한 정적 흐름이다. 실제 장애 결과나 모든 재시도 보장을 전제로 확정하지 않는다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "rationale": "지원자가 못 정리한 범위만 묻고 본인이 구현·운영했다는 전제를 추가하지 않는다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "rationale": "같은 멱등성 주제지만 이미 설명한 동시 요청 경로의 재설명을 요구하지 않는다. 직접 미답이라고 한 시간 차·예외 범위를 한정해 묻는 허용된 보완이다. TTL의 코드 위치를 알려 주되 그 조건 아래의 판단 답은 제공하지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "rationale": "정리하지 못했다는 진술을 수용하고 확인 기회를 주며 역량 부족·거짓·구현 부재로 바꾸지 않는다."
+          }
+        ],
+        "naturalness_note": "조건과 기술 용어가 한 문장에 이어져 약간 길지만 묻는 판단은 하나로 명확하다. 이미 답한 동시 요청 흐름 전체를 다시 말하게 하지 않는다."
+      }
     }
   ]
 }

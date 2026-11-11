@@ -1,0 +1,13 @@
+{
+  "schema": "director-public-evidence-provenance.v1",
+  "transform": "explicit field selection; stable global pseudonyms for UUIDs; UTF-8 pretty JSON; original semantic judgments, false values, unknowns, question/answer wording and metric values retained",
+  "id_pseudonyms": 7,
+  "private_id_mapping_published": false,
+  "originals": [
+    {
+      "source_id": "I:claim-study/live/A/explicit-fact-and-future-proposal/input.json",
+      "sha256": "94172c1dee55a1707d5e5e6f4d5ab782905789f23e196f4ce13b26d2fdba2416",
+      "original_publicly_included": false
+    }
+  ]
+}
