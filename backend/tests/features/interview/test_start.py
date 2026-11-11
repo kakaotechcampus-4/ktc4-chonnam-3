@@ -4,8 +4,10 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import select
 
 from app.core.config import get_settings
+from app.db.models import InterviewTurn
 from app.features.interview.turn_service import save_answer
 
 from .factories import make_interview, make_repo, make_run, make_turn, make_user
@@ -43,13 +45,14 @@ async def test_waiting_interview_keeps_full_time_until_start_is_clicked(client, 
     assert waiting.started_at == first
 
 
-async def test_start_refused_unless_in_progress(client, db, waiting):
-    waiting.status = "preparing"
+@pytest.mark.parametrize("status", ["preparing", "preparing_failed", "completed", "abandoned"])
+async def test_start_refused_unless_in_progress(client, db, waiting, status):
+    waiting.status = status
     await db.commit()
     response = await client.post(f"/api/interviews/{waiting.id}/start")
     assert response.status_code == 409 and response.json()["error"]["reason"] == "not_ready"
     await db.refresh(waiting)
-    assert waiting.started_at is None
+    assert waiting.status == status and waiting.started_at is None
 
 
 async def test_start_unknown_foreign_and_anonymous(client, db, waiting):
@@ -69,6 +72,27 @@ async def test_answer_without_start_begins_timer_at_first_question(db, waiting):
     await db.refresh(waiting)
     assert waiting.started_at is not None
     assert datetime.now(UTC) - waiting.started_at >= timedelta(minutes=4)
+
+
+async def test_long_wait_then_first_answer_expires_at_next_question(client, db, waiting):
+    """보정은 안전장치다. 클릭 없이 제한 시간보다 오래 기다린 뒤 답하면 다음 질문이 오는 순간
+    이미 시간이 다 지나 있어 다음 조회에서 만료된다. 시작 기록은 FE가 보장해야 한다(#259)."""
+    total = get_settings().interview_duration_seconds
+    first = await db.scalar(
+        select(InterviewTurn).where(InterviewTurn.interview_session_id == waiting.id)
+    )
+    first.asked_at = datetime.now(UTC) - timedelta(seconds=total + 60)
+    await db.commit()
+
+    assert await save_answer(db, interview_id=waiting.id, turn_no=1, answer_text="답") is None
+    await db.refresh(waiting)
+    waiting.current_turn = 2
+    await make_turn(db, waiting, 2)
+    await db.commit()
+
+    response = await client.get(f"/api/interviews/{waiting.id}")
+    assert response.json()["status"] == "completed"
+    assert response.json()["remainingSeconds"] == 0
 
 
 async def test_answer_after_start_keeps_clicked_time(client, db, waiting):

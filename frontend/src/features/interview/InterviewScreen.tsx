@@ -224,6 +224,24 @@ export default function InterviewScreen() {
     if (status === 'completed') navigate(`/interview/${id}/report`, { replace: true });
   }, [status, isFetching, id, navigate]);
 
+  /**
+   * 진행 화면이 in_progress로 열리면 제한 시간을 시작한다(#259). 준비 화면의 [면접 시작하기]를
+   * 거치지 않은 진입(준비 뒤 새로고침, 대기 중 재연결 GET, 홈의 이어하기)도 질문을 보는 순간부터
+   * 센다. start는 멱등이라 버튼으로 이미 시작했으면 처음 시각이 유지된다. 응답 뒤 재조회해
+   * 남은 시간의 기준(dataUpdatedAt)을 시작 직후로 맞춘다. 실패해도 첫 답변 때 서버가 보정한다.
+   */
+  const startRequestedRef = useRef(false);
+  useEffect(() => {
+    if (isFetching || status !== 'in_progress' || startRequestedRef.current) return;
+    startRequestedRef.current = true;
+    api
+      .startInterview(id)
+      .then(() => void refetchInterview())
+      .catch(() => {
+        startRequestedRef.current = false;
+      });
+  }, [status, isFetching, id, refetchInterview]);
+
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);

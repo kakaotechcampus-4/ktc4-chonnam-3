@@ -287,7 +287,10 @@ export default function InterviewPrepare() {
         return;
       }
     } catch {
-      // 시작 호출 실패(409 포함)는 아래 실패 안내로 처리한다. 다시 누르면 재시도다.
+      // 시작 호출 실패(409 포함)는 아래 실패 안내로 처리한다. 다른 탭에서 끝내거나 중단한
+      // 면접이면 다시 눌러도 409만 반복되므로 상태를 다시 읽는다. completed는 위 effect가
+      // 리포트로 보내고, abandoned는 아래 "중단된 면접" 화면이 받는다.
+      void refetchInterview();
     }
 
     setStarting(false);
