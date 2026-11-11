@@ -886,6 +886,121 @@ def run_version(provider, ctx, *, version="director_v4", **options):
     )
 
 
+def test_v17_decodes_plan_v4_then_reviews_the_exact_canonical_public_question():
+    raw = source_bound_plan()
+    provider = Provider(raw, review(point_coverage=stable_coverage()))
+    result = run_with_required_point_review(provider, "director_v17@candidate")
+    assert result.succeeded
+    assert [request.schema_version for request in provider.requests] == [
+        "director-plan.v4",
+        "director-review.v3",
+    ]
+    candidate = result.data.question.data
+    assert candidate.question_contract.purpose == candidate.text
+    assert candidate.question_contract.required_points == (c.RequiredPoint("role", candidate.text),)
+    assert provider.requests[-1].payload["question"] == asdict(candidate)
+    (branch,) = provider.requests[0].output_schema["properties"]["question"]["anyOf"]
+    properties = branch["properties"]
+    assert "text" not in properties and {"preamble", "request"} <= set(properties)
+    assert set(properties["question_contract"]["properties"]) == {
+        "point_key",
+        "assumptions",
+        "basis_refs",
+        "evaluation_keys",
+    }
+
+
+def test_v17_restores_saved_v4_attempts_with_the_same_canonical_decoder():
+    provider = Provider(
+        source_bound_plan(), review(point_coverage=stable_coverage("not_asked", None))
+    )
+    result = run_with_required_point_review(provider, "director_v17@candidate")
+    assert result.failure.error_code == "director_candidate_rewrite"
+    saved = json.loads(json.dumps([asdict(attempt) for attempt in result.attempts]))
+    feedback = runtime().recovery_feedback_from_attempts(
+        saved, failure_code=result.failure.error_code
+    )
+    assert feedback is not None
+    assert asdict(feedback.previous_candidate) == provider.requests[-1].payload["question"]
+    saved[0]["schema_version"] = "director-plan.v3"
+    assert (
+        runtime().recovery_feedback_from_attempts(saved, failure_code=result.failure.error_code)
+        is None
+    )
+    saved[0]["schema_version"] = "director-plan.v4"
+    for attempt in saved:
+        attempt["prompt_version"] = "director_v16@candidate"
+    assert (
+        runtime().recovery_feedback_from_attempts(saved, failure_code=result.failure.error_code)
+        is None
+    )
+
+
+def test_v17_revalidates_source_bound_contract_after_provider_validation():
+    class DriftProvider(Provider):
+        async def __call__(self, request, validator):
+            result = await super().__call__(request, validator)
+            if result.succeeded and request.payload["operation"] == "plan":
+                candidate = result.data.question
+                result = replace(
+                    result,
+                    data=replace(
+                        result.data,
+                        question=replace(
+                            candidate,
+                            question_contract=replace(
+                                candidate.question_contract, evaluation_scope="별도 이유를 평가한다"
+                            ),
+                        ),
+                    ),
+                )
+            return result
+
+    provider = DriftProvider(source_bound_plan())
+    result = run_with_required_point_review(provider, "director_v17@candidate")
+    assert result.failure.error_code == "director_candidate_invalid"
+    assert len(provider.requests) == 1
+
+
+def test_v17_zero_route_schema_error_is_an_input_failure_without_a_model_send(monkeypatch):
+    def no_routes(*args):
+        raise c.ContractError("semantic", "source-bound allowed routes")
+
+    monkeypatch.setattr(runtime(), "_source_bound_plan_schema", no_routes)
+    provider = Provider(source_bound_plan())
+    result = run_with_required_point_review(provider, "director_v17@bounded-source")
+    assert result.failure.error_code == "director_input_invalid"
+    assert result.attempts == () and provider.requests == []
+
+
+@pytest.mark.parametrize("number", range(1, 17))
+def test_old_producers_keep_their_schema_without_entering_source_bound_routes(number, monkeypatch):
+    def unexpected(*args):
+        raise AssertionError("old versions must not use new routes")
+
+    monkeypatch.setattr(runtime(), "_source_bound_plan_schema", unexpected)
+    version = f"director_v{number}@preserved"
+    capability = importlib.import_module(
+        "devon_ai.agents.director.capabilities"
+    ).prompt_capabilities(version)
+    extra = {}
+    if capability.required_point_review:
+        extra["point_coverage"] = (
+            stable_coverage()
+            if capability.stable_point_review
+            else {"role": {"status": "asked", "question_excerpt": "맡은 역할을 소개"}}
+        )
+    provider = Provider(plan(), review(**extra))
+    result = run_with_required_point_review(provider, version)
+    assert result.succeeded
+    expected = (
+        runtime()._bounded_plan_schema(context(), {}, False)
+        if capability.bounded_ids
+        else runtime()._plan_schema(False)
+    )
+    assert provider.requests[0].output_schema == expected
+
+
 @pytest.mark.parametrize(
     "template",
     [
