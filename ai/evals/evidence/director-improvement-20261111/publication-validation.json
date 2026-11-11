@@ -3684,6 +3684,288 @@
     }
   ],
   "backend_execution_binding": {
-    "status": "verified_completed"
+    "status": "verified_completed",
+    "source_base_head": "561c3f5aacbc0faf1f14b5e17ab18ccbc17d2863",
+    "source_normalized_git_tree": "d552da05b8bccc3f36270534bdc14d4cbfdf174e",
+    "source_snapshot_sha256": "ca92b2d09d14a0bfeef7e1c0fc79ee905d1ccc198fc969f0c094923b7942dfa0",
+    "expected_file_manifest_sha256": "a128d18c864fd5128136f94746b80bfbccc0633fc8b441eb7a6aec3b92304c8d",
+    "execution_metadata_sha256": "177f41dc4df88259b430eadb03b5fb299293ad21aaea0ce40c1029db80bd84c7",
+    "source_copy_verification": {
+      "file_count": 1417,
+      "raw_sha256_matches": 1417,
+      "git_blobs_verified_exact": 1417,
+      "reconstructed_git_tree": "d552da05b8bccc3f36270534bdc14d4cbfdf174e",
+      "recorded_git_tree_matches": true,
+      "source_files_modified": 0,
+      "actual_source_index_modified": false,
+      "refs_or_commits_created": 0,
+      "whole_manifest_publicly_included": false
+    },
+    "selected_executed_source_files": [
+      {
+        "path": "ai/prompts/runtime-prompts.json",
+        "sha256": "25e7b80b6940334449e5ce9aaf5a2da46de19d50b9671fa3e981c368d37d0dc2",
+        "current_working_tree_raw_sha256": "25e7b80b6940334449e5ce9aaf5a2da46de19d50b9671fa3e981c368d37d0dc2",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/__init__.py",
+        "sha256": "9f452e0cda902bffbb93ea5040d5bdcd31795c67a9bd2f360c095749f7dbe8db",
+        "current_working_tree_raw_sha256": "6bf2b297c50227271d3332ab61de99940e9163d12f824b9b4e64c1c89e73cd29",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/agent.py",
+        "sha256": "1a1e785e375e383311b23967069b84905338d83893df372dee72552c82dd6d1e",
+        "current_working_tree_raw_sha256": "1a1e785e375e383311b23967069b84905338d83893df372dee72552c82dd6d1e",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/capabilities.py",
+        "sha256": "3bee40d565d38369421a3aefc88f7f219ed2ac96d33e62f5b705fe335e19d3c1",
+        "current_working_tree_raw_sha256": "3bee40d565d38369421a3aefc88f7f219ed2ac96d33e62f5b705fe335e19d3c1",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/model_input.py",
+        "sha256": "73b26b0708b260d4036c5cef2f36148b822774f16c122438e087e596b0d3b388",
+        "current_working_tree_raw_sha256": "73b26b0708b260d4036c5cef2f36148b822774f16c122438e087e596b0d3b388",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/plan_wire.py",
+        "sha256": "8ffd058975787ffbde6efd5c628badc70d10336314162caf9e666b2cb6c96839",
+        "current_working_tree_raw_sha256": "8ffd058975787ffbde6efd5c628badc70d10336314162caf9e666b2cb6c96839",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/policy.py",
+        "sha256": "fb7ff353cf9d832079b59eb2882ca9cdc4a044deb624b1ef3ce5b719097bd115",
+        "current_working_tree_raw_sha256": "fb7ff353cf9d832079b59eb2882ca9cdc4a044deb624b1ef3ce5b719097bd115",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/review.py",
+        "sha256": "d8dd63260088487edf65a912b01bc801332e0a36c1b6b43be3665de125bea4be",
+        "current_working_tree_raw_sha256": "d8dd63260088487edf65a912b01bc801332e0a36c1b6b43be3665de125bea4be",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/runtime.py",
+        "sha256": "e2c9cfd0b5828d1e7de53b1d5159a0f85a4955dc105a09d5bc0bd6ef2964a0bc",
+        "current_working_tree_raw_sha256": "e2c9cfd0b5828d1e7de53b1d5159a0f85a4955dc105a09d5bc0bd6ef2964a0bc",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/tools.py",
+        "sha256": "d358806709df22f4a54a85cf3ac6519fdf727276ff5f7fad826097a1e08537ad",
+        "current_working_tree_raw_sha256": "db43c668ccf4b0dc8a3dde81a6b14dacdb991bf9d7ef41fec398039337b65dc6",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/llm_tasks/answer_analysis.py",
+        "sha256": "1b65754d5773e46b191719a53d6a3a240a66650cc828bf01df7c29b63cf54e3b",
+        "current_working_tree_raw_sha256": "1b65754d5773e46b191719a53d6a3a240a66650cc828bf01df7c29b63cf54e3b",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/llm_tasks/answer_analysis_wire.py",
+        "sha256": "3b5934b6537ee1e4353ef6606a895bb4b9e71d8f5aa41c8944ba6e43db8c7704",
+        "current_working_tree_raw_sha256": "3b5934b6537ee1e4353ef6606a895bb4b9e71d8f5aa41c8944ba6e43db8c7704",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "current_working_tree_raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/agent_context.py",
+        "sha256": "0584db1281fe716ceb6486af5fb9a067235ebb18bed3cbab54e9520a640a6998",
+        "current_working_tree_raw_sha256": "0584db1281fe716ceb6486af5fb9a067235ebb18bed3cbab54e9520a640a6998",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/agent_queries.py",
+        "sha256": "94be6fad10cab2b0228c89547cff5f9a779b6fe359eab43682ed8272a25ce45a",
+        "current_working_tree_raw_sha256": "a910660423e260a72f6ec0f2bd5556edbc10bf11f178910092ed0ac3250bda10",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/agent_service.py",
+        "sha256": "9d3de5c58ce84a35807c0fb34f6007d8864103aa7607ad28ee193f649df0845a",
+        "current_working_tree_raw_sha256": "93e841a7caec67b7ce0de86093897ce06b70d36716537e38176fa3f636a60e98",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/answer_audio.py",
+        "sha256": "8a3041766ed06983a7480a60d7c6c340ea2abee0585f612275c86720aecca839",
+        "current_working_tree_raw_sha256": "22e5979f8b5fa4b88dd566adddb36209248cbdfa95f34bc4498b0bbd35f2a289",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/answer_context.py",
+        "sha256": "7fbab2c8801de4e653add02262d2f45e965d3e1980a3ffdc47b15acac7e8f298",
+        "current_working_tree_raw_sha256": "7fbab2c8801de4e653add02262d2f45e965d3e1980a3ffdc47b15acac7e8f298",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/director_service.py",
+        "sha256": "81e270173b3758753ea91944483e3aba8c08f5f68d2520db47e963faa1786fb4",
+        "current_working_tree_raw_sha256": "81e270173b3758753ea91944483e3aba8c08f5f68d2520db47e963faa1786fb4",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/evaluation_coverage.py",
+        "sha256": "e9174bbc61840987d7006b041f665a93602b6e116ee59f0ff03f0f41f777e683",
+        "current_working_tree_raw_sha256": "e9174bbc61840987d7006b041f665a93602b6e116ee59f0ff03f0f41f777e683",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/external_knowledge.py",
+        "sha256": "59cdb2bf5bdcbef5d9d40f9f316994f6ad01393832bac1693ee6cd7e2acd6bd9",
+        "current_working_tree_raw_sha256": "59cdb2bf5bdcbef5d9d40f9f316994f6ad01393832bac1693ee6cd7e2acd6bd9",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/generation_binding.py",
+        "sha256": "cbaa5a14ceaf646c6e499de917be09a65261b801f38a9a39c2e48166a8dfa679",
+        "current_working_tree_raw_sha256": "cbaa5a14ceaf646c6e499de917be09a65261b801f38a9a39c2e48166a8dfa679",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/observation.py",
+        "sha256": "654502791d3e5262ff841806f43633aad69440db6553a5db901f09b55f4eb792",
+        "current_working_tree_raw_sha256": "654502791d3e5262ff841806f43633aad69440db6553a5db901f09b55f4eb792",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/prepare.py",
+        "sha256": "d24b36ef2f07a2110210cdae09afd040004a061f0567f76d545f1fc218c9c80f",
+        "current_working_tree_raw_sha256": "d24b36ef2f07a2110210cdae09afd040004a061f0567f76d545f1fc218c9c80f",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/prepare_checkpoint.py",
+        "sha256": "9458cd18bedb8feb18a033b4b4ec97348bafbdcb8af7d56fc2f3e43aa515eadd",
+        "current_working_tree_raw_sha256": "c8fae91211e428628d4af6a28cc1049df439fb6761f40a1bab360ab5455c9a0d",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/prepare_lease.py",
+        "sha256": "26d7582ea79afae07efce39bbb9f5be647e0f85a41a667c9b4b87df3cddc2528",
+        "current_working_tree_raw_sha256": "27c3553f025b09b6bef96c15cc81e22beb4e8c49da829740f3183187d4faddd8",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/queries.py",
+        "sha256": "bb9daf3f545f21416efc66ffc8bb2a13ee94cb0d21388d6e6f580e47e57cfd53",
+        "current_working_tree_raw_sha256": "d51a9c3609a11a441e3da1638b1b81f14da2e9d3cad2e7deaa2474d7489d98e2",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/question_audio.py",
+        "sha256": "44f7482abb6207155e21ef60da3e165ae61895b5643754cff3b120c968dc9b09",
+        "current_working_tree_raw_sha256": "44f7482abb6207155e21ef60da3e165ae61895b5643754cff3b120c968dc9b09",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/question_replay.py",
+        "sha256": "929c546b5eb82e7df0e30947311bfdff8d472f949ae8ff52f5fbef84fe41930d",
+        "current_working_tree_raw_sha256": "cbd87cc756facda2790216cbc13c308354739751b27de4f0d764de0c47354f4a",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/question_retry.py",
+        "sha256": "28acaed59b092520e45f47de61e4d4358d560f94da066cff87e15a1cdd38bec3",
+        "current_working_tree_raw_sha256": "28acaed59b092520e45f47de61e4d4358d560f94da066cff87e15a1cdd38bec3",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/question_structure.py",
+        "sha256": "d5d51b48166b9ff67ffe5c6c188db96ef03311a705aea48b87cae6a7694e3167",
+        "current_working_tree_raw_sha256": "bdafbe8196a2efcbc638ec39ae479165d1d046eed3fc7aaff2065d99436f7a19",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/queue.py",
+        "sha256": "aeb3411a194c2d9eb83c4e3dd9c8f3e5d0ed53ba90a1a0a5f3263af2e6dad870",
+        "current_working_tree_raw_sha256": "17d5b818ff60bf92d63783d01d1afa2ca0cd36b62e3ada91c7b1261ca7484884",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/repository_candidates.py",
+        "sha256": "b71f383e510e819d394e13ec61ae29aba24f8303611291cdd23c7413994803e4",
+        "current_working_tree_raw_sha256": "2c0a6fdc6ea78c107f5072598905b8433251c318170b660059bc40ceab7de34c",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      }
+    ]
   }
 }
