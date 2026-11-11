@@ -57,7 +57,8 @@ for (const [reason, message] of [
   test(`${reason} 계정에는 상태에 맞는 안내를 표시한다`, async ({ page }) => {
     await fault(page, '/me', 403, reason);
     await page.goto('/home');
-    await expect(page.getByRole('alert')).toContainText(message);
+    // /home 로드 뒤 403으로 /login?error=를 다시 전체 로드한다. 병렬 실행 중 두 번 로드가 5초를 넘긴다.
+    await expect(page.getByRole('alert')).toContainText(message, { timeout: 10_000 });
     await expect(page).toHaveURL(new RegExp(`/login\\?error=${reason}$`));
   });
 }
