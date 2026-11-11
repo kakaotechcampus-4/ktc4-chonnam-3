@@ -58,6 +58,41 @@
       "source_id": "I:claim-study/live/codex-source-grade.json",
       "sha256": "5c2ebfb5c303bd2f23b0ea6368868c19d143789c6aa832add1686c7a9f619c34",
       "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/oracle.json",
+      "sha256": "76ff3d3814fa72a69e104ba9228405588afc9ea08472b162cb98d4e8e0a6c6e2",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:refinement/contribution-source-grade.json",
+      "sha256": "fe5217570d52cf20ffb8082da85b5f4cd4dc8a552b74b8865dfd9ce11f5bb442",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-audit/live-response-grade.json",
+      "sha256": "e0727aa6958929bd75f02e14294bd8beb5bc12dcf6ed0007004d03101fac1b38",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/cases-selected-eight.json",
+      "sha256": "a02fb5487fa5fde3e024094e28f927a15ce185260a0ca4341c1dfe8da63c201c",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-A-contract-regression-fresh-bat-197390-tool_unavailable.json",
+      "sha256": "47691ff51d0cfd62cf7aebf437f90ead398c7ffe56b2937064384736307e11db",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-A-fresh-kubernetes-268685-dont_know.json",
+      "sha256": "e5d8adbe8b8c5d1807f42babce347dd51f1d6f8d44008d1a2f822a7a858e0c91",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-A-fresh-postgres-224704-sufficient.json",
+      "sha256": "e4366067f986bf6eb618028845816c689729eb7972fcf46840cc26e35265474f",
+      "original_publicly_included": false
     }
   ]
 }

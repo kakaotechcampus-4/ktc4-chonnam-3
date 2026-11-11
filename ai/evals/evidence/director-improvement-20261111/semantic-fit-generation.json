@@ -186,6 +186,93 @@
         "fixture_boundary": "partial 답변·분석과 마지막 턴 Context는 합성 대조 fixture다. 실제 K 질문·답변·첫 분석·DB를 변경하지 않았고 이번 실제 T3 출력으로 세지 않는다."
       },
       "synthetic_partial_analysis": true
+    },
+    {
+      "kind": "generation",
+      "group": "A",
+      "case_id": "actual-k-call022-context",
+      "prompt_version": "director_v17@calibrated-review",
+      "question_length_codepoints": 87,
+      "request_length_codepoints": 87,
+      "preamble_length_codepoints": 0,
+      "source_verdict": "reject",
+      "actual_review_verdict": "accept",
+      "source_and_review_agree": false,
+      "question": {
+        "persona": "tech_lead",
+        "text": "이메일 구독 발송 경로에서 Redis set과 지연 작업이 어떤 순서로 사용되어 여러 게시글의 알림을 묶도록 하는지, 코드 흐름을 근거로 설명해 주시겠어요?",
+        "topic_code": "email_subscription_batching",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "이메일 구독 발송 경로에서 Redis set과 지연 작업이 어떤 순서로 사용되어 여러 게시글의 알림을 묶도록 하는지, 코드 흐름을 근거로 설명해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "email_subscription_batch_flow",
+              "description": "이메일 구독 발송 경로에서 Redis set과 지연 작업이 어떤 순서로 사용되어 여러 게시글의 알림을 묶도록 하는지, 코드 흐름을 근거로 설명해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "public-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "public-ref-002"
+        ],
+        "jd_requirement_ids": []
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "코드와 주석은 게시글 ID를 계정별 Redis set에 추가하고 TTL을 설정한 뒤 지연 작업을 예약하는 순서와 그룹핑 목적을 뒷받침합니다. 이 흐름 설명이라는 단일 과제를 요구하며, 확인되지 않은 워커 내부 동작까지 묻지는 않습니다.",
+        "point_coverage": [
+          {
+            "key": "email_subscription_batch_flow",
+            "status": "asked",
+            "question_excerpt": "이메일 구독 발송 경로에서 Redis set과 지연 작업이 어떤 순서로 사용되어 여러 게시글의 알림을 묶도록 하는지, 코드 흐름을 근거로 설명해 주시겠어요?"
+          }
+        ]
+      },
+      "codex_source_grade": {
+        "candidate_source_verdict": "reject",
+        "criterion_scope": "이번 사전 동결한 신규 main의 problem_solving 최소 관찰 기준. 과거 K의 8기준 수용을 소급 변경하지 않는다.",
+        "direct_request_excerpt": "Redis set과 지연 작업이 어떤 순서로 사용되어 여러 게시글의 알림을 묶도록 하는지, 코드 흐름을 근거로 설명해 주시겠어요?",
+        "minimum_sufficient_answer_scope": "계정별 Redis set에 게시글 ID를 넣고 만료를 설정한 뒤 지연 worker를 예약하는 기존 순서를 설명하면 직접 요청을 완료할 수 있다.",
+        "source_checks": {
+          "source_grounding": "satisfied",
+          "explicit_unknown_limits": "satisfied",
+          "single_judgment": "satisfied",
+          "question_contract_alignment": "satisfied",
+          "controller_main_route": "satisfied",
+          "history_nonrepetition": "satisfied",
+          "problem_solving_main_semantic_fit": "violated"
+        },
+        "rationale": "원문과 주석으로 뒷받침되는 새 코드 흐름 질문이지만, 최소 충분 답에는 문제·실패·제약에서 원인 범위를 좁히거나 접근을 선택하거나 가설을 구별할 확인을 정하는 판단이 필요하지 않다. key와 intent를 관찰의 증거로 대신 쓰지 않는다.",
+        "actual_review_reason_factuality": "계정별 set·TTL·예약 순서와 묶음 목적은 실제 코드·주석에 맞으며 미조회 worker 내부를 확정하지 않는다. 다만 그 근거만으로 신규 PS main의 의미 적합성을 승인한 점은 이번 기준과 다르다.",
+        "parallel_judgment_axes": 1,
+        "understanding_load": 1,
+        "naturalness_note": "중심 요청은 하나지만 순서·코드 흐름·묶도록의 표현이 한 문장에 이어지고 Redis set·지연 작업 용어가 들어간다. 실제 청취·TTS 검증은 아니다.",
+        "not_claimed": [
+          "일반 코드 이해 질문의 부적합",
+          "지원자의 낮은 역량",
+          "이전 K 수용 판정의 번복",
+          "정책 간 일반 우월성",
+          "실제 개인 문제 해결 경험"
+        ]
+      },
+      "synthetic_partial_analysis": false
     }
   ]
 }
