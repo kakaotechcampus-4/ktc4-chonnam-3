@@ -26,11 +26,11 @@
 
 행 컬럼: 일시 · 공고(회사명 + 직무) · 사용 레포(태그) · 점수(`{totalScore}`/100) · `리포트 보기 →`
 
-`completed`와 시작 후 중단된 `abandoned`를 표시한다. 중단된 면접의 행 구성은 아래를 따른다.
+`completed`와 시작 후(`면접 시작하기` 클릭 뒤, [공통 0014](../../shared/decisions/0014-interview-timer-starts-on-click.md)) 중단된 `abandoned`를 표시한다. 중단된 면접의 행 구성은 아래를 따른다.
 
 #### 중단된 면접 행 ([공통 0009](../../shared/decisions/0009-interview-abandon-transition.md))
 
-- 표시 대상: `completed`와 `startedAt`이 있는 `abandoned`. 준비 단계에서 버린 면접은 기록할 내용이 없어 표시하지 않는다.
+- 표시 대상: `completed`와 `startedAt`이 있는 `abandoned`. 준비 단계에서 버린 면접과 준비가 끝났지만 시작하지 않고 나간 면접은 기록할 내용이 없어 표시하지 않는다.
 - abandoned 행: 일시는 `startedAt`, 점수 자리는 "중단됨", 버튼은 `리포트 보기` 대신 `다시 도전하기`(`POST /interviews/{id}/retry`). 리포트가 없어 `리포트 보기`는 두지 않는다.
 - 헤더: `totalCount`·`averageScore`는 completed 기준이므로 `완료 {totalCount}회`로 표기해 목록 행 수와 혼동하지 않게 한다.
 - 재도전 실패 안내는 [리포트 명세](report.md#post-interviewsidretry)의 reason별 처리를 행 아래에 보인다.
