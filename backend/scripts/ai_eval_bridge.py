@@ -207,7 +207,7 @@ class ServiceExecutor:
                     self.limits,
                     data.get("answer_analysis"),
                     data["reference_texts"],
-                    None,
+                    data.get("prior_analyses"),
                     data["tool_results"],
                 )
             except c.ContractError as exc:
@@ -215,7 +215,35 @@ class ServiceExecutor:
         if self.dry_run:
             return Execution({"service_task": task, "input_valid": True}, validated_only=True)
         attempts: list[c.AttemptMetadata] = []
+        director_requests: list[dict[str, Any]] = []
+        director_reviews: list[dict[str, Any]] = []
         narrative: c.ReportNarrative | None = None
+
+        def snapshot() -> dict[str, Any] | None:
+            return (
+                {
+                    "schema_version": DIRECTOR_SOURCES_VERSION,
+                    "service_input_sha256": content_hash(payload),
+                    "requests": copy.deepcopy(director_requests),
+                }
+                if task == "director" and director_requests
+                else None
+            )
+
+        def diagnostics() -> dict[str, Any] | None:
+            if not director_reviews:
+                return None
+            return validate_diagnostics(
+                {
+                    "schema_version": DIRECTOR_DIAGNOSTICS_VERSION,
+                    "service_input_sha256": content_hash(payload),
+                    "source_snapshot_sha256": content_hash(snapshot()),
+                    "reviews": copy.deepcopy(director_reviews),
+                },
+                service_input_sha256=content_hash(payload),
+                source_snapshot=snapshot(),
+                attempts=_attempts(attempts),
+            )
 
         def factory() -> Any:
             call = self.model_call_factory()
@@ -225,8 +253,124 @@ class ServiceExecutor:
                 request = replace(
                     request, limits=self.task_limits.get(request.prompt.task_name, request.limits)
                 )
-                result = await call(request, validator)
+                if task == "director":
+                    # 실제 실행 경계의 입력을 보존한다. 원래 사례에는 v9가 숨긴 필드가
+                    # 있으므로 그것으로 모델의 관찰 범위를 사후 추정하지 않는다.
+                    model_payload = json.loads(json.dumps(request.payload, ensure_ascii=False))
+                    director_requests.append(
+                        {
+                            "operation": model_payload.get("operation"),
+                            "prompt_version": request.prompt.version,
+                            "prompt_template": request.prompt.template,
+                            "prompt_template_sha256": hashlib.sha256(
+                                request.prompt.template.encode("utf-8")
+                            ).hexdigest(),
+                            "model": request.prompt.model,
+                            "schema_version": request.schema_version,
+                            "payload": model_payload,
+                            "payload_sha256": content_hash(model_payload),
+                        }
+                    )
+                checked_review: tuple[dict[str, Any], object] | None = None
+                checked_plan: object | None = None
+                checked_plan_raw: object | None = None
+
+                def tracked_validator(raw: object) -> Any:
+                    nonlocal checked_review, checked_plan, checked_plan_raw
+                    checked = validator(raw)
+                    if task == "director" and request.schema_version == SOURCE_BOUND_PLAN_SCHEMA:
+                        canonical = _source_bound_plan(raw, request.prompt.version)
+                        if canonical != getattr(checked, "question", None):
+                            raise c.ContractError(
+                                "semantic", "source-bound plan canonical question"
+                            )
+                        checked_plan = checked
+                        checked_plan_raw = copy.deepcopy(raw)
+                    if (
+                        task == "director"
+                        and request.schema_version in SUPPORTED_REVIEW_SCHEMAS
+                        and type(checked) in (c.QuestionReview, c.CandidateRecovery)
+                        and type(raw) is dict
+                    ):
+                        # 원래 검증기가 통과한 결과만 관찰한다. 재검토나 승인 권한은 없다.
+                        checked_review = (copy.deepcopy(raw), checked)
+                    return checked
+
+                result = await call(request, tracked_validator)
                 attempts.extend(result.attempts)
+                if (
+                    task == "director"
+                    and request.schema_version == SOURCE_BOUND_PLAN_SCHEMA
+                    and result.failure is None
+                ):
+                    try:
+                        valid = (
+                            checked_plan is not None
+                            and result.data is checked_plan
+                            and len(result.attempts) == 1
+                        )
+                        if valid:
+                            attempt = result.attempts[0]
+                            valid = (
+                                attempt.error_stage is None
+                                and attempt.error_code is None
+                                and (attempt.prompt_version, attempt.schema_version)
+                                == (request.prompt.version, request.schema_version)
+                                and attempt.raw_output is not None
+                                and content_hash(_response_json(attempt.raw_output))
+                                == content_hash(checked_plan_raw)
+                                and _source_bound_plan(
+                                    _response_json(attempt.raw_output), request.prompt.version
+                                )
+                                == getattr(checked_plan, "question", None)
+                            )
+                    except (ValueError, TypeError, RecursionError):
+                        valid = False
+                    if not valid:
+                        # 검증된 값과 실제 원시 응답이 다르면 Review나 성공 진단을 만들지 않는다.
+                        raise ExecutionError("schema", "director_plan_binding_invalid")
+                if (
+                    checked_review is not None
+                    and result.failure is None
+                    and result.data is checked_review[1]
+                    and len(result.attempts) == 1
+                ):
+                    attempt = result.attempts[0]
+                    raw_text = attempt.raw_output
+                    if (
+                        raw_text is not None
+                        and attempt.error_stage is None
+                        and attempt.error_code is None
+                        and (attempt.prompt_version, attempt.schema_version)
+                        == (request.prompt.version, request.schema_version)
+                    ):
+                        try:
+                            raw_matches = content_hash(json.loads(raw_text)) == content_hash(
+                                checked_review[0]
+                            )
+                        except ValueError:
+                            raw_matches = False
+                        if raw_matches:
+                            observed = director_requests[-1]
+                            director_reviews.append(
+                                {
+                                    "request_index": len(director_requests) - 1,
+                                    "attempt_index": len(attempts) - 1,
+                                    "request_payload_sha256": observed["payload_sha256"],
+                                    "prompt_version": observed["prompt_version"],
+                                    "prompt_template_sha256": observed["prompt_template_sha256"],
+                                    "response_model": attempt.model,
+                                    "response_raw_sha256": hashlib.sha256(
+                                        raw_text.encode()
+                                    ).hexdigest(),
+                                    "assessment": checked_review[0],
+                                    "recovery": (
+                                        checked_review[1].recovery
+                                        if isinstance(checked_review[1], c.CandidateRecovery)
+                                        else None
+                                    ),
+                                }
+                            )
                 if (
                     request.prompt.task_name == "report"
                     and result.failure is None
@@ -247,7 +391,9 @@ class ServiceExecutor:
                     model_call=factory(),
                     answer_analysis=data.get("answer_analysis"),
                     reference_texts=data["reference_texts"],
+                    prior_analyses=data.get("prior_analyses"),
                     tool_results=data["tool_results"],
+                    recovery_feedback=data.get("recovery_feedback"),
                 )
                 if result.failure is not None or result.data is None:
                     failure = result.failure
@@ -263,6 +409,12 @@ class ServiceExecutor:
                         else asdict(result.data.question.data),
                     },
                     _attempts(attempts),
+                    source_snapshot={
+                        "schema_version": DIRECTOR_SOURCES_VERSION,
+                        "service_input_sha256": content_hash(payload),
+                        "requests": copy.deepcopy(director_requests),
+                    },
+                    diagnostics=diagnostics(),
                 )
             if task == "answer_analysis":
                 answer_result = await analyze_answer(
@@ -310,13 +462,41 @@ class ServiceExecutor:
                 artifacts=artifacts,
             )
         except ExecutionError as exc:
-            raise ExecutionError(exc.stage, exc.code, _attempts(attempts)) from None
+            raise ExecutionError(
+                exc.stage,
+                exc.code,
+                _attempts(attempts),
+                source_snapshot={
+                    "schema_version": DIRECTOR_SOURCES_VERSION,
+                    "service_input_sha256": content_hash(payload),
+                    "requests": copy.deepcopy(director_requests),
+                }
+                if task == "director" and director_requests
+                else None,
+                diagnostics=diagnostics(),
+            ) from None
         except c.ContractError as exc:
             raise ExecutionError(
-                exc.stage, "service_contract_rejected", _attempts(attempts)
+                exc.stage,
+                "service_contract_rejected",
+                _attempts(attempts),
+                source_snapshot=snapshot(),
+                diagnostics=diagnostics(),
             ) from None
         except Exception as exc:
-            raise ExecutionError("executor", type(exc).__name__, _attempts(attempts)) from None
+            raise ExecutionError(
+                "executor",
+                type(exc).__name__,
+                _attempts(attempts),
+                source_snapshot=snapshot(),
+                diagnostics=diagnostics(),
+            ) from None
+        except BaseException as exc:
+            # 취소 예외의 종류는 보존하고 완료한 시도·실제 요청만 사적 checkpoint에 전달한다.
+            exc.__dict__.update(
+                attempts=_attempts(attempts), source_snapshot=snapshot(), diagnostics=diagnostics()
+            )
+            raise
 
 
 def _narrative_artifacts(narrative: c.ReportNarrative) -> dict[str, object]:
