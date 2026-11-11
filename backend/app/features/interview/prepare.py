@@ -319,6 +319,8 @@ async def _snapshot(
             )
         if await load_active_prompt(db, "repo_deep") != prompt:
             raise SourcePreparationError("preparation_inputs_changed")
+        # 앱의 autoflush=False에서도 재조회가 선택 SHA·primary를 덮어쓰지 않게 한다.
+        await db.flush()
         prepare_checkpoint.store(interview, await prepare_checkpoint.checked(db, interview))
         return prompt, tuple(repositories), tuple(snapshot)
 

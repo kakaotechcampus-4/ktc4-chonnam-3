@@ -12,6 +12,7 @@ from devon_ai import contracts as c
 from devon_ai.llm_tasks.answer_analysis import analyze_answer as analyze
 
 from app.core.config import LLMSettings
+from app.integrations.execution_ledger import observe_call
 from app.integrations.llm.client import CallBudget, call_model
 
 
@@ -46,14 +47,19 @@ async def analyze_answer(
             attempt_sink=attempt_sink,
         )
 
-    return await analyze(
-        context,
-        question,
-        turn_id=turn_id,
-        answer_text=answer_text,
-        prompt=prompt,
-        limits=settings.call_limits(prompt.task_name),
-        model_call=model_call,
-        tool_results=tool_results,
-        allowed_locations=allowed_locations,
-    )
+    stage = "answer_analysis.enriched" if tool_results else "answer_analysis.initial"
+    async with observe_call(stage, kind="stage") as observed:
+        result = await analyze(
+            context,
+            question,
+            turn_id=turn_id,
+            answer_text=answer_text,
+            prompt=prompt,
+            limits=settings.call_limits(prompt.task_name),
+            model_call=model_call,
+            tool_results=tool_results,
+            allowed_locations=allowed_locations,
+        )
+        if observed is not None:
+            observed.complete(result.failure.error_code if result.failure else None)
+        return result
