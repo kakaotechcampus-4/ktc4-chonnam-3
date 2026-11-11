@@ -150,3 +150,19 @@ test('logout followed by browser Back returns to login without a dead retry scre
   await expect(page.getByRole('link', { name: 'GitHub로 계속하기' })).toBeVisible();
   await expect(page.getByRole('button', { name: '다시 시도' })).toHaveCount(0);
 });
+
+test('session ending blocks protected child routes under the same auth layout', async ({
+  page,
+}) => {
+  // 로그아웃 직후 /login이 그려지기 전에 뒤로 가기가 오면 같은 레이아웃 안에서 하위 경로만 바뀐다.
+  await page.goto('/mypage');
+  await expect(page.getByRole('heading', { name: /님의 정보/ })).toBeVisible({ timeout: 10_000 });
+  await page.evaluate(async () => {
+    const moduleUrl = '/src/shared/queryClient.ts';
+    const { clearSessionQueries } = await import(moduleUrl);
+    await clearSessionQueries();
+  });
+  await page.getByRole('navigation').getByText('홈', { exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole('button', { name: '다시 시도' })).toHaveCount(0);
+});
