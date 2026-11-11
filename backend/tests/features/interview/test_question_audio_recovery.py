@@ -294,3 +294,142 @@ async def test_retry_charges_characters_only_when_a_new_audio_is_actually_synthe
     assert len(provider.calls) == len(budget.reservations) == len(budget.settled) == 2
     assert [receipt.characters for receipt in budget.reservations] == list(map(len, provider.calls))
     assert all(outcome == "success" for _, outcome in budget.settled)
+
+
+@pytest.mark.parametrize("failure", ["budget_exhausted", "provider_error"])
+async def test_failed_promotion_replays_fallback_without_erasing_paid_usage(failure):
+    class Budget:
+        def __init__(self):
+            self.reserved = []
+            self.outcomes = []
+
+        async def reserve(self, text):
+            if failure == "budget_exhausted" and self.reserved:
+                raise TtsError("budget_exhausted")
+            receipt = CharacterReservation(str(len(self.reserved)), len(text), "fixture")
+            self.reserved.append(receipt)
+            return receipt
+
+        async def settle(self, receipt, outcome):
+            self.outcomes.append(outcome)
+
+    class FailingPromotion(Synthesizer):
+        async def synthesize(self, text, persona):
+            if self.calls:
+                self.calls.append(text)
+                raise TtsError("provider_error")
+            return await super().synthesize(text, persona)
+
+    cache, provider, budget = ExpiringCache(), FailingPromotion(), Budget()
+    attempts = []
+
+    async def pronounce(fragments):
+        attempts.append(fragments)
+        return None if len(attempts) == 1 else ("서킷 브레이커",)
+
+    config = settings()
+    service = QuestionAudioService(
+        cache,
+        BudgetedSpeechSynthesizer(provider, config, budget),
+        config,
+        pronounce=pronounce,
+        pronunciation_identity="fixture",
+    )
+    source = question()
+    original = await service.get(source)
+    cache.now += 61
+    assert (await service.get(source)).data == original.data
+    assert (await service.get(source)).data == original.data
+    assert len(attempts) == 2
+
+    cache.now += 61
+    assert (await service.get(source)).data == original.data
+    assert len(attempts) == 3
+    expected_calls = 1 if failure == "budget_exhausted" else 3
+    assert len(provider.calls) == len(budget.reserved) == expected_calls
+    assert [receipt.characters for receipt in budget.reserved] == list(map(len, provider.calls))
+    assert budget.outcomes == ["success"] + ["uncertain"] * (expected_calls - 1)
+
+
+@pytest.mark.parametrize("failure", ["budget_exhausted", "provider_error"])
+async def test_synthesis_failure_without_a_prior_fallback_still_fails(failure):
+    class Failing(Synthesizer):
+        async def synthesize(self, text, persona):
+            self.calls.append(text)
+            raise TtsError(failure)
+
+    cache, provider = ExpiringCache(), Failing()
+
+    async def pronounce(fragments):
+        return ("서킷 브레이커",)
+
+    service = QuestionAudioService(
+        cache, provider, settings(), pronounce=pronounce, pronunciation_identity="fixture"
+    )
+
+    with pytest.raises(TtsError, match=failure):
+        await service.get(question())
+    assert len(provider.calls) == 1
+
+
+async def test_failed_promotion_never_returns_fallback_after_the_question_changes():
+    current = True
+
+    class FailingPromotion(Synthesizer):
+        async def synthesize(self, text, persona):
+            nonlocal current
+            if self.calls:
+                self.calls.append(text)
+                current = False
+                raise TtsError("provider_error")
+            return await super().synthesize(text, persona)
+
+    cache, provider = ExpiringCache(), FailingPromotion()
+    attempts = []
+
+    async def pronounce(fragments):
+        attempts.append(fragments)
+        return None if len(attempts) == 1 else ("서킷 브레이커",)
+
+    async def check_current():
+        return current
+
+    service = QuestionAudioService(
+        cache, provider, settings(), pronounce=pronounce, pronunciation_identity="fixture"
+    )
+    source = question()
+    await service.get(source, check_current=check_current)
+    cache.now += 61
+
+    with pytest.raises(TtsError, match="source_changed"):
+        await service.get(source, check_current=check_current)
+
+
+async def test_cancelled_completed_promotion_keeps_the_improved_audio():
+    class CancelledPromotion(Synthesizer):
+        async def synthesize(self, text, persona):
+            audio = await super().synthesize(text, persona)
+            if len(self.calls) > 1:
+                raise CompletedSpeechCancelled(audio)
+            return audio
+
+    cache, provider = ExpiringCache(), CancelledPromotion()
+    attempts = []
+
+    async def pronounce(fragments):
+        attempts.append(fragments)
+        return None if len(attempts) == 1 else ("서킷 브레이커",)
+
+    service = QuestionAudioService(
+        cache, provider, settings(), pronounce=pronounce, pronunciation_identity="fixture"
+    )
+    source = question()
+    before = await service.get(source)
+    cache.now += 61
+
+    with pytest.raises(asyncio.CancelledError):
+        await service.get(source)
+    recovered = await service.get(source)
+    assert recovered.data != before.data
+    assert "서킷 브레이커".encode() in recovered.data
+    assert len(attempts) == len(provider.calls) == 2
