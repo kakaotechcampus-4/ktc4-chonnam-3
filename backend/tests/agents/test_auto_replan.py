@@ -1,3 +1,34 @@
+"""v12 자동 재계획은 최초 입력과 안전한 원시 검토가 같은 슬롯 안에서만 허용된다."""
+
+import asyncio
+import json
+from copy import deepcopy
+from dataclasses import asdict
+from uuid import uuid4, uuid5
+
+import httpx
+import pytest
+from sqlalchemy import select
+
+from app.core.errors import AppError
+from app.db.models import (
+    InterviewSession,
+    InterviewTurn,
+    JobPosting,
+    LLMCallRecord,
+    PromptVersion,
+    User,
+)
+from app.features.interview.agent_context import AgentStateError
+from app.features.interview.director_service import process_answer
+from tests.agents.director_helpers import (
+    analysis,
+    approved_review,
+    plan,
+    response,
+    seed_turns,
+    settings,
+)
 from tests.agents.test_question_retry import Redis, retry
 
 

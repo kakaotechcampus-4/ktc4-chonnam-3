@@ -1,3 +1,34 @@
+"""실제 DB·Tool은 유지하고 공급자 HTTP만 대체해 빈 조회의 호출 절감을 확인한다."""
+
+import json
+from dataclasses import asdict, replace
+from uuid import uuid4
+
+import httpx
+import pytest
+from devon_ai import contracts as c
+from sqlalchemy import select
+
+from app.agents.director.tools import EvidenceLimits
+from app.db.models import InterviewSession, InterviewTurn, LLMCallRecord, PromptVersion
+from app.features.interview.director_service import process_answer, start_director
+from tests.agents.director_helpers import (
+    analysis,
+    approved_review,
+    plan,
+    response,
+    seed_turns,
+    settings,
+)
+
+
+async def seed_version(sessions, seed, version, turn=1):
+    await seed_turns(sessions, seed, turn)
+    async with sessions.begin() as db:
+        prompt = await db.scalar(select(PromptVersion).where(PromptVersion.task_name == "director"))
+        prompt.version = version
+
+
 def requesting_analysis(seed):
     request = c.VerificationRequest(
         "팀원 담당입니다",

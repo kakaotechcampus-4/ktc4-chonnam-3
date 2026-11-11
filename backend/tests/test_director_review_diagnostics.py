@@ -1,3 +1,78 @@
+"""검증된 Review 진단만 실제 요청·응답 지문과 함께 보존한다."""
+
+import asyncio
+import copy
+import hashlib
+import json
+from dataclasses import asdict, replace
+
+import pytest
+from async_grader import content_hash
+from devon_ai import contracts as c
+from director_diagnostics import validate_diagnostics
+from eval_cases import Case
+from eval_runner import ExecutionError, rejudge_cases, review_packets, run_cases
+
+from scripts.ai_eval_bridge import ServiceExecutor, _attempts
+from scripts.director_trajectory import _execute
+from tests.test_ai_eval_bridge import contract, payload
+
+
+class Provider:
+    def __init__(self, review=None, failure=None, *, question_contract=None):
+        self.review = review or {
+            "plan_valid": True,
+            "context_valid": True,
+            "wording_valid": False,
+            "contract_matches": True,
+            "safe_alternative": True,
+            "reason_summary": "PRIVATE_REVIEW 표현이 복합적입니다.",
+        }
+        self.failure = failure
+        self.question_contract = question_contract or contract()
+        self.requests = []
+        self.raws = []
+
+    async def __call__(self, request, validator):
+        self.requests.append(request)
+        raw = (
+            {
+                "question": {
+                    "persona": "hr_manager",
+                    "text": "맡은 역할은 무엇인가요?",
+                    "topic_code": "role",
+                    "question_contract": asdict(self.question_contract),
+                    "evidence_refs": [],
+                    "jd_requirement_ids": [],
+                },
+                "intent": "역할 확인",
+                "reason_summary": "첫 질문",
+            }
+            if request.payload["operation"] == "plan"
+            else self.review
+        )
+        raw_text = json.dumps(raw, ensure_ascii=False)
+        self.raws.append(raw_text)
+        attempt = c.AttemptMetadata(
+            len(self.requests),
+            "fixture",
+            "fixture-model",
+            request.prompt.version,
+            request.schema_version,
+            1,
+            2,
+            3,
+            raw_output=raw_text,
+        )
+        try:
+            checked = validator(json.loads(raw_text))
+        except c.ContractError as error:
+            return c.ModelResult(None, c.CallFailure(error.stage, "invalid", "private"), (attempt,))
+        if self.failure and request.payload["operation"] == "review":
+            raise self.failure
+        return c.ModelResult(checked, None, (attempt,))
+
+
 def executor(provider, *, point_review=False, stable_review=False):
     prompt = (
         c.PromptSpec(

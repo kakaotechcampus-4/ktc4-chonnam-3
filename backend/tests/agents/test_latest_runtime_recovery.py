@@ -1,3 +1,17 @@
+"""실제 최신 정책·PG에 모의 HTTP만 결합해 복구 연결을 검증한다. 모델 품질 평가는 아니다."""
+
+import copy
+import hashlib
+import json
+import sys
+from dataclasses import asdict
+from pathlib import Path
+from uuid import UUID, uuid4, uuid5
+
+import httpx
+import pytest
+from devon_ai import contracts as c
+from devon_ai.agents.director.runtime import operation_prompts
 from sqlalchemy import select
 
 from app.db.models import InterviewSession, InterviewTurn, LLMCallRecord, PromptVersion
