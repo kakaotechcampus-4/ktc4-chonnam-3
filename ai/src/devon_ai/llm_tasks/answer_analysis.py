@@ -13,6 +13,7 @@ SUPPORTED_PROMPT_VERSIONS = frozenset(
         "answer_analysis_v4",
         "answer_analysis_v3",
         "answer_analysis_v6",
+        "answer_analysis_v7",
     }
 )
 
@@ -250,12 +251,17 @@ def decode_analysis_output(
     schema_version: str | None = None,
 ) -> c.AnswerAnalysis:
     """감사 원문은 보존하고 해당 버전의 표현으로만 과거 분석을 복원한다."""
-    if prompt_version is not None and prompt_version.partition("@")[0] == "answer_analysis_v6":
-        if schema_version != "6":
+    base = prompt_version.partition("@")[0] if prompt_version is not None else None
+    if base in {"answer_analysis_v6", "answer_analysis_v7"}:
+        expected_schema = "7" if base == "answer_analysis_v7" else "6"
+        if schema_version != expected_schema:
             raise c.ContractError("semantic", "analysis wire version")
         raw_wire = raw
         raw = wire.canonical_output(
-            raw, answer=answer_text, keys=tuple(point.key for point in contract.required_points)
+            raw,
+            answer=answer_text,
+            keys=tuple(point.key for point in contract.required_points),
+            claim_excerpts=base == "answer_analysis_v7",
         )
         wire.validate_wire_constraints(raw_wire)
     return c.decode_strict(c.AnswerAnalysis, raw)
@@ -312,8 +318,9 @@ async def analyze_answer(
     base_version = prompt.version.partition("@")[0]
     include_external = base_version != "answer_analysis_v1"
     keys = tuple(point.key for point in question.data.question_contract.required_points)
-    units = wire.answer_units(answer_text) if base_version == "answer_analysis_v6" else ()
-    if base_version == "answer_analysis_v6" and (not keys or not units):
+    unit_wire = base_version in {"answer_analysis_v6", "answer_analysis_v7"}
+    units = wire.answer_units(answer_text) if unit_wire else ()
+    if unit_wire and (not keys or not units):
         return c.ModelResult(
             None,
             c.CallFailure("semantic", "answer_analysis_input_invalid", "Analysis input rejected."),
@@ -321,14 +328,14 @@ async def analyze_answer(
         )
 
     def validate(raw: object) -> AnalysisChecked:
-        if base_version == "answer_analysis_v6":
+        if unit_wire:
             return validate_checked(
                 decode_analysis_output(
                     raw,
                     prompt_version=prompt.version,
                     answer_text=answer_text,
                     contract=question.data.question_contract,
-                    schema_version="6",
+                    schema_version="7" if base_version == "answer_analysis_v7" else "6",
                 )
             )
         # 계약 밖의 최상위 필드(점수 등)를 조용히 버리지 않고 schema 실패로 처리한다.
@@ -356,7 +363,7 @@ async def analyze_answer(
         jd_requirements,
         evidence_refs,
     )
-    if base_version == "answer_analysis_v6":
+    if unit_wire:
         payload["answer_units"] = wire.units_payload(units)
     request = c.ModelRequest(
         prompt=prompt,
@@ -367,9 +374,16 @@ async def analyze_answer(
             "answer_analysis_v4": "4",
             "answer_analysis_v5": "5",
             "answer_analysis_v6": "6",
+            "answer_analysis_v7": "7",
         }.get(base_version, "2" if include_external else "1"),
-        output_schema=wire.output_schema(keys, units, evidence_refs, allowed_locations)
-        if base_version == "answer_analysis_v6"
+        output_schema=wire.output_schema(
+            keys,
+            units,
+            evidence_refs,
+            allowed_locations,
+            claim_excerpts=base_version == "answer_analysis_v7",
+        )
+        if unit_wire
         else _output_schema(
             evidence_refs=evidence_refs,
             include_external=include_external,

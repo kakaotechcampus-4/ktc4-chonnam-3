@@ -1,4 +1,4 @@
-"""v6 전용 표현을 원문 인용·기존 AnswerAnalysis 값으로 복원한다."""
+"""v6·v7 사적 표현을 원문 인용·기존 AnswerAnalysis 값으로 복원한다."""
 
 import re
 from collections.abc import Iterable, Mapping
@@ -54,6 +54,8 @@ def output_schema(
     units: tuple[AnswerUnit, ...],
     evidence_refs: frozenset[str],
     locations: frozenset[tuple[str, str, str]],
+    *,
+    claim_excerpts: bool = False,
 ) -> dict[str, object]:
     text = {"type": "string", "pattern": r"\S"}
     texts = _array(text)
@@ -94,10 +96,13 @@ def output_schema(
             }
         )
 
+    claim_origin: dict[str, object] = {"quote_id": identifier}
+    if claim_excerpts:
+        claim_origin["claim_excerpt"] = text
     claim_variants = [
         _object(
             {
-                "quote_id": identifier,
+                **claim_origin,
                 "status": {"enum": ["unverified"]},
                 "evidence_refs": refs,
                 "limitations": {**texts, "minItems": 1},
@@ -108,7 +113,7 @@ def output_schema(
         claim_variants.append(
             _object(
                 {
-                    "quote_id": identifier,
+                    **claim_origin,
                     "status": {"enum": ["supported", "partially_supported", "conflicting"]},
                     "evidence_refs": {**refs, "minItems": 1},
                     "limitations": texts,
@@ -235,7 +240,9 @@ def _items(value: object, name: str) -> list[object]:
     return value
 
 
-def canonical_output(raw: object, *, answer: str, keys: tuple[str, ...]) -> dict[str, object]:
+def canonical_output(
+    raw: object, *, answer: str, keys: tuple[str, ...], claim_excerpts: bool = False
+) -> dict[str, object]:
     """판정값을 바꾸지 않고 원문 ID·필드 배치·중복된 파생 flag만 표현 변환한다."""
     data = _fields(
         raw,
@@ -282,17 +289,28 @@ def canonical_output(raw: object, *, answer: str, keys: tuple[str, ...]) -> dict
     elif contribution["unknown_reason"] is not None:
         raise c.ContractError("schema", "known contribution reason")
     claims = []
-    claim_ids: set[str] = set()
+    claim_ids: set[tuple[str, str]] = set()
     for item in _items(data["claim_checks"], "claim checks"):
-        claim = _fields(item, ("quote_id", "status", "evidence_refs", "limitations"), "claim check")
+        fields: tuple[str, ...] = ("quote_id", "status", "evidence_refs", "limitations")
+        if claim_excerpts:
+            fields = ("quote_id", "claim_excerpt", "status", "evidence_refs", "limitations")
+        claim = _fields(item, fields, "claim check")
         identifier = _text(claim["quote_id"], "claim quote ID")
-        if identifier in claim_ids:
-            # 한 원문 unit의 혼합 주장은 한 partially_supported 판정과 한계로 표현한다.
-            raise c.ContractError("semantic", "duplicate claim quote ID")
-        claim_ids.add(identifier)
+        original = quote(identifier)
+        claim_text = original
+        if claim_excerpts:
+            claim_text = _text(claim["claim_excerpt"], "claim excerpt")
+            if claim_text not in original:
+                raise c.ContractError("semantic", "claim excerpt outside selected unit")
+        identity = (identifier, claim_text if claim_excerpts else "")
+        if identity in claim_ids:
+            # v6은 같은 unit 재판정을, v7은 같은 실제 구간 재판정을 거절한다.
+            reason = "duplicate claim excerpt" if claim_excerpts else "duplicate claim quote ID"
+            raise c.ContractError("semantic", reason)
+        claim_ids.add(identity)
         claims.append(
             {
-                "claim_text": quote(identifier),
+                "claim_text": claim_text,
                 "status": claim["status"],
                 "evidence_refs": _strings(claim["evidence_refs"], "claim evidence"),
                 "limitations": _strings(claim["limitations"], "claim limitations"),

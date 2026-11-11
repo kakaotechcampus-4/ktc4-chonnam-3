@@ -212,10 +212,14 @@ async def generate_question(
         )
         return validate_candidate(candidate)
 
+    # 새 Context의 기본 필드를 과거 생성기의 모델 입력에 소급해서 넣지 않는다.
+    context_data = asdict(context)
+    context_data.pop("presented_evaluation_keys", None)
+    context_data.pop("follow_up_options", None)
     request = c.ModelRequest(
         prompt=prompt,
         payload={
-            "context": asdict(context),
+            "context": context_data,
             "question_contract": asdict(question_contract),
             "reference_texts": _model_reference_texts(sources),
             "answer_analysis": analysis_data,
