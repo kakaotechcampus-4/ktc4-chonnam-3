@@ -146,7 +146,10 @@ test('분석 실패는 failureReason별 안내와 이전 URL을 채운 공고 �
   }, POSTING_URL);
   await page.reload();
 
-  await expect(page.getByRole('alert')).toContainText('공고를 불러오지 못했어요.');
+  // 새로고침 뒤 앱 부팅(MSW 워커 시작)이 병렬 실행 중에는 5초를 넘길 수 있다.
+  await expect(page.getByRole('alert')).toContainText('공고를 불러오지 못했어요.', {
+    timeout: 10_000,
+  });
   await page.getByRole('button', { name: '공고 URL 수정하기' }).click();
   await expect(page).toHaveURL(/\/interview\/new$/);
   await expect(page.getByPlaceholder('https://careers.example.com/jobs/123')).toHaveValue(

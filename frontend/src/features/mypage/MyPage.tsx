@@ -165,89 +165,96 @@ export default function MyPage() {
           )}
 
           {historyRows.length > 0 && (
-            <ul className="mt-6 divide-y divide-line-soft text-xs text-ink">
+            // 행마다 같은 열 폭을 쓰도록 목록 전체를 한 grid로 두고 행은 subgrid로 맞춘다.
+            // 왼쪽 글만 남는 폭을 쓰고 잘려서, 기술 스택이 길어도 오른쪽 열이 카드 밖으로 밀리지 않는다.
+            <ul className="mt-6 grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-4 text-xs text-ink">
               {historyRows.map((item) => {
                 // 중단된 면접은 리포트가 없다. 일시는 시작 시각, 점수 자리는 "중단됨"이다.
                 const abandoned = item.status === 'abandoned';
                 // 시간이 끝나 9턴을 못 채운 면접. 점수는 있어도 평균에는 들어가지 않는다(#246).
                 const endedEarly = !abandoned && item.answeredTurns < INTERVIEW_TOTAL_TURNS;
                 return (
-                  <li key={item.id} className="py-2">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="min-w-0 shrink-0">
-                        <p className="font-bold">
-                          {/* 공고에 직무명이 없으면 BE가 빈 문자열을 준다(#121 1-5). */}
-                          {item.companyName} · {item.position.trim() || '직무 정보 없음'}
-                        </p>
-                        <p className="mt-1 text-[10.5px] text-muted">
-                          {formatDate(abandoned ? item.startedAt : item.completedAt)} ·{' '}
-                          {item.techStack.join('/')} · {item.careerLevel}
-                        </p>
-                      </div>
-                      <div className="flex flex-1 flex-wrap gap-2">
-                        {item.repositoryNames.map((name) => (
-                          <span
-                            key={name}
-                            className="rounded-full bg-accent-soft px-2 py-1 text-[10.5px] text-ink"
+                  <li
+                    key={item.id}
+                    className="col-span-3 grid grid-cols-subgrid items-center border-line-soft py-2 [&:not(:first-child)]:border-t"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-bold">
+                        {/* 공고에 직무명이 없으면 BE가 빈 문자열을 준다(#121 1-5). */}
+                        {item.companyName} · {item.position.trim() || '직무 정보 없음'}
+                      </p>
+                      <p
+                        className="mt-1 truncate text-[10.5px] text-muted"
+                        title={item.techStack.join('/')}
+                      >
+                        {formatDate(abandoned ? item.startedAt : item.completedAt)} ·{' '}
+                        {item.techStack.join('/')} · {item.careerLevel}
+                      </p>
+                    </div>
+                    <div className="flex max-w-36 flex-wrap gap-1.5">
+                      {item.repositoryNames.map((name) => (
+                        <span
+                          key={name}
+                          title={name}
+                          className="max-w-full truncate rounded-full bg-accent-soft px-2 py-1 text-[10.5px] text-ink"
+                        >
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-end gap-3 whitespace-nowrap">
+                      {abandoned ? (
+                        <>
+                          <span className="font-bold text-muted">중단됨</span>
+                          <button
+                            type="button"
+                            className="text-accent hover:underline disabled:opacity-50"
+                            disabled={retryMutation.isPending}
+                            onClick={() => retryMutation.mutate(item.id)}
                           >
-                            {name}
+                            다시 도전하기 →
+                          </button>
+                        </>
+                      ) : !item.reportAvailable ? (
+                        <>
+                          {/* 시간이 끝나 진행한 질문이 적어 리포트를 만들 수 없는 면접이다(#246). */}
+                          <span className="font-bold text-muted">
+                            시간 종료 {item.answeredTurns}/{INTERVIEW_TOTAL_TURNS}턴 · 리포트 없음
                           </span>
-                        ))}
-                      </div>
-                      <div className="flex shrink-0 items-center gap-3">
-                        {abandoned ? (
-                          <>
-                            <span className="font-bold text-muted">중단됨</span>
-                            <button
-                              type="button"
-                              className="text-accent hover:underline disabled:opacity-50"
-                              disabled={retryMutation.isPending}
-                              onClick={() => retryMutation.mutate(item.id)}
-                            >
-                              다시 도전하기 →
-                            </button>
-                          </>
-                        ) : !item.reportAvailable ? (
-                          <>
-                            {/* 시간이 끝나 진행한 질문이 적어 리포트를 만들 수 없는 면접이다(#246). */}
-                            <span className="font-bold text-muted">
-                              시간 종료 {item.answeredTurns}/{INTERVIEW_TOTAL_TURNS}턴 · 리포트 없음
+                          <button
+                            type="button"
+                            className="text-accent hover:underline disabled:opacity-50"
+                            disabled={retryMutation.isPending}
+                            onClick={() => retryMutation.mutate(item.id)}
+                          >
+                            다시 도전하기 →
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {endedEarly && (
+                            <span className="text-[10.5px] text-muted">
+                              시간 종료 {item.answeredTurns}/{INTERVIEW_TOTAL_TURNS}턴
                             </span>
-                            <button
-                              type="button"
-                              className="text-accent hover:underline disabled:opacity-50"
-                              disabled={retryMutation.isPending}
-                              onClick={() => retryMutation.mutate(item.id)}
-                            >
-                              다시 도전하기 →
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            {endedEarly && (
-                              <span className="text-[10.5px] text-muted">
-                                시간 종료 {item.answeredTurns}/{INTERVIEW_TOTAL_TURNS}턴
-                              </span>
-                            )}
-                            {item.totalScore !== null && (
-                              <span className="font-bold">
-                                {item.totalScore}
-                                <span className="font-normal text-muted">/100</span>
-                              </span>
-                            )}
-                            <button
-                              type="button"
-                              className="text-accent hover:underline"
-                              onClick={() => navigate(`/interview/${item.id}/report`)}
-                            >
-                              리포트 보기 →
-                            </button>
-                          </>
-                        )}
-                      </div>
+                          )}
+                          {item.totalScore !== null && (
+                            <span className="font-bold">
+                              {item.totalScore}
+                              <span className="font-normal text-muted">/100</span>
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            className="text-accent hover:underline"
+                            onClick={() => navigate(`/interview/${item.id}/report`)}
+                          >
+                            리포트 보기 →
+                          </button>
+                        </>
+                      )}
                     </div>
                     {failedRetryId === item.id && (
-                      <div className="mt-2 flex items-center justify-end gap-3">
+                      <div className="col-span-3 mt-2 flex items-center justify-end gap-3">
                         <p role="alert" className="text-[11px] text-error">
                           {(retryReason && RETRY_ERROR[retryReason]) ??
                             '새 면접을 준비하지 못했어요. 잠시 후 다시 시도해주세요.'}
