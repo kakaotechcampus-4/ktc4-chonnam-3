@@ -3138,6 +3138,261 @@
           }
         ]
       }
+    },
+    {
+      "physical_id": 5,
+      "phase": "answer:01",
+      "candidate": {
+        "persona": "domain_lead",
+        "text": "공고에는 고객 플랫폼의 메시징 기능이 포함되어 있습니다. 제공된 코드에서는 멱등성 키가 있을 때 계정·키별 Redis 락 아래 중복을 확인해 요청을 처리하고, 성공한 결과 ID를 Redis에 1시간 저장합니다. Redis나 락 장애 시 동작은 이 파일만으로 확인되지 않으며, 개인 구현 경험이 아닌 이 구조의 가정형 적용을 묻습니다. 이 멱등성 처리 흐름을 고객 메시지 생성 API에 그대로 적용할지, 한 부분을 바꿔 적용할지 선택하고 그 이유를 말씀해 주시겠어요?",
+        "question_contract": {
+          "purpose": "이 멱등성 처리 흐름을 고객 메시지 생성 API에 그대로 적용할지, 한 부분을 바꿔 적용할지 선택하고 그 이유를 말씀해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "apply_idempotency_flow_to_messaging",
+              "description": "이 멱등성 처리 흐름을 고객 메시지 생성 API에 그대로 적용할지, 한 부분을 바꿔 적용할지 선택하고 그 이유를 말씀해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "validation-ref-001"
+            },
+            {
+              "kind": "jd_requirement",
+              "id": "validation-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ]
+        },
+        "question_type": "main",
+        "parent_turn_id": null,
+        "topic_code": "messaging_idempotency_application"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "제공된 멱등성 구조와 공고의 메시징 업무를 연결해 적용 여부와 이유를 묻고, 배경은 확인 범위와 가정형 질문을 분명히 합니다.",
+        "point_coverage": [
+          {
+            "key": "apply_idempotency_flow_to_messaging",
+            "status": "asked",
+            "question_excerpt": "이 멱등성 처리 흐름을 고객 메시지 생성 API에 그대로 적용할지, 한 부분을 바꿔 적용할지 선택하고 그 이유를 말씀해 주시겠어요?"
+          }
+        ]
+      }
+    },
+    {
+      "physical_id": 8,
+      "phase": "answer:02",
+      "candidate": {
+        "persona": "tech_lead",
+        "text": "제공된 코드에서는 멱등성 키가 중복된 요청은 기존 결과를 반환하고, 일반 게시물의 후처리는 멱등성 처리 블록을 마친 뒤 호출됩니다. 저장은 성공했지만 후처리 작업 큐 등록이 실패하는 상황이라면, 누락된 후처리를 복구하기 위해 어떤 방식을 선택하시겠습니까? 그 이유도 말씀해 주세요.",
+        "question_contract": {
+          "purpose": "저장은 성공했지만 후처리 작업 큐 등록이 실패하는 상황이라면, 누락된 후처리를 복구하기 위해 어떤 방식을 선택하시겠습니까? 그 이유도 말씀해 주세요.",
+          "required_points": [
+            {
+              "key": "postprocess_recovery_choice",
+              "description": "저장은 성공했지만 후처리 작업 큐 등록이 실패하는 상황이라면, 누락된 후처리를 복구하기 위해 어떤 방식을 선택하시겠습니까? 그 이유도 말씀해 주세요."
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "validation-ref-003"
+            },
+            {
+              "kind": "evidence",
+              "id": "validation-ref-001"
+            },
+            {
+              "kind": "evidence",
+              "id": "validation-ref-004"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ]
+        },
+        "question_type": "main",
+        "parent_turn_id": null,
+        "topic_code": "postprocess_recovery"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "코드에서 저장 후 멱등성 처리 블록을 마친 뒤 후처리가 호출되는 흐름을 근거로, 큐 등록 실패 시 복구 방식을 선택하고 이유를 말하도록 직접 요청합니다.",
+        "point_coverage": [
+          {
+            "key": "postprocess_recovery_choice",
+            "status": "asked",
+            "question_excerpt": "누락된 후처리를 복구하기 위해 어떤 방식을 선택하시겠습니까? 그 이유도 말씀해 주세요."
+          }
+        ]
+      }
+    },
+    {
+      "physical_id": 11,
+      "phase": "answer:03",
+      "candidate": {
+        "persona": "tech_lead",
+        "text": "실패한 작업 큐 등록을 다시 시도하겠다고 하셨는데, 그 방식을 누락된 후처리의 복구책으로 선택한 이유는 무엇인가요?",
+        "question_contract": {
+          "purpose": "실패한 작업 큐 등록을 다시 시도하겠다고 하셨는데, 그 방식을 누락된 후처리의 복구책으로 선택한 이유는 무엇인가요?",
+          "required_points": [
+            {
+              "key": "postprocess_recovery_choice",
+              "description": "실패한 작업 큐 등록을 다시 시도하겠다고 하셨는데, 그 방식을 누락된 후처리의 복구책으로 선택한 이유는 무엇인가요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "answer_turn",
+              "id": "validation-ref-005"
+            },
+            {
+              "kind": "evidence",
+              "id": "validation-ref-003"
+            },
+            {
+              "kind": "evidence",
+              "id": "validation-ref-001"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ]
+        },
+        "question_type": "follow_up",
+        "parent_turn_id": "validation-ref-005",
+        "topic_code": "postprocess_recovery_choice"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "허용된 후속 선택지와 실제 답변에 맞춰, 아직 설명되지 않은 재시도 선택의 이유만 묻습니다.",
+        "point_coverage": [
+          {
+            "key": "postprocess_recovery_choice",
+            "status": "asked",
+            "question_excerpt": "그 방식을 누락된 후처리의 복구책으로 선택한 이유는 무엇인가요?"
+          }
+        ]
+      }
+    },
+    {
+      "physical_id": 14,
+      "phase": "answer:04",
+      "candidate": {
+        "persona": "tech_lead",
+        "text": "이 파일은 첨부파일 ID 배열의 원소 수가 제한을 넘으면 조회 전에 오류를 내고, 제한 이내에서 해당 계정 소유의 미연결 첨부파일을 찾습니다. 요청된 첨부파일 ID에 중복이 있어 원소 수가 제한을 넘는 경우, 현재처럼 거부할지 중복 제거 후 허용할지 선택하고 이유를 말씀해 주시겠어요?",
+        "question_contract": {
+          "purpose": "요청된 첨부파일 ID에 중복이 있어 원소 수가 제한을 넘는 경우, 현재처럼 거부할지 중복 제거 후 허용할지 선택하고 이유를 말씀해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "duplicate_media_id_limit_policy",
+              "description": "요청된 첨부파일 ID에 중복이 있어 원소 수가 제한을 넘는 경우, 현재처럼 거부할지 중복 제거 후 허용할지 선택하고 이유를 말씀해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "validation-ref-004"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "technical_reasoning",
+            "communication"
+          ]
+        },
+        "question_type": "main",
+        "parent_turn_id": null,
+        "topic_code": "media_validation_limit_policy"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "파일의 크기 제한 검사와 계정 범위 첨부파일 조회를 정확히 배경으로 삼고, 중복 ID 초과 상황에서의 정책 선택과 이유만 묻습니다.",
+        "point_coverage": [
+          {
+            "key": "duplicate_media_id_limit_policy",
+            "status": "asked",
+            "question_excerpt": "요청된 첨부파일 ID에 중복이 있어 원소 수가 제한을 넘는 경우, 현재처럼 거부할지 중복 제거 후 허용할지 선택하고 이유를 말씀해 주시겠어요?"
+          }
+        ]
+      }
+    },
+    {
+      "physical_id": 17,
+      "phase": "answer:05",
+      "candidate": {
+        "persona": "tech_lead",
+        "text": "가정상 이메일 구독 조건은 충족하지만 일부 대상 게시물의 안내 메일이 누락됩니다. 제공된 파일에서는 게시물 ID를 Redis set에 넣고 TTL을 설정한 뒤 5분 후 worker를 예약하는 데까지만 확인되며, worker 내부 구현은 제공되지 않았습니다. 이 상황에서 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 확인이 어떤 가능성을 구분해 주는지 설명해 주시겠어요?",
+        "question_contract": {
+          "purpose": "이 상황에서 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 확인이 어떤 가능성을 구분해 주는지 설명해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "email_distribution_first_check",
+              "description": "이 상황에서 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 확인이 어떤 가능성을 구분해 주는지 설명해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "validation-ref-004"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "question_type": "main",
+        "parent_turn_id": null,
+        "topic_code": "email_distribution_failure_isolation"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "제공된 코드에서 확인되는 이메일 구독 처리 흐름과 worker 구현의 미확인 범위를 구분하고, 한 관측 지점으로 원인 가능성을 가려보도록 요청합니다. 요청과 계약이 일치하며 하나의 진단 판단으로 답할 수 있습니다.",
+        "point_coverage": [
+          {
+            "key": "email_distribution_first_check",
+            "status": "asked",
+            "question_excerpt": "이 상황에서 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 확인이 어떤 가능성을 구분해 주는지 설명해 주시겠어요?"
+          }
+        ]
+      }
     }
   ]
 }
