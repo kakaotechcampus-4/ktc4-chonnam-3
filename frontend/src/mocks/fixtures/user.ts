@@ -126,12 +126,25 @@ const allInterviews: InterviewListResponse['interviews'] = [
   },
   {
     // 시간이 끝나 2턴에서 끝난 면접. 진행이 짧아 리포트를 만들 수 없다(#246).
+    // 상태 문구가 가장 긴 행에 긴 기술 스택·레포 이름을 둬 이력 카드 넘침을 확인한다.
     id: 'a3d51c20-1008-4c00-9a00-000000000008',
     position: 'Backend Developer',
     companyName: '테스트 기업',
-    techStack: ['Python', 'FastAPI'],
+    techStack: [
+      'GraphQL',
+      'MongoDB',
+      'MySQL',
+      'React',
+      'Node.js',
+      'TypeScript',
+      'AWS',
+      'Docker',
+      'Spring Boot',
+      'Kubernetes',
+      'Next.js',
+    ],
     careerLevel: '신입',
-    repositoryNames: ['notification-worker'],
+    repositoryNames: ['2025_Capstone-Design', 'notification-worker'],
     status: 'completed',
     totalScore: null,
     startedAt: '2026-08-25T09:00:00Z',
@@ -203,8 +216,7 @@ const scoredInterviews = allInterviews.filter(
   (item) => item.totalScore !== null && item.answeredTurns === INTERVIEW_TOTAL_TURNS,
 );
 const averageScore =
-  scoredInterviews.reduce((sum, item) => sum + (item.totalScore ?? 0), 0) /
-  scoredInterviews.length;
+  scoredInterviews.reduce((sum, item) => sum + (item.totalScore ?? 0), 0) / scoredInterviews.length;
 
 /**
  * `desiredPosition`은 가장 최근 완료 면접의 position이다. 완료 면접이 없으면 null.
