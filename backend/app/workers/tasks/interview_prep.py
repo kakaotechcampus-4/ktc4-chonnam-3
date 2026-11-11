@@ -23,10 +23,14 @@ async def interview_prep(ctx: dict[str, Any], interview_id: str) -> None:
             )
             return
         user_id = row.user_id
-    await prepare_interview(
-        ctx["session_factory"],
-        user_id=user_id,
-        interview_id=key,
-        settings=ctx.get("settings") or get_settings(),
-        http_client=ctx["http_client"],
-    )
+    from app.features.interview.observation import interview_execution
+
+    settings = ctx.get("settings") or get_settings()
+    async with interview_execution(settings, "worker.interview_prep", key):
+        await prepare_interview(
+            ctx["session_factory"],
+            user_id=user_id,
+            interview_id=key,
+            settings=settings,
+            http_client=ctx["http_client"],
+        )

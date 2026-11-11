@@ -10,6 +10,15 @@ _TECHNICAL: tuple[c.ScoreKeyId, ...] = (
 )
 
 
+def presented_evaluation_keys(
+    contracts: tuple[c.QuestionContract, ...],
+) -> tuple[c.ScoreKeyId, ...]:
+    """확정 질문의 기회를 합치되 선언이 없던 구형 면접을 사후 승격하지 않는다."""
+    if contracts and not contracts[0].evaluation_keys:
+        return ()
+    return tuple(dict.fromkeys(key for contract in contracts for key in contract.evaluation_keys))
+
+
 def plan_evaluation_targets(
     contracts: tuple[c.QuestionContract, ...],
     permitted: tuple[c.PersonaId, ...],
@@ -23,7 +32,7 @@ def plan_evaluation_targets(
     """
     if contracts and not contracts[0].evaluation_keys:
         return ()
-    covered = {key for contract in contracts for key in contract.evaluation_keys}
+    covered = set(presented_evaluation_keys(contracts))
     targets: list[c.EvaluationTarget] = []
     for persona in permitted:
         if persona == "hr_manager":

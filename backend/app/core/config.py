@@ -210,6 +210,9 @@ class STTSettings(BaseModel):
 
 
 class Settings(BaseSettings):
+    # 외부 전송과 분리한 로컬 실행 장부다. 미설정이면 파일을 만들지 않는다.
+    ai_execution_ledger_path: str | None = Field(default=None, min_length=1)
+
     """.env 를 읽는 설정 단일 진입점.
 
     필드명은 snake_case 이고 환경변수는 대문자다 (pydantic-settings 가 대소문자를 맞춘다).

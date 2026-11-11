@@ -15,7 +15,10 @@ from app.db.models.interview import InterviewSession, InterviewTurn, SessionRepo
 from app.db.models.knowledge import DomainQuestionFrame
 from app.db.models.posting import JdRequirement, JobPosting
 from app.db.models.user import User
-from app.features.interview.evaluation_coverage import plan_evaluation_targets
+from app.features.interview.evaluation_coverage import (
+    plan_evaluation_targets,
+    presented_evaluation_keys,
+)
 from app.features.interview.supplemental_sources import (
     load_external_searches,
     load_supplemental_sources,
@@ -355,6 +358,9 @@ async def load_context(
             for turn in history_turns
         )
         contract = c.decode(c.QuestionContract, turns[-1].question_contract) if turns else None
+        history_contracts = tuple(
+            c.decode(c.QuestionContract, turn.question_contract) for turn in history_turns
+        )
         return c.Context(
             interview_id=str(interview.id),
             current_turn_id=str(turns[-1].id) if turns else None,
@@ -397,16 +403,14 @@ async def load_context(
             ),
             evaluation_targets=(
                 plan_evaluation_targets(
-                    tuple(
-                        c.decode(c.QuestionContract, turn.question_contract)
-                        for turn in history_turns
-                    ),
+                    history_contracts,
                     permitted,
                     has_jd=bool(requirements),
                 )
                 if answer_turn_no is None
                 else ()
             ),
+            presented_evaluation_keys=presented_evaluation_keys(history_contracts),
         )
     except c.ContractError:
         raise AgentStateError("context_contract_invalid") from None

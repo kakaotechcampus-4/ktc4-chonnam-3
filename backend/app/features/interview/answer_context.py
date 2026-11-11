@@ -235,10 +235,10 @@ async def prior_analyses(
                             attempt.get("prompt_version"),
                             attempt.get("schema_version"),
                         )
-                        if (
-                            isinstance(version, str)
-                            and version.partition("@")[0] == "answer_analysis_v6"
-                        ):
+                        if isinstance(version, str) and version.partition("@")[0] in {
+                            "answer_analysis_v6",
+                            "answer_analysis_v7",
+                        }:
                             if not isinstance(schema, str):
                                 raise c.ContractError("schema", "analysis attempt version")
                             restored = decode_analysis_output(
