@@ -1,0 +1,10 @@
+{
+  "schema": "director-public-service-flow.v1",
+  "mode": "actual_luna_and_isolated_postgresql_service_functions",
+  "director_experimental_policy": "director_v17@calibrated-review",
+  "answer_policy": "answer_analysis_v7@claim-contribution-scope",
+  "latest_semantic_fit_nine_turn_run": false,
+  "real_user_session": false,
+  "oauth_ws_browser_stt_tts_report_e2e": false,
+  "fresh_repository_analysis_run": false
+}
