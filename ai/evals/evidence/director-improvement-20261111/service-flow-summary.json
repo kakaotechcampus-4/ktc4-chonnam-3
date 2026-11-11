@@ -945,6 +945,125 @@
         ],
         "naturalness_note": "조건과 기술 용어가 한 문장에 이어져 약간 길지만 묻는 판단은 하나로 명확하다. 이미 답한 동시 요청 흐름 전체를 다시 말하게 하지 않는다."
       }
+    },
+    {
+      "turn_no": 4,
+      "synthetic_answer": true,
+      "question": {
+        "persona": "domain_lead",
+        "text": "이 파일은 계정 ID와 idempotency 키로 Redis 락을 잡고, 기존 키가 있으면 해당 status를 반환하는 흐름입니다. 이 구조를 공고의 고객 플랫폼 중 메시징 요청 처리에 적용한다고 가정할 때, 그대로 사용할지 바꿀지 한 가지 판단과 그 이유를 말씀해 주시겠어요?",
+        "topic_code": "customer_messaging_idempotency_application",
+        "question_contract": {
+          "purpose": "이 구조를 공고의 고객 플랫폼 중 메시징 요청 처리에 적용한다고 가정할 때, 그대로 사용할지 바꿀지 한 가지 판단과 그 이유를 말씀해 주시겠어요?",
+          "basis_refs": [
+            {
+              "id": "public-ref-005",
+              "kind": "evidence"
+            },
+            {
+              "id": "public-ref-006",
+              "kind": "jd_requirement"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "messaging_idempotency_design_choice",
+              "description": "이 구조를 공고의 고객 플랫폼 중 메시징 요청 처리에 적용한다고 가정할 때, 그대로 사용할지 바꿀지 한 가지 판단과 그 이유를 말씀해 주시겠어요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "jd_requirement_ids": [
+          "public-ref-006"
+        ]
+      },
+      "answer_text": "저라면 그대로 쓰기보다는 메시지 저장소에 중복 요청 식별자를 함께 남기는 방식으로 바꾸겠습니다. 고객 메시징에서는 앱의 연결이 끊겼다가 재접속한 뒤 같은 메시지를 재전송할 수 있다고 가정했습니다. 사용자가 보낸 한 메시지가 두 번 나타나지 않도록, 발신자와 클라이언트 요청 ID의 조합을 DB에서 유일하게 만들고 같은 요청이면 기존 메시지 결과를 돌려주도록 제안하겠습니다. 제시된 코드의 Redis 기록은 TTL이 있으므로, 고객이 얼마나 늦게 재시도할 수 있는지 정하지 않고 그 기록만 중복 판정의 기준으로 쓰기는 어렵다고 봤습니다. 이는 이 메시징 상황에 대해 지금 제안하는 설계입니다. 제가 실제 고객 플랫폼에 구현하거나 운영해 본 방식은 아닙니다.",
+      "raw_answer_assessment": {
+        "coverage_assessment": {
+          "evaluation_status": "evaluated",
+          "sufficiency": "sufficient",
+          "covered_points": {
+            "messaging_idempotency_design_choice": [
+              "answer:0001",
+              "answer:0003",
+              "answer:0004"
+            ]
+          },
+          "missing_points": [],
+          "limitations": []
+        },
+        "contribution_scope": {
+          "scope": "unknown",
+          "quote_ids": [
+            "answer:0006"
+          ],
+          "unknown_reason": "답변은 이를 현재 제안하는 설계라고 밝히고, 실제 고객 플랫폼에 구현하거나 운영한 방식은 아니라고 명시한다."
+        },
+        "claim_checks": [
+          {
+            "quote_id": "answer:0004",
+            "claim_excerpt": "제시된 코드의 Redis 기록은 TTL이 있으므로",
+            "status": "supported",
+            "evidence_refs": [
+              "public-ref-005"
+            ],
+            "limitations": []
+          }
+        ],
+        "verification_requests": [],
+        "external_queries": []
+      },
+      "independent_annotation": {
+        "question_verdict": "accept",
+        "question_criteria": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "rationale": "시간 차 범위에 대한 정상 모름 뒤, 같은 코드 구조를 다른 목적지인 공고의 메시징 처리에 그대로 적용할지 바꿀지라는 새 판단으로 이동한다. 모름 답을 다시 강요하지 않는다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "satisfied",
+            "rationale": "메시징 적용 시 유지/변경이라는 한 선택과 그 선택의 이유다. 구현 상세·차이 목록·별도 실험까지 각각 요구하지 않는다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "rationale": "코드 배경 preamble에는 사실만 있고, 가정 아래 유지/변경과 이유라는 직접 request가 purpose·유일 필수점·최종 본문과 일치한다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "rationale": "실제 JD3 중 고객 플랫폼의 메시징이 존재한다. 답에는 제공 코드 구조와 이 실제 업무 목적지의 관계가 필요하며 company_job_fit/communication의 domain main 질문에 맞는다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "rationale": "코드의 계정+키 락·기존 status 경로는 확인된다. 메시징 적용은 가정으로 명시하고 지원자의 실제 구현·운영 경험이나 공고에 없는 재시도 조건을 사실로 단정하지 않는다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "rationale": "코드의 구조를 대상으로 묻고 스터디 발언을 메시징 구현 기여로 바꾸지 않는다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "rationale": "기존 Q2·3은 현 구현의 중복 방지 범위 설명이었다. 이번에는 메시징이라는 실제 JD 업무에 대한 유지/변경 선택이 새로 필요해 표현·대상 이름만 바꾼 동일 답 반복은 아니다. 특정 대안을 먼저 제공하지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "rationale": "직전 모름을 역량이나 거짓으로 해석하지 않고 가정형 직무 적용 기회를 제공한다."
+          }
+        ],
+        "naturalness_note": "선택과 이유는 분명하지만 멱등성 배경이 다시 길게 제시되어 읽기 부담은 조금 있다. 실제 JD에 있는 메시징을 구체적 적용 대상으로 삼는다."
+      }
     }
   ]
 }

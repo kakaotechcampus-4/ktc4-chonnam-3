@@ -392,6 +392,181 @@
           "elapsed_ms": 35098
         }
       ]
+    },
+    {
+      "case_id": "review-B-fresh-restic-75217-contribution_correction",
+      "split": "dev",
+      "synthetic_dialogue_context": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "명시한 부모를 찾지 못했는데도 백업이 계속 진행되는 회귀를 가정형으로 어떻게 검증하시겠어요?",
+        "topic_code": "parent_snapshot_error_regression",
+        "question_type": "follow_up",
+        "parent_turn_id": "fresh-restic-75217-contribution_correction-t5",
+        "question_contract": {
+          "purpose": "명시한 부모를 찾지 못했는데도 백업이 계속 진행되는 회귀를 가정형으로 어떻게 검증하시겠어요?",
+          "required_points": [
+            {
+              "key": "check",
+              "description": "명시한 부모를 찾지 못했는데도 백업이 계속 진행되는 회귀를 가정형으로 어떻게 검증하시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "answer_turn",
+              "id": "fresh-restic-75217-contribution_correction-t5"
+            },
+            {
+              "kind": "evidence",
+              "id": "fresh-restic-e1"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "project_understanding",
+            "technical_reasoning"
+          ]
+        },
+        "evidence_refs": [
+          "fresh-restic-e1"
+        ],
+        "jd_requirement_ids": []
+      },
+      "code_sources": [
+        {
+          "evidence_id": "fresh-restic-e1",
+          "git_ref": "c734245fd3ae9bcac8ab3aaafb4482d4b5d0ae92",
+          "source_kind": "code",
+          "path": "cmd/restic/cmd_backup.go",
+          "start_line": 469,
+          "end_line": 495,
+          "repository": "restic/restic",
+          "content_sha256": "459e3314f20e64f7f6cc3af4ac5de9f90f26ee09d620d3bc3ccd186fea15addb",
+          "content_included_here": false,
+          "public_blob_url": "https://github.com/restic/restic/blob/c734245fd3ae9bcac8ab3aaafb4482d4b5d0ae92/cmd/restic/cmd_backup.go"
+        }
+      ],
+      "oracle": {
+        "expected_source_verdict": "accept",
+        "criterion_results": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "reason": "오류 차이에 관한 답과 개인 기여 정정을 수용하고 실제 미답인 회귀 검증 방법만 후속으로 묻는다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "satisfied",
+            "reason": "명시한 부모 조회 오류를 놓치는 회귀의 검증 방법이라는 판단 하나다. 입력/출력의 별도 목록을 요구하지 않아도 답 범위가 명확하다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "reason": "요청 전체와 purpose·단일 check 필수점이 같고, 가정형임이 실제 문장 안에 표시된다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "reason": "허용된 tech_lead follow_up·t5 부모·check와 부모 평가 키를 지킨다. 최초 구현 주장으로 되돌아가지 않는다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "reason": "명시적 부모의 조회 오류 반환은 실제 코드에 있고, 백업 진행 회귀는 ‘가정형’으로 질문한다. 호출자 전체 동작을 이미 실행한 사실로 만들지 않는다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "reason": "본인이 구현했다고 묻지 않고 해당 코드의 가정한 검증 방법만 확인한다. 본인 구현이 아니라는 정정과 충돌하지 않는다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "reason": "답한 오류 분기 설명을 반복하지 않고 원질문에 있던 미답 검증 목적만 남긴다. 정답이나 특정 테스트 설계는 제공하지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "reason": "미확인 함수 밖 처리나 실제 운영 경력을 부족한 구현으로 확정하지 않는다."
+          }
+        ],
+        "minimum_rejection_criteria": [],
+        "expected_recovery": null,
+        "expected_safe_alternative": true,
+        "wrong_reason_rejection_is_not_semantic_success": true,
+        "scope": "previously exposed development candidate; no relabeling or holdout use"
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "제공 코드에서는 명시한 부모를 찾지 못한 오류를 그대로 반환하므로, 그 동작이 깨지는 경우의 가정형 검증을 묻는 질문은 근거 범위에 맞습니다.",
+            "point_coverage": [
+              {
+                "key": "check",
+                "status": "asked",
+                "question_excerpt": "명시한 부모를 찾지 못했는데도 백업이 계속 진행되는 회귀를 가정형으로 어떻게 검증하시겠어요?"
+              }
+            ]
+          },
+          "expected_verdict": "accept",
+          "actual_verdict": "accept",
+          "decision_match": true,
+          "expected_recovery": null,
+          "actual_recovery": null,
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "pass",
+          "source_note": "findParentSnapshot의 명시적 부모 조회 오류는 무시되지 않고 반환된다. 그 동작이 깨지는 회귀의 가정형 검증만 묻는다는 사유와 전체 승인에 근거가 있다. 현재 기여 정정을 거슬러 개인 구현을 전제하지 않는다.",
+          "full_quality_success": true,
+          "elapsed_ms": 12678
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "제공 함수의 명시적 부모 조회 오류 흐름을 바탕으로, 해당 회귀를 가정형으로 검증하는 방법만 묻습니다.",
+            "point_coverage": [
+              {
+                "key": "check",
+                "status": "asked",
+                "question_excerpt": "명시한 부모를 찾지 못했는데도 백업이 계속 진행되는 회귀를 가정형으로 어떻게 검증하시겠어요?"
+              }
+            ]
+          },
+          "expected_verdict": "accept",
+          "actual_verdict": "accept",
+          "decision_match": true,
+          "expected_recovery": null,
+          "actual_recovery": null,
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "pass",
+          "source_note": "명시적 부모 조회 오류 흐름에서 해당 회귀 검증만 묻는다고 설명한다. 한 검증 목적이며 현재 답변이 아직 답하지 않은 check의 보완이다. 원문상 기여 정정과 충돌하는 주장은 없다.",
+          "full_quality_success": true,
+          "elapsed_ms": 10797
+        }
+      ]
     }
   ]
 }

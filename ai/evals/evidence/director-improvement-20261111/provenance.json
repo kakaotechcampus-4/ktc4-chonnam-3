@@ -38,6 +38,11 @@
       "source_id": "I:claim-study/live/B/explicit-fact-and-future-proposal/raw-response.json",
       "sha256": "324a44394700ac3db12aff83f8b24961bc64c57d03b45e6a8393482bc7452d72",
       "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/B/explicit-fact-and-future-proposal/result.json",
+      "sha256": "09f19aeb8b095cbda6f8afa1380d4fee3e3e7fda9f1b94f04f6ffd6b5e3b28e7",
+      "original_publicly_included": false
     }
   ]
 }
