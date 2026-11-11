@@ -1,3 +1,19 @@
+def requesting_analysis(seed):
+    request = c.VerificationRequest(
+        "팀원 담당입니다",
+        "선택 파일의 구현 확인",
+        str(seed["repo_id"]),
+        seed["sha"],
+        ("src/main.py",),
+    )
+    return replace(
+        analysis(),
+        needs_verification=True,
+        verification_requests=(request,),
+        claim_checks=(c.ClaimCheck("팀원 담당입니다", "unverified", (), ("개인 기여 미확인",)),),
+    )
+
+
 def github_replies(seed, outcome):
     root, source = "b" * 40, "c" * 40
     blob = "ce013625030ba8dba906f756967f9e9ca394464a"

@@ -1,3 +1,76 @@
+def payload(request):
+    return json.loads(json.loads(request.content)["input"][0]["content"][0]["text"])
+
+
+async def answer(sessions, values, http, *, call_id=None, turn=1):
+    return await process_answer(
+        sessions,
+        user_id=values["owner"],
+        interview_id=values["interview_id"],
+        turn_no=turn,
+        text="팀원 담당입니다",
+        call_id=call_id or uuid4(),
+        settings=settings(),
+        http_client=http,
+    )
+
+
+@pytest.mark.parametrize("version", ["director_v10", "director_v11", "director_v12"])
+@pytest.mark.parametrize("kind", ["rewrite", "replan", "no_valid_candidate"])
+async def test_versioned_recovery_uses_one_existing_auto_slot_and_preserves_failure(
+    agent_sessions, agent_seed, version, kind
+):
+    await seed(agent_sessions, agent_seed, version)
+    sent, reviews, call_id = [], 0, uuid4()
+
+    async def handle(request):
+        nonlocal reviews
+        item = payload(request)
+        sent.append(item)
+        if "answer" in item:
+            return response(asdict(analysis()))
+        if item["operation"] == "plan":
+            # 최초 모델 I/O 전에 지문이 확정되어 있어야 한다.
+            async with agent_sessions() as db:
+                row = await db.get(InterviewSession, agent_seed["interview_id"])
+                bindings = row.context_state.get("director_generation_bindings_v1", {})
+                assert bool(bindings) is (version == "director_v12")
+            return response(plan("tech_lead"))
+        reviews += 1
+        review = approved_review()
+        if reviews == 1:
+            review["wording_valid" if kind == "rewrite" else "plan_valid"] = False
+            review["safe_alternative"] = kind != "no_valid_candidate"
+        return response(review)
+
+    expected_auto = kind == "rewrite" or (kind == "replan" and version == "director_v12")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        result = await answer(agent_sessions, agent_seed, http, call_id=call_id)
+        replay = await answer(agent_sessions, agent_seed, http, call_id=call_id)
+    assert result.next_turn_id == replay.next_turn_id
+    assert (result.failure is None) is expected_auto
+    assert len(sent) == (5 if expected_auto else 3)
+    assert sum("answer" in item for item in sent) == 1
+    async with agent_sessions() as db:
+        original = await db.get(LLMCallRecord, uuid5(call_id, "director"))
+        assert original.failure["error_code"] == "director_" + (
+            "no_valid_candidate" if kind == "no_valid_candidate" else "candidate_" + kind
+        )
+        assert original.turn_id is None and len(original.attempts) == 2
+        row = await db.get(InterviewSession, agent_seed["interview_id"])
+        ledger = row.context_state.get("question_retry_v1", {})
+        assert len(ledger) == int(expected_auto)
+        if expected_auto:
+            entry = next(iter(ledger.values()))
+            assert entry["kind"] == "auto" and entry["recovery_kind"] == kind
+            assert entry["request_id"] == str(uuid5(original.id, "automatic-rewrite"))
+            assert entry["status"] == "succeeded"
+        if version == "director_v12":
+            assert len(row.context_state["director_generation_bindings_v1"]) == 1 + int(
+                expected_auto
+            )
+
+
 @pytest.mark.parametrize("version", ["director_v14@candidate", "director_v16@candidate"])
 async def test_point_review_rewrites_an_unasked_requirement_and_stores_only_the_reviewed_question(
     agent_sessions, agent_seed, version
