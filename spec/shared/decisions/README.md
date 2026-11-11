@@ -14,7 +14,8 @@
 
 ## 현재 결정
 
-- [0014 면접 제한 시간은 [면접 시작하기] 클릭부터 센다](0014-interview-timer-starts-on-click.md) — Proposed, 2026-11-11. `started_at`을 준비 완료가 아니라 시작 클릭 시각으로 옮기고 `POST /interviews/{id}/start`(204·404·409 `not_ready`)를 추가한다. 0009의 "시작한 뒤" 기준과 0013의 첫 질문 시각 서술을 부분 대체한다. AI 담당 확인 대기(`interview_started` 이벤트 시점).
+- [0015 면접 제한 시간은 [면접 시작하기] 클릭부터 센다](0015-interview-timer-starts-on-click.md) — Proposed, 2026-11-11. `started_at`을 준비 완료가 아니라 시작 클릭 시각으로 옮기고 `POST /interviews/{id}/start`(204·404·409 `not_ready`)를 추가한다. 0009의 "시작한 뒤" 기준과 0013의 첫 질문 시각 서술을 부분 대체한다. AI 담당 확인 대기(`interview_started` 이벤트 시점).
+- [0014 현행 설명 문서를 현재 코드 기준으로 유지](0014-current-state-docs.md) — Proposed, 2026-11-11. 용어집·계약 안내·BE/AI 아키텍처·pipeline·db-schema에서 Sprint 구분을 없애고 현재 코드 기준으로 작성.
 - [0012 저장한 답변을 보존하는 유한 질문 복구](0012-bounded-question-recovery.md) — Accepted for local implementation, 2026-11-09. 0010을 로컬 구현 범위에서 부분 대체한다. 안전한 후보 반려의 자동 1회와 명시 수동 1회, 진행 상태 조회·동일 요청 재확인과 기존 면접 이어가기를 정의한다. 팀 공통 적용 승인은 PR #228의 FE·BE 검토와 구분한다.
 
 - [0006 Task 11 분석 결과의 부분 실패 계약](0006-task11-analysis-result-contract.md) — Accepted, 2026-09-28. 현재 사용자 승인 범위의 구현 선택으로 결과 집계·실패 원소 형태와 기존 오류 코드를 연결한다. 팀 의결·FE 런타임 완료를 뜻하지 않는다.
@@ -23,11 +24,11 @@ API 원본 구분은 [공통 계약 안내](../contracts/README.md)와 병합된
 
 - [0010 진행 중 질문 생성 실패의 question_failed는 recoverable false](0010-in-progress-question-failed-unrecoverable.md) — Partially Superseded by 0012 for local implementation. `recoverable: false`와 WS 재접속을 통한 모델 재실행 금지는 유지한다. T4 실패의 복구 API 미제공 범위는 0012로 부분 대체하며 T3·영구 오류의 중단 경계는 유지한다. 원문·기존 팀 승인 이력은 보존한다.
 - [0011 STT 공급자(MLAPI Whisper)와 무음 환각 대응](0011-stt-provider-mlapi-whisper.md) — Proposed, 2026-11-02. MLAPI Whisper를 STT로 쓰고 무음 환각은 최소 크기 검사와 문구 필터로 `empty_transcript` 처리한다. 팀 확인 대기.
-- [0013 면접 제한 시간 — 질문 생성 중 정지와 시간 종료 면접의 완료·리포트](0013-interview-time-limit-and-early-end-report.md) — Accepted, 2026-11-10. 질문 생성 대기(`thinking`)를 잔여 시간에서 빼고, 답변 대기 중 0이 되면 서버가 `completed`로 끝낸다. 시간 종료 면접은 tech·domain 답변이 각각 1개 이상이면 리포트를 만들고 평균 점수에서는 뺀다. 계약은 `openapi.yaml`에 반영했다. 첫 질문 시각 서술은 0014(Proposed)가 부분 대체를 제안한다.
+- [0013 면접 제한 시간 — 질문 생성 중 정지와 시간 종료 면접의 완료·리포트](0013-interview-time-limit-and-early-end-report.md) — Accepted, 2026-11-10. 질문 생성 대기(`thinking`)를 잔여 시간에서 빼고, 답변 대기 중 0이 되면 서버가 `completed`로 끝낸다. 시간 종료 면접은 tech·domain 답변이 각각 1개 이상이면 리포트를 만들고 평균 점수에서는 뺀다. 계약은 `openapi.yaml`에 반영했다. 첫 질문 시각 서술은 0015(Proposed)가 부분 대체를 제안한다.
 - [0007 음성 전용 면접 전환 — WS·REST 계약 변경](0007-voice-interview-contract.md) — Proposed, 2026-10-05. Sprint 2부터 답변은 음성만 받고 질문 음성은 `question-audio` URL로 전달한다. 꼬리질문 포함 9턴과 `totalTurns` 기존 의미를 유지하며 BE·AI 검토 대기.
 - [0005 JD 분류 category 통일](0005-jd-category-unification.md) — Proposed, 2026-09-27. DB·AI·API 모두 `category`(`required`/`preferred`/`responsibility`)로 통일하고 `requirement_type`·`unknown`과 변환 레이어를 폐기한다. 구동한 검토 대기.
 - [0003 Sprint 1 세션 인증 유지와 JWT의 Sprint 2 이관](0003-sprint1-session-auth.md) — Accepted, 2026-09-22. 기존 Redis·`devon_session`·14일 sliding 세션을 채택한다. JWT·갱신은 Sprint 2로 이관하며 실제 인증 구현·검증은 남는다.
-- [0009 면접 abandoned 전환 방법 — 나가기·레포 재선택](0009-interview-abandon-transition.md) — Accepted, 2026-10-28. `POST /interviews/{id}/abandon`(204·404·409 `already_completed`)으로 나가기와 레포 재선택의 기존 면접을 전환하고, 재도전은 `completed`와 시작 후 중단된 `abandoned`만 허용한다(여기서 "시작"의 기준은 0014(Proposed)가 시작 클릭으로 정의한다). 계약은 `openapi.yaml`에 반영했고 실제 BE·FE 구현은 남는다.
+- [0009 면접 abandoned 전환 방법 — 나가기·레포 재선택](0009-interview-abandon-transition.md) — Accepted, 2026-10-28. `POST /interviews/{id}/abandon`(204·404·409 `already_completed`)으로 나가기와 레포 재선택의 기존 면접을 전환하고, 재도전은 `completed`와 시작 후 중단된 `abandoned`만 허용한다(여기서 "시작"의 기준은 0015(Proposed)가 시작 클릭으로 정의한다). 계약은 `openapi.yaml`에 반영했고 실제 BE·FE 구현은 남는다.
 - [0008 정상 면접의 Persona 배분을 6/2/1로 고정](0008-fixed-persona-allocation.md) — Accepted, 2026-10-06. 첫 HR을 포함해 기술 6회·도메인 2회·HR 1회로 고정하며 이후 기술·도메인 순서는 자율이다. 이번 반영은 문서에 한정한다.
 - [0002 로컬 기준의 업로드 용량·공고 재사용·면접 배분 채택](0002-local-policy-baseline.md) — Partially Superseded, 2026-09-22. 포트폴리오 20MB와 공고 재사용 7일은 유지하며 면접 배분은 0004를 거쳐 0008을 따른다. 실제 구현 상태와 정책 확정은 구분한다.
 

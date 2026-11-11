@@ -237,7 +237,7 @@ Sprint 1의 `question` 수신은 질문 전달 완료를 뜻하며 `questionEnd`
 
 `remainingSeconds`는 서버 시각 기준이며 총 시간에서 경과를 뺀 뒤 질문 생성 대기(답변 저장부터 다음 질문 저장까지)를 더한 값이다([공통 0013](../../shared/decisions/0013-interview-time-limit-and-early-end-report.md)). 재연결 시 클라이언트 타이머를 이 값으로 덮어쓴다.
 
-- 시작: 제한 시간은 `면접 시작하기`를 누른 시각부터 센다([공통 0014](../../shared/decisions/0014-interview-timer-starts-on-click.md)). 버튼은 `POST /interviews/{id}/start`를 호출하고 성공하면 `GET /interviews/{id}`로 다시 조회한 뒤 진행 화면으로 이동한다. 호출이 실패하면(409 포함) 시작 실패를 안내하고 면접 상태를 다시 읽는다. `completed`는 리포트로, `abandoned`는 "중단된 면접" 화면으로 간다.
+- 시작: 제한 시간은 `면접 시작하기`를 누른 시각부터 센다([공통 0015](../../shared/decisions/0015-interview-timer-starts-on-click.md)). 버튼은 `POST /interviews/{id}/start`를 호출하고 성공하면 `GET /interviews/{id}`로 다시 조회한 뒤 진행 화면으로 이동한다. 호출이 실패하면(409 포함) 시작 실패를 안내하고 면접 상태를 다시 읽는다. `completed`는 리포트로, `abandoned`는 "중단된 면접" 화면으로 간다.
 - 버튼을 거치지 않는 진입: 진행 화면이 `in_progress`로 열리면(준비 뒤 새로고침, 대기 중 재연결, 이어하기) FE가 start를 한 번 호출하고 다시 조회한다. start는 멱등이라 이미 시작했으면 처음 시각이 유지된다. 시작 전 `remainingSeconds`는 전체 시간이다.
 - `thinking`을 받은 뒤 다음 메시지가 올 때까지 카운트다운을 멈춘다. 질문 음성(TTS) 재생 중에는 멈추지 않는다.
 - 답변 대기 중 0이 되면 서버가 면접을 `completed`로 끝내고 `GET`·WS 연결·답변 수신 시점에 판정한다. FE는 입력과 녹음을 막고 안내한 뒤 `GET /interviews/{id}`로 상태를 다시 확인하며(서버가 아직 끝내지 않았거나 조회가 실패하면 주기적으로), `completed`면 리포트로 이동한다. 작성·녹음 중이던 답변은 저장하지 않으며, 만료 뒤 도착한 답변은 서버도 저장하지 않고 `interviewEnd`로 닫는다. 녹음을 끝내고 저장 중인 답변은 취소하지 않는다.

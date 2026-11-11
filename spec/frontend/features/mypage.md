@@ -26,7 +26,7 @@
 
 행 컬럼: 일시 · 공고(회사명 + 직무) · 사용 레포(태그) · 점수(`{totalScore}`/100) · `리포트 보기 →`
 
-`completed`와 시작 후(`면접 시작하기` 클릭 뒤, [공통 0014](../../shared/decisions/0014-interview-timer-starts-on-click.md)) 중단된 `abandoned`를 표시한다. 중단된 면접의 행 구성은 아래를 따른다.
+`completed`와 시작 후(`면접 시작하기` 클릭 뒤, [공통 0015](../../shared/decisions/0015-interview-timer-starts-on-click.md)) 중단된 `abandoned`를 표시한다. 중단된 면접의 행 구성은 아래를 따른다.
 
 #### 중단된 면접 행 ([공통 0009](../../shared/decisions/0009-interview-abandon-transition.md))
 

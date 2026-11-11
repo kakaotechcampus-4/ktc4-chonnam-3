@@ -21,7 +21,7 @@
 
 `/interviews/{id}/retry`
 
-- 원본이 `completed`이거나, 시작 후 중단된 `abandoned`(`started_at` 있음 — 시작 클릭 뒤 기록, [공통 0014](../../shared/decisions/0014-interview-timer-starts-on-click.md))일 때만 허용한다. 준비 단계에서 버렸거나 시작하지 않고 나간 면접은 `started_at`이 없어 허용하지 않는다. 그 외는 `409 original_not_completed`(#121 1-2, [공통 0009](../../shared/decisions/0009-interview-abandon-transition.md)).
+- 원본이 `completed`이거나, 시작 후 중단된 `abandoned`(`started_at` 있음 — 시작 클릭 뒤 기록, [공통 0015](../../shared/decisions/0015-interview-timer-starts-on-click.md))일 때만 허용한다. 준비 단계에서 버렸거나 시작하지 않고 나간 면접은 `started_at`이 없어 허용하지 않는다. 그 외는 `409 original_not_completed`(#121 1-2, [공통 0009](../../shared/decisions/0009-interview-abandon-transition.md)).
 - 원본의 run, 공고, repo 조합을 복사한다.
 - 원본 repo가 삭제/접근불가/private 전환이면 `repository_unavailable`.
 
@@ -58,7 +58,7 @@ Prepare step:
 
 ## 시작
 
-`POST /interviews/{id}/start` ([공통 0014](../../shared/decisions/0014-interview-timer-starts-on-click.md)). 면접 제한 시간은 이 호출부터 센다.
+`POST /interviews/{id}/start` ([공통 0015](../../shared/decisions/0015-interview-timer-starts-on-click.md)). 면접 제한 시간은 이 호출부터 센다.
 
 - 준비 완료는 `status`만 `in_progress`로 바꾸고 `started_at`을 기록하지 않는다. start가 `started_at`을 기록한다.
 - `204`. 멱등이라 다시 호출해도 처음 시각을 유지한다. 세션 행을 `FOR UPDATE`로 잡아 동시 호출은 한쪽만 기록한다.

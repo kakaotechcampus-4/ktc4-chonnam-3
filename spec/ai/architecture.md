@@ -1,8 +1,8 @@
 # AI 기능 아키텍처
 
-작성일: 2026-09-12. 기준: `report.md`와 Sprint 1 FIX 명세.
+상태: 현재 코드 기준([공통 0014](../shared/decisions/0014-current-state-docs.md)). 최초 작성 2026-09-12.
 
-이 문서는 서비스 AI의 책임·연결·개발 범위를 정의한다. 기존 확정사항을 정리하고, 상세 내부 설계는 Proposed로 구분한다. 현재 코드가 이 구조로 실행된다는 의미는 아니다. Claude 작업 진입점은 [ai/README.md](../../ai/README.md)다.
+이 문서는 서비스 AI의 책임·연결·개발 범위를 정의한다. 기존 확정사항을 정리하고, 상세 내부 설계는 Proposed로 구분한다. Claude 작업 진입점은 [ai/README.md](../../ai/README.md)다.
 
 코드 배치는 [승인된 패키지 설계](designs/2026-09-12-ai-package-structure.md)를 따른다. AI 소스 원본은 `ai/src/devon_ai/`이며 기존 BE API·worker가 로컬 패키지를 import한다. 별도 AI 서버는 없다. 내부 입력·출력 계약은 [0014](decisions/0014-minimal-change-revision.md)·[0015](decisions/0015-existing-contracts-and-tool-results.md)의 채택 범위와 상세 구현·검증 조건을 구분한다. [상태 표현과 문서 역할](../../ai/README.md#ai-document-status)에 따라 승인 상태와 실제 적용·검증 현황을 구분한다.
 
@@ -12,7 +12,7 @@
 | --- | --- |
 | [원본 검토](source-audit.md) | context·ForAI·report·FE/BE/DB·스켈레톤 간 충돌과 적용 기준 |
 | [기준 결정](decisions/0001-ai-baseline.md) | FIX 유지와 승인 범위 |
-| [Sprint 1 vector 미도입](decisions/0002-sprint1-vector-search.md) | AI-L20의 승인 범위, BE 반영 확인과 Sprint 2 검토 조건 |
+| [vector 검색 미도입](decisions/0002-sprint1-vector-search.md) | AI-L20의 승인 범위와 도입 검토 조건 |
 | [구현·검수 인계](../../ai/docs/pipeline.md#기존-id별-구현검수-인계) · [Sprint 2 후속 목록](features/extensions.md#sprint-2-착수-시-검토할-사항) | 채택한 방향의 실제 구현·검수와 후속 기능의 미정 범위를 구분 |
 | [내부 계약](contracts.md) | 데이터 소유권, LLM 출력 제안, 검증·재시도 |
 | [레포 분석·추천](features/repository-analysis.md) | L0/L1/L2, Wanted, 추천, 캐시, 부분 실패 |
@@ -20,38 +20,28 @@
 | [면접 진행](features/interviewer.md) | 단일 Director, Persona, 9턴, 질문 검증 |
 | [답변 평가](features/answer-evaluation.md) | 평가 범위, 충분성·정확성·기여, 판단 유보의 범위와 이유 |
 | [근거 검색](features/evidence-retrieval.md) | 검색 범위, 출처, answer_vs_code |
-| [도메인 프레임](features/domain-frames.md) | Sprint 1 seed 후보와 역할 제한 |
+| [도메인 프레임](features/domain-frames.md) | seed 후보와 역할 제한 |
 | [리포트·프로필](features/report-profile.md) | lazy 생성, 피드백, 확정 점수 구조와 세부 기준 검수 |
 | [후속 기능](features/extensions.md) | 음성·Claim·도메인 자료·이미지 |
 | [검증](verification.md) | 계약·상태·모델 평가·완료 판단 |
 
 ## 기준과 범위
 
-- Sprint 1은 Public GitHub 레포와 Wanted 공고를 사용하는 텍스트 면접이다.
+- Public GitHub 레포와 Wanted 공고를 사용하는 음성 면접이다. 답변은 STT로 전사한 텍스트로 분석한다.
 - Agent는 Director 하나다. `tech_lead`, `hr_manager`, `domain_lead`는 Director의 질문 관점이며 독립 Agent가 아니다.
-- 면접 답변은 양방향 텍스트 WebSocket, 분석 진행 알림은 SSE다. 기존 계약에 없는 답변 POST나 면접 SSE를 추가하지 않는다.
-- 기본 9턴을 완료하면 종료한다. Director의 자율 조기 종료는 Sprint 1에 없다.
-- Sprint 1 LLM 모델은 [0011 결정](decisions/0011-sprint1-model-selection.md)에 따라 OpenAI `gpt-5.6-luna`다. 인증·SDK/client·호출 경로와 실제 모델 버전 기록은 기존 BE 소유권 안에서 구현한다. [0018](decisions/0018-existing-baseline-bulk-resolution.md)에 따라 상세 연결을 별도 사용자 질문으로 만들지 않으며 실제 계정 접근과 task별 품질은 검증한다.
-- Sprint 1 embedding/vector 검색과 pgvector extension 선설치는 [0002 결정](decisions/0002-sprint1-vector-search.md)에 따라 미도입이다. BE 반영은 구현·검증에서 확인하고, Sprint 2 도입 여부·세부 설계는 해당 기능 착수 시 검토한다. 공개 리포트 점수는 0~100 score 6개와 단순 평균 `totalScore`를 사용하며, 항목별 세부 기준 seed는 자료 보강에 따라 갱신할 수 있다.
-- 선택 문서 preview와 GitHub URL 추출은 Sprint 1에 있다. 문서 Claim·STT/TTS·이미지 공고 판독은 후속 범위로 분류했으나 현재 develop에 구현돼 있다. 적용 범위와 검증 현황은 [구현 기록](implementation.md)을 따른다.
+- 면접은 WebSocket(답변 오디오와 제어 메시지), 분석 진행 알림은 SSE다. 기존 계약에 없는 답변 POST나 면접 SSE를 추가하지 않는다.
+- 기본 9턴을 완료하면 종료한다. Director의 자율 조기 종료는 없다.
+- LLM 기본 모델은 [0011 결정](decisions/0011-sprint1-model-selection.md)에 따라 OpenAI `gpt-5.6-luna`이며 설정으로 바꾼다. 인증·client·호출 경로와 실제 모델 버전 기록은 BE가 소유한다.
+- embedding/vector 검색과 pgvector extension은 [0002 결정](decisions/0002-sprint1-vector-search.md)에 따라 사용하지 않는다. 공개 리포트 점수는 0~100 score 6개와 단순 평균 `totalScore`를 사용하며, 항목별 세부 기준 seed는 자료 보강에 따라 갱신할 수 있다.
+- 문서 preview와 GitHub URL 추출, 문서 Claim 추출과 코드 대조, STT/TTS, 이미지 공고 판독(Vision)을 사용한다. 적용 범위와 검증 현황은 [구현 기록](implementation.md)을 따른다.
 
 수정 중인 `context/AI.md`의 세 역할 재구성, HTTPS/SSE 면접, 조기 종료, 별도 면접 Worker는 [검토 기록](source-audit.md)의 변경 제안으로 남긴다. 이를 기존 API와 혼합하지 않는다.
 
-## 현재 구현 상태
+## 구현 현황
 
-현재 적용 범위·실행 결과·남은 작업의 원본은 [AI 구현·검증 기록](implementation.md)이다. 아래 기준 커밋과 초기 패키지·질문 경로의 설명은 당시 확인 범위를 보존한 이력이며, 현재 기능 전체의 미구현·미검증 근거로 사용하지 않는다.
+적용 범위·실행 결과·남은 작업은 [AI 구현·검증 기록](implementation.md)에서 관리한다. 이 문서는 책임과 연결 구조를 설명한다.
 
 2026-09-22 사용자 선택에 따라 현재 검증 범위는 **팀 내부·실제 사용자 문답**이며 후속 내부 비교 검증을 위한 보관·재사용을 채택했다. 최종 내부 비교 검증 뒤에도 보관하며 별도의 자동 삭제 기한은 두지 않는다. [0018](decisions/0018-existing-baseline-bulk-resolution.md)의 범위를 따르고 상세 구현·자료 검수는 [작업 인계](../../ai/docs/pipeline.md#기존-id별-구현검수-인계)에서 확인한다. 외부 서비스 출시·자료 공개가 승인된 것은 아니다.
-
-확인 기준 커밋은 `8dabd55`이며, 확인 당시 `backend/app/`의 AI 관련 모듈·주요 BE 모듈은 비어 있거나 모듈 주석만 있었다. `agents/contracts.py`에도 실제 계약 클래스는 없다. worker 등록, ORM, migration, seed, 테스트 fixture가 동작한다고 가정하지 않는다.
-
-이후 설치 가능한 `devon_ai` 패키지와 task-02~03의 내부 계약·순수 검증·주입 호출 경계를 구현했다. BE에는 설정·OpenAI transport·prompt 로딩/seed를 연결했다. [구현 인계](designs/2026-09-23-ai-foundation.md)에 범위를 기록하며 분석 task·서비스 실행 통합은 이 인계 이후 별도 task에서 구현됐다. 현재 검사 기준은 [검증 기록](verification.md)을 따른다.
-
-추가로 [Director 기본 질문 경로](designs/2026-09-23-director-question-path.md)를 구현했다.
-호출자가 준비한 목적의 질문 생성·참조 검사·독립 검토·성공/실패 반환을 제공하며,
-Director의 목적 자동 선정·도구 실행과 실제 서비스 연결은 포함하지 않는다.
-
-FE의 면접·분석·리포트 화면도 구현 검증 근거가 없고, 기존 타입에는 음성 계약 흔적이 있다. 세부 근거는 [원본 검토](source-audit.md)를 따른다. 문서의 FIX는 요구사항 상태이지 구현 상태가 아니다.
 
 ## 책임과 의존 방향
 
