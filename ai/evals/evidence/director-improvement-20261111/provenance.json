@@ -163,6 +163,21 @@
       "source_id": "K:completion-audit.json",
       "sha256": "8ce69130bf54d134e3e484e998ad12aa77f9b5e754699559a3b7777405a90fae",
       "original_publicly_included": false
+    },
+    {
+      "source_id": "K:full-flow/live/measurements-v1.json",
+      "sha256": "7f4990d2cfb094ca735de7096d64b80c15aa0d1262db8e682570e23b695f10f0",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "K:recovery-audit/live-database-audit.json",
+      "sha256": "51ef5e4eafb8596dea4606143ca5c34726383236254335ee48601fe9e6f8618c",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "K:source-quality/mastodon-provenance.frozen.json",
+      "sha256": "d56bba7887a81dc10595d04de3cd0e5a57ac85a287bd17bf2549f46b6dea0e87",
+      "original_publicly_included": false
     }
   ]
 }

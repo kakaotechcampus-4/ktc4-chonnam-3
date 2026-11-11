@@ -442,6 +442,103 @@
         "fixture_boundary": "partial 답변·분석과 마지막 턴 Context는 합성 대조 fixture다. 실제 K 질문·답변·첫 분석·DB를 변경하지 않았고 이번 실제 T3 출력으로 세지 않는다."
       },
       "synthetic_partial_analysis": true
+    },
+    {
+      "kind": "generation",
+      "group": "B",
+      "case_id": "actual-k-call022-context",
+      "prompt_version": "director_v17@semantic-fit",
+      "question_length_codepoints": 196,
+      "request_length_codepoints": 109,
+      "preamble_length_codepoints": 86,
+      "source_verdict": "accept",
+      "actual_review_verdict": "accept",
+      "source_and_review_agree": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "제공된 코드에서는 일반 게시가 `process_status!` 안의 `save!` 트랜잭션을 거친 뒤 `postprocess_status!`를 호출합니다. 일반 게시 요청에서 오류가 났지만 게시물은 생성된 것으로 보인다고 가정하면, 저장 실패와 저장 후 처리 실패를 구분하기 위해 어떤 관측 하나를 가장 먼저 확인하시겠어요? 그 이유도 말씀해 주세요.",
+        "topic_code": "post_save_failure_diagnosis",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "일반 게시 요청에서 오류가 났지만 게시물은 생성된 것으로 보인다고 가정하면, 저장 실패와 저장 후 처리 실패를 구분하기 위해 어떤 관측 하나를 가장 먼저 확인하시겠어요? 그 이유도 말씀해 주세요.",
+          "required_points": [
+            {
+              "key": "post_save_failure_diagnosis",
+              "description": "일반 게시 요청에서 오류가 났지만 게시물은 생성된 것으로 보인다고 가정하면, 저장 실패와 저장 후 처리 실패를 구분하기 위해 어떤 관측 하나를 가장 먼저 확인하시겠어요? 그 이유도 말씀해 주세요."
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "public-ref-001"
+            },
+            {
+              "kind": "evidence",
+              "id": "public-ref-003"
+            },
+            {
+              "kind": "evidence",
+              "id": "public-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "public-ref-001",
+          "public-ref-003",
+          "public-ref-002"
+        ],
+        "jd_requirement_ids": []
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "코드 흐름과 일치하며, 저장 단계와 저장 후 처리 단계를 구분할 단일 관측과 그 이유를 직접 묻습니다.",
+        "point_coverage": [
+          {
+            "key": "post_save_failure_diagnosis",
+            "status": "asked",
+            "question_excerpt": "저장 실패와 저장 후 처리 실패를 구분하기 위해 어떤 관측 하나를 가장 먼저 확인하시겠어요? 그 이유도 말씀해 주세요."
+          }
+        ]
+      },
+      "codex_source_grade": {
+        "candidate_source_verdict": "accept",
+        "criterion_scope": "신규 main의 problem_solving 최소 관찰 기준을 실제 request에 적용한다.",
+        "direct_request_excerpt": "저장 실패와 저장 후 처리 실패를 구분하기 위해 어떤 관측 하나를 가장 먼저 확인하시겠어요? 그 이유도 말씀해 주세요.",
+        "minimum_sufficient_answer_scope": "명시한 오류·게시물 생성 의심 상황에서 저장 이전과 이후의 원인 범주를 구별할 관측 한 가지를 선택하고 그 관측을 우선할 근거를 설명해야 한다.",
+        "source_checks": {
+          "source_grounding": "satisfied",
+          "explicit_unknown_limits": "satisfied",
+          "single_judgment": "satisfied",
+          "question_contract_alignment": "satisfied",
+          "controller_main_route": "satisfied",
+          "history_nonrepetition": "satisfied",
+          "problem_solving_main_semantic_fit": "satisfied"
+        },
+        "rationale": "정상 call 경로는 process_status!의 save! 트랜잭션 뒤 일반 게시의 postprocess_status!로 이어진다. 후보는 오류와 생성 의심을 가정으로 명시하고, 그 상황에서 원인 범위를 좁힐 확인 하나를 직접 요구한다. 해당 확인과 그 이유는 한 판단이다. 기존 멱등성의 시간차 보장 질문이나 멘션 비교 정정을 다시 요구하지 않는다.",
+        "actual_review_reason_factuality": "저장 단계와 저장 후 처리 단계를 구분할 관측 한 가지와 그 이유를 묻는다는 사유는 실제 request에 맞다. 실제 장애 원인·커밋 성공·외부 작업 성공을 확인했다고 확정하지 않는다.",
+        "parallel_judgment_axes": 1,
+        "understanding_load": 1,
+        "naturalness_note": "중심 판단은 명확하지만 코드 배경 한 문장과 실패 가정·비교 목적·이유 요청이 이어져 길다. '관측'은 다소 문어적이다. 이번 수용을 표현 간결성·실제 청취 품질 개선으로 일반화하지 않는다.",
+        "not_claimed": [
+          "실제 장애 원인 확정",
+          "지원자의 실제 구현·운영 경험",
+          "진단부터 재발 방지까지 전 과정 평가",
+          "한 개발 문맥을 넘어선 정책 일반 우월성",
+          "응답 속도·간결성 개선"
+        ]
+      },
+      "synthetic_partial_analysis": false
     }
   ]
 }
