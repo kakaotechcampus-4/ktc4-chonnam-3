@@ -23,7 +23,6 @@ _TASK_MODULES = {
         )
     },
     "profile_summary": "app.llm_tasks.profile_summary",
-    "question_pronunciation": "app.llm_tasks.question_pronunciation",
 }
 
 
