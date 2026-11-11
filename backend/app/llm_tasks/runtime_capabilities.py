@@ -39,3 +39,5 @@ def validate_runtime_prompts(prompts: Sequence[c.PromptSpec]) -> None:
         versions = getattr(module, "SUPPORTED_PROMPT_VERSIONS", ())
         if base_prompt_version(prompt.version) not in versions:
             raise c.ContractError("schema", "runtime prompt is not supported by installed consumer")
+        if prompt.task_name == "director":
+            module.operation_prompts(prompt)

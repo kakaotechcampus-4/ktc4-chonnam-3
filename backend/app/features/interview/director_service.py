@@ -13,8 +13,9 @@ from uuid import UUID, uuid4, uuid5
 
 import httpx
 from devon_ai import contracts as c
+from devon_ai.agents.director.capabilities import prompt_capabilities
 from devon_ai.agents.director.runtime import RecoveryFeedback
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agents.director.runtime_adapter import execute_director
@@ -38,10 +39,16 @@ from app.features.interview.answer_context import (
     prior_analyses,
     reference_texts,
 )
+from app.features.interview.generation_binding import capture as capture_generation
+from app.features.interview.observation import observed_stage
 from app.features.interview.question_structure import question_position
 from app.integrations.llm.client import CallBudget
 from app.llm_tasks.answer_analysis import analyze_answer
-from app.llm_tasks.prompt_loader import load_active_prompt
+from app.llm_tasks.prompt_loader import (
+    PromptConfigurationError,
+    PromptNotFoundError,
+    load_active_prompt,
+)
 from app.shared.events import record_event
 
 DEFAULT_LIMITS = c.ContextLimits(2, 0, "director-runtime.v1")
@@ -176,6 +183,7 @@ async def start_director(
     tool_results: tuple[c.ToolResult, ...] = (),
     preparation_guard: Callable[[AsyncSession, InterviewSession], Awaitable[bool]] | None = None,
     recovery_feedback: RecoveryFeedback | None = None,
+    expected_prompt: c.PromptSpec | None = None,
 ) -> QuestionExecution:
     """DB에서 확정한 입력으로 질문을 만들고 저장한다. 공개 전송·준비 완료는 호출자 책임이다.
 
@@ -196,8 +204,43 @@ async def start_director(
         context = await load_context(db, user_id=user_id, interview_id=interview_id, limits=limits)
         await _pending(db, interview_id, context.turn_no, "director")
         prompt = await load_active_prompt(db, "director")
+        if expected_prompt is not None and prompt != expected_prompt:
+            # 빈 조회 재사용을 허용한 정책과 다른 버전으로 다음 질문을 만들지 않는다.
+            # 폐기 기록을 남겨 같은 답변 재전송도 성공으로 바꾸거나 모델을 재호출하지 않는다.
+            db.add(
+                LLMCallRecord(
+                    id=call_id,
+                    interview_session_id=interview_id,
+                    turn_no=context.turn_no,
+                    task_name="director",
+                    attempts=[],
+                    discard_reason="context_changed",
+                )
+            )
+            return QuestionExecution(call_id, None, None, "context_changed")
         sources = await reference_texts(db, interview_id)
         past = await prior_analyses(db, context)
+        try:
+            bind_generation = prompt_capabilities(prompt.version).auto_replan
+        except c.ContractError:
+            bind_generation = False
+        if context.current_turn_id is not None and bind_generation:
+            # 새 정책의 답변 뒤 생성만 최초 I/O 전에 묶는다. 원문·전체 분석은 해시에만
+            # 사용하며 기존 실패의 call_id 지문을 새 라운드나 활성 버전으로 덮지 않는다.
+            try:
+                interview.context_state = capture_generation(
+                    interview.context_state or {},
+                    call_id=call_id,
+                    context=context,
+                    prompt=prompt,
+                    answer_analysis=answer_analysis,
+                    prior_analyses=past,
+                    reference_texts=sources,
+                    lookup_summary=lookup_summary,
+                    tool_results=tool_results,
+                )
+            except ValueError:
+                raise AgentStateError("generation_binding_invalid") from None
         db.add(
             LLMCallRecord(
                 id=call_id,
@@ -495,6 +538,16 @@ async def process_answer(
         )
         now = datetime.now(UTC)
         turn.answer_text, turn.status, turn.answered_at = text, "answered", now
+        if interview.started_at is None:
+            # 시작 신호가 생략돼도 기존 답변 저장 경로처럼 첫 질문 시각부터 센다.
+            interview.started_at = (
+                await db.scalar(
+                    select(func.min(InterviewTurn.asked_at)).where(
+                        InterviewTurn.interview_session_id == interview_id
+                    )
+                )
+                or now
+            )
         if turn.asked_at is not None:
             turn.answer_duration_sec = max(0, int((now - turn.asked_at).total_seconds()))
         await record_event(
@@ -576,8 +629,15 @@ async def process_answer(
             on_evidence_check,
         )
         final_evidence = loaded.context.evidence
+        reused_under: c.PromptSpec | None = None
         if tool_result is not None:
             final_evidence += tool_result.items
+            reused_under = await _empty_lookup_reuse_prompt(sessions, tool_result)
+        if reused_under is not None:
+            # 원문이 추가되지 않았으므로 최초 분석을 수정하지 않는다. 조회 실패·미확인은
+            # Tool trace와 다음 Plan/Review 입력에 그대로 남겨 검증 완료나 감점으로 바꾸지 않는다.
+            summary += "; 빈 조회의 최초 분석 재사용; Director 정책: " + reused_under.version
+        elif tool_result is not None:
             # 같은 T3 예산을 사용한다. 최초 호출이 재시도했다면 추가 provider 호출은 없다.
             enriched = await analyze_answer(
                 loaded.context,
@@ -731,6 +791,9 @@ async def process_answer(
                 "lookup_summary": summary,
                 "tool_results": [] if tool_result is None else [asdict(tool_result)],
             }
+            if reused_under is not None:
+                # 최초 분석 재사용을 허용한 정책은 자동·수동 질문 복구에서도 바꾸지 않는다.
+                saved_inputs[str(turn_no + 1)]["analysis_reuse_prompt"] = asdict(reused_under)
             interview.context_state = {**state, "director_retry_inputs": saved_inputs}
         question = await start_director(
             sessions,
@@ -743,6 +806,7 @@ async def process_answer(
             answer_analysis=selected,
             lookup_summary=summary,
             tool_results=() if tool_result is None else (tool_result,),
+            expected_prompt=reused_under,
         )
         if question.failure is not None:
             from app.features.interview.question_retry import auto_retry_question
@@ -772,6 +836,23 @@ async def process_answer(
         raise
 
 
+async def _empty_lookup_reuse_prompt(
+    sessions: async_sessionmaker[AsyncSession], result: c.ToolResult
+) -> c.PromptSpec | None:
+    """새 원문이 없는 조회의 분석 재사용만 명시적으로 허용한 활성 정책을 고정한다."""
+    if result.items or result.status not in {"not_found", "tool_error", "insufficient_analysis"}:
+        return None
+    async with sessions() as db:
+        try:
+            prompt = await load_active_prompt(db, "director")
+            supported = prompt_capabilities(prompt.version).reuse_empty_lookup_analysis
+        except (PromptNotFoundError, PromptConfigurationError, c.ContractError):
+            # 최적화 결정에 실패했다고 구형 완료·실패 흐름을 새 오류로 바꾸지 않는다.
+            return None
+    return prompt if supported else None
+
+
+@observed_stage("repository.lookup")
 async def _retrieve(
     sessions: async_sessionmaker[AsyncSession],
     user_id: UUID,
