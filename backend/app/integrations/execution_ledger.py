@@ -1,3 +1,283 @@
+"""서비스·평가가 공유하는 선택적 실행 장부. 원문·인증 정보와 외부 전송은 보관하지 않는다."""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+import logging
+import math
+import sqlite3
+import time
+from collections import Counter
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from contextlib import asynccontextmanager, closing, contextmanager
+from contextvars import ContextVar
+from dataclasses import asdict, dataclass, field, replace
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+from typing import Any, TypedDict
+from uuid import uuid4
+
+_logger = logging.getLogger(__name__)
+
+_METADATA = {
+    "cohort",
+    "case_id",
+    "interview_id",
+    "turn",
+    "prompt_version",
+    "schema_version",
+    "reasoning_effort",
+    "max_output_tokens",
+    "request_bytes",
+    "response_bytes",
+    "stream",
+    "attempt",
+    "status_code",
+    "source_kind",
+    "source_sha256",
+    "usage_parse_status",
+    "outcome_scope",
+    "response_timing_version",
+    "response_headers_ms",
+    "first_sse_event_ms",
+    "first_output_text_delta_ms",
+    "response_read_ms",
+    "response_decode_ms",
+    "validation_ms",
+    "response_read_complete",
+    "sse_timing_limited",
+}
+
+_TIMING_MS = {
+    "response_headers_ms",
+    "first_sse_event_ms",
+    "first_output_text_delta_ms",
+    "response_read_ms",
+    "response_decode_ms",
+    "validation_ms",
+}
+
+
+def _count(value: object) -> int | None:
+    return value if type(value) is int and value >= 0 else None
+
+
+def _number(value: object) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and value >= 0
+    )
+
+
+@dataclass(frozen=True)
+class CallRecord:
+    call_id: str
+    run_id: str
+    entrypoint: str
+    operation: str
+    kind: str
+    started_at: float
+    provider: str = "openai_compatible"
+    status: str = "started"
+    elapsed_seconds: float | None = None
+    requested_model: str | None = None
+    actual_model: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    cached_input_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    cache_write_tokens: int | None = None
+    request_sha256: str | None = None
+    error_code: str | None = None
+    metadata: dict[str, str | int | bool | None] = field(default_factory=dict)
+    parent_call_id: str | None = None
+
+    def __post_init__(self) -> None:
+        for value in (self.call_id, self.run_id, self.entrypoint, self.operation, self.provider):
+            if not isinstance(value, str) or not value.strip() or len(value) > 256:
+                raise ValueError("invalid record identity")
+        if self.kind not in {"generation", "embedding", "stage"} or self.status not in {
+            "started",
+            "succeeded",
+            "failed",
+            "cancelled",
+        }:
+            raise ValueError("invalid record state")
+        if not _number(self.started_at) or (
+            self.elapsed_seconds is not None and not _number(self.elapsed_seconds)
+        ):
+            raise ValueError("invalid record timing")
+        for token_count in (
+            self.input_tokens,
+            self.output_tokens,
+            self.cached_input_tokens,
+            self.reasoning_tokens,
+            self.cache_write_tokens,
+        ):
+            if token_count is not None and _count(token_count) is None:
+                raise ValueError("invalid token count")
+        for detail, total in (
+            (self.cached_input_tokens, self.input_tokens),
+            (self.reasoning_tokens, self.output_tokens),
+        ):
+            if detail is not None and total is not None and detail > total:
+                raise ValueError("token detail exceeds total")
+        if set(self.metadata) - _METADATA or any(
+            value is not None and type(value) not in (str, int, bool)
+            for value in self.metadata.values()
+        ):
+            raise ValueError("metadata is outside the allowlist")
+        for key in _TIMING_MS:
+            timing_value = self.metadata.get(key)
+            if timing_value is not None and _count(timing_value) is None:
+                raise ValueError("invalid response phase timing")
+        for key in ("response_read_complete", "sse_timing_limited"):
+            flag_value = self.metadata.get(key)
+            if flag_value is not None and type(flag_value) is not bool:
+                raise ValueError("invalid response timing flag")
+        if "response_timing_version" in self.metadata and (
+            type(self.metadata["response_timing_version"]) is not int
+            or self.metadata["response_timing_version"] not in (1, 2)
+        ):
+            raise ValueError("invalid response timing version")
+        if self.parent_call_id is not None and (
+            not isinstance(self.parent_call_id, str)
+            or not self.parent_call_id.strip()
+            or self.parent_call_id == self.call_id
+        ):
+            raise ValueError("invalid parent call identity")
+
+
+def record_data(record: CallRecord) -> dict[str, Any]:
+    return asdict(record)
+
+
+class ExecutionLedger:
+    """로컬 관측용 SQLite 장부. 업무 DB를 대체하지 않으며 이벤트는 덮어쓰지 않는다."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with closing(sqlite3.connect(path, timeout=2)) as db, db:
+            db.execute("PRAGMA synchronous=FULL")
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY, body TEXT NOT NULL)"
+            )
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS exports (id TEXT PRIMARY KEY, body TEXT NOT NULL)"
+            )
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS deliveries ("
+                "target TEXT, span_id TEXT, content_hash TEXT, state TEXT, "
+                "PRIMARY KEY (target, span_id))"
+            )
+
+    def _write(self, event_id: str, record: CallRecord) -> None:
+        encoded = json.dumps(
+            record_data(record), sort_keys=True, ensure_ascii=False, allow_nan=False
+        )
+        with closing(sqlite3.connect(self.path, timeout=2)) as db, db:
+            db.execute("INSERT OR IGNORE INTO events VALUES (?, ?)", (event_id, encoded))
+            if (
+                db.execute("SELECT body FROM events WHERE id=?", (event_id,)).fetchone()[0]
+                != encoded
+            ):
+                raise ValueError("conflicting immutable event")
+
+    def start(self, record: CallRecord) -> None:
+        if record.status != "started":
+            raise ValueError("start requires started state")
+        self._write(record.call_id + ":start", record)
+
+    def finish(self, record: CallRecord) -> None:
+        if record.status == "started":
+            raise ValueError("finish requires terminal state")
+        with closing(sqlite3.connect(self.path, timeout=2)) as db:
+            row = db.execute(
+                "SELECT body FROM events WHERE id=?", (record.call_id + ":start",)
+            ).fetchone()
+        if row is None:
+            raise ValueError("missing start event")
+        first = json.loads(row[0])
+        for key in (
+            "run_id",
+            "entrypoint",
+            "operation",
+            "kind",
+            "provider",
+            "started_at",
+            "requested_model",
+            "request_sha256",
+            "parent_call_id",
+        ):
+            if first.get(key) != record_data(record)[key]:
+                raise ValueError("conflicting attempt identity")
+        self._write(record.call_id + ":finish", record)
+
+    def records(self) -> list[CallRecord]:
+        with closing(sqlite3.connect(self.path, timeout=2)) as db:
+            rows = db.execute("SELECT id, body FROM events ORDER BY rowid").fetchall()
+        records: dict[str, CallRecord] = {}
+        for _, body in rows:
+            record = CallRecord(**json.loads(body))
+            records[record.call_id] = record
+        return list(records.values())
+
+    def event_count(self) -> int:
+        with closing(sqlite3.connect(self.path, timeout=2)) as db:
+            return int(db.execute("SELECT count(*) FROM events").fetchone()[0])
+
+    def save_export(self, export_id: str, receipt: Mapping[str, object]) -> None:
+        with closing(sqlite3.connect(self.path, timeout=2)) as db, db:
+            db.execute(
+                "INSERT OR REPLACE INTO exports VALUES (?, ?)",
+                (
+                    export_id,
+                    json.dumps(dict(receipt), sort_keys=True, allow_nan=False),
+                ),
+            )
+
+    def claim_delivery(self, target: str, bindings: Mapping[str, str]) -> set[str]:
+        """전송 전에 배타 예약한다. 응답이 유실돼도 같은 관측을 자동 재전송하지 않는다."""
+        claimed = set()
+        with closing(sqlite3.connect(self.path, timeout=2)) as db, db:
+            db.execute("BEGIN IMMEDIATE")
+            for span_id, content_hash in bindings.items():
+                row = db.execute(
+                    "SELECT content_hash FROM deliveries WHERE target=? AND span_id=?",
+                    (target, span_id),
+                ).fetchone()
+                if row is not None:
+                    if row[0] != content_hash:
+                        raise ValueError("exported observations are immutable")
+                    continue
+                db.execute(
+                    "INSERT INTO deliveries VALUES (?, ?, ?, ?)",
+                    (target, span_id, content_hash, "sending"),
+                )
+                claimed.add(span_id)
+        return claimed
+
+    def mark_delivery(self, target: str, span_ids: Sequence[str], state: str) -> None:
+        if state not in {"accepted", "unknown"}:
+            raise ValueError("invalid delivery state")
+        with closing(sqlite3.connect(self.path, timeout=2)) as db, db:
+            db.executemany(
+                "UPDATE deliveries SET state=? WHERE target=? AND span_id=?",
+                [(state, target, span_id) for span_id in span_ids],
+            )
+
+    def delivery_states(self, target: str) -> dict[str, str]:
+        with closing(sqlite3.connect(self.path, timeout=2)) as db:
+            return dict(
+                db.execute("SELECT span_id, state FROM deliveries WHERE target=?", (target,))
+            )
+
+
 class UsageDetails(TypedDict):
     input_tokens: int | None
     output_tokens: int | None
