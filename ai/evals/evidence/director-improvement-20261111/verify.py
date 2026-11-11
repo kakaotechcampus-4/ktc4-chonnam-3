@@ -1,3 +1,47 @@
+def check_semantic_fit() -> None:
+    evidence = load("semantic-fit-cases.json")
+    cases = evidence["cases"]
+    require(len(cases) == 12 and evidence["physical_model_calls"] == 24, "12 pairs/24 calls")
+    require(
+        Counter(row["oracle"]["expected_source_verdict"] for row in cases)
+        == {"accept": 6, "reject": 6},
+        "6 positive/6 negative",
+    )
+    counts: dict[str, Counter[str]] = {"A": Counter(), "B": Counter()}
+    for case in cases:
+        require({row["arm"] for row in case["actual_observations"]} == {"A", "B"}, "A/B pair")
+        for row in case["actual_observations"]:
+            arm, oracle = row["arm"], case["oracle"]
+            check_quotes(case["question"], row["raw_review"])
+            verdict, recovery = review_outcome(row["raw_review"])
+            match = verdict == oracle["expected_source_verdict"]
+            strict = match and recovery == (
+                None if oracle["expected_recovery"] == "none" else oracle["expected_recovery"]
+            )
+            require(
+                verdict == row["model_verdict"] and recovery == row["model_recovery"],
+                "actual verdict mapping",
+            )
+            require(
+                match == row["oracle_verdict_match"] and strict == row["oracle_recovery_match"],
+                "stored match",
+            )
+            counts[arm]["match"] += int(match)
+            counts[arm]["strict"] += int(strict)
+            counts[arm]["false_accept"] += int(
+                oracle["expected_source_verdict"] == "reject" and verdict == "accept"
+            )
+            counts[arm]["positive_preserved"] += int(
+                oracle["expected_source_verdict"] == "accept" and verdict == "accept"
+            )
+    require([counts[arm]["match"] for arm in ["A", "B"]] == [6, 12], "6/12 to 12/12")
+    require([counts[arm]["strict"] for arm in ["A", "B"]] == [6, 12], "strict recovery")
+    require([counts[arm]["false_accept"] for arm in ["A", "B"]] == [6, 0], "false accept 6 to 0")
+    require(
+        [counts[arm]["positive_preserved"] for arm in ["A", "B"]] == [6, 6], "positive preservation"
+    )
+
+
 def check_generation_and_scope() -> None:
     evidence = load("semantic-fit-generation.json")
     rows = evidence["observations"]

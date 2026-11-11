@@ -1,3 +1,207 @@
+def _case(profile: tuple[str, ...], scenario: str, number: int) -> Case:
+    split, name, _language, path, action, code = profile
+    group = f"director-{split}-{name}-v1"
+    case_id = f"dq-{number:02d}-{scenario}"
+    turn_id, evidence_id, repo_id = f"{case_id}-t2", f"{group}-e1", f"{group}-repo"
+    git_ref = hashlib.sha1(
+        code.encode()
+    ).hexdigest()  # 합성 원문 식별자이며 실재 Git commit이 아니다.
+    flow = f"요청을 검증한 뒤 {action} 저장을 호출합니다."
+    failure = "실패하면 오류를 기록하고 동일 요청 ID로 중복 저장을 막으며 재시도하겠습니다."
+    answer = {
+        "partial": flow,
+        "sufficient": f"{flow} {failure}",
+        "dont_know": "이 처리 흐름과 장애 처리 방식은 모르겠습니다.",
+        "contribution_correction": (
+            f"{flow} 제가 맡은 부분은 요청 검증이고 저장과 예외 처리는 팀원이 구현했습니다."
+        ),
+        "tool_unavailable": f"{flow} 장애 처리 구현은 아직 확인하지 못했습니다.",
+    }[scenario]
+    sufficient, unknown = scenario == "sufficient", scenario == "dont_know"
+    contract = {
+        "purpose": "요청 처리 흐름과 실패 시 접근을 확인한다.",
+        "required_points": [
+            {"key": "flow", "description": "원문에 보이는 검증과 저장 순서"},
+            {"key": "failure", "description": "저장 실패를 가정한 확인·대응 접근"},
+        ],
+        "assumptions": ["실패 대응은 가정형이며 실제 구현을 전제하지 않는다."],
+        "basis_refs": [{"kind": "evidence", "id": evidence_id}],
+        "evaluation_scope": "제공된 정적 코드 흐름과 가정한 실패 대응 설명만 확인한다.",
+        "evaluation_keys": ["project_understanding", "communication"],
+    }
+    question = {
+        "persona": "tech_lead",
+        "text": "이 요청은 어떤 순서로 처리되며, 저장이 실패한다면 어떻게 확인하시겠어요?",
+        "topic_code": "request-flow",
+        "question_contract": contract,
+        "evidence_refs": [evidence_id],
+        "jd_requirement_ids": [],
+        "question_type": "main",
+        "parent_turn_id": None,
+    }
+    covered = [] if unknown else [{"key": "flow", "answer_quotes": [flow]}]
+    if sufficient:
+        covered.append({"key": "failure", "answer_quotes": [failure]})
+    limits = [LIMITATION, "제공된 구간에는 실제 운영 결과와 완전한 실패 경로가 없다."]
+    tools = []
+    if scenario == "tool_unavailable":
+        tools = [
+            {
+                "status": "tool_error",
+                "items": [],
+                "searched_scope": [path],
+                "limitations": ["추가 원문 조회가 실패했다. 미확인 구현은 부재로 확정하지 않는다."],
+                "error_code": "synthetic_source_unavailable",
+            }
+        ]
+    context: dict[str, Any] = {
+        "interview_id": case_id,
+        "current_turn_id": turn_id,
+        "turn_no": 3,
+        "total_turns": 9,
+        "persona_counts": [
+            {"persona": "hr_manager", "count": 1},
+            {"persona": "tech_lead", "count": 1},
+            {"persona": "domain_lead", "count": 0},
+        ],
+        "allowed_personas": ["tech_lead", "domain_lead"],
+        "jd_requirements": [
+            {
+                "id": f"{group}-jd",
+                "text": "서비스 요청 처리와 장애 대응을 설명할 수 있는 개발자",
+                "category": "required",
+                "source_field": "jd_requirements.text",
+                "tech_tags": [],
+            }
+        ],
+        "repositories": [
+            {
+                "repository_id": repo_id,
+                "git_ref": git_ref,
+                "primary": True,
+                "analysis_refs": [],
+                "limitations": limits,
+            }
+        ],
+        "history": [
+            {
+                "turn_id": f"{case_id}-t1",
+                "persona": "hr_manager",
+                "question": "이 프로젝트에서 본인과 팀의 역할을 소개해 주세요.",
+                "answer": "제가 요청 처리 기능을 구현했습니다.",
+                "analysis_ref": None,
+            },
+            {
+                "turn_id": turn_id,
+                "persona": "tech_lead",
+                "question": question["text"],
+                "answer": answer,
+                "analysis_ref": turn_id,
+            },
+        ],
+        "current_question_contract": contract,
+        "evidence": [
+            {
+                "evidence_id": evidence_id,
+                "repository_id": repo_id,
+                "git_ref": git_ref,
+                "source_kind": "code",
+                "path": path,
+                "metadata_key": None,
+                "content": code,
+                "tool_name": None,
+                "summary": None,
+                "start_line": 1,
+                "end_line": len(code.splitlines()),
+            }
+        ],
+        "domain_frames": [
+            {
+                "id": f"{group}-frame",
+                "category": "etc",
+                "version": "synthetic-v1",
+                "text": "가정한 서비스에서 장애 영향과 데이터 일관성 확인 방법을 묻는다.",
+            }
+        ],
+        "limits": {"remaining_calls": 2, "remaining_replans": 0, "policy_version": VERSION},
+        "evaluation_targets": [
+            {"persona": "tech_lead", "keys": ["technical_reasoning", "communication"]},
+            {"persona": "domain_lead", "keys": ["company_job_fit", "communication"]},
+        ],
+        "supplemental_sources": [],
+        "external_searches": [],
+        "supplemental_limitations": limits,
+        "presented_evaluation_keys": [
+            "contribution_clarity",
+            "communication",
+            "project_understanding",
+        ],
+    }
+    analysis = {
+        "evaluation_status": "evaluated",
+        "sufficiency": "sufficient" if sufficient else "insufficient" if unknown else "partial",
+        "covered_points": covered,
+        "missing_points": [] if sufficient else ["flow", "failure"] if unknown else ["failure"],
+        "technical_assessment": {
+            "explanation": "질문 계약과 합성 답변 원문에 한정한 관찰이다.",
+            "answer_quotes": [answer],
+            "evidence_refs": [evidence_id],
+            "limitations": limits,
+        },
+        "contribution_scope": {
+            "scope": "shared" if scenario == "contribution_correction" else "unknown",
+            "answer_quotes": [answer] if scenario == "contribution_correction" else [],
+        },
+        "claim_checks": [],
+        "needs_verification": False,
+        "verification_requests": [],
+        "limitations": limits,
+        "external_queries": [],
+    }
+    rubric = compile_criteria(scenario)
+    expectation = {
+        "case_id": case_id,
+        "version": CASE_VERSION,
+        "allowed": rubric["allowed"],
+        "forbidden": rubric["forbidden"],
+        "grader_controls": [],
+        "source_fact": f"synthetic:{group}:{scenario}",
+        "review": {
+            "status": "unreviewed",
+            "author": "codex",
+            "reviewer": None,
+            "reviewed_at": None,
+            "pending_notes": [],
+        },
+    }
+    payload = {
+        "service_task": "director",
+        "service_input": {
+            "context": context,
+            "question": question,
+            "answer_text": answer,
+            "answer_analysis": analysis,
+            "allowed_locations": [[repo_id, git_ref, path]],
+            "tool_results": tools,
+            "reference_texts": [
+                {
+                    "kind": "job_posting",
+                    "id": f"{group}-posting",
+                    "text": json.dumps(
+                        {
+                            "position": "서비스 개발자",
+                            "requirements": "서비스 요청 처리와 장애 대응 설명",
+                            "collector_debug": {"source": "synthetic", "run": "not_model_evidence"},
+                        },
+                        ensure_ascii=False,
+                    ),
+                }
+            ],
+        },
+    }
+    return Case(case_id, CASE_VERSION, "question", split, group, payload, expectation)
+
+
 def build_cohort() -> Cohort:
     cases = tuple(
         _case(profile, scenario, number)

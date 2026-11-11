@@ -1,3 +1,54 @@
+def luna_factory(
+    factory: Callable[[], Any], limits: c.CallLimits | Mapping[str, c.CallLimits]
+) -> Callable[[], Any]:
+    """실제 요청·응답 모델과 설정을 검사한다. 불일치에도 사용한 시도는 남긴다."""
+
+    def call() -> Any:
+        invoke = None
+
+        async def guarded(request: c.ModelRequest, validator: Any) -> Any:
+            nonlocal invoke
+            if request.prompt.model != LUNA:
+                return c.ModelResult(
+                    None,
+                    c.CallFailure("semantic", "director_study_model_mismatch", "Luna required."),
+                    (),
+                )
+            expected = (
+                limits if isinstance(limits, c.CallLimits) else limits.get(request.prompt.task_name)
+            )
+            if request.limits != expected:
+                return c.ModelResult(
+                    None,
+                    c.CallFailure(
+                        "semantic", "director_study_settings_mismatch", "Settings changed."
+                    ),
+                    (),
+                )
+            if invoke is None:
+                invoke = factory()
+            operation = request.payload.get("operation", request.prompt.task_name)
+            async with observe_call(f"director.{operation}", kind="stage") as observation:
+                result = await invoke(request, validator)
+                if any(attempt.model != LUNA for attempt in result.attempts):
+                    result = c.ModelResult(
+                        None,
+                        c.CallFailure(
+                            "semantic",
+                            "director_study_model_mismatch",
+                            "Unexpected response model.",
+                        ),
+                        result.attempts,
+                    )
+                if observation is not None:
+                    observation.complete(result.failure.error_code if result.failure else None)
+                return result
+
+        return guarded
+
+    return call
+
+
 def _write_new(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("x", encoding="utf-8", newline="\n") as stream:
