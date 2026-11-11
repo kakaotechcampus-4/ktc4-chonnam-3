@@ -2,20 +2,38 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
+import json
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, replace
 from typing import Any, cast
 
+from async_grader import content_hash
 from devon_ai import contracts as c
 from devon_ai.agents.director.agent import _references
-from devon_ai.agents.director.runtime import _input_payload, run_director, verification_decision
+from devon_ai.agents.director.plan_wire import (
+    SOURCE_BOUND_PLAN_SCHEMA,
+    decode_plan_question,
+    plan_schema_matches_version,
+)
+from devon_ai.agents.director.review import SUPPORTED_REVIEW_SCHEMAS
+from devon_ai.agents.director.runtime import (
+    RecoveryFeedback,
+    _input_payload,
+    run_director,
+    verification_decision,
+)
 from devon_ai.llm_tasks.answer_analysis import _check_input, analyze_answer
 from devon_ai.llm_tasks.report import _build_inputs, generate_report
 from devon_ai.llm_tasks.report_score import check_input
+from director_diagnostics import SCHEMA_VERSION as DIRECTOR_DIAGNOSTICS_VERSION
+from director_diagnostics import validate_diagnostics
+from director_sources import SCHEMA_VERSION as DIRECTOR_SOURCES_VERSION
 from eval_artifacts import validate_artifacts
 from eval_runner import Execution, ExecutionError
 
+from app.integrations.llm.client import _json as _response_json
 from app.llm_tasks.report import validate_draft
 
 

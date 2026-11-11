@@ -1,3 +1,17 @@
+"""공개 발췌의 합계와 연결을 검사한다. 네트워크·모델·DB를 호출하지 않는다."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+import re
+import sys
+from collections import Counter
+from pathlib import Path
+from typing import Any, cast
+
+HERE = Path(__file__).resolve().parent
 FLAGS = ("plan_valid", "context_valid", "wording_valid", "contract_matches")
 
 

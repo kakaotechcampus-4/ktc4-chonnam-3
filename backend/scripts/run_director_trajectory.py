@@ -1,3 +1,9 @@
+"""실제 질문 hash에 결합한 합성 답변으로 AI 코어 면접을 한 단계씩 재개한다.
+
+기본은 입력 검증이며 --execute와 유한 시도·시간 예산을 명시해야 실제 호출한다.
+각 단계 출력은 새 파일에 보존하고 --resume, --answer-file로 이어간다.
+"""
+
 from __future__ import annotations
 
 import argparse

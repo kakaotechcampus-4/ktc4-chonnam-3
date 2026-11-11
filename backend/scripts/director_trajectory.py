@@ -1,3 +1,110 @@
+"""고정 원문의 AI 코어 9턴 실행. REST·DB·WS·Tool I/O를 실행했다고 주장하지 않는다.
+
+ServiceExecutor의 실제 Director/T3 경로를 사용한다. 답변은 실제 생성 질문의
+hash에 결합한 외부 입력으로 받으며, 모델 답변 생성기를 기본으로 추가하지 않는다.
+"""
+
+from __future__ import annotations
+
+import copy
+import json
+import time
+from collections import Counter
+from collections.abc import Awaitable, Callable
+from dataclasses import asdict, replace
+from typing import Any, cast
+
+from devon_ai import contracts as c
+from director_cases import content_hash
+from eval_cases import Case
+from eval_runner import Execution, ExecutionError
+
+from app.features.interview.evaluation_coverage import (
+    plan_evaluation_targets,
+    presented_evaluation_keys,
+)
+
+QUOTA = {"hr_manager": 1, "tech_lead": 6, "domain_lead": 2}
+FORMAT = "director-trajectory.v1"
+Checkpoint = Callable[[dict[str, Any]], Awaitable[None]]
+Executor = Callable[[str, dict[str, Any]], Awaitable[Execution]]
+
+
+def _wire(value: Any) -> Any:
+    return json.loads(json.dumps(value, ensure_ascii=False, allow_nan=False))
+
+
+def _seal(state: dict[str, Any]) -> dict[str, Any]:
+    state["state_sha256"] = content_hash(
+        {key: value for key, value in state.items() if key != "state_sha256"}
+    )
+    return state
+
+
+def _validate(state: dict[str, Any]) -> None:
+    if state.get("format_version") != FORMAT or state.get("state_sha256") != content_hash(
+        {key: value for key, value in state.items() if key != "state_sha256"}
+    ):
+        raise ValueError("trajectory state binding mismatch")
+    if state.get("materials_sha256") != content_hash(state.get("materials")):
+        raise ValueError("trajectory material binding mismatch")
+    turns = state.get("turns")
+    if not isinstance(turns, list) or len(turns) > 9:
+        raise ValueError("invalid trajectory turns")
+
+
+def create_trajectory(case: Case, *, session_id: str) -> dict[str, Any]:
+    if not isinstance(session_id, str) or not session_id.strip():
+        raise ValueError("trajectory needs a session ID")
+    data = case.payload["service_input"]
+    context = c.decode_strict(c.Context, data["context"])
+    normalized = _wire(asdict(context))
+    materials = {
+        name: copy.deepcopy(normalized[name])
+        for name in (
+            "jd_requirements",
+            "repositories",
+            "evidence",
+            "domain_frames",
+            "supplemental_sources",
+            "external_searches",
+            "supplemental_limitations",
+        )
+    }
+    materials["reference_texts"] = copy.deepcopy(data.get("reference_texts", []))
+    materials["allowed_locations"] = copy.deepcopy(data.get("allowed_locations", []))
+    # 실제·합성 원문을 모두 내부 타입으로 읽고 생략 가능한 목록은 계약의 기본값을 따른다.
+    if not context.repositories:
+        raise ValueError("trajectory needs bound source material")
+    return _seal(
+        {
+            "format_version": FORMAT,
+            "session_id": session_id,
+            "source_case": f"{case.case_id}.v{case.version}",
+            "source_group_id": case.source_group_id,
+            "source_payload_sha256": content_hash(case.payload),
+            "materials": materials,
+            "materials_sha256": content_hash(materials),
+            "status": "ready",
+            "turns": [],
+            "executions": [],
+            "normal_model_attempts": 27,
+            "scope": {
+                "service_ai_core_executed": False,
+                "database_executed": False,
+                "websocket_executed": False,
+                "tool_io_executed": False,
+                "answer_origin": "synthetic_codex",
+                "human_review_status": "deferred",
+            },
+            "limitations": [
+                "텍스트 AI 코어의 9턴 경로이며 실제 DB·WS·Tool I/O 검증을 대체하지 않는다.",
+                "합성 답변은 실제 생성된 질문 hash에 결합해야 하며 개인 역량의 증거가 아니다.",
+            ],
+        }
+    )
+
+
 def _context(state: dict[str, Any], *, answering: bool) -> c.Context:
     turns = state["turns"]
     answered = [turn for turn in turns if turn["analysis"] is not None]

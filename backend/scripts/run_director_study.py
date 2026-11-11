@@ -1,3 +1,36 @@
+"""공통 실행기·저장 판정을 재사용하는 Luna 전용 Director 연구 CLI.
+
+기본은 유료 호출 없는 입력 검증이다. 사례·평가자 제어·시간·시도 예산을
+분리하며 사람 미검수를 자동 검증 결과와 혼동하지 않는다.
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import copy
+import hashlib
+import json
+import math
+import sys
+import time
+from collections.abc import Callable, Mapping
+from dataclasses import asdict, replace
+from pathlib import Path
+from typing import Any
+from uuid import uuid4
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+for folder in (REPO_ROOT / "ai" / "evals", REPO_ROOT / "ai" / "src", REPO_ROOT / "backend"):
+    sys.path.insert(0, str(folder))
+
+from devon_ai import contracts as c  # noqa: E402
+from director_cases import build_cohort, content_hash, control_packets, export_cohort  # noqa: E402
+from director_study import compare_runs  # noqa: E402
+from eval_runner import rejudge_cases, review_packets, run_cases  # noqa: E402
+from recorded_grader import RecordedGrader  # noqa: E402
+
+from app.core.config import Settings, get_settings  # noqa: E402
 from app.integrations.execution_ledger import (  # noqa: E402
     ExecutionLedger,
     execution_scope,

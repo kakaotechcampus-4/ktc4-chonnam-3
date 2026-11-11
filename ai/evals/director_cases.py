@@ -1,3 +1,20 @@
+"""24개 합성 원문 그룹 × 5상황. 120개 독립 실사용 사례라고 해석하지 않는다."""
+
+from __future__ import annotations
+
+import copy
+import hashlib
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from director_rubrics import SCENARIOS, compile_criteria
+from eval_cases import Case
+from judge_context import build_judge_context
+
+VERSION = "director-study.v2"
+CASE_VERSION = 2
 LIMITATION = "합성 평가 원문이며 실제 운영·개인 기여·미제공 파일을 증명하지 않는다."
 
 # 각 행이 독립 원문 그룹이고, 같은 행의 다섯 상황은 상관된 변형이다.
