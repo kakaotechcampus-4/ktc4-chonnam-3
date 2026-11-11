@@ -113,11 +113,11 @@ def test_accented_latin_filename_reaches_resolver_without_truncation(name: str) 
 
 
 @pytest.mark.parametrize("name", ["café", "cafe\u0301"])
-def test_accented_latin_filename_has_a_complete_fallback_without_resolver(name: str) -> None:
+def test_accented_latin_filename_keeps_original_fallback_without_resolver(name: str) -> None:
     spans = list(iter_file_spans(f"`src/{name}.py` 파일을 확인하세요."))
 
     assert len(spans) == 1
-    assert spans[0][2] == "에스알씨 폴더의 씨 에이 에프 이 파이 파일"
+    assert spans[0][2] == f"에스알씨 폴더의 {name} 파이 파일"
 
 
 def test_unicode_file_comparison_keeps_separator_distinctions() -> None:

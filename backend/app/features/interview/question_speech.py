@@ -4,6 +4,7 @@ import re
 import unicodedata
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
+from datetime import date
 
 from app.features.interview.speech_address import iter_address_spans
 from app.features.interview.speech_paths import iter_file_spans
@@ -14,7 +15,7 @@ from app.integrations.tts.pronunciation import (
     is_latin_name,
 )
 
-QUESTION_SPEECH_VERSION = "question-speech.v4"
+QUESTION_SPEECH_VERSION = "question-speech.v5"
 _DIGITS = "영일이삼사오육칠팔구"
 _UNITS = {"ms": " 밀리초", "%": " 퍼센트"}
 _TERMS = {
@@ -68,6 +69,10 @@ _TECH_NUMBER = re.compile(
 )
 _CPP = re.compile(r"(?<![A-Za-z0-9_])C\+\+(?![A-Za-z0-9_+])")
 _FRACTION = re.compile(r"(?<![A-Za-z0-9_./])([0-9]+)/([0-9]+)(?![A-Za-z0-9_./])")
+_NUMERIC_SLASH = re.compile(r"(?<![A-Za-z0-9_./])\d+(?:/\d+)+(?![A-Za-z0-9_./])")
+_CALENDAR_DATE = re.compile(r"([0-9]{4})/([0-9]{2})/([0-9]{2})\Z")
+_DATE_BEFORE = re.compile(r"(?:날짜|일자|년월일)\s*$")
+_DATE_AFTER = re.compile(r"\s*(?:의\s*)?(?:날짜|일자|년월일)")
 _STATUS_CONTEXT = re.compile(
     r"(?:HTTP|응답|상태\s*코드|오류\s*코드|에러\s*코드)\s*(?:응답\s*)?(?:상태\s*코드\s*)?$",
     re.IGNORECASE,
@@ -87,7 +92,8 @@ _CLOSED = {"와": "과", "를": "을", "는": "은", "가": "이"}
 _OPEN = {closed: opened for opened, closed in _CLOSED.items()}
 _OPAQUE = re.compile(
     r"(?<![A-Za-z0-9+.-])[A-Za-z][A-Za-z0-9+.-]*://[^\s가-힣`<>\"']*"
-    r"|(?:[A-Za-z]:[\\/]|[/\\]|www\.)[A-Za-z0-9._~%+:/\\-][^\s가-힣`<>\"']*"
+    rf"|(?<![{LATIN_CHARACTERS}{COMBINING_MARKS}0-9_./\\%-])"
+    r"(?:[A-Za-z]:[\\/]|[/\\]|www\.)[A-Za-z0-9._~%+:/\\-][^\s가-힣`<>\"']*"
     r"|(?<![A-Za-z0-9_])[A-Za-z0-9_.+-]+@[A-Za-z0-9.-]+"
     r"|(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*\s*=\s*[^\s가-힣]+"
     r"|(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*(?:\[[A-Za-z0-9_]+\]|\([A-Za-z0-9_, ]*\))"
@@ -120,6 +126,13 @@ _FRAGMENT = re.compile(
     + rf"){{0,3}}(?![{_NAME_LETTERS}0-9_+@/:\\=%-]|\.[{_NAME_LETTERS}0-9_])"
 )
 _NAME_TOKEN = re.compile(_NAME)
+_SLASH_NAME = rf"[{LATIN_CHARACTERS}][{_NAME_LETTERS}]*"
+_SLASH_COMPOUND = re.compile(
+    rf"(?<![{_NAME_LETTERS}0-9_.+@/:\\=%-])"
+    rf"({_SLASH_NAME})[ \t]*/[ \t]*({_SLASH_NAME})"
+    rf"(?![{_NAME_LETTERS}0-9_+@/:\\=%-]|\.[{_NAME_LETTERS}0-9_])"
+)
+_SLASH_PATH_CONTEXT = re.compile(r"\s*(?:경로|주소|엔드포인트|라우트|파일|폴더|디렉터리|코드)")
 _READABLE_QUOTE = re.compile(_NAME + r"(?:[ \t]+" + _NAME + r"){0,3}\Z")
 _QUOTE_END = {"`": "`", "'": "'", '"': '"', "“": "”", "‘": "’"}
 _PROSE_QUOTE = re.compile(rf"[{_NAME_LETTERS}가-힣0-9\s.,!?…%+−'’-]+\Z")
@@ -222,8 +235,17 @@ def _local_spans(
             spoken = _case_prefix(match[0]) + spoken
         yield *match.span(), spoken
     # 같은 범위를 파일로도 해석할 수 있는 .NET 같은 등록 기술명은 기존 발음을 우선한다.
-    for start, end, spoken in iter_file_spans(text, resolve=resolve):
+    files = list(iter_file_spans(text, resolve=resolve))
+    file_cases: dict[str, set[str]] = {}
+    for start, end, _ in files:
+        literal = text[start:end]
+        file_cases.setdefault(literal.casefold(), set()).add(literal)
+    for start, end, spoken in files:
         structured.add((start, end))
+        literal = text[start:end]
+        if len(file_cases[literal.casefold()]) > 1:
+            # 알려진 확장자를 포함한 전체 경로의 표기 차이는 모델과 별도로 보존한다.
+            spoken = _case_prefix(literal) + spoken
         if re.match(r"""[`"'”’]?\s*파일""", text[end:]):
             spoken = spoken.removesuffix(" 파일")
         yield start, end, spoken
@@ -234,6 +256,21 @@ def _local_spans(
             yield *match.span(), match[0]
             continue
         yield *match.span(), _SLASH_TERMS[word]
+    for match in _SLASH_COMPOUND.finditer(text):
+        if _SLASH_TERM.fullmatch(match[0]):
+            continue
+        if text[match.start() - 1 : match.start()] == "`":
+            continue
+        if _LITERAL_QUOTE_CONTEXT.search(text) or _SLASH_PATH_CONTEXT.match(text[match.end() :]):
+            yield *match.span(), match[0]
+            continue
+        # 슬래시는 구조로 남기고 양쪽 이름만 기존 발음 보완기로 전달한다.
+        words = (
+            _TERMS.get(name.casefold())
+            or resolve(name, "acronym" if name.isupper() else "term", name)
+            for name in match.groups()
+        )
+        yield *match.span(), " 슬래시 ".join(words)
     for match in _CPP.finditer(text):
         yield *match.span(), "씨플러스플러스"
     for match in _TECH_NUMBER.finditer(text):
@@ -246,6 +283,31 @@ def _local_spans(
             "v": "브이",
         }[label]
         yield *match.span(), prefix + " " + " 점 ".join(map(_integer, value.split(".")))
+    for match in _NUMERIC_SLASH.finditer(text):
+        values = match[0].split("/")
+        date_context = _DATE_BEFORE.search(text[: match.start()]) or _DATE_AFTER.match(
+            text[match.end() :]
+        )
+        if (
+            len(values) == 2
+            and not date_context
+            and all(len(value) == 1 or not value.startswith("0") for value in values)
+        ):
+            continue
+        spoken = match[0]
+        calendar = _CALENDAR_DATE.fullmatch(match[0])
+        if calendar is not None:
+            try:
+                year, month, day = map(int, calendar.groups())
+                date(year, month, day)
+            except ValueError:
+                pass
+            else:
+                spoken = (
+                    f"{_integer(str(year))} 년 {_integer(str(month))} 월 {_integer(str(day))} 일"
+                )
+        # 불명확하거나 유효하지 않은 표기도 전체를 보호해 부분 숫자 변환을 막는다.
+        yield *match.span(), spoken
     for match in _FRACTION.finditer(text):
         left, right = match.groups()
         status_codes = len(left) == len(right) == 3 and left[0] in "12345" and right[0] in "12345"

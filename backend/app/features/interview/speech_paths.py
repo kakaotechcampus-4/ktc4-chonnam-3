@@ -160,7 +160,12 @@ def _spoken_name(
             continue
         if part in {"_", "-"} and not preserve_separators and re.search(r"\w", name):
             continue
-        fallback = _spelled_name(part)
+        # 일반 낭독의 미등록 이름은 Google의 원문 발음을 사용한다.
+        fallback = (
+            part
+            if is_latin_name(part) and part not in _NAMES and not preserve_separators
+            else _spelled_name(part)
+        )
         if resolve is not None and is_latin_name(part) and part not in _NAMES:
             parts.append(resolve(part, role, fallback))
         else:
