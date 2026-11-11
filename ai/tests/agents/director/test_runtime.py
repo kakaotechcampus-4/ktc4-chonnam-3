@@ -886,6 +886,159 @@ def run_version(provider, ctx, *, version="director_v4", **options):
     )
 
 
+@pytest.mark.parametrize("version", ["director_v12", "director_v12@candidate"])
+def test_v12_joins_prior_turns_for_both_models_with_plan_only_feedback(version):
+    ctx, analysis, candidate = continuation_fixture()
+    feedback = runtime().RecoveryFeedback(
+        candidate, c.CandidateRecovery("replan", "이미 답한 목적과 다른 확인점을 선택해 주세요.")
+    )
+    provider = Provider(plan(candidate), review())
+    result = run_version(
+        provider, ctx, version=version, answer_analysis=analysis, recovery_feedback=feedback
+    )
+    assert result.succeeded and len(provider.requests) == 2
+    generated, reviewed = provider.requests
+    for request in provider.requests:
+        assert request.payload["input_version"] == "director-input.v2"
+        assert "history" not in request.payload["context"]
+        assert "prior_analyses" not in request.payload
+        assert [row["turn_id"] for row in request.payload["answered_turns"]] == ["hr-1"]
+        assert request.payload["current_answer"]["turn_id"] == "tech-2"
+        assert request.payload["current_answer"]["question_contract"] == asdict(
+            ctx.current_question_contract
+        )
+        assert request.payload["context"]["follow_up_options"][0]["parent_turn_id"] == "tech-2"
+        assert request.payload["turn_state"]["answered_turn_count"] == 2
+    assert generated.payload["answered_turns"] == reviewed.payload["answered_turns"]
+    assert generated.payload["recovery_feedback"]["recovery"] == "replan"
+    assert "recovery_feedback" not in reviewed.payload
+    assert reviewed.payload["question"] == asdict(candidate)
+
+
+def test_v12_first_hr_has_empty_answered_turns_and_no_invented_analysis():
+    provider = Provider(plan(), review())
+    result = run_version(provider, context(), version="director_v12")
+    assert result.succeeded and len(provider.requests) == 2
+    for request in provider.requests:
+        assert request.payload["answered_turns"] == []
+        assert request.payload["current_answer"] is None
+        assert request.payload["answer_analysis"] is None
+
+
+def test_v13_sends_operation_instructions_with_same_evidence():
+    ctx, analysis, candidate = continuation_fixture()
+    provider = Provider(plan(candidate), review())
+    prompt = replace(
+        PROMPT,
+        version="director_v13@candidate",
+        template="## 공통\n공통 근거 규칙\n## 질문 생성\n생성 지침\n## 독립 검토\n검토 지침\n",
+    )
+    result = asyncio.run(
+        runtime().run_director(
+            ctx, prompt=prompt, limits=LIMITS, model_call=provider, answer_analysis=analysis
+        )
+    )
+    assert result.succeeded
+    generated, reviewed = provider.requests
+    assert generated.prompt.template == "공통 근거 규칙\n\n생성 지침"
+    assert reviewed.prompt.template == "공통 근거 규칙\n\n검토 지침"
+    assert generated.prompt.version == reviewed.prompt.version == prompt.version
+    assert generated.prompt.model == reviewed.prompt.model == prompt.model
+    assert generated.max_attempts == reviewed.max_attempts == 1
+    assert generated.limits == reviewed.limits == LIMITS
+    assert {key: value for key, value in generated.payload.items() if key != "operation"} == {
+        key: value
+        for key, value in reviewed.payload.items()
+        if key not in {"operation", "question", "intent"}
+    }
+
+
+def run_with_required_point_review(provider, version="director_v14@candidate"):
+    prompt = replace(
+        PROMPT,
+        version=version,
+        template="## 공통\n근거 규칙\n## 질문 생성\n생성 지침\n## 독립 검토\n검토 지침\n",
+    )
+    return asyncio.run(
+        runtime().run_director(context(), prompt=prompt, limits=LIMITS, model_call=provider)
+    )
+
+
+@pytest.mark.parametrize("version", ["director_v14@candidate", "director_v15@candidate"])
+def test_point_review_requires_explicit_question_excerpt_for_its_only_required_point(version):
+    provider = Provider(
+        plan(),
+        review(
+            point_coverage={"role": {"status": "asked", "question_excerpt": "맡은 역할을 소개"}}
+        ),
+    )
+    result = run_with_required_point_review(provider, version)
+    assert result.succeeded
+    assert [request.schema_version for request in provider.requests] == [
+        "director-plan.v3",
+        "director-review.v2",
+    ]
+    coverage = provider.requests[-1].output_schema["properties"]["point_coverage"]
+    assert coverage["required"] == ["role"]
+    assert coverage["additionalProperties"] is False
+    generated, reviewed = provider.requests
+    assert (generated.prompt.template == reviewed.prompt.template) is (
+        version.partition("@")[0] == "director_v15"
+    )
+
+
+@pytest.mark.parametrize(
+    ("status", "safe", "valid_plan", "failure_code"),
+    [
+        ("premise_only", True, True, "director_candidate_rewrite"),
+        ("not_asked", True, False, "director_candidate_replan"),
+        ("unclear", False, True, "director_no_valid_candidate"),
+    ],
+)
+@pytest.mark.parametrize("version", ["director_v14@candidate", "director_v15@candidate"])
+def test_point_review_never_approves_unasked_points_with_positive_contract_flag(
+    status, safe, valid_plan, failure_code, version
+):
+    provider = Provider(
+        plan(),
+        review(
+            plan_valid=valid_plan,
+            safe_alternative=safe,
+            point_coverage={"role": {"status": status, "question_excerpt": None}},
+        ),
+    )
+    result = run_with_required_point_review(provider, version)
+    assert result.failure.error_code == failure_code
+    assert len(provider.requests) == 2 and result.data is None
+    feedback = runtime().recovery_feedback_from_attempts(result.attempts, failure_code=failure_code)
+    assert feedback is not None and feedback.previous_candidate == question()
+    if failure_code == "director_candidate_rewrite":
+        assert "role" in feedback.recovery.reason_summary
+    assert (
+        runtime().recovery_feedback_from_attempts(
+            tuple(replace(item, prompt_version="director_v13") for item in result.attempts),
+            failure_code=failure_code,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "coverage",
+    [
+        {},
+        {"other": {"status": "asked", "question_excerpt": "맡은 역할"}},
+        {"role": {"status": "asked", "question_excerpt": "기술을 선택한 이유"}},
+        {"role": {"status": "asked", "question_excerpt": None}},
+    ],
+)
+def test_v14_rejects_malformed_review_coverage(coverage):
+    provider = Provider(plan(), review(point_coverage=coverage))
+    result = run_with_required_point_review(provider)
+    assert result.failure.stage == "schema"
+    assert len(provider.requests) == 2 and result.data is None
+
+
 def stable_coverage(status="asked", excerpt="맡은 역할을 소개"):
     return [{"key": "role", "status": status, "question_excerpt": excerpt}]
 
