@@ -172,9 +172,25 @@ test('복구할 수 없는 질문 생성 실패 뒤에는 다시 연결하지 �
   await faults(page, QUESTION_FAILED_CLOSED);
   let refetches = 0;
   let counting = false;
+  // 진행 화면은 열릴 때 start를 부르고 응답 뒤 한 번 다시 조회한다(#259). 재연결이 아니므로 그 1회는 뺀다.
+  // start 응답이 오류 버튼보다 늦으면 이 재조회가 세는 구간에 들어온다.
+  let skipStartRefetch = false;
+  page.on('response', (response) => {
+    if (
+      response.request().method() === 'POST' &&
+      response.url().endsWith(`/interviews/${IN_PROGRESS}/start`)
+    ) {
+      skipStartRefetch = true;
+    }
+  });
   page.on('request', (request) => {
-    if (!counting || request.method() !== 'GET') return;
-    if (new URL(request.url()).pathname.endsWith(`/interviews/${IN_PROGRESS}`)) refetches += 1;
+    if (request.method() !== 'GET') return;
+    if (!new URL(request.url()).pathname.endsWith(`/interviews/${IN_PROGRESS}`)) return;
+    if (skipStartRefetch) {
+      skipStartRefetch = false;
+      return;
+    }
+    if (counting) refetches += 1;
   });
 
   await page.goto(`/interview/${IN_PROGRESS}/session`);
