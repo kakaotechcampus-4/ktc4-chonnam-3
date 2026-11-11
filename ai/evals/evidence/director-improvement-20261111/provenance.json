@@ -376,7 +376,7 @@
     "semantic-fit-generation.json": "0f0f4280b2bc201dec7b2d2b317fb7f103c7b859bbe74c661b2110b8791ab0db",
     "service-flow-summary.json": "028d6c2e0a675368a2156e03badff004e7b9bac00a90fd575af5d17a882a9695",
     "summary.json": "469b461ff24fcc5be7781d839a4fcd8201340d2e17e3cc2ff8f9523366295d33",
-    "verify.py": "bb8947b58389d0f6659057eecc38189f21464c387721d1ec2a7436758a69fedd"
+    "verify.py": "9de3e4cd0d41931b7c338304ab0ab316a2b8bd98b2cefca7b7c32032e348c2ca"
   },
   "self_hash_note": "This manifest is anchored by the Git commit; no recursive self SHA is claimed. Other bundle files including verify.py are listed below.",
   "recomputed_by_public_verifier": [

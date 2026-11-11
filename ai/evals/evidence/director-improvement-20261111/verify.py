@@ -27,9 +27,7 @@ def load(name: str) -> dict[str, Any]:
 
 
 def review_outcome(raw: dict[str, Any]) -> tuple[str, str | None]:
-    require(
-        all(type(raw[key]) is bool for key in (*FLAGS, "safe_alternative")), "flag type"
-    )
+    require(all(type(raw[key]) is bool for key in (*FLAGS, "safe_alternative")), "flag type")
     unasked = any(point["status"] != "asked" for point in raw["point_coverage"])
     if all(raw[key] for key in FLAGS) and not unasked:
         return "accept", None
@@ -77,9 +75,7 @@ def check_files() -> None:
             "private absolute path",
         )
         require(
-            not re.search(
-                r"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b", text, re.IGNORECASE
-            ),
+            not re.search(r"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b", text, re.IGNORECASE),
             "unmapped UUID",
         )
 
@@ -125,8 +121,7 @@ def check_summary() -> None:
     require(api0["counted_in_actual_total"] is False, "Mock separated")
     for name, count in [("l_final_primary", 24), ("l_final_additional", 8)]:
         require(
-            api0[name]["physical_model_calls"] == 0
-            and api0[name]["mock_responses"] == count,
+            api0[name]["physical_model_calls"] == 0 and api0[name]["mock_responses"] == count,
             "API0 counts",
         )
         require(api0[name]["proof_passed"] is True, "API0 final proof")
@@ -138,8 +133,7 @@ def check_summary() -> None:
         "first Mock failure retained",
     )
     require(
-        summary["development_and_final"]["latest_policy_final_groups_actually_run"]
-        == 0,
+        summary["development_and_final"]["latest_policy_final_groups_actually_run"] == 0,
         "holdout not run",
     )
 
@@ -147,9 +141,7 @@ def check_summary() -> None:
 def check_semantic_fit() -> None:
     evidence = load("semantic-fit-cases.json")
     cases = evidence["cases"]
-    require(
-        len(cases) == 12 and evidence["physical_model_calls"] == 24, "12 pairs/24 calls"
-    )
+    require(len(cases) == 12 and evidence["physical_model_calls"] == 24, "12 pairs/24 calls")
     require(
         Counter(row["oracle"]["expected_source_verdict"] for row in cases)
         == {"accept": 6, "reject": 6},
@@ -167,17 +159,14 @@ def check_semantic_fit() -> None:
             verdict, recovery = review_outcome(row["raw_review"])
             match = verdict == oracle["expected_source_verdict"]
             strict = match and recovery == (
-                None
-                if oracle["expected_recovery"] == "none"
-                else oracle["expected_recovery"]
+                None if oracle["expected_recovery"] == "none" else oracle["expected_recovery"]
             )
             require(
                 verdict == row["model_verdict"] and recovery == row["model_recovery"],
                 "actual verdict mapping",
             )
             require(
-                match == row["oracle_verdict_match"]
-                and strict == row["oracle_recovery_match"],
+                match == row["oracle_verdict_match"] and strict == row["oracle_recovery_match"],
                 "stored match",
             )
             counts[arm]["match"] += int(match)
@@ -237,9 +226,7 @@ def check_generation_and_scope() -> None:
 def check_review_calibration() -> None:
     evidence = load("review-calibration-cases.json")
     cases = evidence["cases"]
-    require(
-        len(cases) == 8 and evidence["physical_model_calls"] == 16, "J8 pairs/16 calls"
-    )
+    require(len(cases) == 8 and evidence["physical_model_calls"] == 16, "J8 pairs/16 calls")
     counts: Counter[str] = Counter()
     for case in cases:
         for row in case["actual_observations"]:
@@ -282,8 +269,7 @@ def check_answer_scope() -> None:
                     )
     require([count[arm] for arm in ["A", "B"]] == [0, 2], "claim scope comparison")
     require(
-        evidence["targeted_refinement"]["current_contribution_scope"]["raw"]["scope"]
-        == "unknown",
+        evidence["targeted_refinement"]["current_contribution_scope"]["raw"]["scope"] == "unknown",
         "future proposal contribution unknown",
     )
 
@@ -297,9 +283,7 @@ def check_service_flow() -> None:
         == {"hr_manager": 1, "tech_lead": 6, "domain_lead": 2},
         "persona quota",
     )
-    require(
-        len(generations) == evidence["actual_call_count"] == 27, "K27 physical requests"
-    )
+    require(len(generations) == evidence["actual_call_count"] == 27, "K27 physical requests")
     require(
         Counter(row["operation"] for row in generations)
         == evidence["operation_counts"]
@@ -319,9 +303,7 @@ def check_service_flow() -> None:
     for row in turns:
         require(row["synthetic_answer"] is True, "synthetic K answer")
         for claim in row["raw_answer_assessment"]["claim_checks"]:
-            require(
-                claim["claim_excerpt"] in row["answer_text"], "K claim answer substring"
-            )
+            require(claim["claim_excerpt"] in row["answer_text"], "K claim answer substring")
     observed = sum(row["observed_generation_seconds"] for row in generations)
     require(
         math.isclose(
@@ -339,9 +321,7 @@ def _check_publication_runtime(value: dict[str, Any]) -> None:
         "publication validation schema",
     )
     require(value["status"] == "completed_recorded_scope", "complete rollout evidence")
-    require(
-        value["historical_physical_calls_unchanged"] == 1254, "history not rewritten"
-    )
+    require(value["historical_physical_calls_unchanged"] == 1254, "history not rewritten")
     require(value["model"] == "gpt-6-luna", "Luna rollout")
     versions = value["runtime"]["registered_tasks"]
     for task, expected in (
@@ -349,17 +329,13 @@ def _check_publication_runtime(value: dict[str, Any]) -> None:
         ("answer_analysis", "answer_analysis_v7"),
         ("report", "report_v4"),
     ):
-        require(
-            versions[task].partition("@")[0] == expected, "runtime selection " + task
-        )
+        require(versions[task].partition("@")[0] == expected, "runtime selection " + task)
 
 
 def _check_publication_calls(value: dict[str, Any]) -> None:
     actual = value["actual"]
     requests = actual["requests"]
-    require(
-        len(requests) == actual["physical_model_calls"], "actual request denominator"
-    )
+    require(len(requests) == actual["physical_model_calls"], "actual request denominator")
     require(
         len({row["physical_id"] for row in requests}) == len(requests),
         "unique ordinals",
@@ -394,9 +370,7 @@ def _check_publication_calls(value: dict[str, Any]) -> None:
     wrapper = value["sse_audit_wrapper"]
     require(wrapper["wrapper_audit_passed"] is True, "shared SSE parser audit")
     require(
-        wrapper["physical_calls_before"]
-        == wrapper["physical_calls_after"]
-        == len(requests),
+        wrapper["physical_calls_before"] == wrapper["physical_calls_after"] == len(requests),
         "wrapper no extra calls",
     )
     require(
@@ -410,17 +384,14 @@ def _check_publication_calls(value: dict[str, Any]) -> None:
     phases = value["phases"]
     require(len(phases) == 10, "start plus nine answers")
     require(
-        [row["phase"] for row in phases]
-        == ["start", *[f"answer:{n:02d}" for n in range(1, 10)]],
+        [row["phase"] for row in phases] == ["start", *[f"answer:{n:02d}" for n in range(1, 10)]],
         "phase order",
     )
     for phase in phases:
         require(phase["same_call_replay_no_extra_io"] is True, "same-call replay")
         require(phase["failed"] is False, "phase failure not hidden")
         physical = sum(row["phase"] == phase["phase"] for row in requests)
-        require(
-            physical == phase["physical_model_calls_this_phase"], "phase physical calls"
-        )
+        require(physical == phase["physical_model_calls_this_phase"], "phase physical calls")
 
 
 def _check_publication_turns(value: dict[str, Any]) -> None:
@@ -441,25 +412,19 @@ def _check_publication_turns(value: dict[str, Any]) -> None:
             hashlib.sha256(canonical).hexdigest() == turn["public_question_sha256"],
             "public question digest",
         )
-        require(
-            turn["question_length_codepoints"] == len(question["text"]), "new length"
-        )
+        require(turn["question_length_codepoints"] == len(question["text"]), "new length")
         require(turn["synthetic_answer"] is True, "new synthetic answer")
         require(
             turn["stored_status"] == "answered" and bool(turn["answer_text"]),
             "new stored answer",
         )
         require(
-            hashlib.sha256(turn["answer_text"].encode()).hexdigest()
-            == turn["answer_text_sha256"],
+            hashlib.sha256(turn["answer_text"].encode()).hexdigest() == turn["answer_text_sha256"],
             "new answer text SHA",
         )
-        public_analysis = json.dumps(
-            turn["analysis"], ensure_ascii=False, sort_keys=True
-        ).encode()
+        public_analysis = json.dumps(turn["analysis"], ensure_ascii=False, sort_keys=True).encode()
         require(
-            hashlib.sha256(public_analysis).hexdigest()
-            == turn["public_selected_analysis_sha256"],
+            hashlib.sha256(public_analysis).hexdigest() == turn["public_selected_analysis_sha256"],
             "new selected analysis SHA",
         )
         require(
@@ -468,8 +433,7 @@ def _check_publication_turns(value: dict[str, Any]) -> None:
         )
         for claim in turn["analysis"].get("claim_checks", []):
             require(
-                bool(claim["claim_text"])
-                and claim["claim_text"] in turn["answer_text"],
+                bool(claim["claim_text"]) and claim["claim_text"] in turn["answer_text"],
                 "new claim excerpt",
             )
         for point in turn["analysis"].get("covered_points", []):
@@ -478,9 +442,7 @@ def _check_publication_turns(value: dict[str, Any]) -> None:
                 "new covered point quotes",
             )
     notes = value["codex_source_review"]
-    require(
-        notes["human_review"] == "not_performed", "Codex review not human validation"
-    )
+    require(notes["human_review"] == "not_performed", "Codex review not human validation")
     require(
         notes["independent_blind_or_human_review_claimed"] is False,
         "no independent judge inflation",
@@ -495,9 +457,7 @@ def _check_publication_turns(value: dict[str, Any]) -> None:
             note["original_question_sha256"] == turn["original_question_sha256"],
             "note original question SHA",
         )
-        require(
-            note["answer_text_sha256"] == turn["answer_text_sha256"], "note answer SHA"
-        )
+        require(note["answer_text_sha256"] == turn["answer_text_sha256"], "note answer SHA")
         require(
             all(note["private_original_binding_checks"].values()),
             "private source-note binding assertion",
@@ -514,14 +474,12 @@ def _check_publication_turns(value: dict[str, Any]) -> None:
         "explicit JD reference count",
     )
     require(
-        notes["provided_jd_requirements"]
-        == value["quality_limits"]["provided_jd_requirements"],
+        notes["provided_jd_requirements"] == value["quality_limits"]["provided_jd_requirements"],
         "provided JD denominator",
     )
     for observed in value["quality_limits"]["known_long_questions"]:
         require(
-            observed["codepoints"]
-            == turns[observed["turn_no"] - 1]["question_length_codepoints"],
+            observed["codepoints"] == turns[observed["turn_no"] - 1]["question_length_codepoints"],
             "long question retained",
         )
 
@@ -534,9 +492,7 @@ def _check_publication_reviews(value: dict[str, Any]) -> None:
             all(type(raw[key]) is bool for key in (*FLAGS, "safe_alternative")),
             "new Review flags",
         )
-        expected_keys = {
-            point["key"] for point in question["question_contract"]["required_points"]
-        }
+        expected_keys = {point["key"] for point in question["question_contract"]["required_points"]}
         keys = [point["key"] for point in raw["point_coverage"]]
         require(
             set(keys) == expected_keys and len(set(keys)) == len(keys),
@@ -546,16 +502,10 @@ def _check_publication_reviews(value: dict[str, Any]) -> None:
             excerpt = point["question_excerpt"]
             require(
                 excerpt is None
-                or (
-                    isinstance(excerpt, str)
-                    and bool(excerpt)
-                    and excerpt in question["text"]
-                ),
+                or (isinstance(excerpt, str) and bool(excerpt) and excerpt in question["text"]),
                 "new Review contiguous quote",
             )
-            require(
-                point["status"] != "asked" or excerpt is not None, "new asked quote"
-            )
+            require(point["status"] != "asked" or excerpt is not None, "new asked quote")
     require(
         len(value["reviews"]) == actual["operations"].get("review", 0),
         "all actual Review outputs",
@@ -589,9 +539,7 @@ def _check_publication_compatibility(value: dict[str, Any]) -> None:
     requests = value["actual"]["requests"]
     wrapper = value["sse_audit_wrapper"]
     identity = value["code_identity"]
-    require(
-        not identity["preserved_copy_mismatches"], "preserved actual execution code"
-    )
+    require(not identity["preserved_copy_mismatches"], "preserved actual execution code")
     compatibility = value["latest_revision_compatibility"]
     require(
         compatibility["status"] != "pending",
@@ -599,8 +547,7 @@ def _check_publication_compatibility(value: dict[str, Any]) -> None:
     )
     previous, latest = compatibility["previous_live"], compatibility["latest"]
     require(
-        previous["physical_model_calls"] == len(requests)
-        and previous["audit_passed"] is True,
+        previous["physical_model_calls"] == len(requests) and previous["audit_passed"] is True,
         "preserved actual run",
     )
     require(
@@ -659,8 +606,7 @@ def _check_publication_compatibility(value: dict[str, Any]) -> None:
     )
     instructions = prompts["provider_instruction_checks"]
     require(
-        instructions["checked_calls"] == len(requests)
-        and instructions["all_identical"] is True,
+        instructions["checked_calls"] == len(requests) and instructions["all_identical"] is True,
         "actual transmitted instructions",
     )
     require(
@@ -714,9 +660,7 @@ def _check_publication_compatibility(value: dict[str, Any]) -> None:
     if (repo / "ai/src/devon_ai").is_dir():
         executed = {
             row["path"]: row
-            for row in value["backend_execution_binding"][
-                "selected_executed_source_files"
-            ]
+            for row in value["backend_execution_binding"]["selected_executed_source_files"]
         }
         for source in identity["current_selected_product_files"]:
             product = repo / source["path"]
@@ -731,8 +675,7 @@ def _check_publication_compatibility(value: dict[str, Any]) -> None:
                 allowed_raw_sha = {source["sha256"], copy["sha256"]}
                 require(
                     product.is_file()
-                    and hashlib.sha256(product.read_bytes()).hexdigest()
-                    in allowed_raw_sha,
+                    and hashlib.sha256(product.read_bytes()).hexdigest() in allowed_raw_sha,
                     "measured working-tree or executed Git-LF raw SHA",
                 )
 
@@ -748,17 +691,13 @@ def _check_publication_test_reports(value: dict[str, Any]) -> None:
         "ledger_gateway_timing_related",
     ):
         report = next(row for row in value["tests"] if row["group"] == group)
-        require(
-            report["status"] == "passed" and report["tests"] > 0, "test report " + group
-        )
+        require(report["status"] == "passed" and report["tests"] > 0, "test report " + group)
         require(
             report["passed"] + report["failures"] + report["errors"] + report["skipped"]
             == report["tests"],
             "test denominator",
         )
-    require(
-        value["quality_limits"]["new_holdout_groups_run"] == 0, "holdout still separate"
-    )
+    require(value["quality_limits"]["new_holdout_groups_run"] == 0, "holdout still separate")
     require(
         value["quality_limits"]["whole_user_browser_voice_report_e2e"] is False,
         "partial service scope",
@@ -834,8 +773,7 @@ def _check_publication_backend_execution(value: dict[str, Any]) -> None:
     )
     report = next(row for row in value["tests"] if row["group"] == "final_backend_full")
     require(
-        binding["xml_sha256"] == report["sha256"]
-        and binding["xml_count_binding_verified"] is True,
+        binding["xml_sha256"] == report["sha256"] and binding["xml_count_binding_verified"] is True,
         "execution metadata bound to final XML",
     )
     require(
@@ -850,8 +788,7 @@ def _check_publication_backend_execution(value: dict[str, Any]) -> None:
         "read-only same-image version receipt",
     )
     require(
-        versions["versions"]["python"] == "3.12.15"
-        and versions["versions"]["pytest"] == "9.1.1",
+        versions["versions"]["python"] == "3.12.15" and versions["versions"]["pytest"] == "9.1.1",
         "observed Python and pytest versions",
     )
     for selected in binding["selected_executed_source_files"]:
@@ -883,8 +820,7 @@ def _check_publication_backend_execution(value: dict[str, Any]) -> None:
             )
     line_endings = binding["selected_source_line_endings"]
     require(
-        line_endings["direct_byte_equal_count"]
-        + line_endings["crlf_working_tree_vs_lf_git_count"]
+        line_endings["direct_byte_equal_count"] + line_endings["crlf_working_tree_vs_lf_git_count"]
         == len(binding["selected_executed_source_files"]),
         "source line-ending denominator",
     )
