@@ -2864,6 +2864,280 @@
         ]
       },
       "public_selected_analysis_sha256": "7c87b5a9296927361f56d3fd2fcb5836057880f5641ae6759f11d8f334d00b54"
+    },
+    {
+      "turn_no": 7,
+      "question": {
+        "persona": "tech_lead",
+        "text": "제공된 코드에서는 Redis set의 TTL이 1시간이고 worker 예약 지연은 5분입니다. 이 조건에서 예약 시점의 잔여 TTL 확인만으로 어떤 가능성을 구분할 수 있다고 보시는지 설명해 주시겠어요?",
+        "question_contract": {
+          "purpose": "이 조건에서 예약 시점의 잔여 TTL 확인만으로 어떤 가능성을 구분할 수 있다고 보시는지 설명해 주시겠어요?",
+          "basis_refs": [
+            {
+              "id": "validation-ref-006",
+              "kind": "answer_turn"
+            },
+            {
+              "id": "validation-ref-004",
+              "kind": "evidence"
+            },
+            {
+              "id": "validation-ref-003",
+              "kind": "evidence"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "email_distribution_first_check",
+              "description": "이 조건에서 예약 시점의 잔여 TTL 확인만으로 어떤 가능성을 구분할 수 있다고 보시는지 설명해 주시겠어요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "topic_code": "email_distribution_first_check",
+        "jd_requirement_ids": [],
+        "parent_turn_no": 6,
+        "depth": 2
+      },
+      "public_question_sha256": "e9d2d54e0744f6592744386932e68d4a76ac63f79cbec5cc3c5f90addfc64c8a",
+      "original_question_sha256": "c7afd759d5b8ca4b8f65bb3477ad67af6fc522fa9fbd0ce71979b42a53ec5997",
+      "synthetic_answer": true,
+      "answer_text": "앞서 TTL을 5분이라고 말한 것은 잘못 읽은 것입니다. 원문은 TTL 1시간, 예약 지연 5분입니다. 예약 직후 잔여 TTL을 보면 만료 시간이 정상적으로 설정됐는지, 예상보다 너무 짧게 남아 있는지부터 구분할 수 있습니다. 5분 정도 실행이 늦어진다는 사실만으로 1시간짜리 set이 만료된다고 설명할 수는 없습니다. TTL이 정상이라고 해서 worker 실행이나 메일 전송 성공까지 확인되는 것도 아닙니다. 따라서 이 확인은 비정상적인 만료 설정 가능성을 좁히는 데 쓰고, 큐 지연과 worker 내부의 전송 실패를 서로 구분하는 증거로 확대하지 않겠습니다.",
+      "answer_text_sha256": "568fa62f46dea32ad3f83df96d39835c57fbe1d37c1ad42b2cb7ffad5d2ca7e6",
+      "stored_status": "answered",
+      "prepared_answer_file_present": true,
+      "question_length_codepoints": 113,
+      "original_question_answer_binding_verified": true,
+      "analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "sufficient",
+        "covered_points": [
+          {
+            "key": "email_distribution_first_check",
+            "answer_quotes": [
+              " 원문은 TTL 1시간, 예약 지연 5분입니다.",
+              " 예약 직후 잔여 TTL을 보면 만료 시간이 정상적으로 설정됐는지, 예상보다 너무 짧게 남아 있는지부터 구분할 수 있습니다.",
+              " 5분 정도 실행이 늦어진다는 사실만으로 1시간짜리 set이 만료된다고 설명할 수는 없습니다.",
+              " TTL이 정상이라고 해서 worker 실행이나 메일 전송 성공까지 확인되는 것도 아닙니다.",
+              " 따라서 이 확인은 비정상적인 만료 설정 가능성을 좁히는 데 쓰고, 큐 지연과 worker 내부의 전송 실패를 서로 구분하는 증거로 확대하지 않겠습니다."
+            ]
+          }
+        ],
+        "missing_points": [],
+        "contribution_scope": {
+          "scope": "unknown",
+          "answer_quotes": []
+        },
+        "claim_checks": [
+          {
+            "status": "supported",
+            "claim_text": "TTL 1시간, 예약 지연 5분입니다.",
+            "limitations": [],
+            "evidence_refs": [
+              "validation-ref-003"
+            ]
+          }
+        ],
+        "needs_verification": false,
+        "verification_requests": [],
+        "external_queries": [],
+        "limitations": [
+          "답변은 관측 지점의 해석과 한계를 설명하지만, 실제 구현이나 운영에 대한 개인 기여를 진술하지 않습니다."
+        ]
+      },
+      "public_selected_analysis_sha256": "a12ec5fe05f5946407d4593b959b2c250716bb7f7cc127a75217a9beea29e345"
+    },
+    {
+      "turn_no": 8,
+      "question": {
+        "persona": "tech_lead",
+        "text": "가정상 예약 게시 레코드는 생성되지만 첨부파일 연결이 누락되는 사례가 있습니다. 제공된 파일에서는 검증용 status를 destroy한 뒤, 첨부파일 UPDATE를 감싸는 트랜잭션 안에서 scheduled_statuses.create!를 호출합니다. 이 문제의 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 결과로 어떤 가능성을 구분할 수 있는지 설명해 주시겠어요?",
+        "question_contract": {
+          "purpose": "이 문제의 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 결과로 어떤 가능성을 구분할 수 있는지 설명해 주시겠어요?",
+          "basis_refs": [
+            {
+              "id": "validation-ref-004",
+              "kind": "evidence"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "technical_reasoning",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "scheduled_media_link_diagnosis",
+              "description": "이 문제의 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 결과로 어떤 가능성을 구분할 수 있는지 설명해 주시겠어요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "topic_code": "scheduled_media_link_diagnosis",
+        "jd_requirement_ids": [],
+        "parent_turn_no": null,
+        "depth": 1
+      },
+      "public_question_sha256": "c3fd8f86a86d8a90f9e2dc77bb2d100bc101aec50b5c8c712d3324ecdd1ac34c",
+      "original_question_sha256": "5d423010bc0d33ee9794dad4c5afc585daad8801e300d63503ef1390878690d4",
+      "synthetic_answer": true,
+      "answer_text": "같은 요청에서 첨부파일 UPDATE가 실제로 몇 행에 적용됐는지를 먼저 확인하겠습니다. 예약 레코드는 생성됐는데 영향 행이 0개라면, 연결할 첨부파일의 선정이나 UPDATE 대상이 비어 있었을 가능성부터 보겠습니다. 영향 행이 있었다면 그 시점의 연결은 수행됐을 가능성이 있으므로 이후 변경이나 조회 조건을 더 확인해야 합니다. 트랜잭션 안에 있다는 사실만으로 대상 0건까지 오류가 된다고 단정하지 않겠습니다. 다른 파일의 DB 제약과 후속 작업은 제공되지 않았으므로 실제 누락 원인을 여기서 확정하지는 않겠습니다.",
+      "answer_text_sha256": "eeb14920baf29dd95a666f3128a97d08f380fd07137d2a8bfec5182bc49078c0",
+      "stored_status": "answered",
+      "prepared_answer_file_present": true,
+      "question_length_codepoints": 221,
+      "original_question_answer_binding_verified": true,
+      "analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "sufficient",
+        "covered_points": [
+          {
+            "key": "scheduled_media_link_diagnosis",
+            "answer_quotes": [
+              "같은 요청에서 첨부파일 UPDATE가 실제로 몇 행에 적용됐는지를 먼저 확인하겠습니다.",
+              " 예약 레코드는 생성됐는데 영향 행이 0개라면, 연결할 첨부파일의 선정이나 UPDATE 대상이 비어 있었을 가능성부터 보겠습니다.",
+              " 영향 행이 있었다면 그 시점의 연결은 수행됐을 가능성이 있으므로 이후 변경이나 조회 조건을 더 확인해야 합니다.",
+              " 트랜잭션 안에 있다는 사실만으로 대상 0건까지 오류가 된다고 단정하지 않겠습니다.",
+              " 다른 파일의 DB 제약과 후속 작업은 제공되지 않았으므로 실제 누락 원인을 여기서 확정하지는 않겠습니다."
+            ]
+          }
+        ],
+        "missing_points": [],
+        "contribution_scope": {
+          "scope": "unknown",
+          "answer_quotes": [
+            "같은 요청에서 첨부파일 UPDATE가 실제로 몇 행에 적용됐는지를 먼저 확인하겠습니다."
+          ]
+        },
+        "claim_checks": [],
+        "needs_verification": false,
+        "verification_requests": [],
+        "external_queries": [],
+        "limitations": [
+          "답변은 확인하겠다는 진단 절차를 제안할 뿐, 이를 실제 구현하거나 운영한 개인·팀 기여를 진술하지 않습니다."
+        ]
+      },
+      "public_selected_analysis_sha256": "f5824427675a11c4efa135bea559bad88e9788df0da4910ae7dceb8c17daf0a9"
+    },
+    {
+      "turn_no": 9,
+      "question": {
+        "persona": "domain_lead",
+        "text": "공고에는 고객 플랫폼의 메시징 기능이 포함되어 있습니다. 고객 메시징 기능을 가정할 때, 어떤 데이터 한 가지를 가장 민감하게 분류하시겠으며 그 이유는 무엇인가요?",
+        "question_contract": {
+          "purpose": "고객 메시징 기능을 가정할 때, 어떤 데이터 한 가지를 가장 민감하게 분류하시겠으며 그 이유는 무엇인가요?",
+          "basis_refs": [
+            {
+              "id": "validation-ref-002",
+              "kind": "jd_requirement"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "customer_messaging_sensitive_data",
+              "description": "고객 메시징 기능을 가정할 때, 어떤 데이터 한 가지를 가장 민감하게 분류하시겠으며 그 이유는 무엇인가요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "topic_code": "customer_messaging_data_sensitivity",
+        "jd_requirement_ids": [
+          "validation-ref-002"
+        ],
+        "parent_turn_no": null,
+        "depth": 1
+      },
+      "public_question_sha256": "5fbfe9cad89dde62187a49caeca5cccc0dcc4ddc8d8f4fb1409cbf0fef7ff22e",
+      "original_question_sha256": "2d260878d85213a0da9133e3a6ffc00f2faa56a8d4d1f554acb5c2beacae990a",
+      "synthetic_answer": true,
+      "answer_text": "고객이 직접 작성한 메시지 본문을 가장 민감하게 분류하겠습니다. 자유롭게 쓰는 내용이라 연락처나 주문 정보처럼 예상하지 못한 개인 정보가 포함될 수 있고, 대화 내용만으로 고객의 개인적인 상황이 드러날 수도 있기 때문입니다. 정해진 필드만 보호해서는 이런 노출을 놓칠 수 있다고 봅니다. 이는 고객 메시징 기능을 가정한 판단이며, 해당 회사의 실제 데이터 분류 정책을 확인했다는 뜻은 아닙니다.",
+      "answer_text_sha256": "9bfab6dc0d6b9d318b69df2a1deb2e73f6780911ba52c27bfd3a1533e014788e",
+      "stored_status": "answered",
+      "prepared_answer_file_present": true,
+      "question_length_codepoints": 91,
+      "original_question_answer_binding_verified": true,
+      "analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "sufficient",
+        "covered_points": [
+          {
+            "key": "customer_messaging_sensitive_data",
+            "answer_quotes": [
+              "고객이 직접 작성한 메시지 본문을 가장 민감하게 분류하겠습니다.",
+              " 자유롭게 쓰는 내용이라 연락처나 주문 정보처럼 예상하지 못한 개인 정보가 포함될 수 있고, 대화 내용만으로 고객의 개인적인 상황이 드러날 수도 있기 때문입니다.",
+              " 정해진 필드만 보호해서는 이런 노출을 놓칠 수 있다고 봅니다."
+            ]
+          }
+        ],
+        "missing_points": [],
+        "contribution_scope": {
+          "scope": "unknown",
+          "answer_quotes": [
+            " 이는 고객 메시징 기능을 가정한 판단이며, 해당 회사의 실제 데이터 분류 정책을 확인했다는 뜻은 아닙니다."
+          ]
+        },
+        "claim_checks": [],
+        "needs_verification": false,
+        "verification_requests": [],
+        "external_queries": [],
+        "limitations": [
+          "가정한 분류 판단만 제시했으며 기존 구현이나 운영에 대한 개인 기여는 설명하지 않아 확인할 수 없습니다."
+        ]
+      },
+      "public_selected_analysis_sha256": "f052bd637b1f481ee8f4e6e24d535cd526257a6beaa59952bebe690cb7ad5a3b"
+    }
+  ],
+  "reviews": [
+    {
+      "physical_id": 2,
+      "phase": "start",
+      "candidate": {
+        "persona": "hr_manager",
+        "text": "간단히 자기소개해 주시고, 대표 프로젝트 하나를 예로 들어 본인과 팀의 역할을 나누어 설명해 주시겠어요?",
+        "question_contract": {
+          "purpose": "간단히 자기소개해 주시고, 대표 프로젝트 하나를 예로 들어 본인과 팀의 역할을 나누어 설명해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "self_introduction_and_roles",
+              "description": "간단히 자기소개해 주시고, 대표 프로젝트 하나를 예로 들어 본인과 팀의 역할을 나누어 설명해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "contribution_clarity",
+            "communication"
+          ]
+        },
+        "question_type": "main",
+        "parent_turn_id": null,
+        "topic_code": "hr_introduction"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "첫 HR 턴에서 자기소개와 대표 프로젝트의 본인·팀 역할을 직접 묻고 있어 계약과 일치합니다.",
+        "point_coverage": [
+          {
+            "key": "self_introduction_and_roles",
+            "status": "asked",
+            "question_excerpt": "간단히 자기소개해 주시고, 대표 프로젝트 하나를 예로 들어 본인과 팀의 역할을 나누어 설명해 주시겠어요?"
+          }
+        ]
+      }
     }
   ]
 }
