@@ -16,12 +16,14 @@
   <a href="https://devon-chonnam-3.duckdns.org">서비스</a> &nbsp;·&nbsp;
   <a href="#5-아키텍처">아키텍처</a> &nbsp;·&nbsp;
   <a href="#9-시작하기">시작하기</a> &nbsp;·&nbsp;
-  <a href="#11-문서">문서</a>
+  <a href="#10-테스트">테스트</a> &nbsp;·&nbsp;
+  <a href="#12-문서">문서</a>
 </p>
 
 <p align="center">
   <a href="https://github.com/kakaotechcampus-4/ktc4-chonnam-3/actions/workflows/backend-ci.yml"><img src="https://github.com/kakaotechcampus-4/ktc4-chonnam-3/actions/workflows/backend-ci.yml/badge.svg?branch=develop" alt="Backend CI" /></a>
   <a href="https://github.com/kakaotechcampus-4/ktc4-chonnam-3/actions/workflows/ai-ci.yml"><img src="https://github.com/kakaotechcampus-4/ktc4-chonnam-3/actions/workflows/ai-ci.yml/badge.svg?branch=develop" alt="AI CI" /></a>
+  <a href="https://github.com/kakaotechcampus-4/ktc4-chonnam-3/actions/workflows/frontend-ci.yml"><img src="https://github.com/kakaotechcampus-4/ktc4-chonnam-3/actions/workflows/frontend-ci.yml/badge.svg?branch=develop" alt="Frontend CI" /></a>
   <img src="https://img.shields.io/badge/Python-3.12-3776ab" alt="Python 3.12" />
   <img src="https://img.shields.io/badge/FastAPI-009688" alt="FastAPI" />
   <img src="https://img.shields.io/badge/React-19-149eca" alt="React 19" />
@@ -369,20 +371,132 @@ npm run dev
 
 <br/>
 
-## 10. 개발
+## 10. 테스트
 
-### 검증 명령
+외부 서비스(GitHub, 공고 사이트, LLM)는 고정 응답이나 mock client로 대신하고, DB와 Redis는 실제 PostgreSQL·Redis로 검증합니다. 실제 모델은 AI 평가에서만 호출해 비용과 비결정성을 일반 테스트와 분리합니다.
+
+<br/>
+
+### 테스트 계층
+
+| 계층 | 검증 대상 | 도구 · 위치 | 실행 시점 |
+|------|-----------|-------------|-----------|
+| 정적 검사 | 코드 스타일 · 타입 | Ruff · Mypy (backend · ai), ESLint · `tsc` (frontend) | PR · push |
+| 단위 | 순수 로직, 스키마, 쿼터, mock LLM 출력 | pytest · `ai/tests`, `backend/tests/core` · `llm_tasks` | PR · push |
+| 통합 (Backend) | PostgreSQL 저장 · 제약, Redis 복구, 워커 · WebSocket · API, 면접관 연결 | pytest-asyncio · `backend/tests/features` · `agents` · `integrations` · `realtime` (`agents`의 Director 준비 · WS 테스트는 실제 DB · Redis 사용) | PR · push |
+| 계약 | 공개 응답 직렬화(camelCase · 오류 응답 형식)와 `openapi.yaml`의 일치, 계약 문서 형식 | `backend/tests/contract` (`openapi.yaml`을 직접 읽음), `.claude/scripts/check_contracts.py` | PR · push (계약 형식 검사는 계약 파일 변경 PR) |
+| 마이그레이션 | Alembic 업그레이드 · 다운그레이드 · 스키마 그래프 | `backend/tests/test_analysis_migration.py` · `test_analysis_storage_upgrade.py` 등 | PR · push (`test_analysis_migration.py`는 Analysis migration CI) |
+| Frontend 단위 | 순수 로직 · API 래퍼 · 면접 중단 분기 · 작은 컴포넌트 | Vitest + Testing Library (`frontend/src/**/*.test.ts(x)`) | PR · push |
+| Frontend E2E | 화면별 흐름 · 실패 · 재시도 · 음성/텍스트 모드 | Playwright + MSW 목 (`frontend/tests`) | PR · push |
+| 통합 E2E | 실제 앱 · 테스트 DB · Redis의 OAuth 세션 흐름 (GitHub HTTP만 대체) | Playwright (`frontend/tests-integration`) | 로컬 (`npm run test:integration`) |
+| AI 평가 | 근거 · 질문 · 흐름 · 리포트의 품질 | `ai/evals` 하네스, `backend/scripts/run_ai_evaluation.py` | CI는 입력 계약 · 평가 격리 검사, 실제 모델 평가는 별도 실행 |
+| 부하 스모크 | `/api/health`(세션이 있으면 `/api/me` · `/api/me/home`)의 오류율 · p50 · p95 지연 | `backend/scripts/load_smoke.py` (httpx + asyncio), 계산 · 판정 로직은 `backend/tests/test_load_smoke.py` | 로컬 수동 실행 (운영 서버 제외) |
+| QA (수동) | 실제 수집부터 면접 · 종료 · 리포트까지의 서비스 흐름 | 팀 내부 사용자 문답 검증 | 릴리스 전 |
+
+디렉터리 안에 단위 테스트와 통합 테스트가 섞여 있어, 위 표는 디렉터리의 주된 성격으로 분류했습니다.
+
+<br/>
+
+### 테스트 환경
+
+| 환경 | 구성 | 용도 |
+|------|------|------|
+| 로컬 개발 | `backend/`에서 `docker compose up -d db redis` (PostgreSQL 15 · Redis 7, pgcrypto 확장) + API · 워커는 `uv`로 직접 실행 | 통합 테스트, 수동 확인 |
+| Backend CI | 서비스 컨테이너 `postgres:15` · `redis:7`, 테스트 DB `task10_test`. Ruff check → Ruff format → Mypy → Pytest | PR · push |
+| AI CI | Ruff · Mypy · Pytest 후 평가 입력 계약 · 격리 검사 결과를 아티팩트로 저장 | PR · push |
+| Frontend CI | `check`(lint → build → Vitest)와 `e2e`(Playwright + MSW) job 분리, Node 24 | frontend 변경 PR · push |
+| 프론트엔드 로컬 | 기본은 MSW 목, 통합 E2E는 `VITE_USE_MSW=false`로 로컬 Backend에 연결 | 화면 · 실패 케이스 검증 |
+| 평가 전용 컨테이너 | `compose.evaluation.yaml`: 네트워크 차단(`network_mode: none`), 사례 · 출력 디렉터리 명시, 사례 · 참조 자료는 읽기 전용이고 출력 폴더만 쓰기 가능 | 외부 서비스 없이 입력과 계약을 검사하는 평가 |
+| LLM 호출 | 일반 테스트는 mock client만 사용, 실제 모델 평가에서만 provider 사용 | 비용 · 비결정성 격리 |
+
+Backend 테스트에는 격리된 PostgreSQL과 Redis가 필요합니다. `TEST_DATABASE_URL`의 DB 이름은 `task10_test`로 시작해야 하고, `TEST_REDIS_URL`은 13~15번 DB를 지정해야 합니다. 테스트가 테이블을 비우므로 개발용 DB를 지정하지 않습니다. `test_analysis_migration.py`는 별도 DB를 가리키는 `TASK11_MIGRATION_URL`이 있을 때만 실행되고, 없으면 건너뜁니다. Frontend E2E는 처음 한 번 `npx playwright install chromium`이 필요합니다.
+
+<br/>
+
+### 영역별 검증 명령
 
 | 위치 | 명령 |
 |------|------|
 | `backend` | `uv run ruff check . && uv run ruff format --check . && uv run mypy app && uv run pytest` |
 | `ai` | `uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest` |
-| `frontend` | `npm run lint && npm run build && npm test` |
-| 저장소 루트 | `python3 .claude/scripts/check_contracts.py` (공통 계약 형식 검사) |
-
-Backend 테스트에는 격리된 PostgreSQL과 Redis가 필요합니다. `TEST_DATABASE_URL`의 DB 이름은 `task10_test`로 시작해야 하고, `TEST_REDIS_URL`은 13~15번 DB를 지정해야 합니다.
+| `frontend` | `npm run lint && npm run build && npm run test:unit && npm test` |
+| 저장소 루트 | `python3 .claude/scripts/check_contracts.py` |
 
 <br/>
+
+### AI 평가
+
+`ai/evals`는 모델에 들어가는 입력과 기대 결과를 별도 파일로 나눠 기대값이 프롬프트로 새지 않게 합니다. 개발용(dev)과 최종 검증용(holdout) 사례를 다른 출처로 분리하고, 사례마다 검수 상태를 기록합니다. 채점기 자체도 점검 사례로 확인합니다.
+
+Judge 프롬프트(`ai/prompts/evaluation-judge-v*.md`)는 사례별 허용(allowed) · 금지(forbidden) 기준과 실제 출력을 비교해 `accept` · `reject` · `ambiguous`로 판정하고, 기준별 결과와 근거를 남깁니다. 평가 실행기의 기본은 v2이며, 검증된 내부 산출물까지 읽는 v3는 `--judge-prompt`로 지정합니다.
+
+아래 꼬리질문 평가 기준과 골드셋 구성은 Judge를 고도화하기 위한 **평가 설계**이며, 5개 기준의 점수 · 가중 합산은 아직 하네스에 구현되지 않았습니다.
+
+**꼬리질문 평가 기준 (설계)**
+
+후속 질문 평가 연구(Nature)의 평가축을 참고해 5개 기준을 1~5점으로 매기고, `Overall Score = Σ(기준 점수 × 가중치)`로 합산합니다.
+
+| 평가 기준 | 평가 질문 | 확인하는 것 |
+|-----------|-----------|-------------|
+| Necessity | 현재 답변에 정말 추가 질문이 필요한가? | 이미 충분히 답한 내용을 반복하지 않는지 |
+| Context Relevance | 방금 한 답변을 실제로 반영했는가? | 직전 답변과 연결된 질문인지 |
+| Technical Validity | 기술적으로 잘못된 전제가 없는가? | 존재하지 않는 기술 · 잘못된 추론이 없는지 |
+| Probing Value | 이해 수준을 한 단계 더 확인할 수 있는가? | 설계 의도 · 판단 근거를 더 깊게 묻는지 |
+| Clarity / Non-leading | 명확하고 답을 유도하지 않는가? | 모호하거나 유도형 질문이 아닌지 |
+
+| 판정 | 의미 | 다음 행동 |
+|------|------|-----------|
+| 꼬리질문이 적절 | 사용자의 답변이 충분하지 않았다 | 더 듣기 위해 꼬리질문을 한다 |
+| 꼬리질문이 부적절 | 사용자의 답변이 충분하다 | 다음 면접관으로 넘긴다 |
+| 기준을 넘는 질문을 만들지 못함 | 확인할 것을 다 확인했다 | 해당 주제를 마무리한다 |
+
+**골드셋 구성과 Judge 입출력 (설계)**
+
+| 계층 | 포함 내용 | 목적 |
+|------|-----------|------|
+| Repository Grounding | 저장소 URL, 핵심 기술 스택, 주요 파일 · 코드 위치, 설계 의도, 설정값, 잠재적 문제점 | 실제 프로젝트를 올바르게 이해했는지 검증 |
+| Interview Scenario | 최초 질문, 가상 답변, 기대 꼬리질문 방향, 질문 관점 라벨(Tech Choice · Trade-off · Config Rationale 등), 금지 질문, 다음 행동 기대값 | 꼬리질문 생성과 다음 행동 판단 검증 |
+| Judge Annotation | 5개 평가 기준별 점수 기준 | 질문 품질을 정량 평가 |
+
+| 구분 | 내용 |
+|------|------|
+| 입력 | Repository Context · Initial Question · Candidate Answer · Generated Follow-up · Golden Guidance(기대 방향, 금지 예시, 관점 라벨) · Rubric(5개 기준) |
+| 출력 | 기준별 점수(1~5) · Overall Score · Pass / Fail · Failure Reason · Suggested Revision |
+
+<br/>
+
+### 현재 상태
+
+2026-11-11 기준입니다.
+
+| 항목 | 상태 |
+|------|------|
+| Backend · AI 단위 · 통합 · 계약 테스트와 CI | 운영 중 |
+| Frontend CI (lint · build · Vitest · Playwright) | 운영 중. PR과 develop push에서 통과 |
+| Frontend E2E | Playwright 스펙 20개 파일 (MSW 목), 통합 E2E 1건 |
+| Frontend 단위 · 컴포넌트 | Vitest + Testing Library 9개 파일 · 45개 테스트 |
+| AI 평가 하네스 | 입력 · 기대 분리, dev / holdout 분리, 검수 상태 관리, 채점기 점검 구현 (사례 종류: evidence · question · flow · report) |
+| Judge | `evaluation-judge` 프롬프트로 allowed · forbidden 기준 판정 |
+| 꼬리질문 5개 기준 · 골드셋 3계층 | 설계 단계 |
+| 부하 스모크 | 스크립트와 서버 없이 도는 판정 테스트 통과. 팀 로컬 측정에서 `/api/health` 동시 1 · 5 · 20 요청 시 오류 0, p95 6.8 · 43 · 494ms. 합격선(p95 500ms)은 임시값 |
+
+<br/>
+
+### CI
+
+| 워크플로 | 실행 조건 | 내용 |
+|----------|-----------|------|
+| [Backend CI](.github/workflows/backend-ci.yml) | `backend/`, `ai/` 변경 | Ruff, Mypy, Pytest (PostgreSQL 15, Redis 7 서비스 컨테이너) |
+| [AI and evaluation CI](.github/workflows/ai-ci.yml) | `ai/`, 평가 스크립트 변경 | Ruff, Mypy, Pytest, 평가 입력 계약 · 격리 검사 |
+| [Frontend CI](.github/workflows/frontend-ci.yml) | `frontend/` 변경 | lint, build, Vitest, Playwright |
+| [Analysis migration CI](.github/workflows/analysis-migration-ci.yml) | `backend/`, `ai/` 변경 | 분석 데이터 마이그레이션 · 다운그레이드 (`TASK11_MIGRATION_URL` 전용 DB) |
+| [Collaboration draft checks](.github/workflows/collaboration-check.yml) | 계약 파일 · 검사 스크립트 변경 PR | `check_contracts.py`, 검사 스크립트 단위 테스트 |
+
+Backend · AI · Frontend · Analysis migration CI는 develop · release 대상 PR과 develop push에서 실행됩니다.
+
+<br/>
+
+## 11. 개발
 
 ### 저장소 구조
 
@@ -404,7 +518,7 @@ Backend 테스트에는 격리된 PostgreSQL과 Redis가 필요합니다. `TEST_
 
 <br/>
 
-## 11. 문서
+## 12. 문서
 
 결정 기록과 설계 문서에 남은 Sprint 표기는 작성 당시의 개발 단계입니다. 현재 동작은 이 README와 아래 문서를 기준으로 합니다.
 
