@@ -462,6 +462,244 @@
       "validation_ms": 3,
       "response_read_complete": true,
       "sse_timing_limited": false
+    },
+    {
+      "phase": "answer:06",
+      "operation": "plan",
+      "status": "succeeded",
+      "observed_generation_seconds": 15.600747099961154,
+      "response_timing_version": 2,
+      "response_headers_ms": 977,
+      "first_sse_event_ms": 978,
+      "first_output_text_delta_ms": 13409,
+      "response_read_ms": 14587,
+      "response_decode_ms": 9,
+      "validation_ms": 2,
+      "response_read_complete": true,
+      "sse_timing_limited": false
+    },
+    {
+      "phase": "answer:06",
+      "operation": "review",
+      "status": "succeeded",
+      "observed_generation_seconds": 9.457148300018162,
+      "response_timing_version": 2,
+      "response_headers_ms": 773,
+      "first_sse_event_ms": 774,
+      "first_output_text_delta_ms": 8016,
+      "response_read_ms": 8654,
+      "response_decode_ms": 4,
+      "validation_ms": 0,
+      "response_read_complete": true,
+      "sse_timing_limited": false
+    },
+    {
+      "phase": "answer:07",
+      "operation": "answer_analysis.initial",
+      "status": "succeeded",
+      "observed_generation_seconds": 19.265386299986858,
+      "response_timing_version": 2,
+      "response_headers_ms": 928,
+      "first_sse_event_ms": 931,
+      "first_output_text_delta_ms": 15415,
+      "response_read_ms": 18315,
+      "response_decode_ms": 10,
+      "validation_ms": 1,
+      "response_read_complete": true,
+      "sse_timing_limited": false
+    },
+    {
+      "phase": "answer:07",
+      "operation": "plan",
+      "status": "succeeded",
+      "observed_generation_seconds": 24.064476899977308,
+      "response_timing_version": 2,
+      "response_headers_ms": 825,
+      "first_sse_event_ms": 826,
+      "first_output_text_delta_ms": 22715,
+      "response_read_ms": 23225,
+      "response_decode_ms": 5,
+      "validation_ms": 1,
+      "response_read_complete": true,
+      "sse_timing_limited": false
+    },
+    {
+      "phase": "answer:07",
+      "operation": "review",
+      "status": "succeeded",
+      "observed_generation_seconds": 12.991696900047828,
+      "response_timing_version": 2,
+      "response_headers_ms": 1304,
+      "first_sse_event_ms": 1305,
+      "first_output_text_delta_ms": 11925,
+      "response_read_ms": 11676,
+      "response_decode_ms": 3,
+      "validation_ms": 0,
+      "response_read_complete": true,
+      "sse_timing_limited": false
+    },
+    {
+      "phase": "answer:08",
+      "operation": "answer_analysis.initial",
+      "status": "succeeded",
+      "observed_generation_seconds": 46.734328100050334,
+      "response_timing_version": 2,
+      "response_headers_ms": 1043,
+      "first_sse_event_ms": 1046,
+      "first_output_text_delta_ms": 39337,
+      "response_read_ms": 45664,
+      "response_decode_ms": 15,
+      "validation_ms": 1,
+      "response_read_complete": true,
+      "sse_timing_limited": false
+    },
+    {
+      "phase": "answer:08",
+      "operation": "plan",
+      "status": "succeeded",
+      "observed_generation_seconds": 15.383293499995489,
+      "response_timing_version": 2,
+      "response_headers_ms": 784,
+      "first_sse_event_ms": 786,
+      "first_output_text_delta_ms": 13457,
+      "response_read_ms": 14574,
+      "response_decode_ms": 12,
+      "validation_ms": 3,
+      "response_read_complete": true,
+      "sse_timing_limited": false
+    },
+    {
+      "phase": "answer:08",
+      "operation": "review",
+      "status": "succeeded",
+      "observed_generation_seconds": 7.054794600000605,
+      "response_timing_version": 2,
+      "response_headers_ms": 785,
+      "first_sse_event_ms": 786,
+      "first_output_text_delta_ms": 5787,
+      "response_read_ms": 6242,
+      "response_decode_ms": 4,
+      "validation_ms": 0,
+      "response_read_complete": true,
+      "sse_timing_limited": false
+    },
+    {
+      "phase": "answer:09",
+      "operation": "answer_analysis.initial",
+      "status": "succeeded",
+      "observed_generation_seconds": 21.289889800013043,
+      "response_timing_version": 2,
+      "response_headers_ms": 914,
+      "first_sse_event_ms": 916,
+      "first_output_text_delta_ms": 16624,
+      "response_read_ms": 20350,
+      "response_decode_ms": 12,
+      "validation_ms": 1,
+      "response_read_complete": true,
+      "sse_timing_limited": false
+    }
+  ],
+  "turns": [
+    {
+      "turn_no": 1,
+      "synthetic_answer": true,
+      "question": {
+        "persona": "hr_manager",
+        "text": "먼저 본인을 소개하고, 지금까지의 경험 중 한 가지를 들어 본인의 역할과 팀에 기여한 내용을 설명해 주시겠어요?",
+        "topic_code": "hr_self_introduction",
+        "question_contract": {
+          "purpose": "먼저 본인을 소개하고, 지금까지의 경험 중 한 가지를 들어 본인의 역할과 팀에 기여한 내용을 설명해 주시겠어요?",
+          "basis_refs": [],
+          "assumptions": [],
+          "evaluation_keys": [
+            "contribution_clarity",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "self_intro_and_team_contribution",
+              "description": "먼저 본인을 소개하고, 지금까지의 경험 중 한 가지를 들어 본인의 역할과 팀에 기여한 내용을 설명해 주시겠어요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "jd_requirement_ids": []
+      },
+      "answer_text": "안녕하세요. 백엔드에서 요청이 저장과 후속 작업으로 이어지는 흐름에 관심을 두고 공부하고 있습니다. 최근에는 동료들과 공개된 Mastodon 코드를 읽는 스터디를 했습니다. 제가 맡은 일은 게시 요청을 처리하는 PostStatusService의 호출 순서를 정리하고, 코드로 확인되는 내용과 다른 파일이나 실행을 더 봐야 하는 내용을 나누는 것이었습니다. 동료들은 각자 읽은 부분을 설명했고, 저는 그 설명을 제 흐름 메모와 대조해서 서로 다르게 이해한 지점을 질문했습니다. 덕분에 팀에서 저장 전 처리와 저장 후 작업을 구분해 이야기할 수 있었습니다. 이 경험은 공개 코드를 읽고 설명한 스터디 경험이며, 제가 Mastodon을 구현하거나 운영했다는 뜻은 아닙니다.",
+      "raw_answer_assessment": {
+        "coverage_assessment": {
+          "evaluation_status": "evaluated",
+          "sufficiency": "sufficient",
+          "covered_points": {
+            "self_intro_and_team_contribution": [
+              "answer:0002",
+              "answer:0003",
+              "answer:0004",
+              "answer:0005",
+              "answer:0006"
+            ]
+          },
+          "missing_points": [],
+          "limitations": []
+        },
+        "contribution_scope": {
+          "scope": "self",
+          "quote_ids": [
+            "answer:0004",
+            "answer:0005"
+          ],
+          "unknown_reason": null
+        },
+        "claim_checks": [],
+        "verification_requests": [],
+        "external_queries": []
+      },
+      "independent_annotation": {
+        "question_verdict": "accept",
+        "question_criteria": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "rationale": "첫 질문으로 중립적 자기소개와 한 경험의 역할·팀 기여를 요청한다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "satisfied",
+            "rationale": "자기소개 안에서 본인 역할과 기여 범위를 설명하는 한 목적이다. 첫 HR 요구를 충족하며 별도 기술 판단을 추가하지 않는다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "rationale": "preamble은 비어 있고 request 전체가 purpose·유일 필수점 description·최종 질문과 같다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "rationale": "첫 턴의 허용 HR, contribution_clarity/communication 키에 맞는다. 특정 공개 코드 기여나 경력 충족을 전제하지 않는다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "rationale": "지금까지의 경험 중 하나를 고르게 하는 중립 질문이며 특정 구현·운영·개인 경험을 사실로 단정하지 않는다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "not_applicable",
+            "rationale": "앞선 지원자 답변이 없고 기존 발언·코드 해석의 개인 귀속 표현이 없다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "rationale": "첫 질문이며 특정 모범 답이나 해법을 제공하지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "not_applicable",
+            "rationale": "모름·자료 실패·미확인에 대한 판단이 아직 없다."
+          }
+        ],
+        "naturalness_note": "공손한 실제 면접 도입 질문이며 기술·채점 용어가 노출되지 않는다."
+      }
     }
   ]
 }

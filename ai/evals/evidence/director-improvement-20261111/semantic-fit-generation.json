@@ -1,4 +1,21 @@
 {
   "schema": "director-semantic-fit-public-generation-and-scope.v1",
-  "mode": "actual_luna"
+  "mode": "actual_luna",
+  "physical_model_calls": 8,
+  "generation_candidate_count": 2,
+  "generation_plan_review_calls": 4,
+  "scope_candidate_count": 2,
+  "scope_review_calls": 4,
+  "actual_t3_calls": 0,
+  "same_context_note": "Generation uses minimum typed restoration of original model projection; unknown current analysis_ref remained None; not full DB Context restoration.",
+  "scope_fixture_validation": {
+    "passed": true,
+    "model_or_api_or_database_calls": 0,
+    "actual_projection_roundtrips": 2,
+    "shared_v7_decoder_and_contract_validation": true,
+    "actual_follow_up_option_count": 1,
+    "follow_up_question_policy_valid": true,
+    "non_ps_main_valid": true
+  },
+  "observations": []
 }

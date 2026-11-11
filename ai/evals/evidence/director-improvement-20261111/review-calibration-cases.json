@@ -1,0 +1,5 @@
+{
+  "schema": "director-public-review-calibration.v1",
+  "mode": "actual_luna",
+  "physical_model_calls": 16
+}

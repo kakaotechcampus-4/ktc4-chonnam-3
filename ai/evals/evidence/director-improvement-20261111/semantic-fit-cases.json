@@ -1,0 +1,6 @@
+{
+  "schema": "director-semantic-fit-public-cases.v1",
+  "mode": "actual_luna",
+  "physical_model_calls": 24,
+  "scope": "Twelve exposed fixed candidates in one Mastodon Q8 context; not independent holdout and not end-to-end service."
+}
