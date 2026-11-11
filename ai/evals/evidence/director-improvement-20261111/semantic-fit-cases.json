@@ -1716,5 +1716,45 @@
         }
       ]
     }
-  ]
+  ],
+  "summary_from_original_source": {
+    "A": {
+      "observed": 12,
+      "independently_annotated": 12,
+      "oracle_verdict_matches": 6,
+      "strict_oracle_recovery_matches": 6,
+      "original_point_asked_and_quote_exact": 12,
+      "safe_alternative_true": 12,
+      "decision_counts": {
+        "accept": 12
+      },
+      "source_factual_reasons_valid": 12,
+      "source_criterion_reason_alignment": 6,
+      "full_source_quality_success": 6,
+      "invented_unasked_requirement": 0,
+      "invented_false_premise_or_attribution": 0,
+      "positive_preserved": 6,
+      "negative_false_acceptances": 6
+    },
+    "B": {
+      "observed": 12,
+      "independently_annotated": 12,
+      "oracle_verdict_matches": 12,
+      "strict_oracle_recovery_matches": 12,
+      "original_point_asked_and_quote_exact": 12,
+      "safe_alternative_true": 12,
+      "decision_counts": {
+        "reject": 6,
+        "accept": 6
+      },
+      "source_factual_reasons_valid": 12,
+      "source_criterion_reason_alignment": 12,
+      "full_source_quality_success": 12,
+      "invented_unasked_requirement": 0,
+      "invented_false_premise_or_attribution": 0,
+      "positive_preserved": 6,
+      "negative_false_acceptances": 0
+    }
+  },
+  "public_check_scope": "Recompute selected verdict/recovery/quote matches; semantic truth and original full request identity require source review."
 }
