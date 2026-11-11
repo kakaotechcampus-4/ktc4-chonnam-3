@@ -891,6 +891,281 @@
           }
         }
       ]
+    },
+    {
+      "case_id": "ps-fit-p01",
+      "split": "dev",
+      "synthetic_candidate": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "게시물은 저장됐지만 이메일 알림이 오지 않는다고 가정하면, 이 경로에서 처음 확인할 처리 경계 한 곳과 그 이유를 말씀해 주시겠어요?",
+        "topic_code": "email_subscription_batching",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "게시물은 저장됐지만 이메일 알림이 오지 않는다고 가정하면, 이 경로에서 처음 확인할 처리 경계 한 곳과 그 이유를 말씀해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "email_subscription_batching_flow",
+              "description": "게시물은 저장됐지만 이메일 알림이 오지 않는다고 가정하면, 이 경로에서 처음 확인할 처리 경계 한 곳과 그 이유를 말씀해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "public-ref-001"
+            },
+            {
+              "kind": "evidence",
+              "id": "public-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "public-ref-001",
+          "public-ref-002"
+        ],
+        "jd_requirement_ids": []
+      },
+      "oracle": {
+        "expected_source_verdict": "accept",
+        "expected_recovery": null,
+        "expected_plan_valid": true,
+        "expected_safe_alternative": true,
+        "minimum_sufficient_answer_scope": "알림 미예약과 예약 뒤 실행 문제를 구별하기 위해 확인할 경계를 한 곳 고르고 그 선택의 근거를 설명해야 한다.",
+        "rationale": "명시한 누락 문제에서 원인 범위를 좁힐 확인 한 가지를 요구한다. 전체 진단 절차나 해결·재발방지를 함께 요구하지 않는다.",
+        "source_lines": [
+          "51-78",
+          "173-194"
+        ]
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "저장 후 이메일 구독 처리로 이어지는 코드 경로가 제공되어 있으며, 그 안에서 먼저 확인할 경계 한 곳과 이유를 고르는 단일 판단을 묻습니다.",
+            "point_coverage": [
+              {
+                "key": "email_subscription_batching_flow",
+                "status": "asked",
+                "question_excerpt": "이 경로에서 처음 확인할 처리 경계 한 곳과 그 이유를 말씀해 주시겠어요?"
+              }
+            ]
+          },
+          "model_verdict": "accept",
+          "model_recovery": null,
+          "oracle_verdict_match": true,
+          "oracle_recovery_match": true,
+          "oracle_plan_match": true,
+          "request_equals_frozen_payload_no_labels": true,
+          "instructions_equal_frozen_arm_policy": true,
+          "raw_wire_attempt_equal": true,
+          "codex_source_grade": {
+            "conclusion": "가정한 문제의 단일 판단을 적절히 승인",
+            "source_question_verdict": "accept",
+            "reason_factual_fidelity": true,
+            "criterion_reason_alignment": true,
+            "invented_unasked_requirement": false,
+            "false_premise_or_personal_attribution": false,
+            "original_point_coverage_valid": true,
+            "safe_alternative_fidelity": true,
+            "other_flags_fidelity": true,
+            "full_source_quality_success": true,
+            "reason_evaluation": "저장 후 알림 미수신 가정에서 먼저 확인할 경계와 같은 선택의 이유라는 단일 진단 판단을 정확히 짚었다. 코드의 저장 후 후처리·이메일 구독/예약 경로가 실제 제공돼 있어 근거가 있고, 실제 worker 성공·실패나 원인을 단정하지 않았다.",
+            "point_evaluation": "실제로 요청한 선택/확인과 필요한 이유를 묻는 연속 구절을 asked로 인용했다. 표기된 필수점 하나의 실제 요구를 보존하고 전체 진단·대안·검증 과제를 숨은 조건으로 추가하지 않았다.",
+            "other_flags_evaluation": "명시된 가정은 실제 운영 사실이나 개인 기여로 바뀌지 않았다. 제공 코드와 허용된 main 배정·질문 계약이 일치하며, 별도의 false premise나 반복·다중 과제를 만들어 거절하지 않았다."
+          }
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "저장 후 이메일 구독 처리 경로의 장애 상황에서 먼저 확인할 한 곳과 이유를 묻는 단일 문제 해결 판단입니다. 제공된 코드가 해당 경로의 조건 검사와 Redis·작업자 호출을 보여 줍니다.",
+            "point_coverage": [
+              {
+                "key": "email_subscription_batching_flow",
+                "status": "asked",
+                "question_excerpt": "이 경로에서 처음 확인할 처리 경계 한 곳과 그 이유를 말씀해 주시겠어요?"
+              }
+            ]
+          },
+          "model_verdict": "accept",
+          "model_recovery": null,
+          "oracle_verdict_match": true,
+          "oracle_recovery_match": true,
+          "oracle_plan_match": true,
+          "request_equals_frozen_payload_no_labels": true,
+          "instructions_equal_frozen_arm_policy": true,
+          "raw_wire_attempt_equal": true,
+          "codex_source_grade": {
+            "conclusion": "가정한 문제의 단일 판단을 적절히 승인",
+            "source_question_verdict": "accept",
+            "reason_factual_fidelity": true,
+            "criterion_reason_alignment": true,
+            "invented_unasked_requirement": false,
+            "false_premise_or_personal_attribution": false,
+            "original_point_coverage_valid": true,
+            "safe_alternative_fidelity": true,
+            "other_flags_fidelity": true,
+            "full_source_quality_success": true,
+            "reason_evaluation": "명시된 저장 후 미수신 가정에서 먼저 확인할 경계 하나와 이유를 고르는 요청을 문제 해결 판단으로 인정했다. 코드의 조건 검사·Redis·예약 호출은 제공 원문에 있으며 실패 지점이나 실제 운영 결과를 지어내지 않았다.",
+            "point_evaluation": "실제로 요청한 선택/확인과 필요한 이유를 묻는 연속 구절을 asked로 인용했다. 표기된 필수점 하나의 실제 요구를 보존하고 전체 진단·대안·검증 과제를 숨은 조건으로 추가하지 않았다.",
+            "other_flags_evaluation": "명시된 가정은 실제 운영 사실이나 개인 기여로 바뀌지 않았다. 제공 코드와 허용된 main 배정·질문 계약이 일치하며, 별도의 false premise나 반복·다중 과제를 만들어 거절하지 않았다."
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "ps-fit-p02",
+      "split": "dev",
+      "synthetic_candidate": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "같은 계정의 이메일 알림이 중복 발송됐고 Redis set에는 게시물 ID가 한 번씩만 있는 상황을 가정하면, 그 관찰만으로 예약 작업 쪽의 원인을 배제할 수 있는지 이유와 함께 판단해 주시겠어요?",
+        "topic_code": "email_subscription_batching",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "같은 계정의 이메일 알림이 중복 발송됐고 Redis set에는 게시물 ID가 한 번씩만 있는 상황을 가정하면, 그 관찰만으로 예약 작업 쪽의 원인을 배제할 수 있는지 이유와 함께 판단해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "email_subscription_batching_flow",
+              "description": "같은 계정의 이메일 알림이 중복 발송됐고 Redis set에는 게시물 ID가 한 번씩만 있는 상황을 가정하면, 그 관찰만으로 예약 작업 쪽의 원인을 배제할 수 있는지 이유와 함께 판단해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "public-ref-001"
+            },
+            {
+              "kind": "evidence",
+              "id": "public-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "public-ref-001",
+          "public-ref-002"
+        ],
+        "jd_requirement_ids": []
+      },
+      "oracle": {
+        "expected_source_verdict": "accept",
+        "expected_recovery": null,
+        "expected_plan_valid": true,
+        "expected_safe_alternative": true,
+        "minimum_sufficient_answer_scope": "게시물 ID의 집합 중복 제거와 worker 예약·소비의 중복 여부가 같은 증거인지 판단해야 하며 제공 파일 밖의 실행 결과는 미확인으로 남겨야 한다.",
+        "rationale": "문제의 원인 후보를 현재 증거로 배제할 수 있는지 한 판단을 요구한다. 실제 중복 원인이나 worker 보장을 미리 확정하지 않는다.",
+        "source_lines": [
+          "188-194"
+        ]
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "제공 코드는 게시물 ID를 Redis set에 추가하는 흐름과 계정 ID로 이메일 작업을 지연 예약하는 흐름을 보여 준다. 질문은 그 관찰만으로 예약 작업 측 원인을 배제할 수 있는지 묻고 있어 확인 범위에 맞으며, 단일 판단과 이유를 요구한다.",
+            "point_coverage": [
+              {
+                "key": "email_subscription_batching_flow",
+                "status": "asked",
+                "question_excerpt": "그 관찰만으로 예약 작업 쪽의 원인을 배제할 수 있는지 이유와 함께 판단해 주시겠어요?"
+              }
+            ]
+          },
+          "model_verdict": "accept",
+          "model_recovery": null,
+          "oracle_verdict_match": true,
+          "oracle_recovery_match": true,
+          "oracle_plan_match": true,
+          "request_equals_frozen_payload_no_labels": true,
+          "instructions_equal_frozen_arm_policy": true,
+          "raw_wire_attempt_equal": true,
+          "codex_source_grade": {
+            "conclusion": "가정한 문제의 단일 판단을 적절히 승인",
+            "source_question_verdict": "accept",
+            "reason_factual_fidelity": true,
+            "criterion_reason_alignment": true,
+            "invented_unasked_requirement": false,
+            "false_premise_or_personal_attribution": false,
+            "original_point_coverage_valid": true,
+            "safe_alternative_fidelity": true,
+            "other_flags_fidelity": true,
+            "full_source_quality_success": true,
+            "reason_evaluation": "같은 관찰로 예약 작업 원인을 배제할 수 있는가라는 단일 판단과 이유를 적절히 인정했다. Redis ID 수집과 계정별 예약의 제공 원문을 정확히 언급하고 실제 중복 원인이나 worker 유일성을 단정하지 않았다.",
+            "point_evaluation": "실제로 요청한 선택/확인과 필요한 이유를 묻는 연속 구절을 asked로 인용했다. 표기된 필수점 하나의 실제 요구를 보존하고 전체 진단·대안·검증 과제를 숨은 조건으로 추가하지 않았다.",
+            "other_flags_evaluation": "명시된 가정은 실제 운영 사실이나 개인 기여로 바뀌지 않았다. 제공 코드와 허용된 main 배정·질문 계약이 일치하며, 별도의 false premise나 반복·다중 과제를 만들어 거절하지 않았다."
+          }
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "질문은 중복 ID가 없는 Redis set만으로 예약 작업 원인을 배제할 수 있는지 판단하게 한다. 코드에는 작업 예약 호출이 보이지만 작업의 유일성이나 실제 실행 결과는 확인되지 않는다.",
+            "point_coverage": [
+              {
+                "key": "email_subscription_batching_flow",
+                "status": "asked",
+                "question_excerpt": "같은 계정의 이메일 알림이 중복 발송됐고 Redis set에는 게시물 ID가 한 번씩만 있는 상황을 가정하면, 그 관찰만으로 예약 작업 쪽의 원인을 배제할 수 있는지 이유와 함께 판단해 주시겠어요?"
+              }
+            ]
+          },
+          "model_verdict": "accept",
+          "model_recovery": null,
+          "oracle_verdict_match": true,
+          "oracle_recovery_match": true,
+          "oracle_plan_match": true,
+          "request_equals_frozen_payload_no_labels": true,
+          "instructions_equal_frozen_arm_policy": true,
+          "raw_wire_attempt_equal": true,
+          "codex_source_grade": {
+            "conclusion": "가정한 문제의 단일 판단을 적절히 승인",
+            "source_question_verdict": "accept",
+            "reason_factual_fidelity": true,
+            "criterion_reason_alignment": true,
+            "invented_unasked_requirement": false,
+            "false_premise_or_personal_attribution": false,
+            "original_point_coverage_valid": true,
+            "safe_alternative_fidelity": true,
+            "other_flags_fidelity": true,
+            "full_source_quality_success": true,
+            "reason_evaluation": "가정된 Redis set의 유일 ID 관찰만으로 예약 작업 원인을 배제할 수 있는지를 묻는 단일 원인 배제 판단으로 인정했다. 예약 호출은 보이지만 작업 유일성·실제 실행은 확인되지 않는다는 한계가 원문 범위와 맞는다. unique worker 주석만으로 실행 보장을 확정하지 않았다.",
+            "point_evaluation": "실제로 요청한 선택/확인과 필요한 이유를 묻는 연속 구절을 asked로 인용했다. 표기된 필수점 하나의 실제 요구를 보존하고 전체 진단·대안·검증 과제를 숨은 조건으로 추가하지 않았다.",
+            "other_flags_evaluation": "명시된 가정은 실제 운영 사실이나 개인 기여로 바뀌지 않았다. 제공 코드와 허용된 main 배정·질문 계약이 일치하며, 별도의 false premise나 반복·다중 과제를 만들어 거절하지 않았다."
+          }
+        }
+      ]
     }
   ]
 }
