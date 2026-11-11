@@ -540,5 +540,33 @@
       },
       "synthetic_partial_analysis": false
     }
-  ]
+  ],
+  "summary_from_original_source": {
+    "physical_actual_model_calls": 8,
+    "scope_review_calls": 4,
+    "scope_source_accept": 4,
+    "scope_review_agreement": 4,
+    "generated_candidates": 2,
+    "generation_by_policy": {
+      "A": {
+        "source_verdict": "reject",
+        "review_verdict": "accept",
+        "matches_source": false,
+        "text_length": 87
+      },
+      "B": {
+        "source_verdict": "accept",
+        "review_verdict": "accept",
+        "matches_source": true,
+        "text_length": 196
+      }
+    },
+    "all_question_review_excerpts_exact": true,
+    "wire_request_and_output_bindings_verified": 8,
+    "synthetic_partial_analyses_counted_as_actual_t3": 0,
+    "actual_t3_or_database_or_tool_provider_calls": 0,
+    "primary_24_review_calls_graded_here": 0,
+    "general_policy_superiority_established": false,
+    "naturalness_or_speed_improvement_established": false
+  }
 }

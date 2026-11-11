@@ -2,5 +2,6 @@
   "schema": "director-public-answer-scope.v1",
   "mode": "actual_luna",
   "physical_calls": 5,
-  "claim_scope_comparison_calls": 4
+  "claim_scope_comparison_calls": 4,
+  "targeted_contribution_refinement_calls": 1
 }

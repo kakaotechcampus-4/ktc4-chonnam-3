@@ -14,5 +14,57 @@
     "full_blob_sha1": "fce7b6d4c14c836d47f59f6d150fd206c291ed39"
   },
   "context_publicly_included": false,
-  "reference_selection_note": "n01 anchors historical K Q8 wording, but references were aligned across candidates; not original whole Question byte replay."
+  "reference_selection_note": "n01 anchors historical K Q8 wording, but references were aligned across candidates; not original whole Question byte replay.",
+  "same_provider_body_except_instructions_private_audit": [
+    {
+      "case_id": "ps-fit-n01",
+      "provider_body_identical_except_instructions": true
+    },
+    {
+      "case_id": "ps-fit-n02",
+      "provider_body_identical_except_instructions": true
+    },
+    {
+      "case_id": "ps-fit-n03",
+      "provider_body_identical_except_instructions": true
+    },
+    {
+      "case_id": "ps-fit-n04",
+      "provider_body_identical_except_instructions": true
+    },
+    {
+      "case_id": "ps-fit-n05",
+      "provider_body_identical_except_instructions": true
+    },
+    {
+      "case_id": "ps-fit-n06",
+      "provider_body_identical_except_instructions": true
+    },
+    {
+      "case_id": "ps-fit-p01",
+      "provider_body_identical_except_instructions": true
+    },
+    {
+      "case_id": "ps-fit-p02",
+      "provider_body_identical_except_instructions": true
+    },
+    {
+      "case_id": "ps-fit-p03",
+      "provider_body_identical_except_instructions": true
+    },
+    {
+      "case_id": "ps-fit-p04",
+      "provider_body_identical_except_instructions": true
+    },
+    {
+      "case_id": "ps-fit-p05",
+      "provider_body_identical_except_instructions": true
+    },
+    {
+      "case_id": "ps-fit-p06",
+      "provider_body_identical_except_instructions": true
+    }
+  ],
+  "frozen_criteria_original_sha256": "2bd711b5d79fcf6346e26b0f18fbae655e991bd7bdb19b0e6b49eabdfd0b7f1c",
+  "cases": []
 }

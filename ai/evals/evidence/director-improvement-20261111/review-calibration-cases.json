@@ -1499,5 +1499,6 @@
       "safe_alternative_protected": 8,
       "full_quality_success": 8
     }
-  }
+  },
+  "scope": "16 Review responses over eight preserved exposed candidates; no new question generation, holdout or full-service claim"
 }

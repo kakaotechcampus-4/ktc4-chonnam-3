@@ -1702,5 +1702,11 @@
         "naturalness_note": "하나의 결과를 묻지만 visibility를 반복하고 silenced/private 코드 용어가 이어진다. 실제 청취 검증은 아니며 기술 용어를 한 번 소개하고 쉬운 표현을 쓰는 후속 비교 여지는 있다."
       }
     }
-  ]
+  ],
+  "code_semantic_limit": "The historical question8 was accepted under its then criterion; later semantic-fit experiment did not rewrite this run or its answer sufficiency.",
+  "full_source_exposure_note": "실제 모델 body의 네 Evidence는 full309 코드와 동일하다. 준비 파일의 전체 공고 reference 보존과 실제 모델 노출은 구분하며, 실제 JD 근거는 전달된 canonical3 요구사항이다.",
+  "publication_integration": {
+    "status": "not_run_at_export",
+    "additional_actual_model_calls": 0
+  }
 }

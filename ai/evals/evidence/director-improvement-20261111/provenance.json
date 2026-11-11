@@ -208,6 +208,190 @@
       "source_id": "L:review-study/probe-api0-v2/completion.json",
       "sha256": "70b9cb4b1cb98587ba01755b00155c0f707d1c7eab59f93007e40daa0251a0c8",
       "original_publicly_included": false
+    },
+    {
+      "source_id": "L:scope-controls/validation.json",
+      "sha256": "10f901a742fabae318d2566fac9a7a99e89bf6788ede25adf61641a20d28d993",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/cases.json",
+      "sha256": "e1d9b4ce1e850915ea6934098d4555198194d8976bccd60ca91490531428bf62",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/criteria.json",
+      "sha256": "2bd711b5d79fcf6346e26b0f18fbae655e991bd7bdb19b0e6b49eabdfd0b7f1c",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-n01.json",
+      "sha256": "89bc72615b79dd8a116d194818fcb03633f7f0ab0930512e5cdd4224cc796e9a",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-n02.json",
+      "sha256": "ae902c1a990b4bd0e842ef7d41046c944c1ade1c4509ad3ad68cb45cbdddd16f",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-n03.json",
+      "sha256": "75ead9bd984b02fec0a6b689665dcf1d98f1ae1e482b898c570de37e3d85f925",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-n04.json",
+      "sha256": "ab943726748515025e2dee77fbdcc12c6cca9afca4c16a1d156458fcd5a5c3c0",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-n05.json",
+      "sha256": "74042c516244d09e2538eaa459a8404b241faa89f59d0d47983ecd62169b0bcf",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-n06.json",
+      "sha256": "284a78847b30267f819a2452145b454af158060be879375368fa991d69dfdeb0",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-p01.json",
+      "sha256": "e0a2deb1248b82581b4b7fcb8402b69a93eb399efb50185d7afe86c5ed6ae1aa",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-p02.json",
+      "sha256": "6f85077975a612075b5244c8f7dee3fa2a2cbd1979c6987b7f6605dc7d20a2ab",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-p03.json",
+      "sha256": "362af590089a368c412edd2eb7e9487fdc367c2edd8e2e5a289d4b4bdaa3d350",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-p04.json",
+      "sha256": "55be52f117fe95139587242626734c44b564f7aedbac7126373faed7a6e35d52",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-p05.json",
+      "sha256": "6d8a14a48ed0148a0985c2b6317116307d69f7d06442a55b8e77f297afc5331b",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-p06.json",
+      "sha256": "32bbeff8094e2c579a5d9058bdf810c1df437241dd24673cec4a85dfb8fdee80",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-n01.json",
+      "sha256": "0e95862b043d0cf064f261ef9bf7b38fd4b7c6c32f66b8cf735dc751f400e435",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-n02.json",
+      "sha256": "100d954f75452ca8392d0c055d8ee6acbf26cc9faef7c9c72975170ec63d2aad",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-n03.json",
+      "sha256": "ec02a93a501efb15eb344640bb33ec055e4d7730c802822e7f308c17a4cbb1e7",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-n04.json",
+      "sha256": "d997527d2f576660c57aba84446c0a46a32891401e81bcc67c6d899f7ec5fb8f",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-n05.json",
+      "sha256": "37089c58c8d09fcf147c922611e4790ebea3360ff0f522427d0f72377ddc2658",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-n06.json",
+      "sha256": "7ff6e80fc2d3e3edefe303e58a8ec10bf98375d3ab028cb49a86cf558a532508",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-p01.json",
+      "sha256": "0848cc25e590df9ea61811e3866b19d25a853fe1109787b617d3df2967322e17",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-p02.json",
+      "sha256": "9500bdef5bedd041a3ce029a3adf7435ee748f1e25543bd6a5b5fcf02ba257da",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-p03.json",
+      "sha256": "e8d60f26a1cd9cdc27132f72da6ad0c9fa6020243e8627662412d6d21663a91c",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-p04.json",
+      "sha256": "56f472475f3766ddc0aa81e79d141edd255f1a66c1b28556ead9db00f2a73c6a",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-p05.json",
+      "sha256": "c29056e663395e4b35e03596f70b46ac8dd67fd716824ef592c8eaba29ab0ca0",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-p06.json",
+      "sha256": "9bfb370d280a30cb818d0c3d9b403ebd291bd0a3b6165a383e3aa8954f51a99f",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:source-review/live-review-grade.json",
+      "sha256": "1075556f562f984b46480b7fb4f45a7612aed2b0cd4fb33cc4f717665d4755fa",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "history:call-accounting",
+      "sha256": "3781c4cacb5eaf6020cc6d70bc6536af97faa29a3b30f1722e9e301d0daf14f4",
+      "original_publicly_included": false
     }
+  ],
+  "original_hash_meaning": "Marks private retained source identity; does not let a reader recompute absent originals or reproduce model calls, DB state, full prompts or wire-body identity.",
+  "public_code": {
+    "repository": "mastodon/mastodon",
+    "commit": "cc76f85b9afc02b1265e68e6ee6c24ab266771b4",
+    "path": "app/services/post_status_service.rb",
+    "raw_url": "https://raw.githubusercontent.com/mastodon/mastodon/cc76f85b9afc02b1265e68e6ee6c24ab266771b4/app/services/post_status_service.rb",
+    "line_count": 309,
+    "byte_count": 10888,
+    "source_sha256": "3f61d6c6d5fb174b0cc1d61f9dedf89ea645cfbd8b394e551bb82d8db0b9387e",
+    "full_blob_sha1": "fce7b6d4c14c836d47f59f6d150fd206c291ed39"
+  },
+  "public_file_hashes": {
+    "answer-scope-cases.json": "a8b3d6205fa0beaee5c6e04994ad7f21f012367fcab5bc452d84f73fc41314d9",
+    "criteria.json": "bb5ab0934765244991cff8e34104aac79f46b7a6d11fd1a9a0404653f789fbfd",
+    "README.md": "8810d69ba2b24fa448d81eb10a3fe6d8b5bda91353c98adeaa5c8e6ead65a0ca",
+    "review-calibration-cases.json": "a7fa180e97c49526de94086b2d86aaf394e9d409092c4e26ab76c505feb1c4b1",
+    "semantic-fit-cases.json": "ee4a4fcc2d2ab8ace5bcb08fed4b6b08fd224ab3f1ae37b4f9476a812d289f85",
+    "semantic-fit-generation.json": "1cdaee665c4765d399a5bb3f47c92fac81c9e5d649afc6f3ad50d8eb0272b853",
+    "service-flow-summary.json": "f7beb643d68ec4ecafa5c0a32704a8cc3099956e06da367c2bb254694da9d2a5",
+    "summary.json": "8cfe277e928e66b1fab8db61a367a51b9acf3f720e884562d659a13473cac1b5",
+    "verify.py": "19e66ed588bcda7fd20a1bbc258507fe20d2a4c31f9b1297cbd28579bd612f97"
+  },
+  "self_hash_note": "This manifest is anchored by the Git commit; no recursive self SHA is claimed. Other bundle files including verify.py are listed below.",
+  "recomputed_by_public_verifier": [
+    "published file hashes",
+    "selected cohort sums",
+    "fixed-case verdict/recovery matches",
+    "contiguous question/answer quotes",
+    "actual/Mock partition",
+    "K nine-turn selected counts and timing sums"
+  ],
+  "not_recomputed": [
+    "private original call_id ledger deduplication",
+    "absent original payload byte identity",
+    "semantic truth or expert validity",
+    "new provider responses",
+    "whole-service browser/voice/report E2E",
+    "actual billing"
   ]
 }
