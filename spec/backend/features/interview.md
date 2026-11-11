@@ -21,7 +21,7 @@
 
 `/interviews/{id}/retry`
 
-- 원본이 `completed`이거나, 시작 후 중단된 `abandoned`(`started_at` 있음)일 때만 허용한다. 준비 단계에서 버린 면접은 질문이 없어 허용하지 않는다. 그 외는 `409 original_not_completed`(#121 1-2, [공통 0009](../../shared/decisions/0009-interview-abandon-transition.md)).
+- 원본이 `completed`이거나, 시작 후 중단된 `abandoned`(`started_at` 있음 — 시작 클릭 뒤 기록, [공통 0015](../../shared/decisions/0015-interview-timer-starts-on-click.md))일 때만 허용한다. 준비 단계에서 버렸거나 시작하지 않고 나간 면접은 `started_at`이 없어 허용하지 않는다. 그 외는 `409 original_not_completed`(#121 1-2, [공통 0009](../../shared/decisions/0009-interview-abandon-transition.md)).
 - 원본의 run, 공고, repo 조합을 복사한다.
 - 원본 repo가 삭제/접근불가/private 전환이면 `repository_unavailable`.
 
@@ -55,6 +55,16 @@ Prepare step:
   - `preparing_failed`가 아니거나 `lastError.recoverable`이 `false`인 실패: `409 prep_failed`
   - 실패 뒤 같은 run에 다른 활성 면접이 생김(run당 활성 1개 위반): `409 session_limit_exceeded`. 다시 눌러도 결과가 같아 `prep_failed`와 구분하며, FE는 진행 중인 면접이 있다는 안내를 보여 준다.
 - 공고에 직무명이 없으면 `GET /interviews/{id}`의 `position`은 빈 문자열 `""`이다. FE는 빈 값(공백만 있는 경우 포함)을 "직무 정보 없음"으로 표시한다(#121 1-5).
+
+## 시작
+
+`POST /interviews/{id}/start` ([공통 0015](../../shared/decisions/0015-interview-timer-starts-on-click.md)). 면접 제한 시간은 이 호출부터 센다.
+
+- 준비 완료는 `status`만 `in_progress`로 바꾸고 `started_at`을 기록하지 않는다. start가 `started_at`을 기록한다.
+- `204`. 멱등이라 다시 호출해도 처음 시각을 유지한다. 세션 행을 `FOR UPDATE`로 잡아 동시 호출은 한쪽만 기록한다.
+- `in_progress`가 아니면(`preparing`, `preparing_failed`, `completed`, `abandoned`) `409 not_ready`, 없거나 남의 면접이면 `404`, 미로그인이면 `401`. 새 reason은 없다.
+- 시작 전(`started_at` null)의 `remainingSeconds`는 전체 시간이고 만료 전환은 일어나지 않는다.
+- 시작 신호 없이 첫 답변이 오면 `save_answer`가 `started_at`을 첫 질문 저장 시각(`asked_at` 최솟값)으로 채운다. 시간 제한이 없어지는 것을 막는 안전장치이며 정상 경로가 아니다.
 
 ## WebSocket
 

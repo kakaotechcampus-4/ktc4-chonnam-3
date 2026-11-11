@@ -183,6 +183,17 @@ async def save_answer(
     )
     if saved is None:  # 쓴 게 없어 rollback 하지 않는다 (save_question 참고)
         return await _answer_rejection(db, interview_id, turn_no)
+    if current.started_at is None:
+        # 시작 신호(start_interview) 없이 답이 오면 첫 질문 저장 시각부터 센다 (#259).
+        # 타이머가 영영 돌지 않아 시간 제한이 없어지는 것을 막는다.
+        current.started_at = (
+            await db.scalar(
+                select(func.min(InterviewTurn.asked_at)).where(
+                    InterviewTurn.interview_session_id == interview_id
+                )
+            )
+            or now
+        )
     await record_event(
         db, "turn_answered", interview_session_id=interview_id, payload={"turnNo": turn_no}
     )

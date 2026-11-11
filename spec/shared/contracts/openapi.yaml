@@ -85,8 +85,9 @@ paths:
       summary: My interview history
       description: >-
         Lists completed interviews and abandoned interviews that had started
-        (startedAt is not null). Interviews abandoned before the first question are
-        not listed. startedAt is set when the first question is saved. Rows are ordered
+        (startedAt is not null). Interviews abandoned before the interview was started
+        are not listed. startedAt is set when the interview is started
+        (POST /interviews/{id}/start). Rows are ordered
         by coalesce(completedAt, startedAt) descending, then id descending. total counts
         the listed rows; averageScore averages the report scores of completed
         interviews in which every turn was answered (interviews the time limit ended
@@ -463,6 +464,39 @@ paths:
                 $ref: '#/components/schemas/ApiError'
         '410':
           description: session_expired when the session no longer exists.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /interviews/{id}/start:
+    post:
+      operationId: startInterview
+      summary: Start the interview time limit when the start button is clicked
+      description: >-
+        Records startedAt, so the time limit counts from this call and not from the
+        moment preparation completed. Idempotent: calling it again keeps the first
+        startedAt. Allowed only for an in_progress interview. Before this call
+        remainingSeconds is the full time limit. If an answer arrives before any start
+        call, the server sets startedAt to the time the first question was saved. The
+        progress screen also calls it when it opens an in_progress interview, so
+        entering without the button (reload, reconnect) starts the time too.
+      parameters:
+        - $ref: '#/components/parameters/InterviewId'
+      responses:
+        '204':
+          description: Interview is started, or was already started
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          description: not_found when the interview does not exist or belongs to another user.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: >-
+            not_ready when the interview is not in_progress (preparing,
+            preparing_failed, completed or abandoned).
           content:
             application/json:
               schema:
@@ -1350,7 +1384,8 @@ components:
           description: >-
             Time limit minus elapsed time, where the time spent waiting for the
             next question (from the answer being saved to the next question being
-            saved) is not counted. Question audio playback is counted. See
+            saved) is not counted. Question audio playback is counted. Before
+            POST /interviews/{id}/start the full time limit is returned. See
             spec/shared/decisions/0013-interview-time-limit-and-early-end-report.md.
         turns:
           type: array
