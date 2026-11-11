@@ -15,6 +15,7 @@ JSON은 UTF-8이며 각 파일의 `schema`로 형식을 구분한다. A/B는 각
 | `answer-scope-cases.json` | 합성 답변2개의 사실/제안 구간4호출과 별도 기여 범위 보완1호출 |
 | `review-calibration-cases.json` | J의 부적합4·정상4 후보에 대한 실제 Review16개 |
 | `service-flow-summary.json` | K의 실제 BE 함수·격리 PostgreSQL·Luna9턴 요약, 합성 문답, 원분석·재실행·시간 |
+| `publication-validation.json` (추가 시) | 이전110/catalog12의 실제27회·9턴과 최신561/catalog11의 API0·핵심 동일성 검증을 분리. 역사적1,254회에 중복 합산하지 않음 |
 | `provenance.json` | 원본의 식별 해시·공개 파일 해시·선택/ID 변환 범위 |
 | `verify.py` | 공개한 값의 해시·분모·판정 분류·인용·합계 재검산. 표준 라이브러리만 사용 |
 
@@ -30,7 +31,7 @@ UUID는 묶음 안에서만 연결되는 `public-ref-NNN`으로 바꾸고 개인
 python ai/evals/evidence/director-improvement-20261111/verify.py
 ```
 
-검사기는 공개 파일9개의 SHA256, cohort 호출/토큰 합계, L12쌍의6/12→12/12와 잘못된 승인6→0, 정상6개 보존, J8쌍의4/8→8/8, 범위2쌍, 직접 질문의 연속 인용, 합성 답변 내 주장 구간, 실제/Mock 분모, K9턴과27물리 호출·시간 합계를 다시 계산한다. `provenance.json` 자체는 Git commit에 고정하며 자기 참조 해시를 주장하지 않는다.
+검사기는 manifest에 등록한 공개 파일의 SHA256, cohort 호출/토큰 합계, L12쌍의6/12→12/12와 잘못된 승인6→0, 정상6개 보존, J8쌍의4/8→8/8, 범위2쌍, 직접 질문의 연속 인용, 합성 답변 내 주장 구간, 실제/Mock 분모, K9턴과27물리 호출·시간 합계를 다시 계산한다. `provenance.json` 자체는 Git commit에 고정하며 자기 참조 해시를 주장하지 않는다.
 
 ## 검산의 한계
 
@@ -41,3 +42,9 @@ python ai/evals/evidence/director-improvement-20261111/verify.py
 - 실제 호출1,254회는 성공한 질문 수·독립 사례 수·전체 계정 사용량이 아니다. Mock·Codex 개발 사용량을 더하지 않으며, cached/reasoning counter도 토큰 총량에 다시 합산하지 않는다. 공급자 실제 청구액은 미확인이다.
 - 지연은 당시 공급자·캐시·입력에서 관측한 값이다. 정책만의 인과 효과나 전체 서비스 속도 개선을 확정하지 않는다. 생성 B의196자 장문 한계도 보존한다.
 - `publication_integration`은 추출 시점에 아직 실행하지 않은 새 통합 검증을 별도로 표시한다. 이후 새 실행은 이 과거 A~L 수치를 덮어쓰지 않고 별도 기록해야 한다.
+
+추가 `publication-validation.json`이 있으면 이전110/catalog12 실제27회의9턴 연결·사용량·직접 인용·Codex 원문 대조를 검산하고, 최신561/catalog11은 별도의 API0 Mock30·실제0과 핵심 코드/지침 동일성으로 확인한다. 실제 스냅샷과 최신 전체 코드의14개 변경/삭제를0으로 처리하지 않는다. 이전 global60과 최신 global50의 차이도 기록하며, Director/T3의 실제 적용120초는 양쪽 같다. 기존 `summary.json`의 `publication_integration`은 당시 추출 시점의 미실행 상태이며 새 파일이 이후 별도 실행의 근거다. 과거 테스트 회차·실패와 새 통과를 합산하지 않는다. XML 해시와 통과 수만으로 모든 테스트가 현재 코드 revision에 결합됐다고 증명하지 않는다.
+
+공개 파생 파일은 UTF-8과 LF로 저장하고 상위 `.gitattributes`의 `text eol=lf` 규칙으로 Git 저장소와 checkout의 바이트를 일치시킨다. `provenance.json`은 그 원문 바이트의 SHA256을 기록한다. 검산기는 줄바꿈을 정규화하지 않으며, CRLF로 바뀐 파일도 원문 불일치로 거절한다. 비공개 원본의 해시와 과거 집계는 이 게시 형식 정리에 포함하지 않는다.
+
+추가 검증 JSON의 `backend_execution_binding`은 v5 전체3302개 검증의 XML과 메타데이터, 고정 source1417개 원문 SHA, 재구성한 Git tree를 로컬에서 대조한 결과다. 전체 manifest는 공개하지 않으므로 이 발췌만으로1417개 원문 전체를 독립 재현할 수 없다. 선택한 실행 파일은 Windows 작업 사본과 실제 Linux에서 실행한 Git LF 사본의 SHA를 각각 보존하며, exporter가 CRLF→LF 외 차이가 없음을 검사했다. checkout 검산은 이 두 실측 원문 SHA를 비교하며 파일을 정규화하지 않는다. 최신14개 차이에는 음성 원복과 opaque 버전 등록 호환 보완이 함께 포함된다. `prior_actual_rollout_timer_catalog12`의13개는 이전110/catalog12 검증이며 최신11개 smoke·등록49개·게시 core31개·최종 전체3302개와 별도 회차다. 겹치는 테스트 수를 합산하지 않는다.

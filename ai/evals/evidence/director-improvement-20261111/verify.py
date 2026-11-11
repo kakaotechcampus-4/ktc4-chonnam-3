@@ -295,6 +295,21 @@ def check_service_flow() -> None:
     )
 
 
+def check_publication_validation() -> None:
+    path = HERE / "publication-validation.json"
+    if not path.exists():
+        return
+    value = load("publication-validation.json")
+    _check_publication_runtime(value)
+    _check_publication_calls(value)
+    _check_publication_turns(value)
+    _check_publication_reviews(value)
+    _check_publication_session(value)
+    _check_publication_compatibility(value)
+    _check_publication_test_reports(value)
+    _check_publication_backend_execution(value)
+
+
 def main() -> None:
     check_files()
     check_summary()
@@ -303,6 +318,7 @@ def main() -> None:
     check_review_calibration()
     check_answer_scope()
     check_service_flow()
+    check_publication_validation()
     sys.stdout.write(
         json.dumps(
             {

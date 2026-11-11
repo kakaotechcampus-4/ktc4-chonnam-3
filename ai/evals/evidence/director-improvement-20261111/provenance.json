@@ -367,15 +367,16 @@
     "full_blob_sha1": "fce7b6d4c14c836d47f59f6d150fd206c291ed39"
   },
   "public_file_hashes": {
-    "answer-scope-cases.json": "a8b3d6205fa0beaee5c6e04994ad7f21f012367fcab5bc452d84f73fc41314d9",
-    "criteria.json": "bb5ab0934765244991cff8e34104aac79f46b7a6d11fd1a9a0404653f789fbfd",
-    "README.md": "8810d69ba2b24fa448d81eb10a3fe6d8b5bda91353c98adeaa5c8e6ead65a0ca",
-    "review-calibration-cases.json": "a7fa180e97c49526de94086b2d86aaf394e9d409092c4e26ab76c505feb1c4b1",
-    "semantic-fit-cases.json": "ee4a4fcc2d2ab8ace5bcb08fed4b6b08fd224ab3f1ae37b4f9476a812d289f85",
-    "semantic-fit-generation.json": "1cdaee665c4765d399a5bb3f47c92fac81c9e5d649afc6f3ad50d8eb0272b853",
-    "service-flow-summary.json": "f7beb643d68ec4ecafa5c0a32704a8cc3099956e06da367c2bb254694da9d2a5",
-    "summary.json": "8cfe277e928e66b1fab8db61a367a51b9acf3f720e884562d659a13473cac1b5",
-    "verify.py": "19e66ed588bcda7fd20a1bbc258507fe20d2a4c31f9b1297cbd28579bd612f97"
+    "README.md": "355023d50ec0fa1448bd6c998b0d5947e29f2fe7e4ed0aad7785980065e45c84",
+    "answer-scope-cases.json": "59d1f96f44aabf449dd862bfbe6d8b36cff6cc6a9f64bb5e22e17330c35e762b",
+    "criteria.json": "944f7d76d2d34c615446c9ef54fc64988ca9a01d76553ae7bf1122bc27d41673",
+    "publication-validation.json": "ac5b23c73c0d4210fd98bffebc51f4fce1c816fff9e8567bac11a613de164270",
+    "review-calibration-cases.json": "f1a3b772893ad673dfee0cb3d0d6f92eb73809fb276d2e0bd99786bdf0259cd4",
+    "semantic-fit-cases.json": "632d4e3e39663b35879e5272683b11a0a6f825559547821b165e6f60e8bc75f9",
+    "semantic-fit-generation.json": "0f0f4280b2bc201dec7b2d2b317fb7f103c7b859bbe74c661b2110b8791ab0db",
+    "service-flow-summary.json": "028d6c2e0a675368a2156e03badff004e7b9bac00a90fd575af5d17a882a9695",
+    "summary.json": "469b461ff24fcc5be7781d839a4fcd8201340d2e17e3cc2ff8f9523366295d33",
+    "verify.py": "bb8947b58389d0f6659057eecc38189f21464c387721d1ec2a7436758a69fedd"
   },
   "self_hash_note": "This manifest is anchored by the Git commit; no recursive self SHA is claimed. Other bundle files including verify.py are listed below.",
   "recomputed_by_public_verifier": [
