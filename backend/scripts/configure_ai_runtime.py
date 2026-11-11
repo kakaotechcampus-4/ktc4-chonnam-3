@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from dataclasses import asdict
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,7 @@ from devon_ai import contracts as c
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import Settings
+from app.llm_tasks.question_pronunciation import QUESTION_PRONUNCIATION_TASK
 from app.llm_tasks.runtime_capabilities import validate_runtime_prompts
 from scripts.seed_prompt_versions import register_prompt_versions
 
@@ -26,6 +28,7 @@ def build_manifest(
     *,
     deployment: str | None = None,
     task_timeouts: dict[str, float] | None = None,
+    pronunciation_model: str | None = None,
 ) -> dict[str, Any]:
     """배포 설정을 구체 모델·본문 경로로 해석한다. API나 DB를 호출하지 않는다."""
     if deployment is not None:
@@ -36,15 +39,21 @@ def build_manifest(
     recipe = json.loads((PROMPT_ROOT / "runtime-prompts.json").read_text(encoding="utf-8"))
     prompts = []
     for task, entry in recipe.items():
+        task_model, task_deployment = model, deployment
+        if task == QUESTION_PRONUNCIATION_TASK:
+            task_model = pronunciation_model or model
+            # 발음 모델 변경은 이 작업의 불변 프롬프트 버전에만 영향을 준다.
+            model_identity = sha256(task_model.encode()).hexdigest()[:16]
+            task_deployment = f"{deployment}-{model_identity}" if deployment else model_identity
         template = PROMPT_ROOT / entry["template"]
         body = template.read_text(encoding="utf-8")
-        version = entry["version"] + ("@" + deployment if deployment else "")
-        c.PromptSpec(task, version, model, body)
+        version = entry["version"] + ("@" + task_deployment if task_deployment else "")
+        c.PromptSpec(task, version, task_model, body)
         prompts.append(
             dict(
                 task_name=task,
                 version=version,
-                model=model,
+                model=task_model,
                 template_path=os.path.relpath(template, output.parent).replace("\\", "/"),
             )
         )
@@ -92,6 +101,7 @@ def main(argv: list[str] | None = None) -> int:
             output,
             deployment=args.deployment,
             task_timeouts=llm.llm_task_timeouts,
+            pronunciation_model=settings.tts_pronunciation_model,
         )
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(
