@@ -27,7 +27,9 @@ def load(name: str) -> dict[str, Any]:
 
 
 def review_outcome(raw: dict[str, Any]) -> tuple[str, str | None]:
-    require(all(type(raw[key]) is bool for key in (*FLAGS, "safe_alternative")), "flag type")
+    require(
+        all(type(raw[key]) is bool for key in (*FLAGS, "safe_alternative")), "flag type"
+    )
     unasked = any(point["status"] != "asked" for point in raw["point_coverage"])
     if all(raw[key] for key in FLAGS) and not unasked:
         return "accept", None
@@ -56,7 +58,8 @@ def check_quotes(question: dict[str, Any], raw: dict[str, Any]) -> None:
 def check_files() -> None:
     provenance = load("provenance.json")
     hashes = provenance["public_file_hashes"]
-    require(len(hashes) == 9, "nine files plus provenance expected")
+    expected_count = 9 + int((HERE / "publication-validation.json").exists())
+    require(len(hashes) == expected_count, "published files plus provenance expected")
     require(
         set(hashes) | {"provenance.json"}
         == {path.name for path in HERE.iterdir() if path.is_file()},
@@ -74,7 +77,9 @@ def check_files() -> None:
             "private absolute path",
         )
         require(
-            not re.search(r"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b", text, re.I),
+            not re.search(
+                r"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b", text, re.IGNORECASE
+            ),
             "unmapped UUID",
         )
 
@@ -82,7 +87,10 @@ def check_files() -> None:
 def check_summary() -> None:
     summary = load("summary.json")
     total, cohorts = summary["total"], summary["cohorts"]
-    require(len(cohorts) == 13 and len({row["cohort"] for row in cohorts}) == 13, "cohort IDs")
+    require(
+        len(cohorts) == 13 and len({row["cohort"] for row in cohorts}) == 13,
+        "cohort IDs",
+    )
     for field, expected in [
         ("physical_calls", 1254),
         ("input_tokens", 11227216),
@@ -96,8 +104,14 @@ def check_summary() -> None:
     )
     require(total["actual_billed_cost"] is None, "billing remains unverified")
     for cohort in cohorts:
-        require(cohort["models"] == {"gpt-6-luna": cohort["physical_calls"]}, "Luna-only cohort")
-        require(sum(cohort["operations"].values()) == cohort["physical_calls"], "operation count")
+        require(
+            cohort["models"] == {"gpt-6-luna": cohort["physical_calls"]},
+            "Luna-only cohort",
+        )
+        require(
+            sum(cohort["operations"].values()) == cohort["physical_calls"],
+            "operation count",
+        )
     partition = summary["l_call_partition"]
     require(
         partition["actual_review"]
@@ -111,7 +125,8 @@ def check_summary() -> None:
     require(api0["counted_in_actual_total"] is False, "Mock separated")
     for name, count in [("l_final_primary", 24), ("l_final_additional", 8)]:
         require(
-            api0[name]["physical_model_calls"] == 0 and api0[name]["mock_responses"] == count,
+            api0[name]["physical_model_calls"] == 0
+            and api0[name]["mock_responses"] == count,
             "API0 counts",
         )
         require(api0[name]["proof_passed"] is True, "API0 final proof")
@@ -123,7 +138,8 @@ def check_summary() -> None:
         "first Mock failure retained",
     )
     require(
-        summary["development_and_final"]["latest_policy_final_groups_actually_run"] == 0,
+        summary["development_and_final"]["latest_policy_final_groups_actually_run"]
+        == 0,
         "holdout not run",
     )
 
@@ -131,7 +147,9 @@ def check_summary() -> None:
 def check_semantic_fit() -> None:
     evidence = load("semantic-fit-cases.json")
     cases = evidence["cases"]
-    require(len(cases) == 12 and evidence["physical_model_calls"] == 24, "12 pairs/24 calls")
+    require(
+        len(cases) == 12 and evidence["physical_model_calls"] == 24, "12 pairs/24 calls"
+    )
     require(
         Counter(row["oracle"]["expected_source_verdict"] for row in cases)
         == {"accept": 6, "reject": 6},
@@ -139,21 +157,27 @@ def check_semantic_fit() -> None:
     )
     counts: dict[str, Counter[str]] = {"A": Counter(), "B": Counter()}
     for case in cases:
-        require({row["arm"] for row in case["actual_observations"]} == {"A", "B"}, "A/B pair")
+        require(
+            {row["arm"] for row in case["actual_observations"]} == {"A", "B"},
+            "A/B pair",
+        )
         for row in case["actual_observations"]:
             arm, oracle = row["arm"], case["oracle"]
             check_quotes(case["question"], row["raw_review"])
             verdict, recovery = review_outcome(row["raw_review"])
             match = verdict == oracle["expected_source_verdict"]
             strict = match and recovery == (
-                None if oracle["expected_recovery"] == "none" else oracle["expected_recovery"]
+                None
+                if oracle["expected_recovery"] == "none"
+                else oracle["expected_recovery"]
             )
             require(
                 verdict == row["model_verdict"] and recovery == row["model_recovery"],
                 "actual verdict mapping",
             )
             require(
-                match == row["oracle_verdict_match"] and strict == row["oracle_recovery_match"],
+                match == row["oracle_verdict_match"]
+                and strict == row["oracle_recovery_match"],
                 "stored match",
             )
             counts[arm]["match"] += int(match)
@@ -166,9 +190,13 @@ def check_semantic_fit() -> None:
             )
     require([counts[arm]["match"] for arm in ["A", "B"]] == [6, 12], "6/12 to 12/12")
     require([counts[arm]["strict"] for arm in ["A", "B"]] == [6, 12], "strict recovery")
-    require([counts[arm]["false_accept"] for arm in ["A", "B"]] == [6, 0], "false accept 6 to 0")
     require(
-        [counts[arm]["positive_preserved"] for arm in ["A", "B"]] == [6, 6], "positive preservation"
+        [counts[arm]["false_accept"] for arm in ["A", "B"]] == [6, 0],
+        "false accept 6 to 0",
+    )
+    require(
+        [counts[arm]["positive_preserved"] for arm in ["A", "B"]] == [6, 6],
+        "positive preservation",
     )
 
 

@@ -1099,6 +1099,225 @@
     }
   },
   "code_identity": {
-    "product_files_checked": 277
+    "product_files_checked": 277,
+    "selected_product_files": [
+      {
+        "path": "ai/src/devon_ai/llm_tasks/answer_analysis.py",
+        "sha256": "1b65754d5773e46b191719a53d6a3a240a66650cc828bf01df7c29b63cf54e3b"
+      },
+      {
+        "path": "ai/src/devon_ai/llm_tasks/answer_analysis_wire.py",
+        "sha256": "3b5934b6537ee1e4353ef6606a895bb4b9e71d8f5aa41c8944ba6e43db8c7704"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/agent.py",
+        "sha256": "1a1e785e375e383311b23967069b84905338d83893df372dee72552c82dd6d1e"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/capabilities.py",
+        "sha256": "3bee40d565d38369421a3aefc88f7f219ed2ac96d33e62f5b705fe335e19d3c1"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/model_input.py",
+        "sha256": "73b26b0708b260d4036c5cef2f36148b822774f16c122438e087e596b0d3b388"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/plan_wire.py",
+        "sha256": "8ffd058975787ffbde6efd5c628badc70d10336314162caf9e666b2cb6c96839"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/policy.py",
+        "sha256": "fb7ff353cf9d832079b59eb2882ca9cdc4a044deb624b1ef3ce5b719097bd115"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/review.py",
+        "sha256": "d8dd63260088487edf65a912b01bc801332e0a36c1b6b43be3665de125bea4be"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/runtime.py",
+        "sha256": "e2c9cfd0b5828d1e7de53b1d5159a0f85a4955dc105a09d5bc0bd6ef2964a0bc"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/tools.py",
+        "sha256": "db43c668ccf4b0dc8a3dde81a6b14dacdb991bf9d7ef41fec398039337b65dc6"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/__init__.py",
+        "sha256": "6bf2b297c50227271d3332ab61de99940e9163d12f824b9b4e64c1c89e73cd29"
+      },
+      {
+        "path": "backend/app/integrations/execution_ledger.py",
+        "sha256": "e9851bcdaf4b6c93fa77626b945545a2b40b5fea3aa95e3cd06a0ddae9391225"
+      },
+      {
+        "path": "backend/app/llm_tasks/answer_analysis.py",
+        "sha256": "d6c9d7f1240c628d4e138a9fd644855e32449c419fd53c9791d9ce128020319d"
+      },
+      {
+        "path": "backend/app/features/interview/agent_context.py",
+        "sha256": "0584db1281fe716ceb6486af5fb9a067235ebb18bed3cbab54e9520a640a6998"
+      },
+      {
+        "path": "backend/app/features/interview/agent_queries.py",
+        "sha256": "a910660423e260a72f6ec0f2bd5556edbc10bf11f178910092ed0ac3250bda10"
+      },
+      {
+        "path": "backend/app/features/interview/agent_service.py",
+        "sha256": "93e841a7caec67b7ce0de86093897ce06b70d36716537e38176fa3f636a60e98"
+      },
+      {
+        "path": "backend/app/features/interview/answer_audio.py",
+        "sha256": "22e5979f8b5fa4b88dd566adddb36209248cbdfa95f34bc4498b0bbd35f2a289"
+      },
+      {
+        "path": "backend/app/features/interview/answer_context.py",
+        "sha256": "7fbab2c8801de4e653add02262d2f45e965d3e1980a3ffdc47b15acac7e8f298"
+      },
+      {
+        "path": "backend/app/features/interview/director_service.py",
+        "sha256": "81e270173b3758753ea91944483e3aba8c08f5f68d2520db47e963faa1786fb4"
+      },
+      {
+        "path": "backend/app/features/interview/evaluation_coverage.py",
+        "sha256": "e9174bbc61840987d7006b041f665a93602b6e116ee59f0ff03f0f41f777e683"
+      },
+      {
+        "path": "backend/app/features/interview/external_knowledge.py",
+        "sha256": "59cdb2bf5bdcbef5d9d40f9f316994f6ad01393832bac1693ee6cd7e2acd6bd9"
+      },
+      {
+        "path": "backend/app/features/interview/generation_binding.py",
+        "sha256": "cbaa5a14ceaf646c6e499de917be09a65261b801f38a9a39c2e48166a8dfa679"
+      },
+      {
+        "path": "backend/app/features/interview/observation.py",
+        "sha256": "654502791d3e5262ff841806f43633aad69440db6553a5db901f09b55f4eb792"
+      },
+      {
+        "path": "backend/app/features/interview/prepare.py",
+        "sha256": "d24b36ef2f07a2110210cdae09afd040004a061f0567f76d545f1fc218c9c80f"
+      },
+      {
+        "path": "backend/app/features/interview/prepare_checkpoint.py",
+        "sha256": "c8fae91211e428628d4af6a28cc1049df439fb6761f40a1bab360ab5455c9a0d"
+      },
+      {
+        "path": "backend/app/features/interview/prepare_lease.py",
+        "sha256": "27c3553f025b09b6bef96c15cc81e22beb4e8c49da829740f3183187d4faddd8"
+      },
+      {
+        "path": "backend/app/features/interview/queries.py",
+        "sha256": "d51a9c3609a11a441e3da1638b1b81f14da2e9d3cad2e7deaa2474d7489d98e2"
+      },
+      {
+        "path": "backend/app/features/interview/question_audio.py",
+        "sha256": "59172f37ddea97d5a5175905f51e3687e9c205d3ad1503f13b724c4f61f96662"
+      },
+      {
+        "path": "backend/app/features/interview/question_replay.py",
+        "sha256": "cbd87cc756facda2790216cbc13c308354739751b27de4f0d764de0c47354f4a"
+      },
+      {
+        "path": "backend/app/features/interview/question_retry.py",
+        "sha256": "28acaed59b092520e45f47de61e4d4358d560f94da066cff87e15a1cdd38bec3"
+      },
+      {
+        "path": "backend/app/features/interview/question_speech.py",
+        "sha256": "41f2753ddb775b2af3ca9ea76d00d68dfa2ca0a34ca9aa938da0fbd678ec0354"
+      },
+      {
+        "path": "backend/app/features/interview/question_structure.py",
+        "sha256": "bdafbe8196a2efcbc638ec39ae479165d1d046eed3fc7aaff2065d99436f7a19"
+      },
+      {
+        "path": "backend/app/features/interview/queue.py",
+        "sha256": "17d5b818ff60bf92d63783d01d1afa2ca0cd36b62e3ada91c7b1261ca7484884"
+      },
+      {
+        "path": "backend/app/features/interview/repository_candidates.py",
+        "sha256": "2c0a6fdc6ea78c107f5072598905b8433251c318170b660059bc40ceab7de34c"
+      },
+      {
+        "path": "backend/app/features/interview/repository_inventory.py",
+        "sha256": "4826271703ea61d6e4543562accfd01b4398ae75a014cce9f868e1574aa8785c"
+      },
+      {
+        "path": "backend/app/features/interview/repository_sources.py",
+        "sha256": "a5f7ff91b626efbeb58482c11e06b8ff21e43211ebb45897b33fba715f65ef6b"
+      },
+      {
+        "path": "backend/app/features/interview/repository_source_selection.py",
+        "sha256": "7d485496e9a50baf98c560a01fe05e0c36938f14813080d1fd43817ff0f49e13"
+      },
+      {
+        "path": "backend/app/features/interview/repository_structure.py",
+        "sha256": "22c8a6fc70397e8732203fce4f1be43195f8738da034f30230e16f3946f07445"
+      },
+      {
+        "path": "backend/app/features/interview/router.py",
+        "sha256": "9643f06bd879498211ad298c8fa63f1089607c9d3980145eadc1fddb0a85a810"
+      },
+      {
+        "path": "backend/app/features/interview/schemas.py",
+        "sha256": "9c01f04563d0378658a36c9738b023ed427488ffc4884d2b5222dab60eb546cf"
+      },
+      {
+        "path": "backend/app/features/interview/service.py",
+        "sha256": "9148fff599d4f3c86bb004ed320d405b7b43265c776502f0cf1a40ace875260f"
+      },
+      {
+        "path": "backend/app/features/interview/source_segments.py",
+        "sha256": "5807c233f26dd30e19fb2f44419a6057200f38ee6541dcf911835e38cf9dd301"
+      },
+      {
+        "path": "backend/app/features/interview/speech_address.py",
+        "sha256": "c34eeee1aa3becc538325f9077d797303e4e3ef0636ece6876608753c191c95a"
+      },
+      {
+        "path": "backend/app/features/interview/speech_paths.py",
+        "sha256": "ea3e89d7473de9b08ee9571498d0d77cbd01135e787abd6d0eb8f6184a84beb7"
+      },
+      {
+        "path": "backend/app/features/interview/speech_spelling.py",
+        "sha256": "f22371c96ce1fc7b395ff1b29d3ae78c2367d0ac30c62860dc2ab2c31b4dbb21"
+      },
+      {
+        "path": "backend/app/features/interview/supplemental_sources.py",
+        "sha256": "54ac5deafd98b11ec3f535b50f8fdecf833f8e194448994ecdd104937936115d"
+      },
+      {
+        "path": "backend/app/features/interview/tts_budget.py",
+        "sha256": "763e4cb2c2a44d6f3e01678653d650c3b934ba352c38952759b072526e95941b"
+      },
+      {
+        "path": "backend/app/features/interview/turn_loop.py",
+        "sha256": "795d0795c6a9277d3f8497b862584e8a1ec5577af81b2740c89be69af978545a"
+      },
+      {
+        "path": "backend/app/features/interview/turn_position.py",
+        "sha256": "079ff65b11cd16a85284787c8e74af094dbb6ea8b09902e5616b5db3c543b094"
+      },
+      {
+        "path": "backend/app/features/interview/turn_service.py",
+        "sha256": "624f036c66485711463fdc01d1a176bc6fada2845b4f9f6e16d894593b1be37c"
+      },
+      {
+        "path": "backend/app/features/interview/ws.py",
+        "sha256": "a1841538f496bb6d7305fe57bf75741838eaeec4cb04163d59e8d49810f1ecc3"
+      },
+      {
+        "path": "backend/app/features/interview/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "backend/app/features/report/history.py",
+        "sha256": "2dcc175e208c5591f0e771b379832a3d4588ccc8456bf19c6da5dc1e3f436963"
+      },
+      {
+        "path": "ai/prompts/runtime-prompts.json",
+        "sha256": "d05443f7f061e3e37bfa8372b47a7f9cb768092b2b37979c7d217c48a0f7f658"
+      }
+    ],
+    "selected_product_files_scope": "original actual execution snapshot, not automatically the latest publication tree"
   }
 }
