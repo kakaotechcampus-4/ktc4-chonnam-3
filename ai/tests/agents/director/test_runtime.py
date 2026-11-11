@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import importlib
 import json
 from dataclasses import asdict, replace
@@ -102,7 +103,7 @@ class Provider:
             len(self.requests),
             "fixture",
             "fixture-model",
-            "director_v2",
+            request.prompt.version,
             request.schema_version,
             2,
             10,
@@ -884,6 +885,265 @@ def run_version(provider, ctx, *, version="director_v4", **options):
             **options,
         )
     )
+
+
+def test_v9_projects_current_answer_once_without_mutating_original_context():
+    original = later_context(persona_counts=(c.PersonaCount("hr_manager", 1),))
+    analysis = checked_analysis(needs=False)
+    sources = {c.BasisRef("job_posting", "job-1"): "공고 원문"}
+    before = asdict(original)
+    provider = Provider(plan(), review())
+    result = run_version(
+        provider,
+        original,
+        version="director_v9",
+        answer_analysis=analysis,
+        prior_analyses={"turn-1": analysis},
+        reference_texts=sources,
+    )
+
+    assert result.succeeded
+    for request in provider.requests:
+        payload = request.payload
+        assert payload["current_answer"]["answer"] == "팀원이 캐시를 구현했습니다."
+        assert payload["context"]["history"] == []
+        assert "current_question_contract" not in payload["context"]
+        assert payload["prior_analyses"] == {}
+        assert payload["answer_analysis"]["contribution_scope"]["scope"] == "teammate"
+        assert payload["turn_state"]["answered_turn_count"] == 1
+    assert asdict(original) == before
+    assert sources == {c.BasisRef("job_posting", "job-1"): "공고 원문"}
+
+
+def test_v9_posting_projection_preserves_source_blocks_and_extraction_limits():
+    posting = {
+        "position": "백엔드 개발자",
+        "requirements": ["HTTP API 설계"],
+        "raw_text": "HTTP API 설계",
+        "source_blocks": [{"block_id": "b-1", "text": "HTTP API 설계", "image_hash": "a" * 64}],
+        "source_limitations": ["일부 작은 글씨는 판독하지 못했다."],
+        "_image_extraction": {"status": "partial", "limitations": ["small_text"]},
+        "source_metadata": {"request_id": "MUST_NOT_REACH_MODEL", "elapsed_ms": 980},
+        "_image_retry": {"attempts": 2},
+    }
+    source = json.dumps(posting, ensure_ascii=False)
+    provider = Provider(plan(), review())
+    result = run_version(
+        provider,
+        context(),
+        version="director_v9",
+        reference_texts={c.BasisRef("job_posting", "job-1"): source},
+    )
+
+    assert result.succeeded
+    for request in provider.requests:
+        visible = json.loads(request.payload["reference_texts"][0]["text"])
+        assert visible["requirements"] == ["HTTP API 설계"]
+        assert visible["source_blocks"] == posting["source_blocks"]
+        assert visible["source_limitations"] == posting["source_limitations"]
+        assert visible["_image_extraction"] == posting["_image_extraction"]
+        assert "source_metadata" not in visible and "_image_retry" not in visible
+        assert "MUST_NOT_REACH_MODEL" not in json.dumps(request.payload)
+
+
+def test_v9_cannot_cite_a_posting_with_only_unexposed_metadata():
+    candidate = replace(
+        question(),
+        question_contract=replace(
+            question().question_contract,
+            basis_refs=(c.BasisRef("job_posting", "job-hidden"),),
+        ),
+    )
+    provider = Provider(plan(candidate), review())
+    result = run_version(
+        provider,
+        context(),
+        version="director_v9",
+        reference_texts={
+            c.BasisRef("job_posting", "job-hidden"): json.dumps({"request_id": "hidden"})
+        },
+    )
+    assert result.failure is not None and result.failure.stage == "semantic"
+    assert len(provider.requests) == 1
+    assert provider.requests[0].payload["reference_texts"] == []
+
+
+def test_v9_maintains_bounded_ids_and_keeps_recovery_feedback_out_of_review():
+    feedback = runtime().RecoveryFeedback(
+        question(), c.CandidateRecovery("rewrite", "중심 질문을 명료하게 해 주세요.")
+    )
+    provider = Provider(plan(), review())
+    result = run_version(
+        provider, context(), version="director_v9@candidate", recovery_feedback=feedback
+    )
+    assert result.succeeded
+    assert provider.requests[0].payload["recovery_feedback"]["recovery"] == "rewrite"
+    assert "recovery_feedback" not in provider.requests[1].payload
+    assert "reason_summary" not in provider.requests[1].payload
+    assert provider.requests[0].schema_version == "director-plan.v3"
+    assert provider.requests[0].output_schema["properties"]["question"]["properties"][
+        "persona"
+    ] == {
+        "type": "string",
+        "enum": ["hr_manager"],
+    }
+
+
+def continuation_fixture():
+    contract = c.QuestionContract(
+        "처리 방법과 이유 확인",
+        (c.RequiredPoint("method", "처리 방법"), c.RequiredPoint("reason", "선택 이유")),
+        (),
+        (),
+        "제출한 답변의 설계 설명",
+        ("project_understanding", "communication"),
+    )
+    ctx = replace(
+        later_context(),
+        turn_no=3,
+        current_turn_id="tech-2",
+        current_question_contract=contract,
+        allowed_personas=("tech_lead", "domain_lead"),
+        persona_counts=(
+            c.PersonaCount("hr_manager", 1),
+            c.PersonaCount("tech_lead", 1),
+            c.PersonaCount("domain_lead", 0),
+        ),
+        history=(
+            c.HistoryTurn("hr-1", "hr_manager", "본인 역할은?", "팀 작업입니다.", None),
+            c.HistoryTurn("tech-2", "tech_lead", "처리 방법과 이유는?", "큐를 사용했습니다.", None),
+        ),
+        jd_requirements=(
+            c.JDRequirement("jd-1", "API 설계", "required", "jd_requirements.text", ()),
+        ),
+        evaluation_targets=(
+            c.EvaluationTarget("tech_lead", ("technical_reasoning", "communication")),
+        ),
+        presented_evaluation_keys=(
+            "contribution_clarity",
+            "communication",
+            "project_understanding",
+        ),
+    )
+    analysis = c.validate_analysis_for_contract(
+        c.AnswerAnalysis(
+            "evaluated",
+            "partial",
+            (c.CoveredPoint("method", ("큐를 사용했습니다.",)),),
+            ("reason",),
+            c.TechnicalAssessment("선택 이유는 확인하지 못했다.", (), (), ()),
+            c.ContributionScope("unknown", ()),
+            (),
+            False,
+            (),
+            ("개인 기여 미확인",),
+        ),
+        contract=contract,
+        answer_text="큐를 사용했습니다.",
+        evidence_refs=frozenset(),
+        allowed_locations=frozenset(),
+    )
+    candidate = c.Question(
+        "tech_lead",
+        "큐를 선택한 이유는 무엇인가요?",
+        "flow",
+        replace(contract, required_points=(c.RequiredPoint("reason", "선택 이유"),)),
+        (),
+        (),
+        "follow_up",
+        "tech-2",
+    )
+    return ctx, analysis, candidate
+
+
+def test_v9_can_follow_the_actual_missing_point_without_losing_the_next_main_target():
+    ctx, analysis, candidate = continuation_fixture()
+    provider = Provider(plan(candidate), review())
+    result = run_version(provider, ctx, version="director_v9", answer_analysis=analysis)
+    assert result.succeeded
+    for request in provider.requests:
+        assert request.payload["context"]["follow_up_options"][0]["missing_point_keys"] == (
+            "reason",
+        )
+        assert request.payload["context"]["evaluation_targets"][0]["keys"] == (
+            "technical_reasoning",
+            "communication",
+        )
+    assert ctx.follow_up_options == ()
+
+
+def test_v8_keeps_old_assignment_and_never_receives_new_policy_fields():
+    ctx, analysis, candidate = continuation_fixture()
+    provider = Provider(plan(candidate), review())
+    result = run_version(provider, ctx, version="director_v8", answer_analysis=analysis)
+    assert result.failure is not None and result.failure.stage == "semantic"
+    assert "follow_up_options" not in provider.requests[0].payload["context"]
+    assert "presented_evaluation_keys" not in provider.requests[0].payload["context"]
+
+
+@pytest.mark.parametrize("invalid", ["context", "prompt"])
+def test_v9_capability_selection_preserves_checked_input_failure(invalid):
+    provider = Provider(plan(), review())
+    result = asyncio.run(
+        runtime().run_director(
+            None if invalid == "context" else context(),
+            prompt=None if invalid == "prompt" else replace(PROMPT, version="director_v9"),
+            limits=LIMITS,
+            model_call=provider,
+        )
+    )
+    assert result.failure.error_code == "director_input_invalid"
+    assert result.attempts == () and provider.requests == []
+
+
+@pytest.mark.parametrize(
+    "version",
+    ["director_v10", "director_v10@candidate", "director_v11", "director_v11@candidate"],
+)
+def test_v10_keeps_projected_input_follow_up_and_independent_review(version):
+    ctx, analysis, candidate = continuation_fixture()
+    feedback = runtime().RecoveryFeedback(
+        candidate, c.CandidateRecovery("rewrite", "실제로 물은 내용과 계약을 맞춰 주세요.")
+    )
+    provider = Provider(plan(candidate), review())
+    result = run_version(
+        provider, ctx, version=version, answer_analysis=analysis, recovery_feedback=feedback
+    )
+    assert result.succeeded
+    assert len(provider.requests) == 2
+    generated, reviewed = provider.requests
+    assert generated.schema_version == "director-plan.v3"
+    assert generated.payload["current_answer"]["turn_id"] == "tech-2"
+    assert [item["turn_id"] for item in generated.payload["context"]["history"]] == ["hr-1"]
+    assert generated.payload["context"]["follow_up_options"][0]["parent_turn_id"] == "tech-2"
+    assert generated.payload["turn_state"]["next_question_no"] == 3
+    assert generated.payload["recovery_feedback"]["recovery"] == "rewrite"
+    assert "recovery_feedback" not in reviewed.payload
+    assert reviewed.payload["question"] == asdict(candidate)
+
+
+@pytest.mark.parametrize("number", range(1, 12))
+@pytest.mark.parametrize("suffix", ["", "@deployment"])
+def test_dialogue_candidate_preserves_all_legacy_input_fingerprints(number, suffix):
+    ctx, analysis, _ = continuation_fixture()
+    value, sources = runtime()._input_payload(
+        ctx, replace(PROMPT, version=f"director_v{number}{suffix}"), LIMITS, analysis, {}, None, ()
+    )
+    material = {
+        "payload": value,
+        "sources": sorted((ref.kind, ref.id, text) for ref, text in sources.items()),
+    }
+    digest = hashlib.sha256(
+        json.dumps(material, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    expected = (
+        "18834c688c412fdd86a003994643ad6518ca7e4cb71b7aea134f17a2971058b0"
+        if number <= 4
+        else "905b307ea9fa95a288cc8572947074d22590acb9ff721afc3f407813342122c8"
+        if number <= 8
+        else "b10b709e3a9717c1de531e68356be1f75e9dbd3de4ce7b9230661ccef8549a98"
+    )
+    assert digest == expected
 
 
 @pytest.mark.parametrize("version", ["director_v12", "director_v12@candidate"])
