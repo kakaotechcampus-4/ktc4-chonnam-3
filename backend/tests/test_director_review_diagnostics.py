@@ -1,3 +1,26 @@
+async def test_rejudge_cancellation_preserves_original_diagnostics_and_output_inflight():
+    provider = Provider()
+    provider.review["wording_valid"] = True
+    saved = await run_cases([case()], executor(provider), metadata={})
+    checkpoints = []
+
+    async def checkpoint(value):
+        checkpoints.append(value)
+
+    async def cancel_grader(rubric, candidate):
+        raise asyncio.CancelledError()
+
+    with pytest.raises(asyncio.CancelledError):
+        await rejudge_cases([case()], saved, cancel_grader, metadata={}, checkpoint=checkpoint)
+    inflight = checkpoints[-1].get("inflight_case")
+    assert inflight is not None
+    original = saved["cases"][0]
+    assert inflight["diagnostics"] == original["diagnostics"]
+    assert inflight["diagnostics_hash"] == original["diagnostics_hash"]
+    assert inflight["output"] == original["output"]
+    assert inflight["attempts"] == original["attempts"]
+
+
 async def test_model_alias_and_actual_snapshot_are_separately_bound_without_changing_outcome():
     class SnapshotProvider(Provider):
         async def __call__(self, request, validator):

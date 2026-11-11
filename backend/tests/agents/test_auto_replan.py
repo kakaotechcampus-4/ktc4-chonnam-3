@@ -1,3 +1,167 @@
+@pytest.mark.parametrize("version", ["director_v14@candidate", "director_v16@candidate"])
+async def test_point_review_rewrites_an_unasked_requirement_and_stores_only_the_reviewed_question(
+    agent_sessions, agent_seed, version
+):
+    await seed(agent_sessions, agent_seed, version)
+    async with agent_sessions.begin() as db:
+        prompt = await db.scalar(select(PromptVersion).where(PromptVersion.task_name == "director"))
+        prompt.template = "## 공통\n근거 규칙\n## 질문 생성\n생성 지침\n## 독립 검토\n검토 지침\n"
+    sent, plans, reviews, call_id = [], 0, 0, uuid4()
+
+    async def handle(request):
+        nonlocal plans, reviews
+        item = payload(request)
+        sent.append(item)
+        if "answer" in item:
+            return response(asdict(analysis()))
+        if item["operation"] == "plan":
+            plans += 1
+            candidate = plan("tech_lead")
+            if plans == 1:
+                candidate["question"]["question_contract"]["required_points"][0]["description"] += (
+                    "와 장애 복구 절차"
+                )
+            return response(candidate)
+        reviews += 1
+        (point,) = item["question"]["question_contract"]["required_points"]
+        receipt = {
+            "status": "not_asked" if reviews == 1 else "asked",
+            "question_excerpt": None if reviews == 1 else "본인의 역할을 설명",
+        }
+        return response(
+            {
+                **approved_review(),
+                "point_coverage": (
+                    [{"key": point["key"], **receipt}]
+                    if version == "director_v16@candidate"
+                    else {point["key"]: receipt}
+                ),
+            }
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        result = await answer(agent_sessions, agent_seed, http, call_id=call_id)
+        replay = await answer(agent_sessions, agent_seed, http, call_id=call_id)
+    assert result.failure is None and result.next_turn_id == replay.next_turn_id
+    assert len(sent) == 5 and plans == reviews == 2
+    assert sent[3]["recovery_feedback"]["recovery"] == "rewrite"
+    assert "recovery_feedback" not in sent[4]
+    async with agent_sessions() as db:
+        original = await db.get(LLMCallRecord, uuid5(call_id, "director"))
+        assert original.failure["error_code"] == "director_candidate_rewrite"
+        assert original.attempts[1]["schema_version"] == (
+            "director-review.v3" if version == "director_v16@candidate" else "director-review.v2"
+        )
+        assert isinstance(original.attempts[1]["raw_output"], str)
+        assert original.turn_id is None
+        stored = await db.get(InterviewTurn, result.next_turn_id)
+        assert "장애 복구 절차" not in json.dumps(stored.question_contract, ensure_ascii=False)
+        assert len(list(await db.scalars(select(InterviewTurn)))) == 2
+
+
+@pytest.mark.parametrize(
+    "change",
+    ["missing", "digest", "source", "past", "analysis", "template", "model", "version", "owner"],
+)
+@pytest.mark.parametrize("kind", ["rewrite", "replan"])
+async def test_first_generation_identity_change_blocks_automatic_and_manual_recovery(
+    agent_sessions, agent_seed, change, kind
+):
+    await seed(agent_sessions, agent_seed, count=2)
+    sent = []
+
+    async def handle(request):
+        item = payload(request)
+        sent.append(item)
+        if "answer" in item:
+            return response(asdict(analysis()))
+        if item["operation"] == "plan":
+            return response(plan("tech_lead"))
+        async with agent_sessions.begin() as db:
+            row = await db.get(InterviewSession, agent_seed["interview_id"])
+            if change in {"missing", "digest"}:
+                state = deepcopy(row.context_state)
+                if change == "missing":
+                    state.pop("director_generation_bindings_v1", None)
+                else:
+                    for binding in state.get("director_generation_bindings_v1", {}).values():
+                        binding["binding"] = "0" * 64
+                row.context_state = state
+            elif change == "source":
+                (await db.get(JobPosting, row.job_posting_id)).raw_payload = {"changed": "source"}
+            elif change in {"past", "analysis"}:
+                turn = await db.scalar(
+                    select(InterviewTurn).where(
+                        InterviewTurn.turn_no == (1 if change == "past" else 2)
+                    )
+                )
+                changed = deepcopy(turn.analysis)
+                changed["limitations"].append("추가 미확인 범위")
+                turn.analysis = changed
+                if change == "analysis":
+                    # 현재 분석은 prior_analyses가 성공한 마지막 T3 원시 출력으로 복원한다.
+                    # JSONB만 바꾸면 실제 typed 입력은 그대로이므로 그 원시 기록도 바꾼다.
+                    record = await db.scalar(
+                        select(LLMCallRecord).where(
+                            LLMCallRecord.task_name == "answer_analysis",
+                            LLMCallRecord.turn_id == turn.id,
+                        )
+                    )
+                    attempts = deepcopy(record.attempts)
+                    attempts[-1]["raw_output"] = json.dumps(changed, ensure_ascii=False)
+                    record.attempts = attempts
+            elif change == "owner":
+                (await db.get(User, agent_seed["owner"])).status = "suspended"
+            else:
+                prompt = await db.scalar(
+                    select(PromptVersion).where(PromptVersion.task_name == "director")
+                )
+                setattr(prompt, change, "director_v10" if change == "version" else "changed-value")
+        return response(
+            {**approved_review(), "wording_valid" if kind == "rewrite" else "plan_valid": False}
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        if change == "owner":
+            with pytest.raises(AgentStateError):
+                await answer(agent_sessions, agent_seed, http, turn=2)
+        else:
+            result = await answer(agent_sessions, agent_seed, http, turn=2)
+            assert result.failure is not None and result.next_turn_id is None
+        assert len(sent) == 3
+        with pytest.raises(AppError):
+            await retry(agent_sessions, agent_seed, Redis(), uuid4(), http)
+        assert len(sent) == 3
+    async with agent_sessions() as db:
+        assert len(list(await db.scalars(select(InterviewTurn)))) == 2
+
+
+@pytest.mark.parametrize("kind", ["rewrite", "replan"])
+async def test_active_v12_cannot_promote_a_legacy_failure(agent_sessions, agent_seed, kind):
+    await seed(agent_sessions, agent_seed, "director_v10")
+    sent = []
+
+    async def handle(request):
+        item = payload(request)
+        sent.append(item)
+        if "answer" in item:
+            return response(asdict(analysis()))
+        if item["operation"] == "plan":
+            return response(plan("tech_lead"))
+        async with agent_sessions.begin() as db:
+            prompt = await db.scalar(
+                select(PromptVersion).where(PromptVersion.task_name == "director")
+            )
+            prompt.version = "director_v12"
+        return response(
+            {**approved_review(), "wording_valid" if kind == "rewrite" else "plan_valid": False}
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        result = await answer(agent_sessions, agent_seed, http)
+    assert result.next_turn_id is None and result.failure is not None and len(sent) == 3
+
+
 async def test_replan_and_rewrite_share_the_same_auto_slot_and_six_director_call_ceiling(
     agent_sessions, agent_seed
 ):

@@ -1,3 +1,16 @@
+from app.features.interview.answer_context import load_answer_context, prior_analyses
+from app.features.interview.director_service import process_answer
+from app.features.report.history import enrich_report_history
+from tests.agents.director_helpers import approved_review, response, seed_turns, settings
+
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "ai/evals"))
+
+from async_grader import content_hash  # noqa: E402
+from director_diagnostics import validate_diagnostics  # noqa: E402
+
+from scripts.ai_eval_bridge import _attempts  # noqa: E402
+
 DIRECTOR = "director_v17@calibrated-review"
 ANALYSIS = "answer_analysis_v7@claim-contribution-scope"
 ANSWER = "팀원 담당입니다"

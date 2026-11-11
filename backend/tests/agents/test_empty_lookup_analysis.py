@@ -1,3 +1,103 @@
+def github_replies(seed, outcome):
+    root, source = "b" * 40, "c" * 40
+    blob = "ce013625030ba8dba906f756967f9e9ca394464a"
+    prefix = "/repos/owner/sample"
+    return {
+        prefix: {"id": 123, "full_name": "owner/sample", "private": False, "visibility": "public"},
+        prefix + "/git/commits/" + seed["sha"]: {"sha": seed["sha"], "tree": {"sha": root}},
+        prefix + "/git/trees/" + root: {
+            "sha": root,
+            "truncated": False,
+            "tree": [{"path": "src", "mode": "040000", "type": "tree", "sha": source}],
+        },
+        prefix + "/git/trees/" + source: {
+            "sha": source,
+            "truncated": False,
+            "tree": (
+                [{"path": "main.py", "mode": "100644", "type": "blob", "sha": blob}]
+                if outcome == "found"
+                else []
+            ),
+        },
+        prefix + "/contents/src/main.py": {
+            "type": "file",
+            "encoding": "base64",
+            "size": 6,
+            "path": "src/main.py",
+            "sha": blob,
+            "content": "aGVsbG8K\n",
+        },
+    }
+
+
+@pytest.mark.parametrize("version", ["director_v8", "director_v9"])
+@pytest.mark.parametrize("outcome", ["not_found", "tool_error", "insufficient_analysis", "found"])
+@pytest.mark.parametrize("turn", [1, 9])
+async def test_empty_lookup_reuses_only_v9_analysis_and_preserves_every_trace(
+    agent_sessions, agent_seed, version, outcome, turn
+):
+    await seed_version(agent_sessions, agent_seed, version, turn)
+    original = requesting_analysis(agent_seed)
+    replies = github_replies(agent_seed, outcome)
+    sent, github_calls = [], []
+
+    async def handle(request):
+        if request.url.host == "api.github.com":
+            github_calls.append(str(request.url))
+            if outcome == "tool_error":
+                return httpx.Response(500)
+            if outcome == "insufficient_analysis":
+                return httpx.Response(404)
+            return httpx.Response(200, json=replies[request.url.path])
+        payload = json.loads(json.loads(request.content)["input"][0]["content"][0]["text"])
+        sent.append(payload)
+        if "answer" in payload:
+            return response(asdict(original if not payload["tool_results"] else analysis()))
+        return response(plan("tech_lead") if payload["operation"] == "plan" else approved_review())
+
+    options = dict(
+        user_id=agent_seed["owner"],
+        interview_id=agent_seed["interview_id"],
+        turn_no=turn,
+        text="팀원 담당입니다",
+        call_id=uuid4(),
+        settings=settings(),
+        evidence_limits=EvidenceLimits(10, 2, 65536, 262144, 2),
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        result = await process_answer(agent_sessions, **options, http_client=http)
+        assert result.failure is None and result.discard_reason is None
+        assert result.completed is (turn == 9)
+        expected_t3 = 1 if version == "director_v9" and outcome != "found" else 2
+        assert len([payload for payload in sent if "answer" in payload]) == expected_t3
+        assert len(sent) == expected_t3 + (0 if turn == 9 else 2)
+        before = (len(sent), len(github_calls))
+        replay = await process_answer(agent_sessions, **options, http_client=http)
+        assert replay.completed is result.completed and replay.next_turn_id == result.next_turn_id
+        assert (len(sent), len(github_calls)) == before
+    async with agent_sessions() as db:
+        saved = await db.get(InterviewTurn, result.turn_id)
+        assert saved.analysis == json.loads(json.dumps(asdict(original)))
+        assert saved.analysis["claim_checks"][0]["status"] == "unverified"
+        record = await db.get(LLMCallRecord, result.call_id)
+        assert len(record.attempts) == expected_t3
+        interview = await db.get(InterviewSession, agent_seed["interview_id"])
+        trace = interview.context_state["evidence_tool_results"][str(saved.id)]
+        assert trace["status"] == outcome
+        if outcome != "found":
+            assert trace["items"] == []
+        assert outcome in saved.decision["reason_summary"]
+        if expected_t3 == 1:
+            assert "빈 조회의 최초 분석 재사용" in saved.decision["reason_summary"]
+            assert version in saved.decision["reason_summary"]
+        if turn != 9:
+            retry_input = interview.context_state["director_retry_inputs"]["2"]
+            assert retry_input["tool_results"][0] == trace
+            for payload in sent:
+                if payload.get("operation") in {"plan", "review"}:
+                    assert payload["tool_results"][0] == trace
+
+
 async def test_valid_second_t3_attempt_can_continue_after_empty_lookup_without_budget_failure(
     agent_sessions, agent_seed
 ):
