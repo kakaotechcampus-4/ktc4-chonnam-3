@@ -273,3 +273,195 @@ def _local_spans(
         if not re.match(r"`?\s+조건(?:[가-힣]|\b)", text[end:]):
             spoken += " 조건"
         yield match.start(), end, spoken
+
+
+def _mask(
+    text: str, resolve: Callable[[str, str, str], str]
+) -> tuple[str, list[tuple[str, str, bool]]]:
+    structured: set[tuple[int, int]] = set()
+    known = list(_local_spans(text, resolve, structured))
+    recognized: dict[int, set[int]] = {}
+    for start, end, _ in known:
+        recognized.setdefault(start, set()).add(end)
+    opaque = []
+    for match in _OPAQUE.finditer(text):
+        start, end = match.span()
+        literal = match[0]
+        balanced_quote = _QUOTE_END.get(literal[:1]) == literal[-1:]
+        content = literal[1:-1]
+        prose = list(content)
+        for left, right, _ in known:
+            if start < left <= right < end:
+                prose[left - start - 1 : right - start - 1] = " " * (right - left)
+        literal_question = _LITERAL_QUOTE_CONTEXT.search(text) or _CODE_AFTER_QUOTE.match(
+            text[end:]
+        )
+        if balanced_quote and (
+            (start + 1, end - 1) in structured
+            or (
+                not literal_question
+                and not _SECRET_NAME.search(content)
+                and (
+                    end - 1 in recognized.get(start + 1, ())
+                    or _READABLE_QUOTE.fullmatch(content)
+                    or (literal[:1] != "`" and _PROSE_QUOTE.fullmatch("".join(prose)))
+                )
+            )
+        ):
+            # 문장 인용부호는 낭독에서 빼고 내부의 숫자·이름은 각 처리 규칙에 맡긴다.
+            known.extend(((start, start + 1, ""), (end - 1, end, "")))
+            continue
+        if any(
+            right <= end and not text[right:end].strip(".,)") for right in recognized.get(start, ())
+        ):
+            continue
+        opaque.append((start, end, literal, False))
+    candidates = [(start, end, spoken, True) for start, end, spoken in known] + opaque
+    candidates.sort(key=lambda span: (span[0], -span[1]))
+    segments: list[str] = []
+    spans: list[tuple[str, str, bool]] = []
+    end = 0
+    for start, stop, spoken, adaptable in candidates:
+        if start >= end:
+            segments.extend((text[end:start], f"\ue000{len(spans)}\ue001"))
+            spans.append((text[start:stop], spoken, adaptable))
+            end = stop
+    segments.append(text[end:])
+    return "".join(segments), spans
+
+
+def _normalize_masked(masked: str, spans: list[tuple[str, str, bool]]) -> str:
+    masked = _MARKER.sub(
+        lambda match: "" if spans[int(match[1])][1:] == ("", True) else match[0], masked
+    )
+
+    def spoken_list(match: re.Match[str]) -> str:
+        (left, _, left_known), (_, _, right_known) = (
+            spans[int(marker[1:-1])] for marker in match.groups()
+        )
+        if not left_known or not right_known or left.endswith(("#", "+")):
+            return match[0]
+        return match[1] + " 그리고 "
+
+    def numeric_list(match: re.Match[str]) -> str:
+        indices = (int(marker[1:-1]) for marker in match.groups())
+        return (
+            match[1] + "이고 "
+            if all(_NUMBER.fullmatch(spans[index][0]) for index in indices)
+            else match[0]
+        )
+
+    def particle(match: re.Match[str]) -> str:
+        marker, original = match.groups()
+        _, spoken, adaptable = spans[int(marker[1:-1])]
+        if not adaptable or not spoken or not "가" <= spoken[-1] <= "힣":
+            return match[0]
+        alternatives = _CLOSED if (ord(spoken[-1]) - ord("가")) % 28 else _OPEN
+        return marker + alternatives.get(original, original)
+
+    masked = re.sub(r"`(\ue000[0-9]+\ue001)`", r"\1", masked)
+    masked = _LIST_AND.sub(spoken_list, masked)
+    masked = _NUMERIC_LIST.sub(numeric_list, masked)
+    masked = _PARTICLE.sub(particle, masked)
+    return " ".join(re.sub(r",(?![0-9])", " ", masked).split())
+
+
+def prepare_question_speech(text: str) -> PreparedSpeech:
+    # 명령어나 자격증명 가능성이 있는 문장은 음성 변환 모델에 전달하지 않는다.
+    if any(marker in text for marker in ("\ue000", "\ue001", "\ue100", "\ue101")):
+        return PreparedSpeech((), text)
+    if _SHELL_OR_SECRET.search(text):
+        return PreparedSpeech((), text)
+
+    entries: list[tuple[str, str, str, str]] = []
+    indices: dict[tuple[str, str, str], int] = {}
+    contrasted = _contrasting_names(text)
+    current_context = ""
+
+    def safe_context(value: str) -> str:
+        value = _MARKER.sub(" 보호된 정보 ", value)
+        value = _LEXICAL.sub(" 발음 대상 ", value)
+        return " ".join(re.sub(r"[^가-힣\s.,?!…()]", " ", value).split())[:240]
+
+    def spelling_prefix(name: str) -> str:
+        if name not in contrasted:
+            return ""
+        if "_" in name:
+            return "밑줄로 구분한 "
+        if "-" in name:
+            return "하이픈으로 구분한 "
+        if "." in name:
+            return "점으로 구분한 "
+        return _case_prefix(name)
+
+    def resolve(name: str, kind: str, fallback: str) -> str:
+        name = unicodedata.normalize("NFC", name)
+        if len(name) > 80 or _SECRET_NAME.search(name):
+            return fallback
+        if len(name) == 1 and kind in {"domain", "path", "file", "extension", "identifier"}:
+            return fallback
+        if name.isalpha() and name.islower() and len(name) > 24:
+            return fallback
+        key = (name, kind, current_context)
+        if key not in indices:
+            if len(entries) == _MAX_FRAGMENTS:
+                return fallback
+            indices[key] = len(entries)
+            entries.append((name, kind, fallback, current_context))
+        return spelling_prefix(name) + f"\ue100{indices[key]}\ue101"
+
+    masked, spans = _mask(text, resolve)
+    masked = _normalize_masked(masked, spans)
+
+    def restore(piece: str) -> str:
+        return _MARKER.sub(lambda match: spans[int(match[1])][1], piece)
+
+    def name_reading(name: str) -> str:
+        if _SECRET_NAME.search(name):
+            return name
+        if name.isupper() or (len(name) <= 5 and sum(char.isupper() for char in name) >= 2):
+            kind = "acronym"
+        elif "_" in name or (name[:1].islower() and any(char.isupper() for char in name)):
+            kind = "identifier"
+        else:
+            kind = "term"
+        if not re.search(r"[0-9_.]", name):
+            return resolve(name, kind, name)
+
+        # 이름에 섞인 숫자와 구분자는 모델 출력과 별도로 보존한다.
+        pieces = []
+        for token in re.findall(rf"[{_NAME_LETTERS}]+|[0-9]+(?:\.[0-9]+)*|[_.-]", name):
+            if token[0].isalpha():
+                pieces.append(resolve(token, kind, token))
+            elif token[0].isdigit():
+                pieces.append(" 점 ".join(_integer(part) for part in token.split(".")))
+            else:
+                pieces.append("닷" if token == "." else "")
+        return spelling_prefix(name) + " ".join(piece for piece in pieces if piece)
+
+    def fragment(match: re.Match[str]) -> str:
+        nonlocal current_context
+        value = match[0]
+        words = value.split()
+        before = masked[max(0, match.start() - 80) : match.start()]
+        after = masked[match.end() : match.end() + 80]
+        current_context = safe_context(before + " 현재 발음 대상 " + after)
+        try:
+            if all(is_latin_name(word) and (word.islower() or word.istitle()) for word in words):
+                return resolve(value, "term", value)
+            return _NAME_TOKEN.sub(lambda item: name_reading(item[0]), value)
+        finally:
+            current_context = ""
+
+    masked = _FRAGMENT.sub(fragment, masked)
+    context = safe_context(masked)
+    template = restore(masked)
+    used = list(dict.fromkeys(int(match[1]) for match in _LEXICAL.finditer(template)))
+    remap = {old: new for new, old in enumerate(used)}
+    template = _LEXICAL.sub(lambda match: f"\ue100{remap[int(match[1])]}\ue101", template)
+    fragments = tuple(
+        SpeechFragment(entries[index][0], entries[index][1], entries[index][3] or context)
+        for index in used
+    )
+    fallbacks = tuple(entries[index][2] for index in used)
+    return PreparedSpeech(fragments, template, fallbacks)
