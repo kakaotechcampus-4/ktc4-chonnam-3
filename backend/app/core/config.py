@@ -61,6 +61,7 @@ def _task_timeout_values(value: object) -> dict[str, float]:
         "profile_summary",
         "claim_code",
         "jd_extract_image",
+        "question_pronunciation",
     }
     if not isinstance(value, dict) or any(key not in allowed for key in value):
         raise ValueError("Unknown LLM task timeout")

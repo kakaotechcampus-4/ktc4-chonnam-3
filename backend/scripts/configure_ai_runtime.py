@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Any
 
 from devon_ai import contracts as c
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.core.config import Settings
+from app.core.config import LLMSettings, Settings
 from app.llm_tasks.question_pronunciation import QUESTION_PRONUNCIATION_TASK
 from app.llm_tasks.runtime_capabilities import validate_runtime_prompts
 from scripts.seed_prompt_versions import register_prompt_versions
@@ -109,6 +110,22 @@ def main(argv: list[str] | None = None) -> int:
         )
         if args.apply:
             asyncio.run(apply_manifest(manifest, output, settings.database_url))
+    except ValidationError as error:
+        # 입력값·검증 문구에는 비밀값이 섞일 수 있어 알려진 필드명만 출력한다.
+        known_fields = set(getattr(Settings, "model_fields", {})) | set(LLMSettings.model_fields)
+        fields = sorted(
+            {
+                str(item["loc"][0])
+                for item in error.errors()
+                if item["loc"] and item["loc"][0] in known_fields
+            }
+        )
+        print(
+            "Runtime configuration failed. Invalid settings fields: "
+            + ", ".join(fields or ["unknown"]),
+            file=sys.stderr,
+        )
+        return 1
     except Exception:
         # URL·설정값·키를 포함할 수 있는 원래 예외를 출력하지 않는다.
         print(
