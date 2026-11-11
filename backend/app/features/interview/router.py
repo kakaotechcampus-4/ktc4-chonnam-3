@@ -6,12 +6,14 @@ main.py 등록은 interview_prep 워커 연결(AI task-06) 때 한다.
 docs/layer-rules.md 1절 / task-13
 """
 
+import asyncio
 import uuid
 from functools import partial
 from typing import Annotated
 
 from devon_ai.contracts import AttemptMetadata
 from fastapi import APIRouter, Depends, Request, Response, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import current_user
@@ -21,11 +23,14 @@ from app.db.models.user import User
 from app.db.session import get_db
 from app.features.interview import service
 from app.features.interview.question_audio import (
+    PronounceFragments,
+    PronunciationStatus,
     QuestionAudioService,
+    load_pronunciation_prompt,
     load_question,
     load_question_pronunciation,
-    record_question_pronunciation,
 )
+from app.features.interview.question_audio_records import record_question_pronunciation
 from app.features.interview.schemas import (
     CreateInterviewRequest,
     CreateInterviewResponse,
@@ -34,7 +39,12 @@ from app.features.interview.schemas import (
     QuestionRetryResponse,
 )
 from app.features.interview.tts_budget import RedisCharacterBudget
-from app.integrations.tts.google import BudgetedSpeechSynthesizer, GoogleTTSClient, TtsError
+from app.integrations.tts.google import (
+    FINALIZATION_TIMEOUT_SECONDS,
+    BudgetedSpeechSynthesizer,
+    GoogleTTSClient,
+    TtsError,
+)
 from app.llm_tasks.question_pronunciation import pronounce_fragments
 from app.shared.enums import Reason
 
@@ -76,11 +86,17 @@ async def get_question_audio(
 ) -> Response:
     """확정된 본인 질문만 합성한다. 음성 실패는 질문·답변·면접 상태를 바꾸지 않는다."""
     user_id = user.id
-    source = await load_question(
-        db, user_id=user_id, interview_id=_parse_id(interview_id, Reason.NOT_FOUND), turn_no=turn_no
-    )
-    # 합성 대기 동안 읽기 트랜잭션을 유지하지 않는다. 게시 직전에 원본·소유권을 다시 확인한다.
-    await db.rollback()
+    try:
+        source = await load_question(
+            db,
+            user_id=user_id,
+            interview_id=_parse_id(interview_id, Reason.NOT_FOUND),
+            turn_no=turn_no,
+        )
+        # 합성 대기 동안 읽기 트랜잭션을 유지하지 않는다. 반환 직전에 다시 확인한다.
+        await db.rollback()
+    except (SQLAlchemyError, OSError, TimeoutError):
+        raise AppError(Reason.NOT_READY) from None
 
     async def still_current() -> bool:
         try:
@@ -90,6 +106,8 @@ async def get_question_audio(
             return latest == source
         except AppError:
             return False
+        except (SQLAlchemyError, OSError, TimeoutError):
+            raise TtsError("source_check_unavailable") from None
         finally:
             await db.rollback()
 
@@ -111,24 +129,44 @@ async def get_question_audio(
             else BudgetedSpeechSynthesizer(injected, settings, budget)
         )
         pronunciation = await load_question_pronunciation(db, app_settings, text=source.text)
-        pronounce, pronunciation_identity = None, None
-        if pronunciation is not None:
-            llm, prompt = pronunciation
-            pronounce = partial(pronounce_fragments, llm, prompt, attempt_sink=attempts)
-            pronunciation_identity = f"{prompt.version}:{prompt.model}"
+
+        async def load_pronounce() -> PronounceFragments:
+            llm, prompt = await load_pronunciation_prompt(db, pronunciation)
+            return partial(pronounce_fragments, llm, prompt, attempt_sink=attempts)
+
+        service = QuestionAudioService(
+            request.app.state.redis,
+            synthesizer,
+            settings,
+            pronunciation_identity=pronunciation.identity,
+            load_pronounce=load_pronounce
+            if pronunciation.status is PronunciationStatus.READY
+            else None,
+        )
         try:
-            audio = await QuestionAudioService(
-                request.app.state.redis,
-                synthesizer,
-                settings,
-                pronounce=pronounce,
-                pronunciation_identity=pronunciation_identity,
-            ).get(source, check_current=still_current)
+            async with asyncio.timeout(FINALIZATION_TIMEOUT_SECONDS):
+                if pronunciation.status is PronunciationStatus.TEMP_UNAVAILABLE:
+                    identity = await service.known_identity(source, pronunciation.model)
+                else:
+                    await service.remember_identity(source, pronunciation)
+                    identity = None
+            if pronunciation.status is PronunciationStatus.TEMP_UNAVAILABLE:
+                if identity is None:
+                    raise TtsError("pronunciation_unavailable")
+                cached_service = QuestionAudioService(
+                    request.app.state.redis, synthesizer, settings, pronunciation_identity=identity
+                )
+                audio = await cached_service.get_cached(source, check_current=still_current)
+                if audio is None:
+                    raise TtsError("pronunciation_unavailable")
+            else:
+                audio = await service.get(source, check_current=still_current)
         finally:
-            await record_question_pronunciation(db, source, attempts)
-        if not await still_current():
-            raise TtsError("source_changed")
-    except (TtsError, ValueError) as exc:
+            await record_question_pronunciation(request.app.state.session_factory, source, attempts)
+        async with asyncio.timeout(FINALIZATION_TIMEOUT_SECONDS):
+            if not await still_current():
+                raise TtsError("source_changed")
+    except (TtsError, ValueError, SQLAlchemyError, OSError, TimeoutError) as exc:
         logger.warning(
             "question_audio_unavailable",
             interview_id=str(source.interview_id),

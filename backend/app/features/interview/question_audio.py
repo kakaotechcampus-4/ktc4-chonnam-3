@@ -16,16 +16,18 @@ from typing import cast
 from uuid import UUID
 
 from anyio import CancelScope
-from devon_ai.contracts import AttemptMetadata, PromptSpec
+from devon_ai.contracts import ContractError, PromptSpec
+from devon_ai.prompt_versions import base_prompt_version
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 from sqlalchemy import select
+from sqlalchemy import text as sql_text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import LLMSettings, Settings
 from app.core.errors import AppError
-from app.db.models import InterviewSession, InterviewTurn, LLMCallRecord
+from app.db.models import InterviewSession, InterviewTurn
 from app.features.interview.question_speech import QUESTION_SPEECH_VERSION, prepare_question_speech
 from app.integrations.tts.google import (
     FINALIZATION_TIMEOUT_SECONDS,
@@ -45,6 +47,7 @@ from app.llm_tasks.prompt_loader import (
 from app.llm_tasks.question_pronunciation import (
     QUESTION_PRONUNCIATION_TASK,
     QUESTION_PRONUNCIATION_TIMEOUT_SECONDS,
+    SUPPORTED_PROMPT_VERSIONS,
 )
 from app.shared.enums import Reason
 
@@ -129,67 +132,51 @@ def question_audio_url(api_prefix: str, interview_id: UUID, turn_no: int) -> str
 
 async def load_question_pronunciation(
     db: AsyncSession, settings: Settings, *, text: str
-) -> tuple[LLMSettings, PromptSpec] | None:
+) -> PronunciationConfiguration:
     if not prepare_question_speech(text).fragments:
-        return None
+        return PronunciationConfiguration(PronunciationStatus.DISABLED)
     try:
         llm = settings.require_llm()
         model = settings.tts_pronunciation_model or llm.llm_default_model
+    except ValueError:
+        logger.warning(
+            "question_pronunciation_disabled", extra={"reason": "llm_configuration_missing"}
+        )
+        return PronunciationConfiguration(PronunciationStatus.DISABLED)
+    try:
         async with asyncio.timeout(FINALIZATION_TIMEOUT_SECONDS):
-            prompt = await load_active_prompt(db, QUESTION_PRONUNCIATION_TASK)
-        if prompt.model == model:
-            return llm, prompt
-    except (
-        ValueError,
-        PromptNotFoundError,
-        PromptConfigurationError,
-        SQLAlchemyError,
-        TimeoutError,
-    ):
+            result = await db.execute(
+                sql_text(
+                    "SELECT version, model FROM prompt_versions "
+                    "WHERE task_name = :task AND is_active IS TRUE LIMIT 2"
+                ),
+                {"task": QUESTION_PRONUNCIATION_TASK},
+            )
+        rows = result.mappings().all()
+        if len(rows) == 1:
+            version, active_model = rows[0]["version"], rows[0]["model"]
+            if active_model != model:
+                reason = "model_mismatch"
+            elif base_prompt_version(version) not in SUPPORTED_PROMPT_VERSIONS:
+                reason = "unsupported_version"
+            else:
+                return PronunciationConfiguration(PronunciationStatus.READY, model, version, llm)
+        else:
+            reason = "multiple_active" if rows else "prompt_missing"
+    except (SQLAlchemyError, OSError, TimeoutError):
         logger.warning("question_pronunciation_unavailable")
-        return None
+        return PronunciationConfiguration(PronunciationStatus.TEMP_UNAVAILABLE, model)
+    except ContractError:
+        reason = "unsupported_version"
     finally:
         await db.rollback()
-    logger.warning("question_pronunciation_model_mismatch")
-    return None
-
-
-async def record_question_pronunciation(
-    db: AsyncSession, question: AudioQuestion, attempts: list[AttemptMetadata]
-) -> None:
-    if not attempts:
-        return
-    last = attempts[-1]
-    try:
-        async with asyncio.timeout(0.25), db.begin():
-            db.add(
-                LLMCallRecord(
-                    interview_session_id=question.interview_id,
-                    turn_id=question.turn_id,
-                    turn_no=question.turn_no,
-                    task_name=QUESTION_PRONUNCIATION_TASK,
-                    attempts=[
-                        {
-                            "attempt": item.attempt,
-                            "provider": item.provider,
-                            "model": item.model,
-                            "prompt_version": item.prompt_version,
-                            "schema_version": item.schema_version,
-                            "latency_ms": item.latency_ms,
-                            "input_tokens": item.input_tokens,
-                            "output_tokens": item.output_tokens,
-                            "error_stage": item.error_stage,
-                            "error_code": item.error_code,
-                        }
-                        for item in attempts
-                    ],
-                    failure={"stage": last.error_stage, "error_code": last.error_code}
-                    if last.error_code
-                    else None,
-                )
-            )
-    except (SQLAlchemyError, TimeoutError):
-        logger.warning("question_pronunciation_record_unavailable")
+    logger.warning(
+        "question_pronunciation_model_mismatch"
+        if reason == "model_mismatch"
+        else "question_pronunciation_disabled",
+        extra={"reason": reason},
+    )
+    return PronunciationConfiguration(PronunciationStatus.DISABLED, model)
 
 
 async def load_pronunciation_prompt(
