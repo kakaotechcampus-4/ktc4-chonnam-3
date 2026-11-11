@@ -238,16 +238,6 @@ tool_error만으로 확보 근거를 버리거나 사용자 감점·Director 전
 | `report_v1` | 종합·Persona 피드백과 실제 문답 근거 | 미관찰 인정, 원문 불변, 확정한 공개 점수 구조 유지·미검수 세부 채점 기준의 임의 생성 금지 | 기존 LLM 방향 유지 |
 | `profile_summary_v1` | 기존 개인 역할의 자연어 요약; 언어·유형 통계는 별도 확정 집계 | 기존 자료의 역할 근거·사용자 진술과 확인 사실 구분, 통계 변경 금지 | 0019에 따라 역할 요약의 LLM 사용 복원, job·version 목록 유지 |
 | `domain_category_v2` | 공고 1건의 도메인 category 7종 중 하나와 근거 문단 ID(`etc`는 `null`) | category enum, non-etc의 ID는 이번 요청의 문단 ID여야 함(위반은 semantic 실패, 무재시도); 코드가 ID로 원문 복원; 실패는 `etc` | [0022](decisions/0022-domain-category-llm.md)·[0028](decisions/0028-domain-category-evidence-id.md)에 따라 LLM 호출, 공고당 1회. v1 prompt는 이력 |
-| `question_pronunciation_v2` | 이름 ID별 한글 발음 | 이름·용도·가려진 주변 문맥 입력, ID 누락·추가 및 잘못된 발음 형식 거절, 원문의 수치·조건·주소 구조는 서비스에서 조립 | 음성 캐시 미스의 미등록 이름에 한 번 요청, 요청별 `low`, 최대 5초, 실패 시 로컬 낭독문 사용 |
-
-질문 음성의 일반 낭독에서는 경로·폴더·파일명 안의 `_`, `-`를 단어 경계로 처리하고 후행 `/`의 이름을 생략한다.
-기호 자체·표기 차이를 묻거나 동일한 이름의 다른 표기를 함께 제시하면 구분자의 이름을 유지한다.
-도메인·퍼센트 인코딩·쿼리의 실제 값과 숫자의 부호·버전·파일 확장자는 의미를 보존한다.
-변환 규칙 버전은 MP3 캐시 식별자에 포함하며 원문 질문·REST·WS 계약은 변경하지 않는다.
-숨김·공백 경로, 숫자로 시작하는 확장자, 파일 문맥의 단독 파일명, `www.` 주소·한글 경로와 악센트 라틴 이름을 처리한다.
-영어 질문도 이름·구절 단위 발음 보완을 사용하며 수치·조건은 서버에서 조립한다. 안내 인용문과 원문 문자열·기호 질문의 보존 경계는 [0051](decisions/0051-question-speech-coverage-and-recovery.md)을 따른다.
-실제 발음 보완 실패 시 기본 MP3를 보관하고 최대 60초 뒤의 재요청에서 한 번 다시 시도한다. 재실패·동일 낭독문은 추가 Google 합성 없이 재사용하고 정상 회복은 전체 TTL로 전환한다.
-개선 합성의 예산 부족·공급자 오류에는 현재 질문의 보관 MP3를 재사용하며 이미 사용한 문자와 불확실 정산은 유지한다. 요청마다 기존 시간·한 번의 시도·입출력 상한을 유지한다.
 
 기존 일곱 version 이름은 FIX 목록이며 삭제하지 않는다. `domain_category_v1`은 [0022](decisions/0022-domain-category-llm.md)로 추가했고 [0028](decisions/0028-domain-category-evidence-id.md)에서 `domain_category_v2`로 바꿨다. [0006 결정](decisions/0006-task-llm-usage-policy.md)의 Wanted 규칙 변환·프로필 통계 집계 비호출은 유지하되, 개인 역할의 자연어 요약은 [0019](decisions/0019-sprint1-profile-role-summary-restoration.md)에 따라 LLM으로 생성한다. version row만으로 호출 범위를 확대하지 않으며 deterministic 변환 version·출처 기록은 BE와 맞춘다. prompt version을 변환 version으로 재정의하거나 비호출 결과를 모델 실행 결과로 기록하지 않는다. 기존 role_summary·roleSummary 필드와 저장 구조를 유지하며 상세 입력·검증·연결은 구현 작업이다.
 
