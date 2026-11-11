@@ -3393,6 +3393,297 @@
           }
         ]
       }
+    },
+    {
+      "physical_id": 20,
+      "phase": "answer:06",
+      "candidate": {
+        "persona": "tech_lead",
+        "text": "제공된 코드에서는 Redis set의 TTL이 1시간이고 worker 예약 지연은 5분입니다. 이 조건에서 예약 시점의 잔여 TTL 확인만으로 어떤 가능성을 구분할 수 있다고 보시는지 설명해 주시겠어요?",
+        "question_contract": {
+          "purpose": "이 조건에서 예약 시점의 잔여 TTL 확인만으로 어떤 가능성을 구분할 수 있다고 보시는지 설명해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "email_distribution_first_check",
+              "description": "이 조건에서 예약 시점의 잔여 TTL 확인만으로 어떤 가능성을 구분할 수 있다고 보시는지 설명해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "answer_turn",
+              "id": "validation-ref-006"
+            },
+            {
+              "kind": "evidence",
+              "id": "validation-ref-004"
+            },
+            {
+              "kind": "evidence",
+              "id": "validation-ref-003"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "question_type": "follow_up",
+        "parent_turn_id": "validation-ref-006",
+        "topic_code": "email_distribution_first_check"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "이전 답변의 TTL 전제를 제공 코드에 맞게 바로잡고, 같은 관측점의 판별 범위를 묻는 허용된 후속 질문이다.",
+        "point_coverage": [
+          {
+            "key": "email_distribution_first_check",
+            "status": "asked",
+            "question_excerpt": "이 조건에서 예약 시점의 잔여 TTL 확인만으로 어떤 가능성을 구분할 수 있다고 보시는지 설명해 주시겠어요?"
+          }
+        ]
+      }
+    },
+    {
+      "physical_id": 23,
+      "phase": "answer:07",
+      "candidate": {
+        "persona": "tech_lead",
+        "text": "가정상 예약 게시 레코드는 생성되지만 첨부파일 연결이 누락되는 사례가 있습니다. 제공된 파일에서는 검증용 status를 destroy한 뒤, 첨부파일 UPDATE를 감싸는 트랜잭션 안에서 scheduled_statuses.create!를 호출합니다. 이 문제의 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 결과로 어떤 가능성을 구분할 수 있는지 설명해 주시겠어요?",
+        "question_contract": {
+          "purpose": "이 문제의 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 결과로 어떤 가능성을 구분할 수 있는지 설명해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "scheduled_media_link_diagnosis",
+              "description": "이 문제의 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 결과로 어떤 가능성을 구분할 수 있는지 설명해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "validation-ref-004"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "technical_reasoning",
+            "communication"
+          ]
+        },
+        "question_type": "main",
+        "parent_turn_id": null,
+        "topic_code": "scheduled_media_link_diagnosis"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "가정된 첨부파일 연결 누락과 제공 코드의 예약 생성·첨부파일 UPDATE 트랜잭션 흐름에 근거해, 관측 지점과 그 결과로 구분할 가능성을 묻는 단일 진단 판단입니다.",
+        "point_coverage": [
+          {
+            "key": "scheduled_media_link_diagnosis",
+            "status": "asked",
+            "question_excerpt": "이 문제의 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 결과로 어떤 가능성을 구분할 수 있는지 설명해 주시겠어요?"
+          }
+        ]
+      }
+    },
+    {
+      "physical_id": 26,
+      "phase": "answer:08",
+      "candidate": {
+        "persona": "domain_lead",
+        "text": "공고에는 고객 플랫폼의 메시징 기능이 포함되어 있습니다. 고객 메시징 기능을 가정할 때, 어떤 데이터 한 가지를 가장 민감하게 분류하시겠으며 그 이유는 무엇인가요?",
+        "question_contract": {
+          "purpose": "고객 메시징 기능을 가정할 때, 어떤 데이터 한 가지를 가장 민감하게 분류하시겠으며 그 이유는 무엇인가요?",
+          "required_points": [
+            {
+              "key": "customer_messaging_sensitive_data",
+              "description": "고객 메시징 기능을 가정할 때, 어떤 데이터 한 가지를 가장 민감하게 분류하시겠으며 그 이유는 무엇인가요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "jd_requirement",
+              "id": "validation-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "communication"
+          ]
+        },
+        "question_type": "main",
+        "parent_turn_id": null,
+        "topic_code": "customer_messaging_data_sensitivity"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "공고의 메시징 업무를 가정해 민감 데이터 한 항목과 분류 이유를 직접 묻고, 하나의 판단으로 답할 수 있습니다.",
+        "point_coverage": [
+          {
+            "key": "customer_messaging_sensitive_data",
+            "status": "asked",
+            "question_excerpt": "고객 메시징 기능을 가정할 때, 어떤 데이터 한 가지를 가장 민감하게 분류하시겠으며 그 이유는 무엇인가요?"
+          }
+        ]
+      }
     }
-  ]
+  ],
+  "session": {
+    "status": "completed",
+    "total_turns": 9,
+    "current_turn": 9,
+    "started_at_set": true,
+    "completed_at_set": true,
+    "completion_events": 1,
+    "recovery_ledger_entries": 0
+  },
+  "observed_timing": {
+    "phase_latency_ms_sum": 596387.293,
+    "first_question_ms": 14729.12,
+    "answer01_next_question_ms": 67789.256,
+    "next_question_phase_median_ms": 68059.799,
+    "manual_answer_authoring_pauses_excluded": true,
+    "not_provider_internal_reasoning_or_ui_delivery_time": true
+  },
+  "tests": [
+    {
+      "group": "latest_ai",
+      "status": "passed",
+      "tests": 1246,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 1246,
+      "sha256": "30bdfbc19ebf3c51af982e09b84fcbc7837f1c1c85dc065acd06199044db2094",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "AI suite recorded before final publication supplement; XML alone does not bind source revision."
+    },
+    {
+      "group": "prior_actual_rollout_timer_catalog12",
+      "status": "passed",
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 13,
+      "sha256": "07a6bff757e4685e22395911a2d3cb06f28dd44fe5ab4008e19c0fecf8f847f5",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Earlier 13-test rollout/timer check at actual-run base110/catalog12; not latest catalog11 verification."
+    },
+    {
+      "group": "latest_561_catalog11_smoke",
+      "status": "passed",
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 11,
+      "sha256": "5dfbc31ebd55590c5aba6fb541ef99c9580590af4aeb0d4fb1c28d7e23d3f5d7",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Separate latest561 catalog11 smoke; do not sum overlapping test groups."
+    },
+    {
+      "group": "latest_registration_compatibility",
+      "status": "passed",
+      "tests": 49,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 49,
+      "sha256": "438a227b83818cdf0fac3ade76f4ec06b6809b3d3fa4dfd686e1df3f99498ecb",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Four-file registration/opaque-version compatibility check after final seed fix."
+    },
+    {
+      "group": "published_core_smoke",
+      "status": "passed",
+      "tests": 31,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 31,
+      "sha256": "d9b5a3f91da818bdcfe2c0fb11d6f99f135009e540de5ec22f0a89cc630b7925",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Separate 31-test core publication checkout smoke before supplemental evidence/docs; not the v5 full suite."
+    },
+    {
+      "group": "final_backend_full",
+      "status": "passed",
+      "tests": 3302,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 3302,
+      "sha256": "6da86c9d43b8cd577d200e623b9f942fcc37ce7d160d1f2c61a37671f45d0292",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Explicit final v5 Linux full suite; source binding is recorded separately in backend_execution_binding.",
+      "platform": "linux-python3.12.15-pytest9.1.1-pg15.19-redis7.4.12-post561"
+    },
+    {
+      "group": "ledger_gateway_timing_related",
+      "status": "passed",
+      "tests": 101,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 101,
+      "sha256": "0642e8c895d66e80cdc927f1edff7a404fae1a49ebd54fac33172bf43a6d53bb",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Earlier 101-test strict/optional ledger and gateway check including 22 new isolation tests; overlapping groups are not summed."
+    },
+    {
+      "group": "prior_windows_backend_attempt",
+      "status": "failed",
+      "tests": 64,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 63,
+      "sha256": "ecd141309136cc994bbbadefe254bad92bf7d60a923e3a8622eeda8e74ddf1ab",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Preserved prior attempt; failures/errors/skips are not overwritten or counted as current final pass."
+    },
+    {
+      "group": "prior_linux_backend_attempt",
+      "status": "failed",
+      "tests": 1522,
+      "failures": 4,
+      "errors": 118,
+      "skipped": 0,
+      "passed": 1400,
+      "sha256": "d59eb2dc8ec24997a3c3fb8376987a8f47236165acfc057178647367808380ad",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Preserved prior attempt; failures/errors/skips are not overwritten or counted as current final pass."
+    },
+    {
+      "group": "prior_linux_v4_backend_attempt",
+      "status": "failed",
+      "tests": 3302,
+      "failures": 4,
+      "errors": 0,
+      "skipped": 1,
+      "passed": 3297,
+      "sha256": "ace34693d6f44a7192f05ac584b98087aa77d4b52c683a7654b848fe53a440b5",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Preserved prior attempt; failures/errors/skips are not overwritten or counted as current final pass."
+    }
+  ],
+  "backend_execution_binding": {
+    "status": "verified_completed"
+  }
 }
