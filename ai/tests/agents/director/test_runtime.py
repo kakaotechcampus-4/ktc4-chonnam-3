@@ -886,6 +886,127 @@ def run_version(provider, ctx, *, version="director_v4", **options):
     )
 
 
+def stable_coverage(status="asked", excerpt="맡은 역할을 소개"):
+    return [{"key": "role", "status": status, "question_excerpt": excerpt}]
+
+
+def test_v16_keeps_v14_inputs_and_stage_policies_with_a_candidate_independent_review_schema():
+    stable = Provider(plan(), review(point_coverage=stable_coverage()))
+    original = Provider(
+        plan(),
+        review(
+            point_coverage={"role": {"status": "asked", "question_excerpt": "맡은 역할을 소개"}}
+        ),
+    )
+    assert run_with_required_point_review(stable, "director_v16@candidate").succeeded
+    assert run_with_required_point_review(original).succeeded
+    assert stable.requests[-1].schema_version == "director-review.v3"
+    for before, after in zip(original.requests, stable.requests, strict=True):
+        assert before.payload == after.payload
+        assert before.prompt.template == after.prompt.template
+        assert before.limits == after.limits
+    coverage = stable.requests[-1].output_schema["properties"]["point_coverage"]
+    assert coverage["type"] == "array"
+    assert coverage["items"]["required"] == ["key", "status", "question_excerpt"]
+    assert coverage["items"]["properties"]["key"] == {"type": "string"}
+    other = replace(
+        question(),
+        question_contract=replace(
+            question().question_contract,
+            required_points=(
+                c.RequiredPoint("different", "역할"),
+                c.RequiredPoint("reason", "이유"),
+            ),
+        ),
+    )
+    module = importlib.import_module("devon_ai.agents.director.review")
+    assert module.review_schema(other, stable=True) == stable.requests[-1].output_schema
+
+
+def test_v16_matches_every_required_point_by_key_without_requiring_response_order():
+    candidate = replace(
+        question(),
+        text="본인이 맡은 역할과 그 역할을 선택한 이유는 무엇인가요?",
+        question_contract=replace(
+            question().question_contract,
+            required_points=(c.RequiredPoint("role", "역할"), c.RequiredPoint("reason", "이유")),
+        ),
+    )
+    provider = Provider(
+        plan(candidate),
+        review(
+            point_coverage=[
+                {"key": "reason", "status": "asked", "question_excerpt": "선택한 이유"},
+                {"key": "role", "status": "asked", "question_excerpt": "맡은 역할"},
+            ]
+        ),
+    )
+    result = run_with_required_point_review(provider, "director_v16@candidate")
+    assert result.succeeded and result.data.question.data == candidate
+
+
+@pytest.mark.parametrize(
+    "coverage",
+    [
+        [],
+        stable_coverage() * 2,
+        [{"key": "other", "status": "asked", "question_excerpt": "맡은 역할"}],
+        [{"key": False, "status": "asked", "question_excerpt": "맡은 역할"}],
+        [{"key": "role", "status": "invalid", "question_excerpt": "맡은 역할"}],
+        [{"key": "role", "status": "asked", "question_excerpt": "질문 밖의 이유"}],
+        stable_coverage(excerpt=None),
+        [{"key": "role", "status": "asked"}],
+        [stable_coverage()[0] | {"extra": True}],
+        {"role": {"status": "asked", "question_excerpt": "맡은 역할"}},
+    ],
+)
+def test_v16_rejects_missing_duplicate_unknown_or_malformed_required_point_receipts(coverage):
+    provider = Provider(plan(), review(point_coverage=coverage))
+    result = run_with_required_point_review(provider, "director_v16@candidate")
+    assert result.failure.stage == "schema"
+    assert result.data is None and len(provider.requests) == 2
+
+
+@pytest.mark.parametrize(
+    "status,safe,valid_plan,code",
+    [
+        ("premise_only", True, True, "director_candidate_rewrite"),
+        ("not_asked", True, False, "director_candidate_replan"),
+        ("unclear", False, True, "director_no_valid_candidate"),
+    ],
+)
+def test_v16_unasked_receipts_reject_and_restore_original_serialized_attempts(
+    status, safe, valid_plan, code
+):
+    provider = Provider(
+        plan(),
+        review(
+            plan_valid=valid_plan,
+            safe_alternative=safe,
+            point_coverage=stable_coverage(status, None),
+        ),
+    )
+    result = run_with_required_point_review(provider, "director_v16@candidate")
+    assert result.failure.error_code == code
+    saved = json.loads(json.dumps([asdict(attempt) for attempt in result.attempts]))
+    feedback = runtime().recovery_feedback_from_attempts(saved, failure_code=code)
+    assert feedback is not None and feedback.previous_candidate == question()
+    saved[1]["schema_version"] = "director-review.v2"
+    assert runtime().recovery_feedback_from_attempts(saved, failure_code=code) is None
+
+
+def source_bound_plan():
+    raw = plan()
+    candidate = raw["question"]
+    candidate["preamble"] = ""
+    candidate["request"] = candidate.pop("text")
+    contract = candidate["question_contract"]
+    contract["point_key"] = contract.pop("required_points")[0]["key"]
+    contract.pop("purpose")
+    contract.pop("evaluation_scope")
+    return raw
+
+
 def test_v17_decodes_plan_v4_then_reviews_the_exact_canonical_public_question():
     raw = source_bound_plan()
     provider = Provider(raw, review(point_coverage=stable_coverage()))
