@@ -2,7 +2,8 @@
 
 import json
 from collections.abc import Callable, Mapping
-from dataclasses import MISSING, asdict, dataclass, field, fields
+from copy import deepcopy
+from dataclasses import MISSING, asdict, dataclass, field, fields, replace
 from typing import Any, Protocol, cast, get_args
 
 from devon_ai import contracts as c
@@ -12,22 +13,31 @@ from devon_ai.agents.director.agent import (
     _object_schema,
     _references,
 )
-
-SUPPORTED_PROMPT_VERSIONS = frozenset(
-    {
-        "director_v5",
-        "director_v2",
-        "director_v4",
-        "director_v1",
-        "director_v7",
-        "director_v8",
-        "director_v6",
-        "director_v3",
-    }
+from devon_ai.agents.director.capabilities import (
+    SUPPORTED_PROMPT_VERSIONS as SUPPORTED_PROMPT_VERSIONS,
+)
+from devon_ai.agents.director.capabilities import (
+    prompt_capabilities,
+)
+from devon_ai.agents.director.model_input import project_model_input
+from devon_ai.agents.director.plan_wire import (
+    SOURCE_BOUND_PLAN_SCHEMA,
+    _plan_object,
+    decode_plan_question,
+    plan_schema_matches_version,
+    validate_source_bound_question,
+)
+from devon_ai.agents.director.policy import validate_question_policy, with_follow_up_options
+from devon_ai.agents.director.review import (
+    assess_review,
+    review_schema,
+    review_schema_version,
 )
 
-
 type Location = tuple[str, str, str]
+
+# 신규 v17 질문은 interview_turns.topic_code의 저장 문자 수에 맞춰 생성한다.
+_TOPIC_CODE_MAX_LENGTH = 50
 
 
 class DirectorModelCall(Protocol):
@@ -121,9 +131,7 @@ def recovery_feedback_from_attempts(
             records.append(c.AttemptMetadata(**cast(dict[str, Any], data)))
         generated, reviewed = records
         if (
-            generated.schema_version
-            not in {"director-plan.v1", "director-plan.v2", "director-plan.v3"}
-            or reviewed.schema_version != "director-review.v1"
+            not plan_schema_matches_version(generated.schema_version, generated.prompt_version)
             or (generated.attempt, reviewed.attempt) != (1, 2)
             or (generated.provider, generated.model, generated.prompt_version)
             != (reviewed.provider, reviewed.model, reviewed.prompt_version)
@@ -132,12 +140,15 @@ def recovery_feedback_from_attempts(
             or reviewed.raw_output is None
         ):
             return None
+        expected_review_schema = review_schema_version(reviewed.prompt_version)
+        if reviewed.schema_version != expected_review_schema:
+            return None
         raw = _plan_object(
             _feedback_json(generated.raw_output),
             {"question", "intent", "reason_summary"},
             "DirectorPlan",
         )
-        candidate = _plan_question(raw["question"])
+        candidate = decode_plan_question(raw["question"], prompt_version=generated.prompt_version)
         c.DirectorDecision(
             "ask",
             cast(str, raw["intent"]),
@@ -146,7 +157,9 @@ def recovery_feedback_from_attempts(
             (),
             cast(str, raw["reason_summary"]),
         )
-        assessment = _assessment(_feedback_json(reviewed.raw_output), candidate)
+        assessment = assess_review(
+            _feedback_json(reviewed.raw_output), candidate, expected_review_schema
+        )
         if (
             type(assessment) is not c.CandidateRecovery
             or _RECOVERY_CODES[assessment.recovery] != failure_code
@@ -217,24 +230,6 @@ def _plan_schema(coverage: bool = False) -> dict[str, object]:
     return _object_schema({"question": question, "intent": text, "reason_summary": text})
 
 
-_REVIEW_CHECKS = (
-    "plan_valid",
-    "context_valid",
-    "wording_valid",
-    "contract_matches",
-    "safe_alternative",
-)
-
-
-def _review_schema() -> dict[str, object]:
-    return _object_schema(
-        {
-            **{key: {"type": "boolean"} for key in _REVIEW_CHECKS},
-            "reason_summary": {"type": "string"},
-        }
-    )
-
-
 def _bounded_plan_schema(
     context: c.Context, sources: Mapping[c.BasisRef, str], coverage: bool
 ) -> dict[str, object]:
@@ -285,38 +280,107 @@ def _bounded_plan_schema(
     return schema
 
 
-def _plan_object(
-    raw: object, expected: set[str], name: str, optional: frozenset[str] = frozenset()
-) -> dict[str, object]:
-    if type(raw) is not dict or not expected - optional <= set(raw) <= expected:
-        raise c.ContractError("schema", name)
-    return cast(dict[str, object], raw)
-
-
 def _plan_question(raw: object) -> c.Question:
-    # 공통 decode의 부가 필드 무시 정책을 바꾸지 않고 새 planner의 중첩 출력만 엄격히 검사한다.
-    question = _plan_object(
-        raw,
-        {item.name for item in fields(c.Question)},
-        "Question",
-        frozenset(item.name for item in fields(c.Question) if item.default is not MISSING),
-    )
-    contract = _plan_object(
-        question["question_contract"],
-        {item.name for item in fields(c.QuestionContract)},
-        "QuestionContract",
-        frozenset(item.name for item in fields(c.QuestionContract) if item.default is not MISSING),
-    )
-    for name, expected in (
-        ("required_points", {item.name for item in fields(c.RequiredPoint)}),
-        ("basis_refs", {item.name for item in fields(c.BasisRef)}),
-    ):
-        entries = contract[name]
-        if type(entries) is not list:
-            raise c.ContractError("schema", name)
-        for item in entries:
-            _plan_object(item, expected, name)
-    return c.decode(c.Question, question)
+    # 예전 내부 호출은 기존 Question 표현만 읽는다. v4는 버전을 명시한 decoder를 사용한다.
+    return decode_plan_question(raw, prompt_version="director_v1")
+
+
+def _source_bound_plan_schema(
+    context: c.Context, sources: Mapping[c.BasisRef, str], coverage: bool
+) -> dict[str, object]:
+    schema = _bounded_plan_schema(context, sources, coverage)
+    question = cast(dict[str, object], cast(dict[str, object], schema["properties"])["question"])
+    props = cast(dict[str, object], question["properties"])
+    question["properties"] = {
+        new_key: value
+        for key, item in props.items()
+        for new_key, value in (
+            (("preamble", {"type": "string"}), ("request", {"type": "string"}))
+            if key == "text"
+            else ((key, item),)
+        )
+    }
+    # 공용 text 객체를 바꾸면 다른 질문 문장·사유까지 같은 상한이 적용되므로 분리한다.
+    cast(dict[str, object], question["properties"])["topic_code"] = {
+        "type": "string",
+        "maxLength": _TOPIC_CODE_MAX_LENGTH,
+    }
+    question["required"] = [
+        name
+        for key in cast(list[str], question["required"])
+        for name in (("preamble", "request") if key == "text" else (key,))
+    ]
+    contract = cast(dict[str, object], props["question_contract"])
+    contract_props = cast(dict[str, object], contract["properties"])
+    contract["properties"] = {
+        "point_key": {"type": "string"},
+        "assumptions": {"type": "array", "items": {"type": "string"}, "maxItems": 0},
+        "basis_refs": contract_props["basis_refs"],
+        "evaluation_keys": {
+            "type": "array",
+            "items": {"type": "string", "enum": list(get_args(c.ScoreKeyId))},
+        },
+    }
+    contract["required"] = ["point_key", "assumptions", "basis_refs", "evaluation_keys"]
+    routes = []
+
+    def add_route(
+        persona: c.PersonaId,
+        kind: str,
+        parent_id: str | None,
+        keys: tuple[c.ScoreKeyId, ...],
+        point_keys: tuple[str, ...] | None = None,
+    ) -> None:
+        branch = deepcopy(question)
+        branch_props = cast(dict[str, object], branch["properties"])
+        branch_props["persona"] = {"type": "string", "enum": [persona]}
+        branch_props["question_type"] = {"type": "string", "enum": [kind]}
+        branch_props["parent_turn_id"] = {"type": ["string", "null"], "enum": [parent_id]}
+        branch_contract = cast(dict[str, object], branch_props["question_contract"])
+        fields = cast(dict[str, object], branch_contract["properties"])
+        fields["evaluation_keys"] = {
+            "type": "array",
+            "items": {"type": "string", **({"enum": list(keys)} if keys else {})},
+            "minItems": len(keys),
+            "maxItems": len(keys),
+        }
+        if point_keys is not None:
+            fields["point_key"] = {"type": "string", "enum": list(point_keys)}
+        routes.append(branch)
+
+    # 경로별 Persona·부모·필수점·평가 키를 하나의 branch로 묶어 교차 조합을 허용하지 않는다.
+    targets = {target.persona: target.keys for target in context.evaluation_targets}
+    for persona in context.allowed_personas:
+        keys = targets.get(persona) if coverage else ()
+        if keys is not None:
+            add_route(persona, "main", None, keys)
+    parent_contract = context.current_question_contract
+    for option in context.follow_up_options:
+        if (
+            option.persona not in context.allowed_personas
+            or option.parent_turn_id != context.current_turn_id
+            or not any(
+                turn.turn_id == option.parent_turn_id and turn.persona == option.persona
+                for turn in context.history
+            )
+            or parent_contract is None
+            or option.evaluation_keys != parent_contract.evaluation_keys
+            or not set(option.missing_point_keys).issubset(
+                point.key for point in parent_contract.required_points
+            )
+        ):
+            continue
+        add_route(
+            option.persona,
+            "follow_up",
+            option.parent_turn_id,
+            option.evaluation_keys,
+            option.missing_point_keys,
+        )
+    if not routes:
+        raise c.ContractError("semantic", "source-bound allowed routes")
+    cast(dict[str, object], schema["properties"])["question"] = {"anyOf": routes}
+    return schema
 
 
 def _validate_candidate(
