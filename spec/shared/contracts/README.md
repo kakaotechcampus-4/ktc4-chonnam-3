@@ -1,6 +1,6 @@
 # 공통 계약
 
-상태: Sprint 1 FIX. 이 디렉터리는 FE/BE가 함께 맞추는 API 계약 원본이다.
+상태: 현재 코드 기준([공통 0014](../decisions/0014-current-state-docs.md)). 이 디렉터리는 FE/BE가 함께 맞추는 API 계약 원본이다.
 
 ## 원본
 

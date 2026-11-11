@@ -10,7 +10,7 @@
 | Celery            | 동작하지만 sync 기반. `httpx`/LLM async 코드와 섞으면 이벤트 루프 관리가 늘어난다 |
 | **ARQ**           | asyncio 네이티브 + Redis 만 요구. 이미 Redis 가 확정 스택이라 인프라 추가가 0     |
 
-`app/workers/arq_app.py` 의 `WorkerSettings` 에 작업별 타임아웃과 `job_timeout` 을 둔다. Sprint 1에서 ARQ 자동 retry는 사용하지 않으므로 `max_tries=1`로 둔다.
+`app/workers/arq_app.py` 의 `WorkerSettings` 에 작업별 타임아웃과 `job_timeout` 을 둔다. ARQ 자동 retry는 사용하지 않으므로 `max_tries=1`로 둔다.
 
 `analysis_jobs.retry_count` 는 ARQ 재시도와 별개로 **사용자가 누른 재시도** 횟수다. 섞지 않는다.
 
@@ -25,14 +25,14 @@
 | `report_generate`        | —                        | M6 — lazy report 생성                  |
 | `profile_summary`        | —                        | report 생성 성공 후 프로필 집계·역할 요약 |
 
-Sprint 1에서는 기본 queue 1개와 단일 ARQ worker 프로세스에 위 6개 job을 모두 등록한다. worker/queue 물리 분리는 Sprint 1 운영 지표를 보고 Sprint 2에서 판단한다. 각 job은 `queued_at`, `started_at`, `completed_at`, `duration_ms`, `queue_wait_ms`, `job_type`, `status`, `error_code`를 남긴다.
+기본 queue 1개와 단일 ARQ worker 프로세스(`app.workers.analysis_app.WorkerSettings`)에 위 6개 job을 모두 등록한다. worker/queue 물리 분리는 운영 지표를 보고 판단한다. 각 job은 `queued_at`, `started_at`, `completed_at`, `duration_ms`, `queue_wait_ms`, `job_type`, `status`, `error_code`를 남긴다.
 
 ## 2. run 실행 흐름
 
 ```
 POST /analysis-runs (application/json)
   ├ 검증: postingUrl 필수(400 posting_url_required), Wanted URL 여부
-  ├ optional documentId 검증  # Sprint 1에서는 portfolio preview documentId
+  ├ optional documentId 검증  # portfolio·cover_letter preview documentId
   ├ 동일 fingerprint의 queued/running job 확인
   │   └ 있으면 409 run_in_progress + error.details.runId (기존 run ID)
   ├ Redis SETNX run:lock:{userId}:analysis:{fingerprint}
@@ -95,7 +95,7 @@ arq.enqueue(...)                ✗ 네트워크 장애 · 인스턴스 종료
 
 ### 중복 실행을 막는 3중 방어
 
-Sprint 1은 `max_tries=1`로 ARQ 자동 재시도를 끈다. 그래도 중복 enqueue와 reaper 재등록이 겹칠 수 있으므로 저장·실행의 중복을 방어해야 한다. worker lost 처리와 자동 재실행 제외는 아래 기준을 따른다.
+`max_tries=1`로 ARQ 자동 재시도를 끈다. 그래도 중복 enqueue와 reaper 재등록이 겹칠 수 있으므로 저장·실행의 중복을 방어해야 한다. worker lost 처리와 자동 재실행 제외는 아래 기준을 따른다.
 
 | 계층        | 방법                                                        | 막는 것                                |
 | ----------- | ----------------------------------------------------------- | -------------------------------------- |
@@ -106,9 +106,9 @@ Sprint 1은 `max_tries=1`로 ARQ 자동 재시도를 끈다. 그래도 중복 en
 세 번째의 `UNIQUE (repository_id, analysis_level, head_sha, prompt_version)` 가 **자연 멱등 키**다.
 중복 실행돼도 LLM 비용만 낭비되고 데이터는 깨지지 않는다.
 
-Sprint 1에서는 `running` 으로 남은 행이 worker lost로 의심되더라도 자동 재실행하지 않는다.
+`running` 으로 남은 행이 worker lost로 의심되더라도 자동 재실행하지 않는다.
 자동 재실행을 넣으면 이전 worker 결과와 새 worker 결과의 충돌 처리가 필요하므로, 해당 작업은
-실패 상태로 닫고 재실행·복구 정책은 Sprint 2에서 다룬다.
+실패 상태로 닫으며 자동 재실행·복구 정책은 두지 않는다.
 
 > 1절의 `analysis_jobs.retry_count` 는 여기서 말하는 재시도가 아니다. ARQ 재시도 · reaper 재등록과
 > 별개로 **사용자가 누른 재시도** 횟수다. 섞지 않는다.
@@ -142,7 +142,7 @@ interview_prep
 ```
 
 준비 실패는 `preparing_failed` 다. 사용자 이탈인 `abandoned` 와 섞지 않는다.
-복구 가능한 준비 실패는 `POST /interviews/{id}/prepare/retry`로 실패 단계부터 재실행한다. 성공 단계·면접·선택 저장소를 유지하며 Sprint 1 WS `prepareRetry` 메시지는 사용하지 않는다.
+복구 가능한 준비 실패는 `POST /interviews/{id}/prepare/retry`로 실패 단계부터 재실행한다. 성공 단계·면접·선택 저장소를 유지하며 WS `prepareRetry` 메시지는 사용하지 않는다.
 
 ## 3. SSE
 
@@ -195,9 +195,9 @@ Postgres 를 주기적으로 재확인하는 폴백을 둔다. 이벤트 보관�
 브라우저에서 붙는 실제 경로는 `/api/ws/interviews/{sessionId}` 다. Caddy 가 `/api/*` 를 backend 로
 전달하고, FE 문서에서는 fetch 래퍼를 거치지 않는 WS 예시에 `/api` prefix 를 직접 쓴다.
 
-**스프린트1 은 양방향 텍스트다.** 오디오 프레임 · TTS · `transcript` · `stt_failed` ·
-`tts_failed`·`questionEnd`는 스프린트2 대상이다 (`interview_sessions.answer_mode` CHECK = `'text'`). Sprint 1은 `question` 이벤트로 질문 전달을 마친다.
-클라→서버 답변 메시지는 `{ "type": "answer", "turn": n, "text": "..." }`다. 서버는 `turn`이 현재 답변 가능한 turn과 일치하고 아직 저장된 답변이 없을 때만 저장한다.
+**새 면접의 답변은 음성이다.** 클라이언트는 `answerStart`(turn, mimeType) → 오디오 바이너리 프레임 → `answerEnd`를 보낸다.
+서버는 STT로 전사한 결과를 `transcript`로 보낸 뒤 답변으로 처리한다. 질문 음성은 `GET /interviews/{id}/turns/{turn}/question-audio`로 받는다.
+음성 전환 이전에 만든 `answer_mode='text'` 면접의 클라→서버 답변 메시지는 `{ "type": "answer", "turn": n, "text": "..." }`다. 서버는 `turn`이 현재 답변 가능한 turn과 일치하고 아직 저장된 답변이 없을 때만 저장한다.
 
 ### 4.1 핸드셰이크
 
@@ -226,9 +226,9 @@ Postgres 를 주기적으로 재확인하는 폴백을 둔다. 이벤트 보관�
 | 답변 (C→S, `{type:"answer", turn, text}`) | C→S  | turn 일치·미답변 확인 후 `UPDATE interview_turns SET answer_text, answered_at, answer_duration_sec, status='answered'` + `events(turn_answered)`                                      |
 | `thinking`             | S→C  | `UPDATE interview_turns SET analysis` (AnswerAnalysis) → `SET decision` (DirectorDecision) + `context_state` 갱신                                                                       |
 | `evidenceCheck`        | S→C  | **`INSERT evidences(retrieved_for_turn=n, git_ref, snippet, tool_name)`**                                                                                                               |
-| (답변과 코드 불일치 발견) | —  | Sprint 1 `evidence_conflicts(source='answer_vs_code')` 저장, 후속 질문 후보로 사용                                                                                                       |
+| (답변과 코드 불일치 발견) | —  | `evidence_conflicts(source='answer_vs_code')` 저장, 후속 질문 후보로 사용                                                                                                       |
 | `interviewEnd`         | S→C  | `status='completed'`, `events(interview_completed)`                                                                                                                                       |
-| 명시적 이탈·레포 재선택 | —    | `status='abandoned'`, `abandoned_at`, `abandoned_at_turn=current_turn`(질문이 나간 턴 수, 답변 대기 중인 현재 질문 포함. [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md), #143). Sprint 1 고정 10개 외 별도 이탈 이벤트는 추가하지 않음                                                                              |
+| 명시적 이탈·레포 재선택 | —    | `status='abandoned'`, `abandoned_at`, `abandoned_at_turn=current_turn`(질문이 나간 턴 수, 답변 대기 중인 현재 질문 포함. [공통 0009](../../spec/shared/decisions/0009-interview-abandon-transition.md), #143). 고정 이벤트 10종 외 별도 이탈 이벤트는 추가하지 않음                                                                              |
 
 `evidenceCheck` 가 화면에 뜬 순간 `evidences` 에 행이 있어야 한다. 화면에는 떴는데 행이 없으면
 그건 연출이고, 서비스가 주장하는 "근거 기반" 이 데이터로 증명되지 않는다.
@@ -242,14 +242,14 @@ Postgres 를 주기적으로 재확인하는 폴백을 둔다. 이벤트 보관�
 | ------------- | ----------- | ------------------------------------------------------------------ |
 | `tech_lead`   | 가능한 한 근거 연결 | 실제 사용한 코드 근거를 `question_basis`로 저장             |
 | `domain_lead` | 정상        | 근거 없는 질문도 허용하며 사용한 JD 요구사항이 있으면 연결        |
-| `hr_manager`  | 정상        | 첫 질문은 evidence 없이 허용. Sprint 1 문서 Claim 생성·연결은 요구하지 않음 |
+| `hr_manager`  | 정상        | 첫 질문은 evidence 없이 허용. 문서 Claim 연결은 필수가 아님 |
 
 답변 분석에서 검증 가능한 주장이 나오면 후속 조회 근거를 `evaluation_basis`로 연결한다. 기준은 [면접 명세](../../spec/backend/features/interview.md)이며 실제 저장 연결은 구현·검증한다.
 
 ### 4.3 이탈 처리
 
 WS `disconnect` 만으로 `abandoned` 를 확정하지 않는다 (새로고침·터널 끊김과 구분 불가).
-Sprint 1에는 하트비트/timeout 기반 자동 abandoned 판정 배치를 두지 않는다. `abandoned`는 사용자가
+하트비트/timeout 기반 자동 abandoned 판정 배치는 두지 않는다. `abandoned`는 사용자가
 이탈 확인 모달에서 명시적으로 나가거나, 레포 재선택으로 새 세션을 만들 때만 설정한다.
 
 주기 작업은 아래 reaper가 본다. 모두 `app.workers.analysis_app.WorkerSettings`에 30초 주기(`second={0, 30}`, 기동 시 1회)로 등록되며,
@@ -282,7 +282,7 @@ Sprint 1에는 하트비트/timeout 기반 자동 abandoned 판정 배치를 두
 기록(Postgres)은 남는다. 로그인 세션이 유효하면 `GET /interviews/{id}` 가 새 `sessionId` 를 발급한다.
 로그인용 `auth:sess:{sid}`도 유실됐거나 만료됐다면 Postgres에서 복구하지 않고 먼저 재로그인한다.
 
-Sprint 1에서는 FE 문서와 맞춰 WS를 `sessionId`로 유지한다.
+WS는 FE 문서와 맞춰 `sessionId`로 연결한다.
 
 ### 4.5 세션 상태 — DB와 API 각 5개
 
@@ -311,4 +311,4 @@ report_generate succeeded
   -> enqueue profile_summary
 ```
 
-이전 `report_generate` 실패 이력이 있으면 Sprint 1에서는 `409 report_unavailable`로 닫는다. 리포트 재생성·수동 재시도·이의제기 기반 재평가는 Sprint 2다. `profile_summary`는 언어·프로젝트 유형을 LLM 없이 집계하고, [0019 결정](../../spec/ai/decisions/0019-sprint1-profile-role-summary-restoration.md)에 따라 개인 역할 요약만 LLM으로 생성한다. 기존 저장 필드와 job을 유지하며 실제 생성·저장·호출 연결은 구현·검증 대상이다. 프로필 실패는 report 결과를 실패로 되돌리지 않으며 재시도·복구 정책은 Sprint 2에서 다룬다.
+이전 `report_generate` 실패 이력이 있으면 GET은 `409 report_unavailable`을 반환하고, 사용자는 `POST /interviews/{id}/report/retry`로 명시 재시도한다. 성공한 리포트는 재시도로 바꾸지 않는다. 피드백 이의 제기(`POST /interviews/{id}/feedback-disagreements`)는 점수를 자동으로 바꾸지 않으며, 명시 재평가 결과는 `report_revisions`에 새 revision으로 보존한다. `profile_summary`는 언어·프로젝트 유형을 LLM 없이 집계하고, [0019 결정](../../spec/ai/decisions/0019-sprint1-profile-role-summary-restoration.md)에 따라 개인 역할 요약만 LLM으로 생성한다. 프로필 실패는 report 결과를 실패로 되돌리지 않는다. 전달되지 못한 프로필 갱신은 `profile_refresh_requests`에 남고 `profile_refresh_reaper`가 재등록한다.
