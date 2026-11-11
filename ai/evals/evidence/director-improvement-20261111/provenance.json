@@ -393,5 +393,10 @@
     "new provider responses",
     "whole-service browser/voice/report E2E",
     "actual billing"
-  ]
+  ],
+  "export_side_effects": {
+    "new_model_calls": 0,
+    "new_network_calls": 0,
+    "new_business_db_connections": 0
+  }
 }

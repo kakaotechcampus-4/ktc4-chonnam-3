@@ -3,5 +3,6 @@
   "mode": "actual_luna",
   "physical_calls": 5,
   "claim_scope_comparison_calls": 4,
-  "targeted_contribution_refinement_calls": 1
+  "targeted_contribution_refinement_calls": 1,
+  "scope": "Two synthetic development answers on one public code context; no general sufficiency accuracy or independent holdout claim."
 }
