@@ -1102,6 +1102,183 @@
           "elapsed_ms": 31994
         }
       ]
+    },
+    {
+      "case_id": "review-B-contract-regression-fresh-bat-197390-tool_unavailable",
+      "split": "dev",
+      "synthetic_dialogue_context": true,
+      "question": {
+        "persona": "domain_lead",
+        "text": "공고의 주요 업무에는 Kubernetes Operator 패턴을 활용한 CI/CD 자동화 개발이 있습니다. 제공된 코드 구간만으로 Operator 동작 자체는 확인되지 않습니다. 제공 코드의 조건부 처리 흐름을 Operator 기반 CI/CD에 가정적으로 적용한다면, reconcile 작업을 생략할 조건 하나를 무엇으로 정하고 그 이유는 무엇인가요?",
+        "topic_code": "operator_ci_cd_skip_policy",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "제공 코드의 조건부 처리 흐름을 Operator 기반 CI/CD에 가정적으로 적용한다면, reconcile 작업을 생략할 조건 하나를 무엇으로 정하고 그 이유는 무엇인가요?",
+          "required_points": [
+            {
+              "key": "skip_policy",
+              "description": "제공 코드의 조건부 처리 흐름을 Operator 기반 CI/CD에 가정적으로 적용한다면, reconcile 작업을 생략할 조건 하나를 무엇으로 정하고 그 이유는 무엇인가요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "fresh-bat-e1"
+            },
+            {
+              "kind": "jd_requirement",
+              "id": "fresh-jd-197390-main_tasks-1"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "fresh-bat-e1"
+        ],
+        "jd_requirement_ids": [
+          "fresh-jd-197390-main_tasks-1"
+        ]
+      },
+      "code_sources": [
+        {
+          "evidence_id": "fresh-bat-e1",
+          "git_ref": "8cf33bdde9a6e4c11d0f866415b1fc867df0cd40",
+          "source_kind": "code",
+          "path": "src/controller.rs",
+          "start_line": 143,
+          "end_line": 214,
+          "repository": "sharkdp/bat",
+          "content_sha256": "b3d7ef216b9a34675e6796827b8fe140605521f1605bdf5069c10936ab1e58cc",
+          "content_included_here": false,
+          "public_blob_url": "https://github.com/sharkdp/bat/blob/8cf33bdde9a6e4c11d0f866415b1fc867df0cd40/src/controller.rs"
+        }
+      ],
+      "oracle": {
+        "expected_source_verdict": "accept",
+        "criterion_results": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "reason": "조회 실패·후속 선택 없음에서 기존 check를 main으로 재요구하지 않고 제공 조건부 처리의 직무 적용 판단으로 전환한다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "satisfied",
+            "reason": "reconcile 생략 조건 하나를 고르고 같은 조건의 이유를 설명하는 한 판단이다. 별도의 적용·차이·보완 목록을 요구하지 않는다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "reason": "조건 하나와 이유가 실제 request에 직접 있고 request 전체가 계약과 일치한다. 배경에 숨은 추가 지시는 없다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "reason": "허용 domain_lead main·company_job_fit/communication을 따르며, 코드의 조건부 생략 방식에 대응해 공고의 Operator 작업을 생략할 조건을 선택하도록 직접 요청한다. 일반 진단 지표만으로 완료하는 질문과 다르다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "reason": "Operator의 실제 동작은 제공 구간에서 확인되지 않는다고 알리고 적용은 ‘가정적으로’ 둔다. 생략 조건은 설계 선택이며 실제 구현·운영 결과라고 단정하지 않는다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "reason": "지원자의 본인 구현·운영 경험을 전제로 하지 않고 코드의 조건부 흐름만 근거로 사용한다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "reason": "입력 생략 설명·표준 입력 재현·일반 기록 답변과 달리 Operator 작업의 새 생략 조건을 선택한다. 특정 조건이나 정답은 미리 제시하지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "reason": "원문 조회 실패와 미확인 Operator 구현을 기능 부재·거짓·개인 역량 부족으로 바꾸지 않는다."
+          }
+        ],
+        "minimum_rejection_criteria": [],
+        "expected_recovery": null,
+        "expected_safe_alternative": true,
+        "wrong_reason_rejection_is_not_semantic_success": true,
+        "scope": "previously exposed development candidate; no relabeling or holdout use"
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "코드의 조건부 생략 흐름을 Operator 기반 CI/CD에 가정적으로 적용해 조건과 이유를 직접 묻고, 실제 Operator 동작을 확인한 것처럼 전제하지 않습니다.",
+            "point_coverage": [
+              {
+                "key": "skip_policy",
+                "status": "asked",
+                "question_excerpt": "제공 코드의 조건부 처리 흐름을 Operator 기반 CI/CD에 가정적으로 적용한다면, reconcile 작업을 생략할 조건 하나를 무엇으로 정하고 그 이유는 무엇인가요?"
+              }
+            ]
+          },
+          "expected_verdict": "accept",
+          "actual_verdict": "accept",
+          "decision_match": true,
+          "expected_recovery": null,
+          "actual_recovery": null,
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "pass",
+          "source_note": "reconcile 생략 조건 하나와 그 이유를 묻고 Operator 구현 자체를 확인한 것은 아니라는 사유가 질문 및 제공 범위와 일치한다. 한 선택의 이유를 별개 과제로 세지 않는다.",
+          "full_quality_success": true,
+          "elapsed_ms": 19553
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "제공 코드의 조건부 흐름을 공고의 Operator 기반 CI/CD 업무에 가정적으로 적용해, 생략 조건과 그 이유라는 하나의 판단을 묻습니다. Operator 동작은 확인되지 않았다는 배경도 제공 범위에 맞습니다.",
+            "point_coverage": [
+              {
+                "key": "skip_policy",
+                "status": "asked",
+                "question_excerpt": "제공 코드의 조건부 처리 흐름을 Operator 기반 CI/CD에 가정적으로 적용한다면, reconcile 작업을 생략할 조건 하나를 무엇으로 정하고 그 이유는 무엇인가요?"
+              }
+            ]
+          },
+          "expected_verdict": "accept",
+          "actual_verdict": "accept",
+          "decision_match": true,
+          "expected_recovery": null,
+          "actual_recovery": null,
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "pass",
+          "source_note": "실제 조건부 생략 방식의 가정적 적용에서 한 생략 조건과 이유를 묻는다고 읽었다. 미확인 Operator 동작을 미확인으로 둔 배경도 맞으며 전체 승인이 타당하다.",
+          "full_quality_success": true,
+          "elapsed_ms": 18565
+        }
+      ]
     }
   ]
 }

@@ -1,4 +1,5 @@
 {
   "schema": "director-public-answer-scope.v1",
-  "mode": "actual_luna"
+  "mode": "actual_luna",
+  "physical_calls": 5
 }
