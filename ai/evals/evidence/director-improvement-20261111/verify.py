@@ -295,6 +295,181 @@ def check_service_flow() -> None:
     )
 
 
+def _check_publication_session(value: dict[str, Any]) -> None:
+    phases = value["phases"]
+    session = value["session"]
+    require(
+        session["status"] == "completed" and session["current_turn"] == 9,
+        "new completed session",
+    )
+    require(
+        session["started_at_set"] is True and session["completed_at_set"] is True,
+        "new timer lifecycle",
+    )
+    require(session["completion_events"] == 1, "new single completion event")
+    timing = value["observed_timing"]
+    require(
+        math.isclose(
+            sum(row["phase_latency_ms"] for row in phases),
+            timing["phase_latency_ms_sum"],
+            abs_tol=1e-6,
+        ),
+        "new timing sum",
+    )
+
+
+def _check_publication_compatibility(value: dict[str, Any]) -> None:
+    requests = value["actual"]["requests"]
+    wrapper = value["sse_audit_wrapper"]
+    identity = value["code_identity"]
+    require(
+        not identity["preserved_copy_mismatches"], "preserved actual execution code"
+    )
+    compatibility = value["latest_revision_compatibility"]
+    require(
+        compatibility["status"] != "pending",
+        "latest publication compatibility recorded",
+    )
+    previous, latest = compatibility["previous_live"], compatibility["latest"]
+    require(
+        previous["physical_model_calls"] == len(requests)
+        and previous["audit_passed"] is True,
+        "preserved actual run",
+    )
+    require(
+        previous["audit_sha256"] == wrapper["final_audit_sha256"],
+        "original actual audit hash",
+    )
+    require(
+        previous["catalog_count"] == 12 and latest["catalog_count"] == 11,
+        "explicit catalog scope change",
+    )
+    require(
+        previous["full_identity_matches_current"] is False,
+        "whole old identity is not latest identity",
+    )
+    require(
+        latest["physical_model_calls"] == 0 and latest["api0_passed"] is True,
+        "latest revision only API0",
+    )
+    require(
+        latest["opaque_registration_compatibility_fix_included"] is True,
+        "latest opaque registration compatibility included",
+    )
+    require(compatibility["latest_api0_audit"]["passed"] is True, "latest API0 proof")
+    comparison = compatibility["product_comparison"]
+    require(
+        comparison["compared_snapshot_files"]
+        == comparison["identical_bytes_count"] + len(comparison["changed_files"]),
+        "snapshot comparison denominator",
+    )
+    changed = {row["path"] for row in comparison["changed_files"]}
+    require(
+        changed == set(identity["current_product_mismatches"]),
+        "actual versus latest differences not hidden",
+    )
+    core = compatibility["core_identity"]
+    require(
+        core["all_identical"] is True and bool(core["files"]),
+        "Director T3 core identity",
+    )
+    require(
+        all(
+            row["identical"] is True and row["old_sha256"] == row["new_sha256"]
+            for row in core["files"]
+        ),
+        "core file hashes",
+    )
+    prompts = compatibility["prompt_identity"]
+    require(prompts["all_identical"] is True, "actual and latest prompt identity")
+    require(
+        all(
+            row["same_runtime_body"] is True
+            and row["body_sha256_at_live"] == row["body_sha256_current"]
+            for row in prompts["files"]
+        ),
+        "prompt body hashes",
+    )
+    instructions = prompts["provider_instruction_checks"]
+    require(
+        instructions["checked_calls"] == len(requests)
+        and instructions["all_identical"] is True,
+        "actual transmitted instructions",
+    )
+    require(
+        all(
+            row["identical"] is True
+            and row["instructions_sha256_at_live"] == row["instructions_sha256_current"]
+            for row in instructions["calls"]
+        ),
+        "instruction hashes",
+    )
+    configuration = compatibility["configuration"]
+    require(
+        configuration["environment_changed_since_live"] is True,
+        "changed environment explicitly recorded",
+    )
+    require(
+        configuration["global_timeout_before"] == 60
+        and configuration["global_timeout_latest"] == 50,
+        "old global60 and latest global50 separated",
+    )
+    require(
+        configuration["original_env_modified_by_comparison"] is False,
+        "comparison did not edit env",
+    )
+    require(
+        configuration["same_director_answer_limits"] is True,
+        "resolved task limits preserved",
+    )
+    for task in ("director", "answer_analysis"):
+        effective = configuration["effective_tasks"][task]
+        require(
+            effective["at_live"] == effective["latest_api0"],
+            "resolved task identity " + task,
+        )
+    require(
+        all(
+            value["task_limits"][task]["timeout_seconds"] == 120
+            for task in ("director", "answer_analysis")
+        ),
+        "actual resolved two task120",
+    )
+    require(
+        compatibility["original_live_preservation"]["unchanged"] is True,
+        "original captures retained",
+    )
+    require(
+        compatibility["original_actual_audit_reexecuted_after_revert"] is False,
+        "no invalid current rerun of old actual audit",
+    )
+    repo = HERE.parents[3]
+    if (repo / "ai/src/devon_ai").is_dir():
+        executed = {
+            row["path"]: row
+            for row in value["backend_execution_binding"][
+                "selected_executed_source_files"
+            ]
+        }
+        for source in identity["current_selected_product_files"]:
+            product = repo / source["path"]
+            if source["sha256"] is None:
+                require(not product.exists(), "expected upstream file removal")
+            else:
+                copy = executed[source["path"]]
+                require(
+                    copy["current_working_tree_raw_sha256"] == source["sha256"],
+                    "separate working-tree source binding",
+                )
+                allowed_raw_sha = {source["sha256"], copy["sha256"]}
+                require(
+                    product.is_file()
+                    and hashlib.sha256(product.read_bytes()).hexdigest()
+                    in allowed_raw_sha,
+                    "measured working-tree or executed Git-LF raw SHA",
+                )
+
+
 def _check_publication_test_reports(value: dict[str, Any]) -> None:
     for group in (
         "latest_ai",
