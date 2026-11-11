@@ -213,6 +213,294 @@
           "physical_calls": 1
         }
       ]
+    },
+    {
+      "case_id": "explicit-fact-and-future-proposal",
+      "split": "dev",
+      "synthetic_answer": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "이 코드의 멱등 키는 3,600초 보관됩니다. 같은 키로 그 이후에도 재시도될 수 있는 서비스라면, 중복 방지 보장 범위를 어떻게 정하고 어떤 보완을 선택할지 근거와 함께 말씀해 주세요.",
+        "topic_code": "idempotency_retention_window",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "같은 키로 그 이후에도 재시도될 수 있는 서비스라면, 중복 방지 보장 범위를 어떻게 정하고 어떤 보완을 선택할지 근거와 함께 말씀해 주세요.",
+          "required_points": [
+            {
+              "key": "request",
+              "description": "같은 키로 그 이후에도 재시도될 수 있는 서비스라면, 중복 방지 보장 범위를 어떻게 정하고 어떤 보완을 선택할지 근거와 함께 말씀해 주세요."
+            }
+          ],
+          "assumptions": [
+            "같은 키로 그 이후에도 재시도될 수 있는 서비스라면"
+          ],
+          "basis_refs": [
+            {
+              "kind": "answer_turn",
+              "id": "director-improvement-d-v10-fresh-dev-t2"
+            },
+            {
+              "kind": "evidence",
+              "id": "fresh-mastodon-e2"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "technical_reasoning",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "fresh-mastodon-e2"
+        ],
+        "jd_requirement_ids": []
+      },
+      "answer_text": "원문은 redis.setex(idempotency_key, 3_600, @status.id)로 결과 ID를 3,600초 보관하므로, 저는 보장 범위를 그 기간 안으로 제한하고 이후 재시도에는 별도 영속 기록을 사용하겠습니다.",
+      "oracle": {
+        "minimum_expected": "명시적인 setex·3,600초 원문 관찰과 별도 영속 기록을 쓰겠다는 설계 제안을 분리한다.",
+        "candidate_fact_excerpt": "원문은 redis.setex(idempotency_key, 3_600, @status.id)로 결과 ID를 3,600초 보관",
+        "claim_omission_is_acceptable": true,
+        "claim_omission_does_not_prove_excerpt_selection": true,
+        "forbidden": "현재 코드가 별도 영속 기록을 사용한다고 supported로 확정"
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw": {
+            "coverage_assessment": {
+              "evaluation_status": "evaluated",
+              "sufficiency": "partial",
+              "covered_points": {
+                "request": [
+                  "answer:0001"
+                ]
+              },
+              "missing_points": [
+                "request"
+              ],
+              "limitations": [
+                "현재 코드의 보장 범위를 3,600초로 제한하고 이후 재시도에 별도 영속 기록을 사용하겠다는 선택은 제시했습니다. 다만 그 영속 기록을 얼마나 오래 유지할지, 그 기간에 맞춰 이후 재시도까지 어떤 범위로 보장할지는 정하지 않았습니다."
+              ]
+            },
+            "contribution_scope": {
+              "scope": "self",
+              "quote_ids": [
+                "answer:0001"
+              ],
+              "unknown_reason": null
+            },
+            "claim_checks": [
+              {
+                "quote_id": "answer:0001",
+                "status": "supported",
+                "evidence_refs": [
+                  "fresh-mastodon-e2"
+                ],
+                "limitations": []
+              }
+            ]
+          },
+          "canonical": {
+            "sufficiency": "partial",
+            "contribution_scope": {
+              "scope": "self",
+              "answer_quotes": [
+                "원문은 redis.setex(idempotency_key, 3_600, @status.id)로 결과 ID를 3,600초 보관하므로, 저는 보장 범위를 그 기간 안으로 제한하고 이후 재시도에는 별도 영속 기록을 사용하겠습니다."
+              ]
+            },
+            "claim_checks": [
+              {
+                "claim_text": "원문은 redis.setex(idempotency_key, 3_600, @status.id)로 결과 ID를 3,600초 보관하므로, 저는 보장 범위를 그 기간 안으로 제한하고 이후 재시도에는 별도 영속 기록을 사용하겠습니다.",
+                "status": "supported",
+                "evidence_refs": [
+                  "fresh-mastodon-e2"
+                ],
+                "limitations": []
+              }
+            ]
+          },
+          "codex_source_grade": {
+            "focused_claim_scope_verdict": "reject",
+            "reason": "전체 문장을 supported로 두어 별도 영속 기록을 사용하겠다는 제안까지 같은 판정에 묶었다. 근거 원문은 Redis setex이며 별도 영속 기록의 존재를 보여주지 않는다.",
+            "claims": [
+              {
+                "claim_text": "원문은 redis.setex(idempotency_key, 3_600, @status.id)로 결과 ID를 3,600초 보관하므로, 저는 보장 범위를 그 기간 안으로 제한하고 이후 재시도에는 별도 영속 기록을 사용하겠습니다.",
+                "status": "supported",
+                "evidence_refs": [
+                  "fresh-mastodon-e2"
+                ],
+                "limitations": []
+              }
+            ],
+            "sufficiency": "partial"
+          },
+          "physical_calls": 1
+        },
+        {
+          "arm": "B",
+          "raw": {
+            "coverage_assessment": {
+              "evaluation_status": "evaluated",
+              "sufficiency": "sufficient",
+              "covered_points": {
+                "request": [
+                  "answer:0001"
+                ]
+              },
+              "missing_points": [],
+              "limitations": []
+            },
+            "contribution_scope": {
+              "scope": "self",
+              "quote_ids": [
+                "answer:0001"
+              ],
+              "unknown_reason": null
+            },
+            "claim_checks": [
+              {
+                "quote_id": "answer:0001",
+                "claim_excerpt": "원문은 redis.setex(idempotency_key, 3_600, @status.id)로 결과 ID를 3,600초 보관하므로",
+                "status": "supported",
+                "evidence_refs": [
+                  "fresh-mastodon-e2"
+                ],
+                "limitations": []
+              }
+            ]
+          },
+          "canonical": {
+            "sufficiency": "sufficient",
+            "contribution_scope": {
+              "scope": "self",
+              "answer_quotes": [
+                "원문은 redis.setex(idempotency_key, 3_600, @status.id)로 결과 ID를 3,600초 보관하므로, 저는 보장 범위를 그 기간 안으로 제한하고 이후 재시도에는 별도 영속 기록을 사용하겠습니다."
+              ]
+            },
+            "claim_checks": [
+              {
+                "claim_text": "원문은 redis.setex(idempotency_key, 3_600, @status.id)로 결과 ID를 3,600초 보관하므로",
+                "status": "supported",
+                "evidence_refs": [
+                  "fresh-mastodon-e2"
+                ],
+                "limitations": []
+              }
+            ]
+          },
+          "codex_source_grade": {
+            "focused_claim_scope_verdict": "accept",
+            "reason": "setex·결과 ID·3,600초의 원문 관찰 구절만 supported로 보존했다. 별도 영속 기록을 사용하겠다는 설계 제안은 technical_assessment에서 다뤘다.",
+            "claims": [
+              {
+                "claim_text": "원문은 redis.setex(idempotency_key, 3_600, @status.id)로 결과 ID를 3,600초 보관하므로",
+                "status": "supported",
+                "evidence_refs": [
+                  "fresh-mastodon-e2"
+                ],
+                "limitations": []
+              }
+            ],
+            "sufficiency": "sufficient"
+          },
+          "physical_calls": 1
+        }
+      ]
     }
+  ],
+  "claim_scope_counts_from_original_source": {
+    "A": {
+      "reject": 2
+    },
+    "B": {
+      "accept": 2
+    }
+  },
+  "sufficiency_observations_from_original_source": {
+    "hypothetical_scope": "A/B 모두 partial이며 실제 미답인 보완책·근거를 남겼다.",
+    "mixed_fact_proposal": "A는 partial, B는 sufficient로 달랐다. 표현 변환이 충분성을 고친 결과가 아니다. 현재 비교의 주평가 대상은 주장 범위다. 충분성 판정 일치·일반 정확도 검증으로 확대하지 않는다."
+  },
+  "targeted_refinement": {
+    "case_id": "explicit-fact-and-future-proposal",
+    "current_contribution_scope_verdict": "accept",
+    "current_contribution_scope": {
+      "expected": "unknown",
+      "raw": {
+        "scope": "unknown",
+        "quote_ids": [
+          "answer:0001"
+        ],
+        "unknown_reason": "답변은 향후 적용할 설계 제안만 담고 있어, 기존 구현이나 운영에 대한 실제 기여를 확인할 수 없습니다."
+      },
+      "canonical": {
+        "scope": "unknown",
+        "answer_quotes": [
+          "원문은 redis.setex(idempotency_key, 3_600, @status.id)로 결과 ID를 3,600초 보관하므로, 저는 보장 범위를 그 기간 안으로 제한하고 이후 재시도에는 별도 영속 기록을 사용하겠습니다."
+        ]
+      },
+      "reason": "현재 답변의 1인칭은 아직 구현하지 않은 가정형 설계 선택이다. 원래 이력도 Mastodon 코드 기여·운영 경험이 없음을 명시한다. 스터디에서의 개인 분석 역할과 현재 코드의 실제 구현 기여를 섞지 않는다."
+    },
+    "fact_excerpt_verdict": "accept",
+    "claims": [
+      {
+        "claim_text": "redis.setex(idempotency_key, 3_600, @status.id)로 결과 ID를 3,600초 보관하므로",
+        "status": "supported",
+        "evidence_refs": [
+          "fresh-mastodon-e2"
+        ],
+        "limitations": []
+      }
+    ],
+    "fact_reason": "선택한 원문 구절은 setex·결과 ID·3,600초라는 실제 코드 관찰만 담는다. 뒤의 별도 영속 기록 제안은 claim_text에서 빠져 있으며, 기술 설명에 그 구현·보존 기간·일관성의 미확인을 보존한다.",
+    "source_evidence": {
+      "id": "fresh-mastodon-e2",
+      "repository_id": "mastodon/mastodon",
+      "git_ref": "cc76f85b9afc02b1265e68e6ee6c24ab266771b4",
+      "path": "app/services/post_status_service.rb",
+      "start_line": 226,
+      "end_line": 256
+    },
+    "parser_verdict": "preserved_model_judgments",
+    "parser_checks": {
+      "scope_unchanged": true,
+      "sufficiency_unchanged": true,
+      "claim_status_unchanged": true,
+      "claim_excerpt_exact_selected_unit_substring": true,
+      "unknown_reason_retained_in_limitations": true,
+      "actual_sent_body_equals_request_payload": true
+    },
+    "sufficiency": {
+      "raw": "sufficient",
+      "canonical": "sufficient",
+      "independent_of_contribution_and_claim_grade": true,
+      "note": "해당 모델의 이번 충분성 판정으로만 보존한다. 이전 v7 혼합 입력도 sufficient였고, 현재 기여 분류 수정 또는 사실 구절 분리가 충분성 정확도를 개선했다는 검증은 아니다. 별도 충분성 정답을 사후 추가하지 않는다."
+    },
+    "physical_call": {
+      "model": "gpt-6-luna",
+      "prompt_version": "answer_analysis_v7@claim-contribution-scope",
+      "schema_version": "7",
+      "attempt_count": 1,
+      "model_retries": 0,
+      "latency_ms": 41344,
+      "input_tokens": 6711,
+      "output_tokens": 4590,
+      "reasoning_tokens": 4142,
+      "body_sha256": "3bfdd98fa70f2982075f5a48391db2ec5af0e399fbf7c78a1191b54b2d4ffa2f",
+      "admission_body_ledger_equal": true
+    },
+    "limits": [
+      "동일한 노출 개발 입력의 단일 추가 실행이다. 독립 holdout·통계적 일반화·서비스 전체 정확도 입증이 아니다.",
+      "새 정책을 사용한 모델 원문이 unknown으로 바뀐 결과다. 원래 self 응답이나 저장값을 사후 수정하지 않았다.",
+      "실제 코드 구절은 정적 자료다. 운영상 중복 방지 보장·원자성·지원자의 개인 기여를 증명하지 않는다.",
+      "전체 refinement 실행3회 중 이 채점은 answer_analysis1회만 다룬다. Director2회와 전체 iteration23회는 이 평가의 표본수가 아니다."
+    ],
+    "uses_same_exposed_input": true
+  },
+  "limitations": [
+    "단일 보존 레포·질문과 합성 답변 두 개의 개발용 관측이다.",
+    "기존 h의 partially_supported+한계 기록을 소급 오류로 분류하지 않는다.",
+    "원문 구절 일치는 의미적 진위·실행·운영 보장·개인 기여의 완전한 증명이 아니다.",
+    "코드가 바꾸지 않은 기술 해석과 충분성은 별도 평가 범위다."
   ]
 }
