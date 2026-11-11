@@ -2406,5 +2406,229 @@
       }
     }
   ],
-  "turns": []
+  "turns": [
+    {
+      "turn_no": 1,
+      "question": {
+        "persona": "hr_manager",
+        "text": "간단히 자기소개해 주시고, 대표 프로젝트 하나를 예로 들어 본인과 팀의 역할을 나누어 설명해 주시겠어요?",
+        "question_contract": {
+          "purpose": "간단히 자기소개해 주시고, 대표 프로젝트 하나를 예로 들어 본인과 팀의 역할을 나누어 설명해 주시겠어요?",
+          "basis_refs": [],
+          "assumptions": [],
+          "evaluation_keys": [
+            "contribution_clarity",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "self_introduction_and_roles",
+              "description": "간단히 자기소개해 주시고, 대표 프로젝트 하나를 예로 들어 본인과 팀의 역할을 나누어 설명해 주시겠어요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "topic_code": "hr_introduction",
+        "jd_requirement_ids": [],
+        "parent_turn_no": null,
+        "depth": 1
+      },
+      "public_question_sha256": "168627b6469c853bce68fc3b6d9250440d858a7b2f9cd2d54b1c63b75b67f169",
+      "original_question_sha256": "168627b6469c853bce68fc3b6d9250440d858a7b2f9cd2d54b1c63b75b67f169",
+      "synthetic_answer": true,
+      "answer_text": "백엔드 개발자를 준비하고 있습니다. 최근에는 Mastodon의 게시 요청과 후처리 코드를 읽으며 실패가 어느 단계에서 발생하는지 구분하는 학습을 했습니다. 이 공개 프로젝트를 직접 구현하거나 운영한 경험은 없습니다. 제가 직접 한 부분은 제공된 원문을 읽고 요청 흐름과 확인할 지점을 정리한 것이고, 원래 서비스 구현에 참여한 기여는 없습니다. 팀원과 함께 개발한 프로젝트의 역할 분담 경험도 이번 사례에서는 제시할 수 없습니다. 확인한 코드와 제가 제안하는 해결책을 구분해서 설명하려고 합니다.",
+      "answer_text_sha256": "4931520f99a48b6b22173c5d847da3d0778dcfdddcc09fa5373fd720ffe198c5",
+      "stored_status": "answered",
+      "prepared_answer_file_present": true,
+      "question_length_codepoints": 58,
+      "original_question_answer_binding_verified": true,
+      "analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "partial",
+        "covered_points": [
+          {
+            "key": "self_introduction_and_roles",
+            "answer_quotes": [
+              "백엔드 개발자를 준비하고 있습니다.",
+              " 최근에는 Mastodon의 게시 요청과 후처리 코드를 읽으며 실패가 어느 단계에서 발생하는지 구분하는 학습을 했습니다.",
+              " 이 공개 프로젝트를 직접 구현하거나 운영한 경험은 없습니다.",
+              " 제가 직접 한 부분은 제공된 원문을 읽고 요청 흐름과 확인할 지점을 정리한 것이고, 원래 서비스 구현에 참여한 기여는 없습니다.",
+              " 팀원과 함께 개발한 프로젝트의 역할 분담 경험도 이번 사례에서는 제시할 수 없습니다."
+            ]
+          }
+        ],
+        "missing_points": [
+          "self_introduction_and_roles"
+        ],
+        "contribution_scope": {
+          "scope": "self",
+          "answer_quotes": [
+            " 제가 직접 한 부분은 제공된 원문을 읽고 요청 흐름과 확인할 지점을 정리한 것이고, 원래 서비스 구현에 참여한 기여는 없습니다."
+          ]
+        },
+        "claim_checks": [],
+        "needs_verification": false,
+        "verification_requests": [],
+        "external_queries": [],
+        "limitations": [
+          "백엔드 개발 준비 중이라는 소개와 Mastodon 게시 요청·후처리 코드 학습 사례, 제공된 원문을 읽고 요청 흐름과 확인할 지점을 정리한 본인의 역할은 설명했습니다. 다만 실제 팀 프로젝트와 팀원 역할은 제시하지 않아 본인과 팀의 역할을 나누어 설명하라는 요청은 충족되지 않았습니다."
+        ]
+      },
+      "public_selected_analysis_sha256": "710fff6ec5d9f646be3148deb929c367306b2f962ed859c3acb123b3b97b2320"
+    },
+    {
+      "turn_no": 2,
+      "question": {
+        "persona": "domain_lead",
+        "text": "공고에는 고객 플랫폼의 메시징 기능이 포함되어 있습니다. 제공된 코드에서는 멱등성 키가 있을 때 계정·키별 Redis 락 아래 중복을 확인해 요청을 처리하고, 성공한 결과 ID를 Redis에 1시간 저장합니다. Redis나 락 장애 시 동작은 이 파일만으로 확인되지 않으며, 개인 구현 경험이 아닌 이 구조의 가정형 적용을 묻습니다. 이 멱등성 처리 흐름을 고객 메시지 생성 API에 그대로 적용할지, 한 부분을 바꿔 적용할지 선택하고 그 이유를 말씀해 주시겠어요?",
+        "question_contract": {
+          "purpose": "이 멱등성 처리 흐름을 고객 메시지 생성 API에 그대로 적용할지, 한 부분을 바꿔 적용할지 선택하고 그 이유를 말씀해 주시겠어요?",
+          "basis_refs": [
+            {
+              "id": "validation-ref-001",
+              "kind": "evidence"
+            },
+            {
+              "id": "validation-ref-002",
+              "kind": "jd_requirement"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "apply_idempotency_flow_to_messaging",
+              "description": "이 멱등성 처리 흐름을 고객 메시지 생성 API에 그대로 적용할지, 한 부분을 바꿔 적용할지 선택하고 그 이유를 말씀해 주시겠어요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "topic_code": "messaging_idempotency_application",
+        "jd_requirement_ids": [
+          "validation-ref-002"
+        ],
+        "parent_turn_no": null,
+        "depth": 1
+      },
+      "public_question_sha256": "65ed433aaf7685cfc5c3760ad2f6302f71bcf031658b736e898d3e8be365a92d",
+      "original_question_sha256": "92302b712f7d2aa9c4304ce0b2c5a90242101cd4b10d33563c47b773c8d50766",
+      "synthetic_answer": true,
+      "answer_text": "한 부분을 바꿔 적용하겠습니다. 중복 판정 결과를 Redis에만 두지 않고, 고객 ID와 멱등성 키에 유일 제약을 둔 DB 기록으로 남기겠습니다. 메시지 저장과 결과 ID 기록을 같은 트랜잭션으로 묶으면 Redis의 결과가 유실되거나 한 시간이 지난 뒤 재시도해도 같은 메시지 ID를 반환할 수 있기 때문입니다. Redis 락은 동시 중복 작업을 줄이는 보조 수단으로 쓰겠습니다. 이것은 메시지 생성 API에 적용한다고 가정한 제안이며, 제가 구현한 경험이나 제공된 프로젝트의 실제 운영 방식은 아닙니다.",
+      "answer_text_sha256": "3abae3d5aa0a0c5b41486a74468493f774fa13508a15f1b6c693bdfd6301796c",
+      "stored_status": "answered",
+      "prepared_answer_file_present": true,
+      "question_length_codepoints": 260,
+      "original_question_answer_binding_verified": true,
+      "analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "sufficient",
+        "covered_points": [
+          {
+            "key": "apply_idempotency_flow_to_messaging",
+            "answer_quotes": [
+              "한 부분을 바꿔 적용하겠습니다.",
+              " 중복 판정 결과를 Redis에만 두지 않고, 고객 ID와 멱등성 키에 유일 제약을 둔 DB 기록으로 남기겠습니다.",
+              " 메시지 저장과 결과 ID 기록을 같은 트랜잭션으로 묶으면 Redis의 결과가 유실되거나 한 시간이 지난 뒤 재시도해도 같은 메시지 ID를 반환할 수 있기 때문입니다.",
+              " Redis 락은 동시 중복 작업을 줄이는 보조 수단으로 쓰겠습니다."
+            ]
+          }
+        ],
+        "missing_points": [],
+        "contribution_scope": {
+          "scope": "unknown",
+          "answer_quotes": [
+            " 이것은 메시지 생성 API에 적용한다고 가정한 제안이며, 제가 구현한 경험이나 제공된 프로젝트의 실제 운영 방식은 아닙니다."
+          ]
+        },
+        "claim_checks": [],
+        "needs_verification": false,
+        "verification_requests": [],
+        "external_queries": [],
+        "limitations": [
+          "답변은 가정형 설계 제안이라고 명시하고, 본인의 구현 경험이나 제공된 프로젝트의 실제 운영 방식이 아니라고 밝힌다. 따라서 기존 구현이나 운영에 대한 개인 기여 범위는 확인할 수 없다."
+        ]
+      },
+      "public_selected_analysis_sha256": "ad86b385ed71b9ef6e24ad19eb45df88dcda2e7767e734eb92f15f9e50d6243e"
+    },
+    {
+      "turn_no": 3,
+      "question": {
+        "persona": "tech_lead",
+        "text": "제공된 코드에서는 멱등성 키가 중복된 요청은 기존 결과를 반환하고, 일반 게시물의 후처리는 멱등성 처리 블록을 마친 뒤 호출됩니다. 저장은 성공했지만 후처리 작업 큐 등록이 실패하는 상황이라면, 누락된 후처리를 복구하기 위해 어떤 방식을 선택하시겠습니까? 그 이유도 말씀해 주세요.",
+        "question_contract": {
+          "purpose": "저장은 성공했지만 후처리 작업 큐 등록이 실패하는 상황이라면, 누락된 후처리를 복구하기 위해 어떤 방식을 선택하시겠습니까? 그 이유도 말씀해 주세요.",
+          "basis_refs": [
+            {
+              "id": "validation-ref-003",
+              "kind": "evidence"
+            },
+            {
+              "id": "validation-ref-001",
+              "kind": "evidence"
+            },
+            {
+              "id": "validation-ref-004",
+              "kind": "evidence"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "postprocess_recovery_choice",
+              "description": "저장은 성공했지만 후처리 작업 큐 등록이 실패하는 상황이라면, 누락된 후처리를 복구하기 위해 어떤 방식을 선택하시겠습니까? 그 이유도 말씀해 주세요."
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "topic_code": "postprocess_recovery",
+        "jd_requirement_ids": [],
+        "parent_turn_no": null,
+        "depth": 1
+      },
+      "public_question_sha256": "a66ddbf2e5e2b31431c4d47ed8a57a0ba9547c22f42d533952fb0539c92fb7bf",
+      "original_question_sha256": "875ecf77df364ada39aa4ab5a297c41f36b0317d8fe2a0f9145923ac0778f986",
+      "synthetic_answer": true,
+      "answer_text": "실패한 작업 큐 등록을 다시 시도하는 방식을 선택하겠습니다.",
+      "answer_text_sha256": "f638d38c29172631ce3a03b2336959029777bd2e4a6625f800a32e46de310817",
+      "stored_status": "answered",
+      "prepared_answer_file_present": true,
+      "question_length_codepoints": 157,
+      "original_question_answer_binding_verified": true,
+      "analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "partial",
+        "covered_points": [
+          {
+            "key": "postprocess_recovery_choice",
+            "answer_quotes": [
+              "실패한 작업 큐 등록을 다시 시도하는 방식을 선택하겠습니다."
+            ]
+          }
+        ],
+        "missing_points": [
+          "postprocess_recovery_choice"
+        ],
+        "contribution_scope": {
+          "scope": "unknown",
+          "answer_quotes": []
+        },
+        "claim_checks": [],
+        "needs_verification": false,
+        "verification_requests": [],
+        "external_queries": [],
+        "limitations": [
+          "답변은 실패한 작업 큐 등록을 다시 시도하겠다는 선택은 밝혔지만, 그 방식을 선택한 이유는 설명하지 않았습니다.",
+          "답변은 가정형 대응 방식을 선택할 뿐, 실제 구현이나 운영에 대한 기여를 진술하지 않습니다."
+        ]
+      },
+      "public_selected_analysis_sha256": "8623924798b94ea7b4e9216e7ff5c3a395d8d2c7a913fe3471e2c75ef701c4c1"
+    }
+  ]
 }
