@@ -34,7 +34,17 @@ class ExpiringCache:
         self.deadlines[key] = self.now + ex
         return True
 
+    async def ttl(self, key):
+        if await self.get(key) is None:
+            return -2
+        return self.deadlines[key] - self.now
+
     async def execute_command(self, command, script, count, key, owner):
+        if command == "SET":
+            if await self.get(script) is None:
+                return None
+            self.values[script] = str(count).encode()
+            return True
         if await self.get(key) == owner.encode():
             self.values.pop(key, None)
             self.deadlines.pop(key, None)
@@ -287,7 +297,7 @@ async def test_retry_charges_characters_only_when_a_new_audio_is_actually_synthe
     await service.get(source)
     cache.now += 61
     await service.get(source)
-    cache.now += 61
+    cache.now += 121
     await service.get(source)
 
     assert len(attempts) == 3
@@ -342,7 +352,7 @@ async def test_failed_promotion_replays_fallback_without_erasing_paid_usage(fail
     assert (await service.get(source)).data == original.data
     assert len(attempts) == 2
 
-    cache.now += 61
+    cache.now += 121
     assert (await service.get(source)).data == original.data
     assert len(attempts) == 3
     expected_calls = 1 if failure == "budget_exhausted" else 3

@@ -32,7 +32,15 @@ class Cache:
         self.values[key] = value.encode() if isinstance(value, str) else value
         return True
 
+    async def ttl(self, key):
+        return 3600 if key in self.values else -2
+
     async def execute_command(self, command, script, count, key, owner):
+        if command == "SET":
+            if script not in self.values:
+                return None
+            self.values[script] = str(count).encode()
+            return True
         if self.values.get(key) == owner.encode():
             self.values.pop(key)
             return 1
