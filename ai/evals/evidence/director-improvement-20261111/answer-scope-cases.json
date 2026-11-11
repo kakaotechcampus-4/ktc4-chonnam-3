@@ -4,5 +4,17 @@
   "physical_calls": 5,
   "claim_scope_comparison_calls": 4,
   "targeted_contribution_refinement_calls": 1,
-  "scope": "Two synthetic development answers on one public code context; no general sufficiency accuracy or independent holdout claim."
+  "scope": "Two synthetic development answers on one public code context; no general sufficiency accuracy or independent holdout claim.",
+  "code_evidence": {
+    "id": "fresh-mastodon-e2",
+    "repository": "mastodon/mastodon",
+    "ref": "cc76f85b9afc02b1265e68e6ee6c24ab266771b4",
+    "path": "app/services/post_status_service.rb",
+    "lines": [
+      226,
+      256
+    ],
+    "fact": "redis.setex(idempotency_key, 3_600, @status.id)"
+  },
+  "cases": []
 }

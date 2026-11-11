@@ -342,6 +342,281 @@
           }
         }
       ]
+    },
+    {
+      "case_id": "ps-fit-n03",
+      "split": "dev",
+      "synthetic_candidate": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "이메일 구독 알림을 묶을 게시물 ID는 어떤 Redis 키에 저장하나요?",
+        "topic_code": "email_subscription_batching",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "이메일 구독 알림을 묶을 게시물 ID는 어떤 Redis 키에 저장하나요?",
+          "required_points": [
+            {
+              "key": "email_subscription_batching_flow",
+              "description": "이메일 구독 알림을 묶을 게시물 ID는 어떤 Redis 키에 저장하나요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "public-ref-001"
+            },
+            {
+              "kind": "evidence",
+              "id": "public-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "public-ref-001",
+          "public-ref-002"
+        ],
+        "jd_requirement_ids": []
+      },
+      "oracle": {
+        "expected_source_verdict": "reject",
+        "expected_recovery": "replan",
+        "expected_plan_valid": false,
+        "expected_safe_alternative": true,
+        "minimum_sufficient_answer_scope": "email_subscriptions:<account id>:next_batch 키를 제시하면 충분하다.",
+        "rationale": "저장 키의 이름을 읽으면 완료되는 회상 질문이다.",
+        "source_lines": [
+          "192-194"
+        ]
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "제공 코드에 게시물 ID를 `email_subscriptions:#{@status.account_id}:next_batch` Redis 키에 저장하는 흐름이 있고, 질문은 해당 키만 묻습니다.",
+            "point_coverage": [
+              {
+                "key": "email_subscription_batching_flow",
+                "status": "asked",
+                "question_excerpt": "이메일 구독 알림을 묶을 게시물 ID는 어떤 Redis 키에 저장하나요?"
+              }
+            ]
+          },
+          "model_verdict": "accept",
+          "model_recovery": null,
+          "oracle_verdict_match": false,
+          "oracle_recovery_match": false,
+          "oracle_plan_match": false,
+          "request_equals_frozen_payload_no_labels": true,
+          "instructions_equal_frozen_arm_policy": true,
+          "raw_wire_attempt_equal": true,
+          "codex_source_grade": {
+            "conclusion": "새 의미 기준상 잘못 승인",
+            "source_question_verdict": "reject",
+            "reason_factual_fidelity": true,
+            "criterion_reason_alignment": false,
+            "invented_unasked_requirement": false,
+            "false_premise_or_personal_attribution": false,
+            "original_point_coverage_valid": true,
+            "safe_alternative_fidelity": true,
+            "other_flags_fidelity": true,
+            "full_source_quality_success": false,
+            "reason_evaluation": "계정별 email_subscriptions next_batch 키는 실제 sadd 호출에 있다. 질문은 그 키의 식별만 요구한다. A의 사유는 코드 일치만으로 승인해 이번 problem_solving main의 의미 적합성을 놓친다. 이는 과거 K의 원래 기준 판정을 소급 수정하는 뜻이 아니다.",
+            "point_evaluation": "원래 직접 물은 코드 회상 필수점은 asked이며 실제 질문의 연속 구절로 인용했다. 원문에 없던 원인·대안·검증을 필수점으로 추가하지 않았다.",
+            "other_flags_evaluation": "Context·문장·계약의 기존 적합성과 안전한 대안 존재는 true로 유지했다. 같은 제공 코드와 허용된 기술 Persona에서 p01 같은 유효한 질문이 가능하므로 safe_alternative=true가 맞다."
+          }
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": false,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "코드에는 게시물 ID를 저장하는 Redis 키가 확인되지만, 질문은 키를 식별하는 데 그쳐 problem_solving 평가에 필요한 문제 상황에서의 판단을 요구하지 않습니다.",
+            "point_coverage": [
+              {
+                "key": "email_subscription_batching_flow",
+                "status": "asked",
+                "question_excerpt": "이메일 구독 알림을 묶을 게시물 ID는 어떤 Redis 키에 저장하나요?"
+              }
+            ]
+          },
+          "model_verdict": "reject",
+          "model_recovery": "replan",
+          "oracle_verdict_match": true,
+          "oracle_recovery_match": true,
+          "oracle_plan_match": true,
+          "request_equals_frozen_payload_no_labels": true,
+          "instructions_equal_frozen_arm_policy": true,
+          "raw_wire_attempt_equal": true,
+          "codex_source_grade": {
+            "conclusion": "의미 적합성만 정확히 거절",
+            "source_question_verdict": "reject",
+            "reason_factual_fidelity": true,
+            "criterion_reason_alignment": true,
+            "invented_unasked_requirement": false,
+            "false_premise_or_personal_attribution": false,
+            "original_point_coverage_valid": true,
+            "safe_alternative_fidelity": true,
+            "other_flags_fidelity": true,
+            "full_source_quality_success": true,
+            "reason_evaluation": "계정별 email_subscriptions next_batch 키는 실제 sadd 호출에 있다. 질문은 그 키의 식별만 요구한다. B는 실제로 요구한 답이 회상에 그친다는 점만으로 plan_valid=false를 선택했고, 별도의 장애·거짓 전제를 만들지 않았다.",
+            "point_evaluation": "원래 직접 물은 코드 회상 필수점은 asked이며 실제 질문의 연속 구절로 인용했다. 원문에 없던 원인·대안·검증을 필수점으로 추가하지 않았다.",
+            "other_flags_evaluation": "Context·문장·계약의 기존 적합성과 안전한 대안 존재는 true로 유지했다. 같은 제공 코드와 허용된 기술 Persona에서 p01 같은 유효한 질문이 가능하므로 safe_alternative=true가 맞다."
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "ps-fit-n04",
+      "split": "dev",
+      "synthetic_candidate": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "이 파일에서 게시물 후처리가 이메일 구독 처리로 이어지는 호출 순서를 설명해 주시겠어요?",
+        "topic_code": "email_subscription_batching",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "이 파일에서 게시물 후처리가 이메일 구독 처리로 이어지는 호출 순서를 설명해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "email_subscription_batching_flow",
+              "description": "이 파일에서 게시물 후처리가 이메일 구독 처리로 이어지는 호출 순서를 설명해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "public-ref-001"
+            },
+            {
+              "kind": "evidence",
+              "id": "public-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "public-ref-001",
+          "public-ref-002"
+        ],
+        "jd_requirement_ids": []
+      },
+      "oracle": {
+        "expected_source_verdict": "reject",
+        "expected_recovery": "replan",
+        "expected_plan_valid": false,
+        "expected_safe_alternative": true,
+        "minimum_sufficient_answer_scope": "postprocess_status!에서 process_email_subscriptions!를 호출하는 순서를 설명하면 충분하다.",
+        "rationale": "아직 다루지 않은 흐름 질문으로는 유효하지만 이번 문제 해결 main의 새 원인·대안·검증 판단은 없다.",
+        "source_lines": [
+          "173-181",
+          "183-194"
+        ]
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "제공된 코드의 호출 흐름을 근거로 후처리에서 이메일 구독 처리로 이어지는 순서를 묻고 있어 유효합니다.",
+            "point_coverage": [
+              {
+                "key": "email_subscription_batching_flow",
+                "status": "asked",
+                "question_excerpt": "게시물 후처리가 이메일 구독 처리로 이어지는 호출 순서를 설명해 주시겠어요?"
+              }
+            ]
+          },
+          "model_verdict": "accept",
+          "model_recovery": null,
+          "oracle_verdict_match": false,
+          "oracle_recovery_match": false,
+          "oracle_plan_match": false,
+          "request_equals_frozen_payload_no_labels": true,
+          "instructions_equal_frozen_arm_policy": true,
+          "raw_wire_attempt_equal": true,
+          "codex_source_grade": {
+            "conclusion": "새 의미 기준상 잘못 승인",
+            "source_question_verdict": "reject",
+            "reason_factual_fidelity": true,
+            "criterion_reason_alignment": false,
+            "invented_unasked_requirement": false,
+            "false_premise_or_personal_attribution": false,
+            "original_point_coverage_valid": true,
+            "safe_alternative_fidelity": true,
+            "other_flags_fidelity": true,
+            "full_source_quality_success": false,
+            "reason_evaluation": "후처리에서 이메일 구독 처리로 이어지는 호출은 제공 파일에 있고 아직 같은 지원자 답변을 반복시키지 않는다. 직접 요청은 그 호출 순서뿐이다. A의 사유는 코드 일치만으로 승인해 이번 problem_solving main의 의미 적합성을 놓친다. 이는 과거 K의 원래 기준 판정을 소급 수정하는 뜻이 아니다.",
+            "point_evaluation": "원래 직접 물은 코드 회상 필수점은 asked이며 실제 질문의 연속 구절로 인용했다. 원문에 없던 원인·대안·검증을 필수점으로 추가하지 않았다.",
+            "other_flags_evaluation": "Context·문장·계약의 기존 적합성과 안전한 대안 존재는 true로 유지했다. 같은 제공 코드와 허용된 기술 Persona에서 p01 같은 유효한 질문이 가능하므로 safe_alternative=true가 맞다."
+          }
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": false,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "코드 근거와 질문 계약은 일치하지만, problem_solving 평가에 필요한 문제·실패·제약 상황에서의 판단을 요구하지 않고 호출 순서 설명만 요구합니다. 제공 자료와 허용 Persona 안에서 대안 질문을 구성할 수 있습니다.",
+            "point_coverage": [
+              {
+                "key": "email_subscription_batching_flow",
+                "status": "asked",
+                "question_excerpt": "이 파일에서 게시물 후처리가 이메일 구독 처리로 이어지는 호출 순서를 설명해 주시겠어요?"
+              }
+            ]
+          },
+          "model_verdict": "reject",
+          "model_recovery": "replan",
+          "oracle_verdict_match": true,
+          "oracle_recovery_match": true,
+          "oracle_plan_match": true,
+          "request_equals_frozen_payload_no_labels": true,
+          "instructions_equal_frozen_arm_policy": true,
+          "raw_wire_attempt_equal": true,
+          "codex_source_grade": {
+            "conclusion": "의미 적합성만 정확히 거절",
+            "source_question_verdict": "reject",
+            "reason_factual_fidelity": true,
+            "criterion_reason_alignment": true,
+            "invented_unasked_requirement": false,
+            "false_premise_or_personal_attribution": false,
+            "original_point_coverage_valid": true,
+            "safe_alternative_fidelity": true,
+            "other_flags_fidelity": true,
+            "full_source_quality_success": true,
+            "reason_evaluation": "후처리에서 이메일 구독 처리로 이어지는 호출은 제공 파일에 있고 아직 같은 지원자 답변을 반복시키지 않는다. 직접 요청은 그 호출 순서뿐이다. B는 실제로 요구한 답이 회상에 그친다는 점만으로 plan_valid=false를 선택했고, 별도의 장애·거짓 전제를 만들지 않았다.",
+            "point_evaluation": "원래 직접 물은 코드 회상 필수점은 asked이며 실제 질문의 연속 구절로 인용했다. 원문에 없던 원인·대안·검증을 필수점으로 추가하지 않았다.",
+            "other_flags_evaluation": "Context·문장·계약의 기존 적합성과 안전한 대안 존재는 true로 유지했다. 같은 제공 코드와 허용된 기술 Persona에서 p01 같은 유효한 질문이 가능하므로 safe_alternative=true가 맞다."
+          }
+        }
+      ]
     }
   ]
 }
