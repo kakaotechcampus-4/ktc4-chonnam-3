@@ -2121,6 +2121,290 @@
           }
         ]
       }
+    },
+    "configuration": {
+      "environment_changed_since_live": true,
+      "global_timeout_before": 60.0,
+      "global_timeout_latest": 50.0,
+      "effective_tasks": {
+        "director": {
+          "at_live": {
+            "timeout_seconds": 120.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          },
+          "latest_api0": {
+            "timeout_seconds": 120.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          }
+        },
+        "answer_analysis": {
+          "at_live": {
+            "timeout_seconds": 120.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          },
+          "latest_api0": {
+            "timeout_seconds": 120.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          }
+        },
+        "repo_shallow": {
+          "at_live": {
+            "timeout_seconds": 180.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          },
+          "latest_api0": {
+            "timeout_seconds": 180.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          }
+        },
+        "repo_deep": {
+          "at_live": {
+            "timeout_seconds": 160.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          },
+          "latest_api0": {
+            "timeout_seconds": 160.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          }
+        },
+        "report": {
+          "at_live": {
+            "timeout_seconds": 180.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          },
+          "latest_api0": {
+            "timeout_seconds": 180.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          }
+        },
+        "report_score": {
+          "at_live": {
+            "timeout_seconds": 180.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          },
+          "latest_api0": {
+            "timeout_seconds": 180.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          }
+        }
+      },
+      "same_director_answer_limits": true,
+      "raw_env_copied": false,
+      "original_env_modified_by_comparison": false
+    },
+    "original_live_preservation": {
+      "unchanged": true,
+      "files_checked": 498,
+      "schema_or_database_written_by_comparison": false
+    },
+    "scope_limits": [
+      "The historical 27 real Luna calls ran against base 110e1aeb, catalog12 and the then-current environment; they are preserved as historical evidence.",
+      "Latest base561/catalog11 and the changed global timeout have a new complete API0 nine-turn storage/recovery/history validation only; no new provider calls were made.",
+      "Full historical source identity intentionally does not match the latest revision. Core-file and actual transmitted instruction equality do not erase the 14 changed/removed runtime files. The seed script includes both the pronunciation revert and the later opaque prompt-version registration compatibility fix.",
+      "Latest API0 is a structural/connection regression using mock responses, not a new real-model quality, latency, or cost measurement.",
+      "Speech pronunciation, frontend/REST/WS service E2E, fresh repository analysis, external search, and actual report/scoring generation are outside this comparison."
+    ],
+    "original_actual_audit_reexecuted_after_revert": false,
+    "latest_model_actual_calls_added": 0
+  },
+  "actual_run_scope_note": "The real 27-call run belongs to its preserved execution snapshot/catalog12. Upstream voice revert, latest catalog11 and final opaque-version registration compatibility fix are separate publication/API0 checks, not another real-model interview.",
+  "phases": [
+    {
+      "phase": "start",
+      "failed": false,
+      "phase_latency_ms": 14729.12,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 1,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 2,
+      "outcome": {
+        "failure": null,
+        "discard_reason": null
+      }
+    },
+    {
+      "phase": "answer:01",
+      "failed": false,
+      "phase_latency_ms": 67789.256,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 2,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:02",
+      "failed": false,
+      "phase_latency_ms": 68330.342,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 3,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:03",
+      "failed": false,
+      "phase_latency_ms": 36836.739,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 4,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:04",
+      "failed": false,
+      "phase_latency_ms": 94027.011,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 5,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:05",
+      "failed": false,
+      "phase_latency_ms": 67566.844,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 6,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:06",
+      "failed": false,
+      "phase_latency_ms": 82008.133,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 7,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:07",
+      "failed": false,
+      "phase_latency_ms": 98531.76,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 8,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:08",
+      "failed": false,
+      "phase_latency_ms": 54039.308,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 9,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:09",
+      "failed": false,
+      "phase_latency_ms": 12528.78,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 9,
+      "session_status": "completed",
+      "physical_model_calls_this_phase": 1,
+      "outcome": {
+        "completed": true,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
     }
-  }
+  ],
+  "turns": []
 }
