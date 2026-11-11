@@ -8,11 +8,13 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import random
 import time
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager, nullcontext
+from dataclasses import dataclass, field, replace
 from decimal import Decimal, InvalidOperation
 from email.utils import parsedate_to_datetime
 from typing import cast
@@ -28,7 +30,103 @@ from devon_ai.contracts import (
 )
 from pydantic import SecretStr
 
+from app.integrations.execution_ledger import Observation, observe_call
+
 MAX_JSON_DEPTH = 64
+MAX_TIMING_FRAME_BYTES = 65536
+
+
+class _ResponseTiming:
+    """내용을 저장하지 않고 도착 시각만 관측하며 권위 응답 파서는 바꾸지 않는다."""
+
+    def __init__(self, observed: Observation, started: float, *, stream: bool) -> None:
+        self.observed, self.started, self.stream = observed, started, stream
+        self._line = bytearray()
+        self._data: list[bytes] = []
+        self._frame_bytes = 0
+        self._skip_lf = False
+        self._finished = False
+        self._put(
+            response_timing_version=2,
+            response_headers_ms=None,
+            first_sse_event_ms=None,
+            first_output_text_delta_ms=None,
+            response_read_ms=None,
+            response_decode_ms=None,
+            validation_ms=None,
+            response_read_complete=None,
+            sse_timing_limited=False,
+        )
+
+    def _put(self, **values: str | int | bool | None) -> None:
+        self.observed.record = replace(
+            self.observed.record, metadata={**self.observed.record.metadata, **values}
+        )
+
+    def mark(self, name: str, received: float | None = None) -> None:
+        now = time.perf_counter() if received is None else received
+        self._put(**{name: max(0, round((now - self.started) * 1000))})
+
+    @contextmanager
+    def duration(self, name: str) -> Iterator[None]:
+        started = time.perf_counter()
+        try:
+            yield
+        finally:
+            self._put(**{name: max(0, round((time.perf_counter() - started) * 1000))})
+
+    def feed(self, chunk: bytes) -> None:
+        if not self.stream or self._finished:
+            return
+        # 한 chunk에 들어온 이벤트의 실제 공급자 생성 시각을 역추정하지 않는다.
+        received = time.perf_counter()
+        for offset in range(0, len(chunk), 4096):
+            for part in chunk[offset : offset + 4096].splitlines(keepends=True):
+                if self._skip_lf and part.startswith(b"\n"):
+                    part = part[1:]
+                self._skip_lf = part.endswith(b"\r")
+                if not part:
+                    continue
+                self._frame_bytes += len(part)
+                if self._frame_bytes > MAX_TIMING_FRAME_BYTES:
+                    self._put(sse_timing_limited=True)
+                    self._finished = True
+                    self._line.clear()
+                    self._data.clear()
+                    return
+                ending = part.endswith((b"\r", b"\n"))
+                self._line.extend(part.rstrip(b"\r\n") if ending else part)
+                if ending:
+                    line = bytes(self._line)
+                    self._line.clear()
+                    if line.startswith(b"data:"):
+                        self._data.append(line[5:].removeprefix(b" "))
+                    elif not line:
+                        self._event(received)
+                        self._frame_bytes = 0
+                    if self._finished:
+                        return
+
+    def _event(self, received: float) -> None:
+        data, self._data = b"\n".join(self._data), []
+        if not data or data == b"[DONE]":
+            return
+        try:
+            event = _json(data)
+        except (ValueError, UnicodeError, RecursionError):
+            return
+        if not isinstance(event, dict) or not isinstance(event.get("type"), str):
+            return
+        if self.observed.record.metadata["first_sse_event_ms"] is None:
+            self.mark("first_sse_event_ms", received)
+        if (
+            event["type"] == "response.output_text.delta"
+            and isinstance(event.get("delta"), str)
+            and event["delta"]
+        ):
+            self.mark("first_output_text_delta_ms", received)
+            self._finished = True
+            self._data.clear()
 
 
 @dataclass
@@ -299,7 +397,41 @@ async def _attempt[T](
     attempt: int,
     base_url: str,
 ) -> tuple[T | None, CallFailure | None, AttemptMetadata, float | None]:
+    async with observe_call(
+        request.prompt.task_name,
+        requested_model=request.prompt.model,
+        request_sha256=hashlib.sha256(body).hexdigest(),
+        metadata={
+            "prompt_version": request.prompt.version,
+            "schema_version": request.schema_version,
+            "reasoning_effort": request.limits.reasoning_effort,
+            "max_output_tokens": request.limits.max_output_tokens,
+            "request_bytes": len(body),
+            "stream": request.limits.stream,
+            "attempt": attempt,
+            "outcome_scope": "gateway_contract",
+        },
+    ) as observed:
+        result = await _attempt_impl(
+            request, validator, http, api_key, body, attempt, base_url, observed
+        )
+        if observed is not None:
+            observed.complete(result[1].error_code if result[1] else None)
+        return result
+
+
+async def _attempt_impl[T](
+    request: ModelRequest,
+    validator: Callable[[object], T],
+    http: httpx.AsyncClient,
+    api_key: SecretStr,
+    body: bytes,
+    attempt: int,
+    base_url: str,
+    observed: Observation | None,
+) -> tuple[T | None, CallFailure | None, AttemptMetadata, float | None]:
     started = time.monotonic()
+    timing_started = time.perf_counter()
     model = request.prompt.model
     response_id: str | None = None
     input_tokens: int | None = None
@@ -309,6 +441,11 @@ async def _attempt[T](
     data: T | None = None
     retry_delay: float | None = 0.0
     provider_status: int | None = None
+    timing = (
+        _ResponseTiming(observed, timing_started, stream=request.limits.stream)
+        if observed
+        else None
+    )
     try:
         async with asyncio.timeout(request.limits.timeout_seconds) as deadline:
             async with http.stream(
@@ -323,6 +460,13 @@ async def _attempt[T](
                 timeout=request.limits.timeout_seconds,
                 follow_redirects=False,
             ) as response:
+                if timing is not None:
+                    timing.mark("response_headers_ms")
+                if observed is not None:
+                    observed.record = replace(
+                        observed.record,
+                        metadata={**observed.record.metadata, "status_code": response.status_code},
+                    )
                 # 상태를 먼저 구분해 큰 오류 페이지가 실행 budget 오류로 바뀌지 않게 한다.
                 if not response.is_success:
                     retry_delay = 0.0
@@ -335,11 +479,23 @@ async def _attempt[T](
                         )
                         if retry_delay is not None:
                             error_body = bytearray()
-                            async for chunk in response.aiter_bytes():
-                                remaining = request.limits.max_response_bytes - len(error_body)
-                                error_body.extend(chunk[:remaining])
-                                if len(error_body) >= request.limits.max_response_bytes:
-                                    break
+                            read_complete = False
+                            try:
+                                with (
+                                    timing.duration("response_read_ms") if timing else nullcontext()
+                                ):
+                                    async for chunk in response.aiter_bytes():
+                                        remaining = request.limits.max_response_bytes - len(
+                                            error_body
+                                        )
+                                        error_body.extend(chunk[:remaining])
+                                        if len(error_body) >= request.limits.max_response_bytes:
+                                            break
+                                    else:
+                                        read_complete = True
+                            finally:
+                                if timing is not None:
+                                    timing._put(response_read_complete=read_complete)
                             raw = bytes(error_body).decode("utf-8", errors="replace")
                             if _quota_exhausted(bytes(error_body)):
                                 retry_delay = None
@@ -354,51 +510,67 @@ async def _attempt[T](
                         retry_delay,
                     )
                 buffer = bytearray()
-                async for chunk in response.aiter_bytes():
-                    if len(buffer) + len(chunk) > request.limits.max_response_bytes:
-                        raise _failed(
-                            "budget", "llm_failed", "Provider response exceeds byte limit."
-                        )
-                    buffer.extend(chunk)
+                read_complete = False
+                try:
+                    with timing.duration("response_read_ms") if timing else nullcontext():
+                        async for chunk in response.aiter_bytes():
+                            if len(buffer) + len(chunk) > request.limits.max_response_bytes:
+                                raise _failed(
+                                    "budget", "llm_failed", "Provider response exceeds byte limit."
+                                )
+                            buffer.extend(chunk)
+                            if timing is not None:
+                                timing.feed(chunk)
+                        read_complete = True
+                finally:
+                    if timing is not None:
+                        timing._put(response_read_complete=read_complete)
                 raw = bytes(buffer).decode("utf-8", errors="replace")
         # 취소를 삼키는 transport가 만료 후 늦게 응답해도 성공으로 처리하지 않는다.
         if deadline.expired():
             raise TimeoutError
-        # 공급자 응답 봉투의 손상과 그 안에 담긴 모델 출력의 JSON 오류를 구분한다.
-        try:
-            decoded = (
-                _stream_envelope(bytes(buffer)) if request.limits.stream else _json(bytes(buffer))
-            )
-        except (ValueError, UnicodeError, RecursionError):
-            raise _failed("provider", "llm_failed", "Invalid provider response JSON.") from None
-        if not isinstance(decoded, dict):
-            raise _failed("provider", "llm_failed", "Invalid provider response envelope.")
-        envelope = cast(dict[str, object], decoded)
-        input_tokens = _token(envelope.get("usage"), "input_tokens")
-        output_tokens = _token(envelope.get("usage"), "output_tokens")
-        actual_model = envelope.get("model")
-        if not isinstance(actual_model, str) or not actual_model.strip():
-            raise _failed("provider", "llm_failed", "Provider model metadata is missing.")
-        model = actual_model
-        provider_id = envelope.get("id")
-        if not isinstance(provider_id, str) or not provider_id.strip():
-            raise _failed("provider", "llm_failed", "Provider response identifier is missing.")
-        response_id = provider_id
-        if envelope.get("status") != "completed":
-            raise _failed("provider", "llm_failed", "Provider response did not complete.")
-        raw, refusal = _output(envelope)
-        if refusal:
-            raise _failed("semantic", "llm_failed", "Provider refused this request.")
-        # 봉투 검증을 통과한 뒤에만 작업별 출력의 parse/schema/semantic을 검사한다.
-        try:
-            parsed = _json(raw)
-        except (ValueError, UnicodeError, RecursionError):
-            raise _failed("parse", "llm_parse_failed", "Model output is not strict JSON.") from None
-        try:
-            data = validator(parsed)
-        except ContractError as exc:
-            code = "llm_parse_failed" if exc.stage == "parse" else "llm_failed"
-            raise _failed(exc.stage, code, "Model output failed contract validation.") from None
+        # 봉투와 최종 모델 JSON의 복원 시간이며 외부 대기나 작업 검증은 포함하지 않는다.
+        with timing.duration("response_decode_ms") if timing else nullcontext():
+            try:
+                decoded = (
+                    _stream_envelope(bytes(buffer))
+                    if request.limits.stream
+                    else _json(bytes(buffer))
+                )
+            except (ValueError, UnicodeError, RecursionError):
+                raise _failed("provider", "llm_failed", "Invalid provider response JSON.") from None
+            if not isinstance(decoded, dict):
+                raise _failed("provider", "llm_failed", "Invalid provider response envelope.")
+            envelope = cast(dict[str, object], decoded)
+            if observed is not None:
+                observed.response(envelope)
+            input_tokens = _token(envelope.get("usage"), "input_tokens")
+            output_tokens = _token(envelope.get("usage"), "output_tokens")
+            actual_model = envelope.get("model")
+            if not isinstance(actual_model, str) or not actual_model.strip():
+                raise _failed("provider", "llm_failed", "Provider model metadata is missing.")
+            model = actual_model
+            provider_id = envelope.get("id")
+            if not isinstance(provider_id, str) or not provider_id.strip():
+                raise _failed("provider", "llm_failed", "Provider response identifier is missing.")
+            response_id = provider_id
+            if envelope.get("status") != "completed":
+                raise _failed("provider", "llm_failed", "Provider response did not complete.")
+            raw, refusal = _output(envelope)
+            if refusal:
+                raise _failed("semantic", "llm_failed", "Provider refused this request.")
+            try:
+                parsed = _json(raw)
+            except (ValueError, UnicodeError, RecursionError):
+                raise _failed(
+                    "parse", "llm_parse_failed", "Model output is not strict JSON."
+                ) from None
+        with timing.duration("validation_ms") if timing else nullcontext():
+            try:
+                data = validator(parsed)
+            except ContractError as exc:
+                code = "llm_parse_failed" if exc.stage == "parse" else "llm_failed"
+                raise _failed(exc.stage, code, "Model output failed contract validation.") from None
         if data is None:
             raise _failed("schema", "llm_failed", "Validator returned no result.")
     except (TimeoutError, httpx.TimeoutException):
