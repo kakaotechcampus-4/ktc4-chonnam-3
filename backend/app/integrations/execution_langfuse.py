@@ -1,3 +1,152 @@
+def _hash(value: object) -> str:
+    return hashlib.sha256(
+        json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()
+    ).hexdigest()
+
+
+def _attribute(key: str, value: object) -> dict[str, Any]:
+    encoded: dict[str, Any]
+    if type(value) is bool:
+        encoded = {"boolValue": value}
+    elif type(value) is int:
+        encoded = {"intValue": str(value)}
+    elif type(value) is float:
+        encoded = {"doubleValue": value}
+    else:
+        encoded = {
+            "stringValue": value if isinstance(value, str) else json.dumps(value, sort_keys=True)
+        }
+    return {"key": key, "value": encoded}
+
+
+def build_export(records: Sequence[CallRecord]) -> dict[str, Any]:
+    if len({record.call_id for record in records}) != len(records):
+        raise ValueError("duplicate ledger call")
+    groups: dict[str, list[CallRecord]] = defaultdict(list)
+    for record in records:
+        if record.elapsed_seconds is not None:
+            groups[record.run_id].append(record)
+    spans: list[dict[str, Any]] = []
+    expected: dict[str, Any] = {}
+    for run_id, items in sorted(groups.items()):
+        trace_id = _hash(["execution-ledger.v1", run_id])[:32]
+        root_id = _hash(["root", run_id])[:16]
+        start = min(item.started_at for item in items)
+        end = max(item.started_at + (item.elapsed_seconds or 0) for item in items)
+        root_hash = _hash(
+            [record_data(item) for item in sorted(items, key=lambda item: item.call_id)]
+        )
+        root = {
+            "traceId": trace_id,
+            "spanId": root_id,
+            "name": "observed execution window",
+            "startTimeUnixNano": str(int(start * 1_000_000_000)),
+            "endTimeUnixNano": str(int(end * 1_000_000_000)),
+            "attributes": [
+                _attribute("langfuse.observation.type", "span"),
+                _attribute("langfuse.trace.name", run_id),
+                _attribute("langfuse.observation.metadata.ledger_record_sha256", root_hash),
+                _attribute(
+                    "langfuse.observation.metadata.timing_scope", "observed recorded calls only"
+                ),
+            ],
+        }
+        spans.append(root)
+        expected[root_id] = {
+            "trace_id": trace_id,
+            "record_sha256": root_hash,
+            "usage": {},
+            "parent_id": None,
+            "started_at": start,
+            "ended_at": end,
+        }
+        for item in sorted(items, key=lambda item: (item.started_at, item.call_id)):
+            span_id = _hash(["call", item.call_id])[:16]
+            parent_id = (
+                _hash(["call", item.parent_call_id])[:16]
+                if any(parent.call_id == item.parent_call_id for parent in items)
+                else root_id
+            )
+            record_hash = _hash(record_data(item))
+            usage = {}
+            if item.kind != "stage":
+                if item.input_tokens is not None:
+                    usage["input"] = item.input_tokens
+                if item.output_tokens is not None:
+                    usage["output"] = item.output_tokens
+            attributes: dict[str, object] = {
+                "langfuse.trace.name": run_id,
+                "langfuse.observation.type": "span" if item.kind == "stage" else item.kind,
+                "langfuse.observation.level": "ERROR"
+                if item.status in {"failed", "cancelled"}
+                else "DEFAULT",
+                "langfuse.observation.metadata.ledger_record_sha256": record_hash,
+                "langfuse.observation.metadata.call_id": item.call_id,
+                "langfuse.observation.metadata.entrypoint": item.entrypoint,
+                "langfuse.observation.metadata.operation": item.operation,
+                "langfuse.observation.metadata.status": item.status,
+                "langfuse.observation.metadata.cost_status": "unpriced",
+                "langfuse.observation.metadata.content_exported": False,
+                "langfuse.observation.metadata.actual_model": item.actual_model,
+                "langfuse.observation.metadata.requested_model": item.requested_model,
+                "langfuse.observation.metadata.cached_input_tokens": item.cached_input_tokens,
+                "langfuse.observation.metadata.reasoning_tokens": item.reasoning_tokens,
+                "langfuse.observation.metadata.cache_write_tokens": item.cache_write_tokens,
+                **{
+                    "langfuse.observation.metadata." + key: value
+                    for key, value in item.metadata.items()
+                },
+            }
+            model = item.actual_model or item.requested_model
+            if model is not None and item.kind != "stage":
+                # 공급자 단가 검증 전에는 동명 OpenAI 기본 단가의 자동 적용을 막는다.
+                attributes["langfuse.observation.model.name"] = item.provider + "::" + model
+            if usage:
+                attributes["langfuse.observation.usage_details"] = usage
+            spans.append(
+                {
+                    "traceId": trace_id,
+                    "spanId": span_id,
+                    "parentSpanId": parent_id,
+                    "name": item.kind + ":" + item.operation,
+                    "startTimeUnixNano": str(int(item.started_at * 1_000_000_000)),
+                    "endTimeUnixNano": str(
+                        int((item.started_at + (item.elapsed_seconds or 0)) * 1_000_000_000)
+                    ),
+                    "attributes": [
+                        _attribute(key, value)
+                        for key, value in attributes.items()
+                        if value is not None
+                    ],
+                    "status": {"code": 2 if item.status in {"failed", "cancelled"} else 1},
+                }
+            )
+            expected[span_id] = {
+                "trace_id": trace_id,
+                "record_sha256": record_hash,
+                "usage": usage,
+                "parent_id": parent_id,
+                "started_at": item.started_at,
+                "ended_at": item.started_at + (item.elapsed_seconds or 0),
+            }
+    payload = {
+        "resourceSpans": [
+            {
+                "resource": {"attributes": [_attribute("service.name", "devon.execution-ledger")]},
+                "scopeSpans": [
+                    {"scope": {"name": "devon.execution-ledger", "version": "1"}, "spans": spans}
+                ],
+            }
+        ]
+    }
+    return {
+        "payload": payload,
+        "expected": expected,
+        "export_id": _hash(expected),
+        "unexported_unknown_duration": sum(record.elapsed_seconds is None for record in records),
+    }
+
+
 async def _readback(
     http: httpx.AsyncClient, base_url: str, auth: httpx.BasicAuth, expected: dict[str, Any]
 ) -> dict[str, int]:
