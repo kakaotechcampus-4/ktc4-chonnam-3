@@ -27,8 +27,38 @@ def _attempts(items: list[c.AttemptMetadata]) -> tuple[dict[str, Any], ...]:
         record["raw_output_sha256"] = (
             hashlib.sha256(raw.encode("utf-8")).hexdigest() if raw is not None else None
         )
+        try:
+            # 원래 byte 지문과 별도로 실제 JSON 내용을 결합한다. 응답 원문은 보존하지 않는다.
+            record["raw_output_json_sha256"] = (
+                content_hash(_response_json(raw)) if raw is not None else None
+            )
+        except (ValueError, TypeError, RecursionError):
+            record["raw_output_json_sha256"] = None
+        if item.schema_version == SOURCE_BOUND_PLAN_SCHEMA:
+            # 새 사적 wire만 원문에서 다시 구성한다. 구형 시도 요약의 지문은 바꾸지 않는다.
+            record["canonical_question_sha256"] = None
+            if raw is not None and item.error_stage is None and item.error_code is None:
+                try:
+                    question = _source_bound_plan(_response_json(raw), item.prompt_version)
+                    record["canonical_question_sha256"] = content_hash(asdict(question))
+                except (ValueError, TypeError, RecursionError):
+                    pass
         result.append(record)
     return tuple(result)
+
+
+def _source_bound_plan(raw: object, prompt_version: str) -> c.Question:
+    if (
+        not plan_schema_matches_version(SOURCE_BOUND_PLAN_SCHEMA, prompt_version)
+        or type(raw) is not dict
+        or set(raw) != {"question", "intent", "reason_summary"}
+        or any(
+            type(raw[key]) is not str or not raw[key].strip()
+            for key in ("intent", "reason_summary")
+        )
+    ):
+        raise c.ContractError("schema", "source-bound plan receipt")
+    return decode_plan_question(raw["question"], prompt_version=prompt_version)
 
 
 def _object(value: object, name: str) -> dict[str, Any]:
@@ -46,6 +76,59 @@ def _locations(raw: object) -> frozenset[tuple[str, str, str]]:
     ):
         raise ExecutionError("input", "allowed_locations")
     return frozenset(tuple(item) for item in raw)
+
+
+def _checked_prior_analyses(
+    raw: object,
+    context: c.Context,
+    sources: Mapping[c.BasisRef, str],
+    locations: frozenset[tuple[str, str, str]],
+) -> tuple[dict[str, c.ContractChecked[c.AnswerAnalysis]], dict[str, c.QuestionContract]]:
+    """검증용 과거 계약을 추측하지 않고 당시 발언·현재 원문 범위에 다시 대조한다."""
+    supplied = _object(raw, "prior_analyses")
+    history = {turn.turn_id: (index, turn) for index, turn in enumerate(context.history)}
+    analyses = {}
+    contracts = {}
+    for turn_id, value in supplied.items():
+        if turn_id not in history or turn_id == context.current_turn_id:
+            raise ExecutionError("input", "prior_analysis_turn")
+        index, turn = history[turn_id]
+        if not turn.answer.strip():
+            raise ExecutionError("input", "prior_analysis_answer")
+        item = _object(value, "prior_analysis")
+        if set(item) != {"question_contract", "analysis"}:
+            raise ExecutionError("input", "prior_analysis_fields")
+        contract = c.decode_strict(c.QuestionContract, item["question_contract"])
+        older = {previous.turn_id for previous in context.history[:index]}
+        permitted = {ref for ref in sources if ref.kind != "answer_turn" or ref.id in older}
+        if not set(contract.basis_refs).issubset(permitted):
+            raise ExecutionError("input", "prior_contract_reference")
+        checked = c.validate_analysis_for_contract(
+            c.decode_strict(c.AnswerAnalysis, item["analysis"]),
+            contract=contract,
+            answer_text=turn.answer,
+            evidence_refs=frozenset(ref.id for ref in sources if ref.kind == "evidence"),
+            allowed_locations=locations,
+        )
+        analyses[turn_id] = checked
+        contracts[turn_id] = contract
+    return analyses, contracts
+
+
+def _checked_feedback(raw: object) -> RecoveryFeedback:
+    """기존 복구 wire를 같은 runtime 검증기로 읽고 새 승인·참조 권한으로 해석하지 않는다."""
+    item = _object(raw, "recovery_feedback")
+    if set(item) != {"version", "previous_candidate", "recovery", "review_reason_summary"} or (
+        item["version"] != "director-recovery.v1"
+    ):
+        raise ExecutionError("input", "recovery_feedback_fields")
+    return RecoveryFeedback(
+        c.decode_strict(c.Question, item["previous_candidate"]),
+        c.decode_strict(
+            c.CandidateRecovery,
+            {"recovery": item["recovery"], "reason_summary": item["review_reason_summary"]},
+        ),
+    )
 
 
 def prepare(kind: str, payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -84,9 +167,13 @@ def prepare(kind: str, payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
             "reference_texts",
             "tool_results",
             "answer_analysis",
+            "prior_analyses",
+            "recovery_feedback",
         }
         if "context" not in data or set(data) - allowed:
             raise ExecutionError("input", "service_input_fields")
+        if task != "director" and {"prior_analyses", "recovery_feedback"}.intersection(data):
+            raise ExecutionError("input", "director_only_input_fields")
         context = c.decode_strict(c.Context, data["context"])
         references: dict[c.BasisRef, str] = {}
         raw_references = data.get("reference_texts", [])
@@ -151,6 +238,12 @@ def prepare(kind: str, payload: dict[str, Any]) -> tuple[str, dict[str, Any]]:
                 evidence_refs=frozenset(ref.id for ref in sources if ref.kind == "evidence"),
                 allowed_locations=locations,
             )
+        if "prior_analyses" in data:
+            result["prior_analyses"], result["prior_question_contracts"] = _checked_prior_analyses(
+                data["prior_analyses"], context, sources, locations
+            )
+        if "recovery_feedback" in data:
+            result["recovery_feedback"] = _checked_feedback(data["recovery_feedback"])
         return task, result
     except c.ContractError as exc:
         raise ExecutionError("input", f"contract_{exc.stage}") from None

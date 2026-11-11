@@ -1,3 +1,22 @@
+def content_hash(value: object) -> str:
+    text = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode()).hexdigest()
+
+
+@dataclass(frozen=True)
+class Cohort:
+    cases: tuple[Case, ...]
+    pilot_ids: tuple[str, ...]
+    manifest: dict[str, Any]
+
+    def select(self, selection: str) -> tuple[Case, ...]:
+        if selection not in {"pilot", "dev", "holdout", "all"}:
+            raise ValueError("invalid Director selection")
+        if selection == "pilot":
+            return tuple(case for case in self.cases if case.case_id in self.pilot_ids)
+        return tuple(case for case in self.cases if selection == "all" or case.split == selection)
+
+
 def _case(profile: tuple[str, ...], scenario: str, number: int) -> Case:
     split, name, _language, path, action, code = profile
     group = f"director-{split}-{name}-v1"

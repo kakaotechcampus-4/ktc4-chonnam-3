@@ -1,3 +1,119 @@
+FLAGS = ("plan_valid", "context_valid", "wording_valid", "contract_matches")
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise ValueError(message)
+
+
+def load(name: str) -> dict[str, Any]:
+    value = json.loads((HERE / name).read_text(encoding="utf-8"))
+    require(isinstance(value, dict), name + ": expected object")
+    return cast(dict[str, Any], value)
+
+
+def review_outcome(raw: dict[str, Any]) -> tuple[str, str | None]:
+    require(all(type(raw[key]) is bool for key in (*FLAGS, "safe_alternative")), "flag type")
+    unasked = any(point["status"] != "asked" for point in raw["point_coverage"])
+    if all(raw[key] for key in FLAGS) and not unasked:
+        return "accept", None
+    if not raw["safe_alternative"]:
+        return "reject", "no_valid_candidate"
+    if not raw["plan_valid"] or not raw["context_valid"]:
+        return "reject", "replan"
+    return "reject", "rewrite"
+
+
+def check_quotes(question: dict[str, Any], raw: dict[str, Any]) -> None:
+    points = question["question_contract"]["required_points"]
+    keys = [point["key"] for point in points]
+    actual = [point["key"] for point in raw["point_coverage"]]
+    require(len(keys) == len(set(keys)) and set(keys) == set(actual), "point keys")
+    require(len(actual) == len(set(actual)), "duplicate point coverage")
+    for point in raw["point_coverage"]:
+        excerpt = point["question_excerpt"]
+        require(isinstance(excerpt, str), "excerpt must be string")
+        if point["status"] == "asked":
+            require(bool(excerpt), "asked needs nonempty quote")
+        if excerpt:
+            require(excerpt in question["text"], "noncontiguous question quote")
+
+
+def check_files() -> None:
+    provenance = load("provenance.json")
+    hashes = provenance["public_file_hashes"]
+    require(len(hashes) == 9, "nine files plus provenance expected")
+    require(
+        set(hashes) | {"provenance.json"}
+        == {path.name for path in HERE.iterdir() if path.is_file()},
+        "file set",
+    )
+    for name, expected in hashes.items():
+        require(Path(name).name == name, "manifest path must be filename")
+        actual = hashlib.sha256((HERE / name).read_bytes()).hexdigest()
+        require(actual == expected, name + ": SHA256 mismatch")
+    for path in HERE.glob("*.json"):
+        text = path.read_text(encoding="utf-8")
+        require("\ufffd" not in text, "invalid Unicode replacement")
+        require(
+            not re.search(r"(?:^|[\s\"])[A-Za-z]:[\\/]|/Users/|/home/", text),
+            "private absolute path",
+        )
+        require(
+            not re.search(r"\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b", text, re.I),
+            "unmapped UUID",
+        )
+
+
+def check_summary() -> None:
+    summary = load("summary.json")
+    total, cohorts = summary["total"], summary["cohorts"]
+    require(len(cohorts) == 13 and len({row["cohort"] for row in cohorts}) == 13, "cohort IDs")
+    for field, expected in [
+        ("physical_calls", 1254),
+        ("input_tokens", 11227216),
+        ("output_tokens", 2062870),
+        ("unknown_usage_calls", 0),
+    ]:
+        require(sum(row[field] for row in cohorts) == total[field] == expected, field)
+    require(
+        total["unique_call_ids"] == 1254 and total["duplicates"] == [],
+        "private uniqueness assertion",
+    )
+    require(total["actual_billed_cost"] is None, "billing remains unverified")
+    for cohort in cohorts:
+        require(cohort["models"] == {"gpt-6-luna": cohort["physical_calls"]}, "Luna-only cohort")
+        require(sum(cohort["operations"].values()) == cohort["physical_calls"], "operation count")
+    partition = summary["l_call_partition"]
+    require(
+        partition["actual_review"]
+        + partition["actual_generation_plan_review"]
+        + partition["actual_scope_review"]
+        == partition["actual_total"]
+        == 32,
+        "L physical partition",
+    )
+    api0 = summary["api0"]
+    require(api0["counted_in_actual_total"] is False, "Mock separated")
+    for name, count in [("l_final_primary", 24), ("l_final_additional", 8)]:
+        require(
+            api0[name]["physical_model_calls"] == 0 and api0[name]["mock_responses"] == count,
+            "API0 counts",
+        )
+        require(api0[name]["proof_passed"] is True, "API0 final proof")
+    failure = api0["l_first_additional_failure"]
+    require(
+        failure["mock_responses"] == 1
+        and failure["physical_model_calls"] == 0
+        and failure["not_final_proof"] is True,
+        "first Mock failure retained",
+    )
+    require(
+        summary["development_and_final"]["latest_policy_final_groups_actually_run"] == 0,
+        "holdout not run",
+    )
+
+
 def check_semantic_fit() -> None:
     evidence = load("semantic-fit-cases.json")
     cases = evidence["cases"]

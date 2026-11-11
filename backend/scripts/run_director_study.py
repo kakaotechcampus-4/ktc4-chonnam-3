@@ -1,3 +1,34 @@
+from scripts.ai_eval_bridge import ServiceExecutor, prepare  # noqa: E402
+from scripts.evaluation_output import RunOutput, technical_exit_code  # noqa: E402
+from scripts.run_ai_evaluation import (  # noqa: E402
+    ModelAttemptBudget,
+    load_manifest,
+    source_metadata,
+)
+
+LUNA = "gpt-6-luna"
+
+
+def parser() -> argparse.ArgumentParser:
+    value = argparse.ArgumentParser(description=__doc__)
+    value.add_argument("--manifest", type=Path)
+    value.add_argument("--selection", choices=("pilot", "dev", "holdout", "all"), default="pilot")
+    value.add_argument("--case-id", action="append", default=[])
+    value.add_argument("--output", type=Path, required=True)
+    value.add_argument("--execute", action="store_true")
+    value.add_argument("--max-model-attempts", type=int)
+    value.add_argument("--max-wall-seconds", type=float)
+    value.add_argument("--env-file", type=Path)
+    value.add_argument("--ledger", type=Path)
+    value.add_argument("--export-cases", type=Path)
+    value.add_argument("--export-review-packets", type=Path)
+    value.add_argument("--controls-only", action="store_true")
+    value.add_argument("--rejudge-results", type=Path)
+    value.add_argument("--recorded-judgments", type=Path)
+    value.add_argument("--compare", type=Path, nargs=2, metavar=("BASELINE", "CANDIDATE"))
+    return value
+
+
 def luna_factory(
     factory: Callable[[], Any], limits: c.CallLimits | Mapping[str, c.CallLimits]
 ) -> Callable[[], Any]:

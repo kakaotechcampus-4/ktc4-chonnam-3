@@ -1,3 +1,10 @@
+async def _checkpoint(state: dict[str, Any], checkpoint: Checkpoint | None) -> dict[str, Any]:
+    _seal(state)
+    if checkpoint is not None:
+        await checkpoint(copy.deepcopy(state))
+    return state
+
+
 async def _execute(
     state: dict[str, Any],
     executor: Executor,

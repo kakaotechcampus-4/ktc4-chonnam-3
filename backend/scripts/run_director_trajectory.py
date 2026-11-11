@@ -1,3 +1,37 @@
+from director_cases import build_cohort, content_hash  # noqa: E402
+from eval_cases import (  # noqa: E402
+    _EXPECTATION_KEYS,
+    _EXPECTATION_OPTIONAL,
+    Case,
+    _check_expectation,
+    _check_keys,
+)
+
+from app.core.config import Settings, get_settings  # noqa: E402
+from app.integrations.execution_ledger import ExecutionLedger, execution_scope  # noqa: E402
+from scripts.ai_eval_bridge import ServiceExecutor, prepare  # noqa: E402
+from scripts.director_trajectory import advance, create_trajectory  # noqa: E402
+from scripts.evaluation_output import RunOutput  # noqa: E402
+from scripts.run_ai_evaluation import (  # noqa: E402
+    ModelAttemptBudget,
+    load_manifest,
+    source_metadata,
+)
+from scripts.run_director_study import LUNA, luna_factory  # noqa: E402
+
+MAX_SEED_BYTES = 512 * 1024
+_SEED_FIELDS = {"case_id", "version", "kind", "split", "source_group_id", "payload", "expectation"}
+
+
+def _unique_seed_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate seed JSON key")
+        result[key] = value
+    return result
+
+
 def load_seed_file(path: Path, expected_sha256: str | None = None) -> tuple[Case, dict[str, Any]]:
     """파일 지문과 실제 typed 입력을 검사한다. 수집 원천의 진실성은 별도 provenance로 확인한다."""
     with path.open("rb") as stream:
