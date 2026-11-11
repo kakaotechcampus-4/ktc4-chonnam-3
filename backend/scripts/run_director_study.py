@@ -1,3 +1,8 @@
+from app.integrations.execution_ledger import (  # noqa: E402
+    ExecutionLedger,
+    execution_scope,
+    observe_call,
+)
 from scripts.ai_eval_bridge import ServiceExecutor, prepare  # noqa: E402
 from scripts.evaluation_output import RunOutput, technical_exit_code  # noqa: E402
 from scripts.run_ai_evaluation import (  # noqa: E402

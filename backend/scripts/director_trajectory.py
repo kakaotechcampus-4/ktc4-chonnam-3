@@ -1,3 +1,66 @@
+def _context(state: dict[str, Any], *, answering: bool) -> c.Context:
+    turns = state["turns"]
+    answered = [turn for turn in turns if turn["analysis"] is not None]
+    contracts = tuple(
+        c.decode_strict(c.Question, turn["question"]).question_contract for turn in turns
+    )
+    counts = Counter(turn["question"]["persona"] for turn in turns)
+    permitted: tuple[c.PersonaId, ...] = cast(
+        tuple[c.PersonaId, ...],
+        tuple(
+            persona
+            for persona in ("hr_manager", "tech_lead", "domain_lead")
+            if counts[persona] < QUOTA[persona]
+        ),
+    )
+    if not turns:
+        permitted = ("hr_manager",)
+    current = turns[-1] if turns else None
+    materials = state["materials"]
+    raw = {
+        name: copy.deepcopy(materials[name])
+        for name in (
+            "jd_requirements",
+            "repositories",
+            "evidence",
+            "domain_frames",
+            "supplemental_sources",
+            "external_searches",
+            "supplemental_limitations",
+        )
+    }
+    raw.update(
+        interview_id=state["session_id"],
+        current_turn_id=current["turn_id"] if current else None,
+        turn_no=len(turns) if answering else len(answered) + 1,
+        total_turns=9,
+        persona_counts=[{"persona": persona, "count": counts[persona]} for persona in QUOTA],
+        allowed_personas=list(permitted),
+        history=[
+            {
+                "turn_id": turn["turn_id"],
+                "persona": turn["question"]["persona"],
+                "question": turn["question"]["text"],
+                "answer": turn["answer"]["text"],
+                "analysis_ref": turn["turn_id"],
+            }
+            for turn in answered
+        ],
+        current_question_contract=current["question"]["question_contract"] if current else None,
+        limits={"remaining_calls": 2, "remaining_replans": 0, "policy_version": FORMAT},
+        evaluation_targets=[]
+        if answering
+        else [
+            asdict(target)
+            for target in plan_evaluation_targets(
+                contracts, permitted, has_jd=bool(materials["jd_requirements"])
+            )
+        ],
+        presented_evaluation_keys=list(presented_evaluation_keys(contracts)),
+    )
+    return c.decode_strict(c.Context, _wire(raw))
+
+
 async def _checkpoint(state: dict[str, Any], checkpoint: Checkpoint | None) -> dict[str, Any]:
     _seal(state)
     if checkpoint is not None:

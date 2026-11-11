@@ -1,3 +1,217 @@
+LIMITATION = "합성 평가 원문이며 실제 운영·개인 기여·미제공 파일을 증명하지 않는다."
+
+# 각 행이 독립 원문 그룹이고, 같은 행의 다섯 상황은 상관된 변형이다.
+_PROFILES = (
+    (
+        "dev",
+        "invoice",
+        "python",
+        "src/billing/invoice.py",
+        "청구 기록",
+        "def invoice(req):\n    validate(req)\n    return store.insert(req)\n",
+    ),
+    (
+        "dev",
+        "jobs",
+        "typescript",
+        "packages/worker/job.ts",
+        "작업 기록",
+        "export async function job(req) {\n  validate(req);\n  return store.insert(req);\n}\n",
+    ),
+    (
+        "dev",
+        "booking",
+        "java",
+        "booking/src/Booking.java",
+        "예약 기록",
+        "Booking reserve(Request req) {\n  validate(req);\n  return store.insert(req);\n}\n",
+    ),
+    (
+        "dev",
+        "webhook",
+        "go",
+        "internal/hooks/handler.go",
+        "수신 이벤트",
+        "func receive(req Request) error {\n"
+        "  if err := validate(req); err != nil { return err }\n"
+        "  return store.Insert(req)\n}\n",
+    ),
+    (
+        "dev",
+        "queue",
+        "rust",
+        "crates/tasks/src/queue.rs",
+        "대기 작업",
+        "fn enqueue(req: Request) -> Result<()> {\n"
+        "    validate(&req)?;\n    store.insert(req)\n}\n",
+    ),
+    (
+        "dev",
+        "upload",
+        "csharp",
+        "Modules/Files/Upload.cs",
+        "업로드 정보",
+        "Task Upload(Request req) {\n  Validate(req);\n  return store.Insert(req);\n}\n",
+    ),
+    (
+        "dev",
+        "stock",
+        "php",
+        "app/Inventory/Stock.php",
+        "재고 변경",
+        "function update($req) {\n  validate($req);\n  return $this->store->insert($req);\n}\n",
+    ),
+    (
+        "dev",
+        "checkout",
+        "ruby",
+        "services/checkout.rb",
+        "주문 요청",
+        "def checkout(req)\n  validate(req)\n  store.insert(req)\nend\n",
+    ),
+    (
+        "dev",
+        "notify",
+        "kotlin",
+        "notification/Send.kt",
+        "알림 요청",
+        "fun send(req: Request): Record {\n  validate(req)\n  return store.insert(req)\n}\n",
+    ),
+    (
+        "dev",
+        "batch",
+        "scala",
+        "batch/Import.scala",
+        "가져오기 작업",
+        "def submit(req: Request): Record = {\n  validate(req)\n  store.insert(req)\n}\n",
+    ),
+    (
+        "dev",
+        "cache",
+        "swift",
+        "Sources/Cache/Refresh.swift",
+        "갱신 요청",
+        "func refresh(_ req: Request) throws -> Record {\n"
+        "  try validate(req)\n  return try store.insert(req)\n}\n",
+    ),
+    (
+        "dev",
+        "profile",
+        "dart",
+        "lib/profile/update.dart",
+        "프로필 변경",
+        "Future<Record> update(Request req) async {\n"
+        "  validate(req);\n  return store.insert(req);\n}\n",
+    ),
+    (
+        "holdout",
+        "shipment",
+        "python",
+        "delivery/accept.py",
+        "배송 접수",
+        "def accept(parcel):\n    check_address(parcel)\n    return deliveries.save(parcel)\n",
+    ),
+    (
+        "holdout",
+        "ticket",
+        "typescript",
+        "apps/tickets/submit.ts",
+        "문의 접수",
+        "export function submit(ticket) {\n"
+        "  checkCategory(ticket);\n  return tickets.save(ticket);\n}\n",
+    ),
+    (
+        "holdout",
+        "payment",
+        "java",
+        "pay/core/Accept.java",
+        "결제 요청",
+        "Payment accept(Request payment) {\n"
+        "  checkAmount(payment);\n  return payments.save(payment);\n}\n",
+    ),
+    (
+        "holdout",
+        "account",
+        "go",
+        "accounts/create.go",
+        "계정 등록",
+        "func Create(account Account) error {\n"
+        "  if err := checkEmail(account); err != nil { return err }\n"
+        "  return accounts.Save(account)\n}\n",
+    ),
+    (
+        "holdout",
+        "search",
+        "rust",
+        "indexer/src/accept.rs",
+        "색인 요청",
+        "fn accept(document: Document) -> Result<()> {\n"
+        "    check_fields(&document)?;\n    index_jobs.save(document)\n}\n",
+    ),
+    (
+        "holdout",
+        "media",
+        "csharp",
+        "Media/Submit.cs",
+        "변환 요청",
+        "Task Submit(Media media) {\n  CheckFormat(media);\n  return conversions.Save(media);\n}\n",
+    ),
+    (
+        "holdout",
+        "coupon",
+        "php",
+        "Domain/Coupon/Issue.php",
+        "쿠폰 발급",
+        "function issue($coupon) {\n"
+        "  checkPeriod($coupon);\n  return $this->coupons->save($coupon);\n}\n",
+    ),
+    (
+        "holdout",
+        "ledger",
+        "ruby",
+        "ledger/record.rb",
+        "원장 기록",
+        "def record(entry)\n  check_balance(entry)\n  ledger.save(entry)\nend\n",
+    ),
+    (
+        "holdout",
+        "route",
+        "kotlin",
+        "routing/Register.kt",
+        "경로 등록",
+        "fun register(route: Route): Record {\n"
+        "  checkStops(route)\n  return routes.save(route)\n}\n",
+    ),
+    (
+        "holdout",
+        "metrics",
+        "scala",
+        "analytics/Ingest.scala",
+        "지표 수집",
+        "def ingest(metric: Metric): Record = {\n"
+        "  checkLabels(metric)\n  metrics.save(metric)\n}\n",
+    ),
+    (
+        "holdout",
+        "calendar",
+        "swift",
+        "Calendar/Add.swift",
+        "일정 추가",
+        "func add(_ event: Event) throws -> Record {\n"
+        "  try checkTime(event)\n  return try events.save(event)\n}\n",
+    ),
+    (
+        "holdout",
+        "form",
+        "dart",
+        "features/forms/send.dart",
+        "신청서 접수",
+        "Future<Record> send(Form form) async {\n"
+        "  checkFields(form);\n  return forms.save(form);\n}\n",
+    ),
+)
+
+
 def content_hash(value: object) -> str:
     text = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(text.encode()).hexdigest()

@@ -1,3 +1,21 @@
+from __future__ import annotations
+
+import argparse
+import asyncio
+import hashlib
+import json
+import math
+import re
+import sys
+from dataclasses import asdict, replace
+from pathlib import Path
+from typing import Any
+from uuid import uuid4
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+for folder in (REPO_ROOT / "ai" / "evals", REPO_ROOT / "ai" / "src", REPO_ROOT / "backend"):
+    sys.path.insert(0, str(folder))
+
 from director_cases import build_cohort, content_hash  # noqa: E402
 from eval_cases import (  # noqa: E402
     _EXPECTATION_KEYS,
