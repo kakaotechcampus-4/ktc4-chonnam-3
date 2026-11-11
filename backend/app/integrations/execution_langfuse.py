@@ -1,3 +1,77 @@
+async def _readback(
+    http: httpx.AsyncClient, base_url: str, auth: httpx.BasicAuth, expected: dict[str, Any]
+) -> dict[str, int]:
+    rows: dict[str, dict[str, Any]] = {}
+    counts: Counter[str] = Counter()
+    for trace_id in sorted({item["trace_id"] for item in expected.values()}):
+        cursor = None
+        seen = set()
+        for _ in range(100):
+            params = {"traceId": trace_id, "limit": "1000", "fields": "core,basic,usage,metadata"}
+            if cursor:
+                params["cursor"] = cursor
+            response = await http.get(
+                base_url + "/api/public/v2/observations",
+                params=params,
+                auth=auth,
+                timeout=10,
+                follow_redirects=False,
+            )
+            response.raise_for_status()
+            result = response.json()
+            for row in result["data"]:
+                counts[row["id"]] += 1
+                rows[row["id"]] = row
+            cursor = result.get("meta", {}).get("cursor")
+            if not cursor:
+                break
+            if cursor in seen:
+                raise ValueError("repeated observation cursor")
+            seen.add(cursor)
+        else:
+            raise ValueError("observation page limit exceeded")
+    verified = mismatched = missing = 0
+    for span_id, item in expected.items():
+        row = rows.get(span_id)
+        if row is None:
+            missing += 1
+            continue
+        usage = {
+            key: value for key, value in (row.get("usageDetails") or {}).items() if key != "total"
+        }
+        timing_matches = True
+        for field, source in (("startTime", "started_at"), ("endTime", "ended_at")):
+            stamp = row.get(field)
+            try:
+                if not isinstance(stamp, str):
+                    raise ValueError("missing timestamp")
+                timing_matches &= (
+                    abs(datetime.fromisoformat(stamp).timestamp() - item[source]) <= 0.002
+                )
+            except (ValueError, TypeError, OverflowError):
+                timing_matches = False
+        if (
+            row.get("traceId") != item["trace_id"]
+            or counts[span_id] != 1
+            or row.get("parentObservationId") != item["parent_id"]
+            or not timing_matches
+            or (row.get("metadata") or {}).get("ledger_record_sha256") != item["record_sha256"]
+            or usage != item["usage"]
+            or row.get("totalCost") is not None
+        ):
+            mismatched += 1
+        else:
+            verified += 1
+    return {
+        "verified_observations": verified,
+        "mismatched_observations": mismatched,
+        "missing_observations": missing,
+        "duplicate_observation_ids": sum(count > 1 for count in counts.values()),
+        "observations_returned": sum(counts.values()),
+        "unexpected_observations": len(set(rows) - set(expected)),
+    }
+
+
 async def export_ledger(
     ledger: ExecutionLedger,
     *,
