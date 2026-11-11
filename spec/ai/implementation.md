@@ -3526,3 +3526,39 @@ request ID도 일치했다. 최초 조회에서 완료 응답까지 약 64초이
 - 게시 시 통합 구현과 선행 미병합으로 비활성인 후속 패치를 구분한다. OpenAPI와 대응 REST 문서, outbox 생산자와 소비자의 부분 활성화를 피하고 후속 패치의 적용 전·후 지문도 재확인한다.
 - 수치·명령·통과/실패/미실행과 커밋 근거는 각 원래 리뷰 스레드 및 종합 리뷰에 기록한다. 과거 실측·기존 테스트 수치를 이번 수정의 신규 결과로 재사용하지 않는다.
 
+## 2026-11-11 — Director 문제 재현 평가와 질문·대기 개선
+
+작업 기준은 develop `a68ba3c55a5dcfaa82026a266f6837fca10213c0`, 로컬 브랜치는
+`feature/ai-director-improvement-20261111`이다. 원본 작업공간·기존 프롬프트·사용자 면접 기록을
+보존하고 별도 worktree에서 구현했다. 결정은 [0052](decisions/0052-director-problem-oriented-evaluation.md),
+필드 의미는 [내부 계약](contracts.md), 실행 방법은 [평가 README](../../ai/evals/README.md)에 둔다.
+초기 설계·testing 문서에 구현 여부를 분산 기록하지 않는다.
+
+### 구현한 범위
+
+- `capabilities.py`가 v1~v10의 턴 상태·참조 제한·복구·새 정책 지원을 함께 결정한다.
+  과거 저장 버전에는 새 Context 필드를 보내지 않으며 기존 입력 형식을 보존한다.
+- `model_input.py`는 저장 Context와 표시 입력을 분리한다. 현재 질문·답변·계약·분석의 중복,
+  불필요한 공고 수집 메타데이터를 제거하고 원문·SHA·파일 위치·정정·OCR 한계를 유지한다.
+  감춘 자료는 참조 허용 목록에서도 제외한다. Plan과 독립 Review의 원문 범위는 같다.
+- `policy.py`는 현재 계약·실제 답변에 다시 검증한 T3에서만 보완·명확화 선택지를 계산한다.
+  충분한 답변·정상 모름에 반복을 강제하지 않고, 남은 Persona 슬롯으로 다른 평가 영역을
+  질문할 기회를 확보한다. `presented_evaluation_keys`는 질문 기회이며 점수·역량 충족이 아니다.
+- 새 `director-runtime-v9`와 후속 v10을 별도로 보존했다. v10은 한 중심 목적, 실제 답변 연결,
+  가정·기여 범위 구분과 질문/계약 일치를 지시한다. `company_job_fit`은 실제 프로젝트의
+  경험·이해·제안을 JD 업무에 연결하는 질문이어야 한다. 일반 장애 질문의 이름만 바꾸지 않는다.
+- `director_service.py`는 v9/v10에서 새 원문 없는 `not_found/tool_error/insufficient_analysis`
+  결과에 최초 유효 T3를 재사용한다. 새 근거가 있으면 보강 T3를 실행한다. Tool 상태·불확실성·
+  원 실패·재시도 입력은 유지한다. 시작 시 활성 프롬프트를 고정하고 변경되면 다음 호출 전에
+  `context_changed`로 폐기한다. 저장 재생에서도 같은 결과를 보존한다.
+- 질문 생성은 기존 Plan/독립 Review·유한 복구를 유지한다. 자동 복구의 버전 지원도 같은
+  capability로 연결했다. `prepare.py`는 새 선택 레포 값을 flush한 뒤 checkpoint를 읽도록
+  수정해 autoflush가 꺼진 실제 준비 흐름의 `preparation_changed` 회귀를 해결했다.
+- 선택 설정 `AI_EXECUTION_LEDGER_PATH`로 준비 worker·WS 답변·REST 재생성의 실행 범위를
+  기록한다. T3·Plan·Review·레포/외부 조회 단계와 물리 호출의 부모 관계, 실패·취소·토큰·시간을
+  로컬 장부에 연결한다. 초기화와 쓰기는 이벤트 루프 밖에서 실행하며 Langfuse 전송은 별도다.
+
+공개 REST/WS 필드·DB 컬럼·고정 9턴/기술6·도메인2·HR1·공개 채점 산식은 변경하지 않았다.
+기본 runtime recipe는 v10을 선택한다. 원본 `.env`·현재 서비스의 활성 DB 프롬프트를
+자동 변경하거나 실행 중인 서비스를 교체하지 않았다. 등록·활성화는 기존 runtime 설정 절차를 따른다.
+

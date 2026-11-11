@@ -105,3 +105,17 @@ Director 후속 게시의 코어 경계는 [0023](0023-director-runtime.md), 별
 
 - [0049 통합 리뷰의 최신 기반·실행 복구·배포 일치](0049-integrated-review-runtime-consistency.md): Accepted for local implementation and publication scope, 2026-11-10. 최신 음성 기반, 계약·마이그레이션 정렬, 유한 복구·프로필 재사용 및 배포 순서를 정의한다.
 - [0050 면접 작업 수명과 리뷰 결과의 제한적 복구](0050-review-work-lifetime-and-scoped-recovery.md): Accepted for implementation and publication scope, 2026-11-10. 작업 기한·소유권, 결과 보존 및 대상·감사를 제한한 복구를 정의한다.
+- [0052 Director 문제 재현 평가와 조건부 질문 개선](0052-director-problem-oriented-evaluation.md): Accepted for local development and evaluation, 2026-11-11. Luna·현재 설정 유지, Codex 저장 주평가와 사람 검수의 구분, 질문 기회·조건부 후속, v9 입력·빈 조회 재사용과 정책 동일성, 강의·합성 평가 자료의 해석 범위를 정의한다.
+- [0053 Director 검토 진단과 원문 손실 없는 평가 문맥](0053-director-review-diagnostics-and-lossless-context.md): Accepted for local development and evaluation, 2026-11-11. 검증된 판단의 사적 진단·원응답 결합, v3 평가 문맥의 무손실 중복 제거, 과거 형식 보존과 후보의 기본값 전환 기준을 정의한다.
+- [0054 전체 답변의 인접 배치와 제한된 자동 재계획](0054-director-dialogue-view-and-bounded-replan.md): Accepted for local experimental development and evaluation, 2026-11-11. v12의 전체 문답·분석 표시와 최초 입력 동일성에 묶인 자동 재계획, 기존 자동 슬롯 공유와 버전 간 경계를 정의한다.
+- [0055 Director의 생성·검토 지침 분리와 실제 자료 비교](0055-director-operation-prompts.md). 2026-11-11 로컬 실험 개발·평가 채택. 단계별 지침 적용과 원문 동일성, 새 레포·공고를 사용한 비교 기준을 정의한다.
+- [0056 Director 질문의 필수 확인점별 독립 검토](0056-director-required-point-review.md). 2026-11-11 로컬 실험 개발·평가 채택. 필수점별 판정과 질문 인용, 기존 복구 경계, 평가 검증 범위를 정의한다.
+- [0057 Director 공통 정책 배치 비교와 지연 측정](0057-director-shared-policy-comparison.md). 2026-11-11 로컬 실험 개발·평가 채택. 동일 전체 정책을 전달하는 v15와 실제 캐시·추론·지연의 비교 범위를 정의한다.
+- [0058 Director 필수점 검토의 고정 응답 스키마](0058-director-stable-review-schema.md). 2026-11-11 로컬 실험 개발·평가 채택. v16의 고정 배열 응답과 정확한 필수점·인용 검증, 기존 형식의 복원 및 비교 경계를 정의한다.
+- [0059 실제 요청 전체에서 구성하는 질문 계약](0059-director-request-bound-question-contract.md). 2026-11-11 로컬 실험 개발·평가 채택. v17의 배경·요청 분리, 요청 전체에서 단일 필수점 구성, 부분답 후속과 저장 복원·검토의 경계를 정의한다.
+- [0060 답변 주장에 대한 원문 구절 선택](0060-answer-claim-literal-excerpts.md). 2026-11-11 로컬 실험 개발·평가 채택. v7의 원문 구절 결합과 과거 복원 보존, 중심 판단을 좁힌 질문 후보와 평가 경계를 정의한다.
+- [0061 독립 검토의 판단 경계와 응답 구간 계측](0061-review-calibration-and-response-timing.md). 2026-11-11 로컬 실험 개발·평가 채택. 기존 형식의 최소 검토 정책 보완과 사적 응답 구간 계측·비교 경계를 정의한다.
+- [0062 응답 계측의 정밀 시계 분리](0062-response-timing-high-resolution-clock.md). 2026-11-11 로컬 구현·평가 채택. perf_counter 기반 version2와 과거 계측·비교 원문의 보존을 정의한다.
+- [0063 Director 주제 식별자의 생성·저장 경계](0063-director-topic-storage-boundary.md). 2026-11-11 로컬 실험 개발·평가 채택. 신규 v17의 topic_code 문자 수 상한과 절단 금지, 과거 복원·공개 계약·DB 보존을 정의한다.
+- [0064 Director 질문과 평가 항목의 최소 의미 적합성](0064-director-evaluation-key-semantic-fit.md). 신규 문제 해결 main의 최소 관찰 목적과 실제 요청·후속 범위, 과거 판정 보존을 정의한다.
+- [0065 Director 개선 정책의 서비스 기본 연결과 단일 통합 게시](0065-director-service-rollout.md). 2026-11-11 서비스 연결·게시 채택. Director v17·답변 분석 v7의 기본 연결, 공통 12파일 채택과 단일 PR 예외, 배포·진행 중 면접·롤백 경계를 정의한다.
