@@ -1166,6 +1166,281 @@
           }
         }
       ]
+    },
+    {
+      "case_id": "ps-fit-p03",
+      "split": "dev",
+      "synthetic_candidate": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "공지 이메일을 1분 안에 보내야 한다는 요구가 생겼다고 가정하면, 현재 묶음 처리의 5분 지연을 유지할지 바꿀지 한 가지 결정과 그 이유를 말씀해 주시겠어요?",
+        "topic_code": "email_subscription_batching",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "공지 이메일을 1분 안에 보내야 한다는 요구가 생겼다고 가정하면, 현재 묶음 처리의 5분 지연을 유지할지 바꿀지 한 가지 결정과 그 이유를 말씀해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "email_subscription_batching_flow",
+              "description": "공지 이메일을 1분 안에 보내야 한다는 요구가 생겼다고 가정하면, 현재 묶음 처리의 5분 지연을 유지할지 바꿀지 한 가지 결정과 그 이유를 말씀해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "public-ref-001"
+            },
+            {
+              "kind": "evidence",
+              "id": "public-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "public-ref-001",
+          "public-ref-002"
+        ],
+        "jd_requirement_ids": []
+      },
+      "oracle": {
+        "expected_source_verdict": "accept",
+        "expected_recovery": null,
+        "expected_plan_valid": true,
+        "expected_safe_alternative": true,
+        "minimum_sufficient_answer_scope": "새 시간 제약 아래 지연 정책을 유지하거나 바꾸는 결정을 내려야 한다. 실제 배달 보장은 이 파일만으로 확정할 수 없다.",
+        "rationale": "단순 상수 회상과 달리 제약을 만족시키기 위한 접근 선택을 직접 요구한다. 결정 하나와 그 이유만으로 충분하다.",
+        "source_lines": [
+          "8-12",
+          "188-194"
+        ]
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "제공 코드에서 묶음 전송을 위해 5분 지연을 두는 흐름이 확인되며, 1분 내 발송 요구에 대한 선택과 그 이유를 묻는 질문입니다.",
+            "point_coverage": [
+              {
+                "key": "email_subscription_batching_flow",
+                "status": "asked",
+                "question_excerpt": "공지 이메일을 1분 안에 보내야 한다는 요구가 생겼다고 가정하면, 현재 묶음 처리의 5분 지연을 유지할지 바꿀지 한 가지 결정과 그 이유를 말씀해 주시겠어요?"
+              }
+            ]
+          },
+          "model_verdict": "accept",
+          "model_recovery": null,
+          "oracle_verdict_match": true,
+          "oracle_recovery_match": true,
+          "oracle_plan_match": true,
+          "request_equals_frozen_payload_no_labels": true,
+          "instructions_equal_frozen_arm_policy": true,
+          "raw_wire_attempt_equal": true,
+          "codex_source_grade": {
+            "conclusion": "가정한 문제의 단일 판단을 적절히 승인",
+            "source_question_verdict": "accept",
+            "reason_factual_fidelity": true,
+            "criterion_reason_alignment": true,
+            "invented_unasked_requirement": false,
+            "false_premise_or_personal_attribution": false,
+            "original_point_coverage_valid": true,
+            "safe_alternative_fidelity": true,
+            "other_flags_fidelity": true,
+            "full_source_quality_success": true,
+            "reason_evaluation": "제공 파일의 5분 지연은 사실이고 1분 내 발송은 명시된 새 가정이다. 그 제약 아래 유지/변경 결정과 이유라는 한 해결 접근 선택을 승인했으며 실제 이메일 발송 완료를 보장하지 않았다.",
+            "point_evaluation": "실제로 요청한 선택/확인과 필요한 이유를 묻는 연속 구절을 asked로 인용했다. 표기된 필수점 하나의 실제 요구를 보존하고 전체 진단·대안·검증 과제를 숨은 조건으로 추가하지 않았다.",
+            "other_flags_evaluation": "명시된 가정은 실제 운영 사실이나 개인 기여로 바뀌지 않았다. 제공 코드와 허용된 main 배정·질문 계약이 일치하며, 별도의 false premise나 반복·다중 과제를 만들어 거절하지 않았다."
+          }
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "코드에서 신규 게시물 이메일을 묶기 위해 5분 뒤 작업을 예약하므로, 1분 내 발송 요구에 맞춰 지연 유지 여부와 이유를 판단하게 하는 질문은 근거와 요청이 일치합니다.",
+            "point_coverage": [
+              {
+                "key": "email_subscription_batching_flow",
+                "status": "asked",
+                "question_excerpt": "현재 묶음 처리의 5분 지연을 유지할지 바꿀지 한 가지 결정과 그 이유를 말씀해 주시겠어요?"
+              }
+            ]
+          },
+          "model_verdict": "accept",
+          "model_recovery": null,
+          "oracle_verdict_match": true,
+          "oracle_recovery_match": true,
+          "oracle_plan_match": true,
+          "request_equals_frozen_payload_no_labels": true,
+          "instructions_equal_frozen_arm_policy": true,
+          "raw_wire_attempt_equal": true,
+          "codex_source_grade": {
+            "conclusion": "가정한 문제의 단일 판단을 적절히 승인",
+            "source_question_verdict": "accept",
+            "reason_factual_fidelity": true,
+            "criterion_reason_alignment": true,
+            "invented_unasked_requirement": false,
+            "false_premise_or_personal_attribution": false,
+            "original_point_coverage_valid": true,
+            "safe_alternative_fidelity": true,
+            "other_flags_fidelity": true,
+            "full_source_quality_success": true,
+            "reason_evaluation": "원문의 5분 지연과 가정한 1분 요구를 연결해 정책 유지 여부를 판단하는 요청으로 승인했다. 단순 상수 회상과 다른 적용 결정을 짚고, 실제 배달 성공이나 모든 진단·검증 과정을 추가 요구하지 않았다.",
+            "point_evaluation": "실제로 요청한 선택/확인과 필요한 이유를 묻는 연속 구절을 asked로 인용했다. 표기된 필수점 하나의 실제 요구를 보존하고 전체 진단·대안·검증 과제를 숨은 조건으로 추가하지 않았다.",
+            "other_flags_evaluation": "명시된 가정은 실제 운영 사실이나 개인 기여로 바뀌지 않았다. 제공 코드와 허용된 main 배정·질문 계약이 일치하며, 별도의 false premise나 반복·다중 과제를 만들어 거절하지 않았다."
+          }
+        }
+      ]
+    },
+    {
+      "case_id": "ps-fit-p04",
+      "split": "dev",
+      "synthetic_candidate": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "이메일 알림 누락을 재현한다고 가정하면, 구독 조건 때문에 예약되지 않은 경우와 예약 이후의 실행 문제를 구별하려면 어느 지점을 관찰하시겠어요?",
+        "topic_code": "email_subscription_batching",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "이메일 알림 누락을 재현한다고 가정하면, 구독 조건 때문에 예약되지 않은 경우와 예약 이후의 실행 문제를 구별하려면 어느 지점을 관찰하시겠어요?",
+          "required_points": [
+            {
+              "key": "email_subscription_batching_flow",
+              "description": "이메일 알림 누락을 재현한다고 가정하면, 구독 조건 때문에 예약되지 않은 경우와 예약 이후의 실행 문제를 구별하려면 어느 지점을 관찰하시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "public-ref-001"
+            },
+            {
+              "kind": "evidence",
+              "id": "public-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "public-ref-001",
+          "public-ref-002"
+        ],
+        "jd_requirement_ids": []
+      },
+      "oracle": {
+        "expected_source_verdict": "accept",
+        "expected_recovery": null,
+        "expected_plan_valid": true,
+        "expected_safe_alternative": true,
+        "minimum_sufficient_answer_scope": "조건 평가와 예약 요청 사이 또는 예약 경계의 증거 중 하나를 택해 미예약과 예약 후 문제를 구별할 확인을 설명해야 한다.",
+        "rationale": "두 원인 범주를 구별할 관찰 한 가지를 요구한다. 실행되지 않은 실제 worker의 원인을 정답으로 단정하지 않는다.",
+        "source_lines": [
+          "183-194"
+        ]
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "코드에 있는 구독 조건과 Redis·작업 예약 지점을 관찰해 두 경우를 구별하도록 묻는 유효한 단일 진단 과제입니다. 현재 발언과도 충돌하지 않습니다.",
+            "point_coverage": [
+              {
+                "key": "email_subscription_batching_flow",
+                "status": "asked",
+                "question_excerpt": "이메일 알림 누락을 재현한다고 가정하면, 구독 조건 때문에 예약되지 않은 경우와 예약 이후의 실행 문제를 구별하려면 어느 지점을 관찰하시겠어요?"
+              }
+            ]
+          },
+          "model_verdict": "accept",
+          "model_recovery": null,
+          "oracle_verdict_match": true,
+          "oracle_recovery_match": true,
+          "oracle_plan_match": true,
+          "request_equals_frozen_payload_no_labels": true,
+          "instructions_equal_frozen_arm_policy": true,
+          "raw_wire_attempt_equal": true,
+          "codex_source_grade": {
+            "conclusion": "가정한 문제의 단일 판단을 적절히 승인",
+            "source_question_verdict": "accept",
+            "reason_factual_fidelity": true,
+            "criterion_reason_alignment": true,
+            "invented_unasked_requirement": false,
+            "false_premise_or_personal_attribution": false,
+            "original_point_coverage_valid": true,
+            "safe_alternative_fidelity": true,
+            "other_flags_fidelity": true,
+            "full_source_quality_success": true,
+            "reason_evaluation": "미예약과 예약 후 실행 문제를 구별할 관찰 지점을 고르는 과제를 단일 진단으로 승인했다. 구독 조건과 예약 호출은 원문에서 확인되며 앞선 실제 발언과 충돌하지 않는다. 두 원인 범주를 확인 한 가지의 구별 대상으로 올바르게 다뤘다.",
+            "point_evaluation": "실제로 요청한 선택/확인과 필요한 이유를 묻는 연속 구절을 asked로 인용했다. 표기된 필수점 하나의 실제 요구를 보존하고 전체 진단·대안·검증 과제를 숨은 조건으로 추가하지 않았다.",
+            "other_flags_evaluation": "명시된 가정은 실제 운영 사실이나 개인 기여로 바뀌지 않았다. 제공 코드와 허용된 main 배정·질문 계약이 일치하며, 별도의 false premise나 반복·다중 과제를 만들어 거절하지 않았다."
+          }
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "제공된 코드의 구독 조건 검사와 작업 예약 호출을 관찰해 누락 원인을 구분하도록 묻습니다.",
+            "point_coverage": [
+              {
+                "key": "email_subscription_batching_flow",
+                "status": "asked",
+                "question_excerpt": "구독 조건 때문에 예약되지 않은 경우와 예약 이후의 실행 문제를 구별하려면 어느 지점을 관찰하시겠어요?"
+              }
+            ]
+          },
+          "model_verdict": "accept",
+          "model_recovery": null,
+          "oracle_verdict_match": true,
+          "oracle_recovery_match": true,
+          "oracle_plan_match": true,
+          "request_equals_frozen_payload_no_labels": true,
+          "instructions_equal_frozen_arm_policy": true,
+          "raw_wire_attempt_equal": true,
+          "codex_source_grade": {
+            "conclusion": "가정한 문제의 단일 판단을 적절히 승인",
+            "source_question_verdict": "accept",
+            "reason_factual_fidelity": true,
+            "criterion_reason_alignment": true,
+            "invented_unasked_requirement": false,
+            "false_premise_or_personal_attribution": false,
+            "original_point_coverage_valid": true,
+            "safe_alternative_fidelity": true,
+            "other_flags_fidelity": true,
+            "full_source_quality_success": true,
+            "reason_evaluation": "코드의 구독 조건 검사·예약 호출을 바탕으로 누락 원인을 구별할 확인을 요구한다는 사유가 실제 요청과 맞는다. worker 내부를 확인한 것으로 만들거나 특정 실제 원인을 확정하지 않았다.",
+            "point_evaluation": "실제로 요청한 선택/확인과 필요한 이유를 묻는 연속 구절을 asked로 인용했다. 표기된 필수점 하나의 실제 요구를 보존하고 전체 진단·대안·검증 과제를 숨은 조건으로 추가하지 않았다.",
+            "other_flags_evaluation": "명시된 가정은 실제 운영 사실이나 개인 기여로 바뀌지 않았다. 제공 코드와 허용된 main 배정·질문 계약이 일치하며, 별도의 false premise나 반복·다중 과제를 만들어 거절하지 않았다."
+          }
+        }
+      ]
     }
   ]
 }
