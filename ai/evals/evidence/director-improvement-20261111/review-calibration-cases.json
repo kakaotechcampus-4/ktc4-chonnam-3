@@ -201,6 +201,197 @@
           "elapsed_ms": 48492
         }
       ]
+    },
+    {
+      "case_id": "review-B-fresh-postgres-224704-sufficient",
+      "split": "dev",
+      "synthetic_dialogue_context": true,
+      "question": {
+        "persona": "domain_lead",
+        "text": "공고에는 관계형 데이터베이스 쿼리나 인덱스 최적화가 포함되며, 제공 자료에는 해당 성능 결과가 없습니다. 그 업무를 맡는다고 가정할 때, 앞서 말씀하신 코드 확인과 실행 검증의 구분을 적용해 쿼리·인덱스 변경의 효과를 판단할 비교 근거 하나를 무엇으로 삼으시겠어요?",
+        "topic_code": "relational_db_optimization",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "그 업무를 맡는다고 가정할 때, 앞서 말씀하신 코드 확인과 실행 검증의 구분을 적용해 쿼리·인덱스 변경의 효과를 판단할 비교 근거 하나를 무엇으로 삼으시겠어요?",
+          "required_points": [
+            {
+              "key": "optimization_effect_basis",
+              "description": "그 업무를 맡는다고 가정할 때, 앞서 말씀하신 코드 확인과 실행 검증의 구분을 적용해 쿼리·인덱스 변경의 효과를 판단할 비교 근거 하나를 무엇으로 삼으시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "answer_turn",
+              "id": "fresh-postgres-224704-sufficient-t4"
+            },
+            {
+              "kind": "answer_turn",
+              "id": "fresh-postgres-224704-sufficient-t6"
+            },
+            {
+              "kind": "answer_turn",
+              "id": "fresh-postgres-224704-sufficient-t7"
+            },
+            {
+              "kind": "evidence",
+              "id": "fresh-postgres-e1"
+            },
+            {
+              "kind": "jd_requirement",
+              "id": "fresh-jd-224704-main_tasks-2"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "fresh-postgres-e1"
+        ],
+        "jd_requirement_ids": [
+          "fresh-jd-224704-main_tasks-2"
+        ]
+      },
+      "code_sources": [
+        {
+          "evidence_id": "fresh-postgres-e1",
+          "git_ref": "5bf919736b20ffdc8d646c33ed2d9054609b23ec",
+          "source_kind": "code",
+          "path": "src/backend/storage/lmgr/deadlock.c",
+          "start_line": 217,
+          "end_line": 280,
+          "repository": "postgres/postgres",
+          "content_sha256": "9d527f6d3a69056b8cbe773f854a7a17019070a2d0992a11710fe380389f4f02",
+          "content_included_here": false,
+          "public_blob_url": "https://github.com/postgres/postgres/blob/5bf919736b20ffdc8d646c33ed2d9054609b23ec/src/backend/storage/lmgr/deadlock.c"
+        }
+      ],
+      "oracle": {
+        "expected_source_verdict": "reject",
+        "criterion_results": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "reason": "충분히 설명한 교착 계산을 반복하지 않고, 새 업무의 변경 효과를 판단할 근거를 선택하는 목적으로 이동한다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "satisfied",
+            "reason": "변경 효과를 판단할 비교 근거 하나를 선택하는 한 판단이다. 별도의 적용·차이·보완 목록을 요구하지 않는다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "reason": "request 전체와 purpose·단일 필수점이 동일하고, 비교근거 선택 외의 숨은 계약 요구는 없다. preamble은 공고와 미제공 성능 범위를 알리는 사실이다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "violated",
+            "reason": "Persona·route·키는 맞지만 company_job_fit의 프로젝트 방식↔직무 관계가 실제 답에 필요하지 않다. ‘같은 데이터·부하 조건에서 변경 전후 실제 쿼리 실행시간을 비교하겠습니다’만으로 요청한 비교근거 하나에 답할 수 있다. 앞선 검토/실행 구분은 수식 조건이며 그 방식의 직무 적용 선택·차이·보완 자체를 설명하거나 판단할 필요는 없다. deadlock 용어가 없다는 이유로 반려한 것은 아니다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "reason": "공고의 최적화 업무와 제공 자료의 성능 결과 부재를 구분하고, 업무 수행은 ‘맡는다고 가정’한다. 성능 효과나 실제 업무 경력을 전제하지 않는다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "reason": "‘앞서 말씀하신 코드 확인과 실행 검증의 구분’은 t4·t6·t7의 실제 입력/관찰 기록 및 정적·실행 구분 발언과 맞는다. 발언 귀속 자체는 유효하다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "reason": "이전 답변은 재현·기록과 정적/실행 범위 구분이었다. 쿼리·인덱스 변경 효과의 구체적 비교근거 선택은 아직 직접 답하지 않았으며 정답도 선제공하지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "reason": "운영 성능 결과가 없음을 평가 실패나 구현 부재로 바꾸지 않고 가정한 선택 범위에 둔다."
+          }
+        ],
+        "minimum_rejection_criteria": [
+          "allowed:context_alignment"
+        ],
+        "expected_recovery": "replan",
+        "expected_safe_alternative": true,
+        "wrong_reason_rejection_is_not_semantic_success": true,
+        "scope": "previously exposed development candidate; no relabeling or holdout use"
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "공고의 쿼리·인덱스 최적화 업무에 맞춰 변경 효과를 비교할 근거를 묻고, 앞서 말한 코드 확인과 실행 검증의 구분도 실제 답변과 일치합니다.",
+            "point_coverage": [
+              {
+                "key": "optimization_effect_basis",
+                "status": "asked",
+                "question_excerpt": "쿼리·인덱스 변경의 효과를 판단할 비교 근거 하나를 무엇으로 삼으시겠어요?"
+              }
+            ]
+          },
+          "expected_verdict": "reject",
+          "actual_verdict": "accept",
+          "decision_match": false,
+          "expected_recovery": "replan",
+          "actual_recovery": null,
+          "strict_recovery_match": false,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "fail",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "not_applicable",
+          "source_note": "공고 최적화·검토/실행 구분은 실제 JD와 t4/t7/t8에 있다. 그러나 일반적인 전후 실행시간 비교만으로 충분한 요청이므로 실제 대기열 방식의 직무 관계가 필수라는 plan_valid=true의 판단은 성립하지 않는다.",
+          "full_quality_success": false,
+          "elapsed_ms": 19229
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": false,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "질문은 앞서 확인한 코드 동작과 공고의 최적화 업무의 관계를 답에 요구하지 않아, 일반적인 성능 비교 근거만으로 끝날 수 있습니다. 관찰한 대기열 재배열·하드 교착 흐름과 최적화 업무의 연결 여부를 직접 묻는 대안은 가능합니다.",
+            "point_coverage": [
+              {
+                "key": "optimization_effect_basis",
+                "status": "asked",
+                "question_excerpt": "쿼리·인덱스 변경의 효과를 판단할 비교 근거 하나를 무엇으로 삼으시겠어요?"
+              }
+            ]
+          },
+          "expected_verdict": "reject",
+          "actual_verdict": "reject",
+          "decision_match": true,
+          "expected_recovery": "replan",
+          "actual_recovery": "replan",
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "not_applicable",
+          "source_note": "plan_valid=false의 이유는 실제 동작과 직무의 관계를 판단하지 않아도 일반 성능 비교 답으로 끝난다는 누락을 정확히 지적한다. 원문에 없는 별도 설명 의무를 만들지 않고, 제공 방식과 업무를 연결할 대안도 같은 범위에서 가능하다.",
+          "full_quality_success": true,
+          "elapsed_ms": 35098
+        }
+      ]
     }
   ]
 }

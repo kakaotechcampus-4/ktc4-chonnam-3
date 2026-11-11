@@ -1,3 +1,4 @@
 {
-  "schema": "director-public-answer-scope.v1"
+  "schema": "director-public-answer-scope.v1",
+  "mode": "actual_luna"
 }

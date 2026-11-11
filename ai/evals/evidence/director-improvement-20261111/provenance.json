@@ -18,6 +18,26 @@
       "source_id": "I:claim-study/live/A/explicit-fact-and-future-proposal/result.json",
       "sha256": "6abc89adbad448504ddd1bf654d0a4b28e668c505dd94a077f264d900126a349",
       "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/A/hypothetical-scope-selection/input.json",
+      "sha256": "6213699454fa9b6eb2565eb3cc938efd5cfe633110c94f92bf05470dec7988d4",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/A/hypothetical-scope-selection/raw-response.json",
+      "sha256": "729341828abcc9a13763cf81a08e20d0d3666109c08c94a121228834834c0b7b",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/A/hypothetical-scope-selection/result.json",
+      "sha256": "a0564076de7fb24dfb22f16f495e26b5357c5000824ed79acad33617d2be752c",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/B/explicit-fact-and-future-proposal/raw-response.json",
+      "sha256": "324a44394700ac3db12aff83f8b24961bc64c57d03b45e6a8393482bc7452d72",
+      "original_publicly_included": false
     }
   ]
 }
