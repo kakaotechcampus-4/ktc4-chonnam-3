@@ -1,0 +1,275 @@
+{
+  "schema": "director-improvement-public-summary.v1",
+  "scope": "Historical measured Director improvement work through iteration L; excludes publication integration calls and Codex development usage.",
+  "model": "gpt-6-luna",
+  "cohorts": [
+    {
+      "cohort": "initial-v8-v10",
+      "physical_calls": 711,
+      "input_tokens": 5704634,
+      "output_tokens": 1009190,
+      "unknown_usage_calls": 0,
+      "models": {
+        "gpt-6-luna": 711
+      },
+      "operations": {
+        "director": 646,
+        "answer_analysis": 53,
+        "evaluation_judge": 12
+      }
+    },
+    {
+      "cohort": "continuation-20261111",
+      "physical_calls": 128,
+      "input_tokens": 1927560,
+      "output_tokens": 224472,
+      "unknown_usage_calls": 0,
+      "models": {
+        "gpt-6-luna": 128
+      },
+      "operations": {
+        "director": 99,
+        "answer_analysis": 29
+      }
+    },
+    {
+      "cohort": "iteration-20261111b",
+      "physical_calls": 38,
+      "input_tokens": 457409,
+      "output_tokens": 68097,
+      "unknown_usage_calls": 0,
+      "models": {
+        "gpt-6-luna": 38
+      },
+      "operations": {
+        "director": 38
+      }
+    },
+    {
+      "cohort": "iteration-20261111c",
+      "physical_calls": 40,
+      "input_tokens": 281854,
+      "output_tokens": 67095,
+      "unknown_usage_calls": 0,
+      "models": {
+        "gpt-6-luna": 40
+      },
+      "operations": {
+        "director": 38,
+        "director_plan": 1,
+        "director_review": 1
+      }
+    },
+    {
+      "cohort": "iteration-20261111d",
+      "physical_calls": 101,
+      "input_tokens": 751692,
+      "output_tokens": 185295,
+      "unknown_usage_calls": 0,
+      "models": {
+        "gpt-6-luna": 101
+      },
+      "operations": {
+        "director": 88,
+        "answer_analysis": 13
+      }
+    },
+    {
+      "cohort": "iteration-20261111e",
+      "physical_calls": 46,
+      "input_tokens": 326024,
+      "output_tokens": 97219,
+      "unknown_usage_calls": 0,
+      "models": {
+        "gpt-6-luna": 46
+      },
+      "operations": {
+        "director": 44,
+        "answer_analysis": 2
+      }
+    },
+    {
+      "cohort": "iteration-20261111f",
+      "physical_calls": 48,
+      "input_tokens": 374485,
+      "output_tokens": 98748,
+      "unknown_usage_calls": 0,
+      "models": {
+        "gpt-6-luna": 48
+      },
+      "operations": {
+        "director": 45,
+        "answer_analysis": 3
+      }
+    },
+    {
+      "cohort": "iteration-20261111g",
+      "physical_calls": 22,
+      "input_tokens": 141049,
+      "output_tokens": 65772,
+      "unknown_usage_calls": 0,
+      "models": {
+        "gpt-6-luna": 22
+      },
+      "operations": {
+        "director": 20,
+        "answer_analysis": 2
+      }
+    },
+    {
+      "cohort": "iteration-20261111h",
+      "physical_calls": 21,
+      "input_tokens": 128779,
+      "output_tokens": 51496,
+      "unknown_usage_calls": 0,
+      "models": {
+        "gpt-6-luna": 21
+      },
+      "operations": {
+        "director": 19,
+        "answer_analysis": 2
+      }
+    },
+    {
+      "cohort": "iteration-20261111i",
+      "physical_calls": 23,
+      "input_tokens": 143865,
+      "output_tokens": 56557,
+      "unknown_usage_calls": 0,
+      "models": {
+        "gpt-6-luna": 23
+      },
+      "operations": {
+        "answer_analysis": 5,
+        "director": 18
+      }
+    },
+    {
+      "cohort": "iteration-20261111j",
+      "physical_calls": 17,
+      "input_tokens": 99148,
+      "output_tokens": 34856,
+      "unknown_usage_calls": 0,
+      "models": {
+        "gpt-6-luna": 17
+      },
+      "operations": {
+        "director": 17
+      }
+    },
+    {
+      "cohort": "iteration-20261111k",
+      "physical_calls": 27,
+      "input_tokens": 348594,
+      "output_tokens": 60158,
+      "unknown_usage_calls": 0,
+      "models": {
+        "gpt-6-luna": 27
+      },
+      "operations": {
+        "director": 18,
+        "answer_analysis": 9
+      }
+    },
+    {
+      "cohort": "iteration-20261111l",
+      "physical_calls": 32,
+      "input_tokens": 542123,
+      "output_tokens": 43915,
+      "unknown_usage_calls": 0,
+      "models": {
+        "gpt-6-luna": 32
+      },
+      "operations": {
+        "director": 32
+      }
+    }
+  ],
+  "total": {
+    "physical_calls": 1254,
+    "unique_call_ids": 1254,
+    "duplicates": [],
+    "input_tokens": 11227216,
+    "output_tokens": 2062870,
+    "unknown_usage_calls": 0,
+    "recorded_limit_details": {
+      "reasoning_effort": {
+        "xhigh": 1252,
+        "not_recorded": 2
+      },
+      "max_output_tokens": {
+        "128000": 1252,
+        "not_recorded": 2
+      },
+      "timeout_seconds": {
+        "not_recorded": 1254
+      },
+      "stream": {
+        "True": 1252,
+        "not_recorded": 2
+      }
+    },
+    "actual_billed_cost": null
+  },
+  "counting": {
+    "unit": "physical model request, not successful question or independent quality sample",
+    "failed_exploration_and_recovery_included": true,
+    "reasoning_and_cached_counters_are_not_added_to_total": true,
+    "original_call_ids_publicly_included": false,
+    "deduplication_in_public_verifier": "sum selected cohort counts; original cross-ledger call_id uniqueness is a private read-only audit assertion"
+  },
+  "development_and_final": {
+    "initial_dev_cases": 60,
+    "initial_then_final_cases": 60,
+    "pilot12_is_dev_subset": true,
+    "expanded_source_groups": 24,
+    "expanded_dev_groups": 12,
+    "expanded_final_groups": 12,
+    "latest_policy_final_groups_actually_run": 0
+  },
+  "l_call_partition": {
+    "actual_review": 24,
+    "actual_generation_plan_review": 4,
+    "actual_scope_review": 4,
+    "actual_total": 32,
+    "synthetic_scope_t3_calls": 0
+  },
+  "api0": {
+    "counted_in_actual_total": false,
+    "l_final_primary": {
+      "mode": "api0",
+      "physical_model_calls": 0,
+      "mock_responses": 24,
+      "proof_passed": true
+    },
+    "l_final_additional": {
+      "mode": "api0",
+      "physical_model_calls": 0,
+      "mock_responses": 8,
+      "proof_passed": true,
+      "first_failure_preserved_no_retry": true
+    },
+    "l_first_additional_failure": {
+      "mode": "api0",
+      "physical_model_calls": 0,
+      "mock_responses": 1,
+      "failure": "scratch mock Review candidate decoder received dataclass tuples before wire normalization",
+      "production_failure": false,
+      "first_failure_preserved": true,
+      "not_final_proof": true
+    },
+    "k_full_flow_mock_calls": 30,
+    "k_recovery_and_enrichment_are_mock": true
+  },
+  "publication_integration": {
+    "status": "not_run_at_export",
+    "additional_actual_model_calls": 0,
+    "included_in_historical_total": false
+  },
+  "judging": {
+    "semantic_source_grader": "Codex",
+    "independent_human_review": "not_performed",
+    "automatic_verification": "completed_for_recorded_scope",
+    "measurement_validity_or_general_quality_established": false
+  }
+}

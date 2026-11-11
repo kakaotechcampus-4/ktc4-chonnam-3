@@ -1,0 +1,1504 @@
+{
+  "schema": "director-public-review-calibration.v1",
+  "mode": "actual_luna",
+  "physical_model_calls": 16,
+  "candidate_count": 8,
+  "additional_timing_probe_excluded": 1,
+  "judger": "Codex; not independent human review",
+  "cases": [
+    {
+      "case_id": "review-A-fresh-postgres-224704-sufficient",
+      "split": "dev",
+      "synthetic_dialogue_context": true,
+      "question": {
+        "persona": "domain_lead",
+        "text": "제공된 코드 구간은 교착 감지 결과에 따라 잠금 대기열을 재배열하거나 하드 교착을 반환합니다. 지원자께서는 이 공개 코드를 학습 목적으로 읽었고 직접 기여하지 않았으며, 실제 운영 검증 결과도 없다고 하셨습니다. 공고에는 관계형 데이터베이스의 쿼리나 인덱스 최적화와 Django·DRF API 개발이 제시되어 있습니다. 실제 수행 경험을 전제하지 않고, 이 코드에서 확인한 접근을 공고의 쿼리·인덱스 최적화 업무에 어떻게 적용할 수 있을지 말씀해 주세요. 교착 처리와 최적화의 차이 때문에 추가로 확인하거나 검증해야 할 근거도 함께 설명해 주세요.",
+        "topic_code": "postgres_deadlock_to_query_index_optimization_job_fit",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "실제 수행 경험을 전제하지 않고, 이 코드에서 확인한 접근을 공고의 쿼리·인덱스 최적화 업무에 어떻게 적용할 수 있을지 말씀해 주세요. 교착 처리와 최적화의 차이 때문에 추가로 확인하거나 검증해야 할 근거도 함께 설명해 주세요.",
+          "required_points": [
+            {
+              "key": "apply_code_review_to_jd_database_optimization",
+              "description": "실제 수행 경험을 전제하지 않고, 이 코드에서 확인한 접근을 공고의 쿼리·인덱스 최적화 업무에 어떻게 적용할 수 있을지 말씀해 주세요. 교착 처리와 최적화의 차이 때문에 추가로 확인하거나 검증해야 할 근거도 함께 설명해 주세요."
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "answer_turn",
+              "id": "fresh-postgres-224704-sufficient-t1"
+            },
+            {
+              "kind": "answer_turn",
+              "id": "fresh-postgres-224704-sufficient-t3"
+            },
+            {
+              "kind": "answer_turn",
+              "id": "fresh-postgres-224704-sufficient-t8"
+            },
+            {
+              "kind": "evidence",
+              "id": "fresh-postgres-e1"
+            },
+            {
+              "kind": "jd_requirement",
+              "id": "fresh-jd-224704-main_tasks-2"
+            },
+            {
+              "kind": "jd_requirement",
+              "id": "fresh-jd-224704-requirements-1"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "fresh-postgres-e1"
+        ],
+        "jd_requirement_ids": [
+          "fresh-jd-224704-main_tasks-2",
+          "fresh-jd-224704-requirements-1"
+        ]
+      },
+      "code_sources": [
+        {
+          "evidence_id": "fresh-postgres-e1",
+          "git_ref": "5bf919736b20ffdc8d646c33ed2d9054609b23ec",
+          "source_kind": "code",
+          "path": "src/backend/storage/lmgr/deadlock.c",
+          "start_line": 217,
+          "end_line": 280,
+          "repository": "postgres/postgres",
+          "content_sha256": "9d527f6d3a69056b8cbe773f854a7a17019070a2d0992a11710fe380389f4f02",
+          "content_included_here": false,
+          "public_blob_url": "https://github.com/postgres/postgres/blob/5bf919736b20ffdc8d646c33ed2d9054609b23ec/src/backend/storage/lmgr/deadlock.c"
+        }
+      ],
+      "oracle": {
+        "expected_source_verdict": "reject",
+        "criterion_results": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "reason": "직전 교착 분기·검증 방법은 충분히 답했으므로 같은 흐름을 재질문하지 않고 남은 domain_lead의 직무 적용으로 전환한다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "violated",
+            "reason": "실제 요청은 ‘어떻게 적용할 수 있을지’와 ‘차이 때문에 추가로 확인하거나 검증해야 할 근거’를 각각 설명하도록 한다. 적용 방법을 답해도 두 번째 별도 검증근거 과제가 남아, 사전 동결한 한 판단 기준에서는 병렬 요구다. 같은 선택의 이유만 덧붙인 경우와 구분했다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "reason": "request의 두 문장 전체가 purpose·단일 필수점과 같고, 실제로 요청하는 적용과 추가 검증근거 모두 계약 안에 있다. preamble에는 추가 명령이 없다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "reason": "허용 domain_lead main·company_job_fit/communication이며, 교착 처리 접근을 실제 JD의 쿼리·인덱스 최적화에 적용하고 두 영역의 차이도 직접 요청한다. 직무 관계는 배경에만 있지 않다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "reason": "대기열 재배열과 하드 교착 반환은 제공 deadlock.c 217~280줄에 있다. 실제 운영 검증이 없다는 답변을 보존하고 새 업무 적용은 실제 수행 경험을 전제하지 않는 가정으로 둔다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "reason": "학습 목적·직접 기여하지 않음은 t1, 운영 검증 결과 없음은 t8의 실제 답변이다. 코드 관찰을 지원자의 구현 경력으로 바꾸지 않는다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "reason": "t8의 분기·상태 관찰 답변과 달리 공고 최적화 업무로의 전이는 아직 답하지 않았다. 일반 입력·기록 답변을 그대로 반복하도록 묻지는 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "reason": "하드 교착 호출자의 처리·실제 성능 결과 미확인을 결함이나 개인 역량 부족으로 확정하지 않는다."
+          }
+        ],
+        "minimum_rejection_criteria": [
+          "allowed:one_goal"
+        ],
+        "expected_recovery": "rewrite",
+        "expected_safe_alternative": true,
+        "wrong_reason_rejection_is_not_semantic_success": true,
+        "scope": "previously exposed development candidate; no relabeling or holdout use"
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "무기여와 미검증이라는 실제 발언을 전제로, 코드에서 본 접근을 쿼리·인덱스 최적화 업무에 적용하는 방법과 그 차이에 따른 검증 근거를 묻습니다.",
+            "point_coverage": [
+              {
+                "key": "apply_code_review_to_jd_database_optimization",
+                "status": "asked",
+                "question_excerpt": "실제 수행 경험을 전제하지 않고, 이 코드에서 확인한 접근을 공고의 쿼리·인덱스 최적화 업무에 어떻게 적용할 수 있을지 말씀해 주세요. 교착 처리와 최적화의 차이 때문에 추가로 확인하거나 검증해야 할 근거도 함께 설명해 주세요."
+              }
+            ]
+          },
+          "expected_verdict": "reject",
+          "actual_verdict": "accept",
+          "decision_match": false,
+          "expected_recovery": "rewrite",
+          "actual_recovery": null,
+          "strict_recovery_match": false,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "fail",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "not_applicable",
+          "source_note": "사유의 무기여·미실행·적용 방법·추가 검증 설명은 t1/t2/t8과 실제 두 요청에 있다. 다만 적용 방법을 답해도 별도의 검증근거 과제가 남아 wording_valid=true는 잘못된 승인이다.",
+          "full_quality_success": false,
+          "elapsed_ms": 23658
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": false,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "코드의 동작, 지원자의 발언, 공고 내용과 계약은 일치하며 직무와의 적용 관계도 직접 묻습니다. 다만 적용 방법에 더해 교착 처리와 최적화의 차이 및 추가 검증 근거까지 별도로 요구해 독립적인 답변 과제가 둘입니다.",
+            "point_coverage": [
+              {
+                "key": "apply_code_review_to_jd_database_optimization",
+                "status": "asked",
+                "question_excerpt": "실제 수행 경험을 전제하지 않고, 이 코드에서 확인한 접근을 공고의 쿼리·인덱스 최적화 업무에 어떻게 적용할 수 있을지 말씀해 주세요. 교착 처리와 최적화의 차이 때문에 추가로 확인하거나 검증해야 할 근거도 함께 설명해 주세요."
+              }
+            ]
+          },
+          "expected_verdict": "reject",
+          "actual_verdict": "reject",
+          "decision_match": true,
+          "expected_recovery": "rewrite",
+          "actual_recovery": "rewrite",
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "not_applicable",
+          "source_note": "wording_valid=false와 독립 과제 둘이라는 사유가 적용 방법 및 추가 검증근거를 각각 요구하는 원문에 맞는다. 직무 관계·계약·발언은 유효하다고 보존했고 가짜 오류를 추가하지 않았다.",
+          "full_quality_success": true,
+          "elapsed_ms": 48492
+        }
+      ]
+    },
+    {
+      "case_id": "review-B-fresh-postgres-224704-sufficient",
+      "split": "dev",
+      "synthetic_dialogue_context": true,
+      "question": {
+        "persona": "domain_lead",
+        "text": "공고에는 관계형 데이터베이스 쿼리나 인덱스 최적화가 포함되며, 제공 자료에는 해당 성능 결과가 없습니다. 그 업무를 맡는다고 가정할 때, 앞서 말씀하신 코드 확인과 실행 검증의 구분을 적용해 쿼리·인덱스 변경의 효과를 판단할 비교 근거 하나를 무엇으로 삼으시겠어요?",
+        "topic_code": "relational_db_optimization",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "그 업무를 맡는다고 가정할 때, 앞서 말씀하신 코드 확인과 실행 검증의 구분을 적용해 쿼리·인덱스 변경의 효과를 판단할 비교 근거 하나를 무엇으로 삼으시겠어요?",
+          "required_points": [
+            {
+              "key": "optimization_effect_basis",
+              "description": "그 업무를 맡는다고 가정할 때, 앞서 말씀하신 코드 확인과 실행 검증의 구분을 적용해 쿼리·인덱스 변경의 효과를 판단할 비교 근거 하나를 무엇으로 삼으시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "answer_turn",
+              "id": "fresh-postgres-224704-sufficient-t4"
+            },
+            {
+              "kind": "answer_turn",
+              "id": "fresh-postgres-224704-sufficient-t6"
+            },
+            {
+              "kind": "answer_turn",
+              "id": "fresh-postgres-224704-sufficient-t7"
+            },
+            {
+              "kind": "evidence",
+              "id": "fresh-postgres-e1"
+            },
+            {
+              "kind": "jd_requirement",
+              "id": "fresh-jd-224704-main_tasks-2"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "fresh-postgres-e1"
+        ],
+        "jd_requirement_ids": [
+          "fresh-jd-224704-main_tasks-2"
+        ]
+      },
+      "code_sources": [
+        {
+          "evidence_id": "fresh-postgres-e1",
+          "git_ref": "5bf919736b20ffdc8d646c33ed2d9054609b23ec",
+          "source_kind": "code",
+          "path": "src/backend/storage/lmgr/deadlock.c",
+          "start_line": 217,
+          "end_line": 280,
+          "repository": "postgres/postgres",
+          "content_sha256": "9d527f6d3a69056b8cbe773f854a7a17019070a2d0992a11710fe380389f4f02",
+          "content_included_here": false,
+          "public_blob_url": "https://github.com/postgres/postgres/blob/5bf919736b20ffdc8d646c33ed2d9054609b23ec/src/backend/storage/lmgr/deadlock.c"
+        }
+      ],
+      "oracle": {
+        "expected_source_verdict": "reject",
+        "criterion_results": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "reason": "충분히 설명한 교착 계산을 반복하지 않고, 새 업무의 변경 효과를 판단할 근거를 선택하는 목적으로 이동한다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "satisfied",
+            "reason": "변경 효과를 판단할 비교 근거 하나를 선택하는 한 판단이다. 별도의 적용·차이·보완 목록을 요구하지 않는다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "reason": "request 전체와 purpose·단일 필수점이 동일하고, 비교근거 선택 외의 숨은 계약 요구는 없다. preamble은 공고와 미제공 성능 범위를 알리는 사실이다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "violated",
+            "reason": "Persona·route·키는 맞지만 company_job_fit의 프로젝트 방식↔직무 관계가 실제 답에 필요하지 않다. ‘같은 데이터·부하 조건에서 변경 전후 실제 쿼리 실행시간을 비교하겠습니다’만으로 요청한 비교근거 하나에 답할 수 있다. 앞선 검토/실행 구분은 수식 조건이며 그 방식의 직무 적용 선택·차이·보완 자체를 설명하거나 판단할 필요는 없다. deadlock 용어가 없다는 이유로 반려한 것은 아니다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "reason": "공고의 최적화 업무와 제공 자료의 성능 결과 부재를 구분하고, 업무 수행은 ‘맡는다고 가정’한다. 성능 효과나 실제 업무 경력을 전제하지 않는다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "reason": "‘앞서 말씀하신 코드 확인과 실행 검증의 구분’은 t4·t6·t7의 실제 입력/관찰 기록 및 정적·실행 구분 발언과 맞는다. 발언 귀속 자체는 유효하다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "reason": "이전 답변은 재현·기록과 정적/실행 범위 구분이었다. 쿼리·인덱스 변경 효과의 구체적 비교근거 선택은 아직 직접 답하지 않았으며 정답도 선제공하지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "reason": "운영 성능 결과가 없음을 평가 실패나 구현 부재로 바꾸지 않고 가정한 선택 범위에 둔다."
+          }
+        ],
+        "minimum_rejection_criteria": [
+          "allowed:context_alignment"
+        ],
+        "expected_recovery": "replan",
+        "expected_safe_alternative": true,
+        "wrong_reason_rejection_is_not_semantic_success": true,
+        "scope": "previously exposed development candidate; no relabeling or holdout use"
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "공고의 쿼리·인덱스 최적화 업무에 맞춰 변경 효과를 비교할 근거를 묻고, 앞서 말한 코드 확인과 실행 검증의 구분도 실제 답변과 일치합니다.",
+            "point_coverage": [
+              {
+                "key": "optimization_effect_basis",
+                "status": "asked",
+                "question_excerpt": "쿼리·인덱스 변경의 효과를 판단할 비교 근거 하나를 무엇으로 삼으시겠어요?"
+              }
+            ]
+          },
+          "expected_verdict": "reject",
+          "actual_verdict": "accept",
+          "decision_match": false,
+          "expected_recovery": "replan",
+          "actual_recovery": null,
+          "strict_recovery_match": false,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "fail",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "not_applicable",
+          "source_note": "공고 최적화·검토/실행 구분은 실제 JD와 t4/t7/t8에 있다. 그러나 일반적인 전후 실행시간 비교만으로 충분한 요청이므로 실제 대기열 방식의 직무 관계가 필수라는 plan_valid=true의 판단은 성립하지 않는다.",
+          "full_quality_success": false,
+          "elapsed_ms": 19229
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": false,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "질문은 앞서 확인한 코드 동작과 공고의 최적화 업무의 관계를 답에 요구하지 않아, 일반적인 성능 비교 근거만으로 끝날 수 있습니다. 관찰한 대기열 재배열·하드 교착 흐름과 최적화 업무의 연결 여부를 직접 묻는 대안은 가능합니다.",
+            "point_coverage": [
+              {
+                "key": "optimization_effect_basis",
+                "status": "asked",
+                "question_excerpt": "쿼리·인덱스 변경의 효과를 판단할 비교 근거 하나를 무엇으로 삼으시겠어요?"
+              }
+            ]
+          },
+          "expected_verdict": "reject",
+          "actual_verdict": "reject",
+          "decision_match": true,
+          "expected_recovery": "replan",
+          "actual_recovery": "replan",
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "not_applicable",
+          "source_note": "plan_valid=false의 이유는 실제 동작과 직무의 관계를 판단하지 않아도 일반 성능 비교 답으로 끝난다는 누락을 정확히 지적한다. 원문에 없는 별도 설명 의무를 만들지 않고, 제공 방식과 업무를 연결할 대안도 같은 범위에서 가능하다.",
+          "full_quality_success": true,
+          "elapsed_ms": 35098
+        }
+      ]
+    },
+    {
+      "case_id": "review-B-fresh-restic-75217-contribution_correction",
+      "split": "dev",
+      "synthetic_dialogue_context": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "명시한 부모를 찾지 못했는데도 백업이 계속 진행되는 회귀를 가정형으로 어떻게 검증하시겠어요?",
+        "topic_code": "parent_snapshot_error_regression",
+        "question_type": "follow_up",
+        "parent_turn_id": "fresh-restic-75217-contribution_correction-t5",
+        "question_contract": {
+          "purpose": "명시한 부모를 찾지 못했는데도 백업이 계속 진행되는 회귀를 가정형으로 어떻게 검증하시겠어요?",
+          "required_points": [
+            {
+              "key": "check",
+              "description": "명시한 부모를 찾지 못했는데도 백업이 계속 진행되는 회귀를 가정형으로 어떻게 검증하시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "answer_turn",
+              "id": "fresh-restic-75217-contribution_correction-t5"
+            },
+            {
+              "kind": "evidence",
+              "id": "fresh-restic-e1"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "project_understanding",
+            "technical_reasoning"
+          ]
+        },
+        "evidence_refs": [
+          "fresh-restic-e1"
+        ],
+        "jd_requirement_ids": []
+      },
+      "code_sources": [
+        {
+          "evidence_id": "fresh-restic-e1",
+          "git_ref": "c734245fd3ae9bcac8ab3aaafb4482d4b5d0ae92",
+          "source_kind": "code",
+          "path": "cmd/restic/cmd_backup.go",
+          "start_line": 469,
+          "end_line": 495,
+          "repository": "restic/restic",
+          "content_sha256": "459e3314f20e64f7f6cc3af4ac5de9f90f26ee09d620d3bc3ccd186fea15addb",
+          "content_included_here": false,
+          "public_blob_url": "https://github.com/restic/restic/blob/c734245fd3ae9bcac8ab3aaafb4482d4b5d0ae92/cmd/restic/cmd_backup.go"
+        }
+      ],
+      "oracle": {
+        "expected_source_verdict": "accept",
+        "criterion_results": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "reason": "오류 차이에 관한 답과 개인 기여 정정을 수용하고 실제 미답인 회귀 검증 방법만 후속으로 묻는다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "satisfied",
+            "reason": "명시한 부모 조회 오류를 놓치는 회귀의 검증 방법이라는 판단 하나다. 입력/출력의 별도 목록을 요구하지 않아도 답 범위가 명확하다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "reason": "요청 전체와 purpose·단일 check 필수점이 같고, 가정형임이 실제 문장 안에 표시된다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "reason": "허용된 tech_lead follow_up·t5 부모·check와 부모 평가 키를 지킨다. 최초 구현 주장으로 되돌아가지 않는다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "reason": "명시적 부모의 조회 오류 반환은 실제 코드에 있고, 백업 진행 회귀는 ‘가정형’으로 질문한다. 호출자 전체 동작을 이미 실행한 사실로 만들지 않는다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "reason": "본인이 구현했다고 묻지 않고 해당 코드의 가정한 검증 방법만 확인한다. 본인 구현이 아니라는 정정과 충돌하지 않는다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "reason": "답한 오류 분기 설명을 반복하지 않고 원질문에 있던 미답 검증 목적만 남긴다. 정답이나 특정 테스트 설계는 제공하지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "reason": "미확인 함수 밖 처리나 실제 운영 경력을 부족한 구현으로 확정하지 않는다."
+          }
+        ],
+        "minimum_rejection_criteria": [],
+        "expected_recovery": null,
+        "expected_safe_alternative": true,
+        "wrong_reason_rejection_is_not_semantic_success": true,
+        "scope": "previously exposed development candidate; no relabeling or holdout use"
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "제공 코드에서는 명시한 부모를 찾지 못한 오류를 그대로 반환하므로, 그 동작이 깨지는 경우의 가정형 검증을 묻는 질문은 근거 범위에 맞습니다.",
+            "point_coverage": [
+              {
+                "key": "check",
+                "status": "asked",
+                "question_excerpt": "명시한 부모를 찾지 못했는데도 백업이 계속 진행되는 회귀를 가정형으로 어떻게 검증하시겠어요?"
+              }
+            ]
+          },
+          "expected_verdict": "accept",
+          "actual_verdict": "accept",
+          "decision_match": true,
+          "expected_recovery": null,
+          "actual_recovery": null,
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "pass",
+          "source_note": "findParentSnapshot의 명시적 부모 조회 오류는 무시되지 않고 반환된다. 그 동작이 깨지는 회귀의 가정형 검증만 묻는다는 사유와 전체 승인에 근거가 있다. 현재 기여 정정을 거슬러 개인 구현을 전제하지 않는다.",
+          "full_quality_success": true,
+          "elapsed_ms": 12678
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "제공 함수의 명시적 부모 조회 오류 흐름을 바탕으로, 해당 회귀를 가정형으로 검증하는 방법만 묻습니다.",
+            "point_coverage": [
+              {
+                "key": "check",
+                "status": "asked",
+                "question_excerpt": "명시한 부모를 찾지 못했는데도 백업이 계속 진행되는 회귀를 가정형으로 어떻게 검증하시겠어요?"
+              }
+            ]
+          },
+          "expected_verdict": "accept",
+          "actual_verdict": "accept",
+          "decision_match": true,
+          "expected_recovery": null,
+          "actual_recovery": null,
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "pass",
+          "source_note": "명시적 부모 조회 오류 흐름에서 해당 회귀 검증만 묻는다고 설명한다. 한 검증 목적이며 현재 답변이 아직 답하지 않은 check의 보완이다. 원문상 기여 정정과 충돌하는 주장은 없다.",
+          "full_quality_success": true,
+          "elapsed_ms": 10797
+        }
+      ]
+    },
+    {
+      "case_id": "review-A-fresh-kubernetes-268685-dont_know",
+      "split": "dev",
+      "synthetic_dialogue_context": true,
+      "question": {
+        "persona": "domain_lead",
+        "text": "공개 Kubernetes 코드를 학습 목적으로 읽었고 직접 기여하지 않았다고 하셨습니다. 제공된 코드 구간은 실패 횟수에 따라 재시도 대기 시간을 늘려 상한으로 제한하고, 마지막 실패 이후 경과 시간을 반영합니다. 공고는 Kubernetes·Docker 기반 표준 플랫폼의 설계·운영과 안정성·가용성·성능 개선을 명시합니다. 이 재시도 대기 방식이 해당 플랫폼 업무에 어떤 측면에서 적용될 수 있고, 실제 운영에 적용하려면 어떤 차이나 보완이 필요하다고 보시나요?",
+        "topic_code": "kubernetes_retry_backoff_job_fit",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "이 재시도 대기 방식이 해당 플랫폼 업무에 어떤 측면에서 적용될 수 있고, 실제 운영에 적용하려면 어떤 차이나 보완이 필요하다고 보시나요?",
+          "required_points": [
+            {
+              "key": "platform_application",
+              "description": "이 재시도 대기 방식이 해당 플랫폼 업무에 어떤 측면에서 적용될 수 있고, 실제 운영에 적용하려면 어떤 차이나 보완이 필요하다고 보시나요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "fresh-kubernetes-e1"
+            },
+            {
+              "kind": "jd_requirement",
+              "id": "fresh-jd-268685-main_tasks-3"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "fresh-kubernetes-e1"
+        ],
+        "jd_requirement_ids": [
+          "fresh-jd-268685-main_tasks-3"
+        ]
+      },
+      "code_sources": [
+        {
+          "evidence_id": "fresh-kubernetes-e1",
+          "git_ref": "c41dac6b0f518f2068c98b323964949fd015e760",
+          "source_kind": "code",
+          "path": "pkg/controller/job/backoff_utils.go",
+          "start_line": 236,
+          "end_line": 276,
+          "repository": "kubernetes/kubernetes",
+          "content_sha256": "eef8bcdec3141397b4165ff160cb03b99e0227317005fda53bac39448881db3b",
+          "content_included_here": false,
+          "public_blob_url": "https://github.com/kubernetes/kubernetes/blob/c41dac6b0f518f2068c98b323964949fd015e760/pkg/controller/job/backoff_utils.go"
+        }
+      ],
+      "oracle": {
+        "expected_source_verdict": "reject",
+        "criterion_results": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "reason": "재시도 계산을 모른다는 정상 답변 뒤에 같은 계산·최대 대기 테스트를 다시 요구하지 않고 JD 플랫폼 업무 적용으로 전환한다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "violated",
+            "reason": "‘어떤 측면에서 적용될 수 있고’와 ‘어떤 차이나 보완이 필요’는 적용 가능성과 별도 차이/조정의 두 답을 각각 요구한다. 실제 적용 판단 하나의 이유만 요구한 경우보다 범위가 넓다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "reason": "적용·차이/보완을 모두 묻는 request 전체가 계약에 그대로 들어가고, preamble은 코드·공고 사실만 제시한다. 요구 개수가 많다는 문제와 literal 계약 일치 여부를 분리했다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "reason": "허용 domain_lead main과 평가 키를 지키며 제공 backoff 방식과 실제 JD 플랫폼 안정성 업무의 관계를 직접 묻는다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "reason": "실패 수별 증가·상한·경과시간 반영은 제공 backoff_utils.go의 내용과 맞고 개인 운영·배포 성과를 전제하지 않는다. 적용은 가능성과 필요 보완의 가정으로 둔다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "reason": "학습 목적과 직접 기여 없음은 t1 발언이다. 코드 계산 요약을 지원자가 알고 있다고 말한 것으로 바꾸지는 않는다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "reason": "원래 재시작 시간 계산과 경계 테스트를 다시 풀라고 하지 않는다. t2의 지연 원인 구별과 달리 코드 방식의 직무 적용을 새로 확인한다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "reason": "모름·미실행을 거짓이나 역량 부족으로 결론내지 않고 다른 평가 목적을 제안한다."
+          }
+        ],
+        "minimum_rejection_criteria": [
+          "allowed:one_goal"
+        ],
+        "expected_recovery": "rewrite",
+        "expected_safe_alternative": true,
+        "wrong_reason_rejection_is_not_semantic_success": true,
+        "scope": "previously exposed development candidate; no relabeling or holdout use"
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "제공 코드의 재시도 대기 처리와 JD의 플랫폼 운영·안정성 개선 업무를 연결해 적용 및 운영 보완을 직접 묻고, 지원자의 학습 목적과 비기여 설명도 정확히 반영합니다.",
+            "point_coverage": [
+              {
+                "key": "platform_application",
+                "status": "asked",
+                "question_excerpt": "이 재시도 대기 방식이 해당 플랫폼 업무에 어떤 측면에서 적용될 수 있고, 실제 운영에 적용하려면 어떤 차이나 보완이 필요하다고 보시나요?"
+              }
+            ]
+          },
+          "expected_verdict": "reject",
+          "actual_verdict": "accept",
+          "decision_match": false,
+          "expected_recovery": "rewrite",
+          "actual_recovery": null,
+          "strict_recovery_match": false,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "fail",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "not_applicable",
+          "source_note": "사유의 재시도 계산·플랫폼 JD·학습/비기여는 실제 원문에 있다. 하지만 적용 측면을 말한 뒤 별도의 운영 차이·보완도 답해야 하므로 wording_valid=true의 승인에는 근거가 부족하다.",
+          "full_quality_success": false,
+          "elapsed_ms": 16696
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": false,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "코드 방식의 업무 적용과 운영상 차이·보완을 각각 답해야 해 중심 판단이 둘로 나뉩니다.",
+            "point_coverage": [
+              {
+                "key": "platform_application",
+                "status": "asked",
+                "question_excerpt": "이 재시도 대기 방식이 해당 플랫폼 업무에 어떤 측면에서 적용될 수 있고, 실제 운영에 적용하려면 어떤 차이나 보완이 필요하다고 보시나요?"
+              }
+            ]
+          },
+          "expected_verdict": "reject",
+          "actual_verdict": "reject",
+          "decision_match": true,
+          "expected_recovery": "rewrite",
+          "actual_recovery": "rewrite",
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "not_applicable",
+          "source_note": "업무 적용과 운영상 차이·보완을 각각 답해야 한다는 사유가 request의 두 독립 의무와 일치한다. wording_valid=false이고 정상 모름을 실패·역량 부족으로 바꾸지 않았다.",
+          "full_quality_success": true,
+          "elapsed_ms": 27676
+        }
+      ]
+    },
+    {
+      "case_id": "review-B-fresh-kubernetes-268685-dont_know",
+      "split": "dev",
+      "synthetic_dialogue_context": true,
+      "question": {
+        "persona": "domain_lead",
+        "text": "제공된 코드 구간은 실패 후 대기시간을 산출하지만, 재생성 결과나 파드 이벤트 처리는 보여 주지 않습니다. 개인 운영 경험을 전제하지 않고, 이 재시도 대기 동작을 공고의 Kubernetes 기반 표준 플랫폼 안정성 개선에 적용한다고 가정할 때, 그 효과를 판단할 운영 지표 하나와 선택 이유는 무엇인가요?",
+        "topic_code": "kubernetes-backoff-stability-metric",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "개인 운영 경험을 전제하지 않고, 이 재시도 대기 동작을 공고의 Kubernetes 기반 표준 플랫폼 안정성 개선에 적용한다고 가정할 때, 그 효과를 판단할 운영 지표 하나와 선택 이유는 무엇인가요?",
+          "required_points": [
+            {
+              "key": "stability_metric_choice",
+              "description": "개인 운영 경험을 전제하지 않고, 이 재시도 대기 동작을 공고의 Kubernetes 기반 표준 플랫폼 안정성 개선에 적용한다고 가정할 때, 그 효과를 판단할 운영 지표 하나와 선택 이유는 무엇인가요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "fresh-kubernetes-e1"
+            },
+            {
+              "kind": "jd_requirement",
+              "id": "fresh-jd-268685-main_tasks-3"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "fresh-kubernetes-e1"
+        ],
+        "jd_requirement_ids": [
+          "fresh-jd-268685-main_tasks-3"
+        ]
+      },
+      "code_sources": [
+        {
+          "evidence_id": "fresh-kubernetes-e1",
+          "git_ref": "c41dac6b0f518f2068c98b323964949fd015e760",
+          "source_kind": "code",
+          "path": "pkg/controller/job/backoff_utils.go",
+          "start_line": 236,
+          "end_line": 276,
+          "repository": "kubernetes/kubernetes",
+          "content_sha256": "eef8bcdec3141397b4165ff160cb03b99e0227317005fda53bac39448881db3b",
+          "content_included_here": false,
+          "public_blob_url": "https://github.com/kubernetes/kubernetes/blob/c41dac6b0f518f2068c98b323964949fd015e760/pkg/controller/job/backoff_utils.go"
+        }
+      ],
+      "oracle": {
+        "expected_source_verdict": "accept",
+        "criterion_results": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "reason": "모른다고 한 시간 계산·경계 검증을 재요구하지 않고, 재시도 대기 방식을 안정성 개선에 적용할 때의 효과 판단으로 전환한다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "satisfied",
+            "reason": "효과를 판단할 운영 지표 하나와 그 지표를 고른 이유는 같은 선택의 설명이다. 적용 가능성·차이·보완을 별도 축으로 병렬 요구하지 않는다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "reason": "운영 지표와 선택 이유가 실제 request에 직접 있고 전체 request가 purpose·단일 필수점과 일치한다. 배경에는 추가 지시가 없다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "reason": "허용 domain_lead main·company_job_fit/communication이며, 일반 운영 지표가 아니라 이 재시도 대기의 플랫폼 안정성 효과를 판단하는 지표와 이유를 묻는다. 지표 선택의 답은 코드 방식과 JD 목표를 연결해야 한다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "reason": "제공 구간은 남은 대기시간 계산만 포함하며 실제 파드 재생성·이벤트 처리는 없다. 이 한계를 알리고 플랫폼 적용은 명시적 가정으로 둔다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "reason": "개인 운영 경험을 전제하지 않는다고 명시하고 학습 코드의 설명을 본인 실무 성과로 귀속하지 않는다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "reason": "t2의 지연 원인 분리·시간 기록은 문제 정의였고, 지금은 안정성 효과를 대표할 지표의 선택과 이유다. 새 목표의 선택 근거까지 과거 답변에 있지는 않으며 특정 지표를 선제공하지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "reason": "정상 모름이나 파드 처리 미확인을 결함·거짓으로 확정하지 않는다."
+          }
+        ],
+        "minimum_rejection_criteria": [],
+        "expected_recovery": null,
+        "expected_safe_alternative": true,
+        "wrong_reason_rejection_is_not_semantic_success": true,
+        "scope": "previously exposed development candidate; no relabeling or holdout use"
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "제공된 코드 구간과 JD가 질문의 전제를 뒷받침하며, 실제 문장은 지표 하나와 선택 이유를 직접 묻습니다.",
+            "point_coverage": [
+              {
+                "key": "stability_metric_choice",
+                "status": "asked",
+                "question_excerpt": "개인 운영 경험을 전제하지 않고, 이 재시도 대기 동작을 공고의 Kubernetes 기반 표준 플랫폼 안정성 개선에 적용한다고 가정할 때, 그 효과를 판단할 운영 지표 하나와 선택 이유는 무엇인가요?"
+              }
+            ]
+          },
+          "expected_verdict": "accept",
+          "actual_verdict": "accept",
+          "decision_match": true,
+          "expected_recovery": null,
+          "actual_recovery": null,
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "pass",
+          "source_note": "실제 질문은 실패 후 대기시간 산출이라는 코드 범위와 플랫폼 안정성 JD를 조건으로 지표 하나와 같은 선택의 이유를 묻는다. 사유·전체 승인 모두 그 범위에 맞는다.",
+          "full_quality_success": true,
+          "elapsed_ms": 24685
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "제공된 재시도 대기 동작을 플랫폼 안정성 개선에 적용한다는 조건 아래, 효과를 판단할 지표 하나와 선택 이유를 요구합니다.",
+            "point_coverage": [
+              {
+                "key": "stability_metric_choice",
+                "status": "asked",
+                "question_excerpt": "개인 운영 경험을 전제하지 않고, 이 재시도 대기 동작을 공고의 Kubernetes 기반 표준 플랫폼 안정성 개선에 적용한다고 가정할 때, 그 효과를 판단할 운영 지표 하나와 선택 이유는 무엇인가요?"
+              }
+            ]
+          },
+          "expected_verdict": "accept",
+          "actual_verdict": "accept",
+          "decision_match": true,
+          "expected_recovery": null,
+          "actual_recovery": null,
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "pass",
+          "source_note": "재시도 대기가 플랫폼 안정성에 미치는 효과라는 구체적 조건에서 하나의 지표와 이유를 묻는다고 정확히 읽었다. 일반 지표 질문이라는 이유로 유효한 이 후보까지 반려하지 않았다.",
+          "full_quality_success": true,
+          "elapsed_ms": 17266
+        }
+      ]
+    },
+    {
+      "case_id": "review-A-contract-regression-fresh-bat-197390-tool_unavailable",
+      "split": "dev",
+      "synthetic_dialogue_context": true,
+      "question": {
+        "persona": "domain_lead",
+        "text": "공고는 Kubernetes Operator 패턴을 활용한 CI/CD 자동화 개발을 요구합니다. 제공된 함수는 Git 변경 줄 모드에서 일반 파일이 아닌 입력과 변경이 없는 파일을 출력 단계 전에 건너뜁니다. 직접 Kubernetes 운영 경험을 전제하지 않고, 이 코드의 입력 분기와 조기 종료를 Operator 기반 CI/CD 자동화에 참고한다면 어떤 설계 원칙을 적용할 수 있고, Operator 및 배포 파이프라인 측면에서 무엇이 달라 추가로 보완돼야 할까요?",
+        "topic_code": "operator_ci_cd_fit",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "직접 Kubernetes 운영 경험을 전제하지 않고, 이 코드의 입력 분기와 조기 종료를 Operator 기반 CI/CD 자동화에 참고한다면 어떤 설계 원칙을 적용할 수 있고, Operator 및 배포 파이프라인 측면에서 무엇이 달라 추가로 보완돼야 할까요?",
+          "required_points": [
+            {
+              "key": "operator_ci_cd_fit",
+              "description": "직접 Kubernetes 운영 경험을 전제하지 않고, 이 코드의 입력 분기와 조기 종료를 Operator 기반 CI/CD 자동화에 참고한다면 어떤 설계 원칙을 적용할 수 있고, Operator 및 배포 파이프라인 측면에서 무엇이 달라 추가로 보완돼야 할까요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "fresh-bat-e1"
+            },
+            {
+              "kind": "jd_requirement",
+              "id": "fresh-jd-197390-main_tasks-1"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "fresh-bat-e1"
+        ],
+        "jd_requirement_ids": [
+          "fresh-jd-197390-main_tasks-1"
+        ]
+      },
+      "code_sources": [
+        {
+          "evidence_id": "fresh-bat-e1",
+          "git_ref": "8cf33bdde9a6e4c11d0f866415b1fc867df0cd40",
+          "source_kind": "code",
+          "path": "src/controller.rs",
+          "start_line": 143,
+          "end_line": 214,
+          "repository": "sharkdp/bat",
+          "content_sha256": "b3d7ef216b9a34675e6796827b8fe140605521f1605bdf5069c10936ab1e58cc",
+          "content_included_here": false,
+          "public_blob_url": "https://github.com/sharkdp/bat/blob/8cf33bdde9a6e4c11d0f866415b1fc867df0cd40/src/controller.rs"
+        }
+      ],
+      "oracle": {
+        "expected_source_verdict": "reject",
+        "criterion_results": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "reason": "추가 조회에 실패하고 허용 후속이 없는 상태에서 미답 재현을 main으로 우회하지 않고 코드의 직무 적용이라는 다른 목적으로 전환한다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "violated",
+            "reason": "‘어떤 설계 원칙을 적용할 수 있고’와 ‘무엇이 달라 추가로 보완돼야’는 적용 원칙 선택과 별도 차이·보완 설명을 함께 요구한다. 사전의 한 관계 기준으로는 두 독립 판단 축이다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "reason": "적용과 차이·보완의 실제 요청 전체가 purpose·단일 필수점으로 보존된다. preamble은 공고와 코드 관찰만 제시한다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "reason": "허용 domain_lead main과 실제 평가 키를 따르고, 입력 분기·조기 종료를 실제 JD의 Operator 기반 CI/CD에 전이하는 관계를 직접 묻는다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "reason": "Git 변경 줄 모드의 일반 파일 외 입력·변경 없는 파일 생략은 제공 controller.rs 분기에 있다. Kubernetes 실무 경력·Operator 동작은 사실로 전제하지 않는다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "reason": "입력 생략은 코드 관찰로 제시하며 지원자가 Operator를 구현·운영했다고 귀속하지 않는다. 학습 목적과 직접 기여 없음의 발언을 해치지 않는다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "reason": "이전 입력별 생략 답변이나 일반 재현 기록과 다른 구체적인 Operator 직무 전이다. 특정 적용 원칙·보완 정답은 먼저 주지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "reason": "Tool 오류·프린터 내부 미확인을 기능 부재나 개인 기여 부족으로 평가하지 않는다."
+          }
+        ],
+        "minimum_rejection_criteria": [
+          "allowed:one_goal"
+        ],
+        "expected_recovery": "rewrite",
+        "expected_safe_alternative": true,
+        "wrong_reason_rejection_is_not_semantic_success": true,
+        "scope": "previously exposed development candidate; no relabeling or holdout use"
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "코드의 입력 분기와 조기 종료를 Operator 기반 CI/CD 업무에 적용하는 설계 원칙과 추가 차이를 직접 묻고, 전제와 요구가 계약에 반영되어 있습니다.",
+            "point_coverage": [
+              {
+                "key": "operator_ci_cd_fit",
+                "status": "asked",
+                "question_excerpt": "이 코드의 입력 분기와 조기 종료를 Operator 기반 CI/CD 자동화에 참고한다면 어떤 설계 원칙을 적용할 수 있고, Operator 및 배포 파이프라인 측면에서 무엇이 달라 추가로 보완돼야 할까요?"
+              }
+            ]
+          },
+          "expected_verdict": "reject",
+          "actual_verdict": "accept",
+          "decision_match": false,
+          "expected_recovery": "rewrite",
+          "actual_recovery": null,
+          "strict_recovery_match": false,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "fail",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "not_applicable",
+          "source_note": "입력 분기·조기 종료와 Operator JD를 가정적으로 연결해 적용 원칙 및 차이를 묻는다는 사유 자체는 원문에 있다. 다만 적용 원칙에 답해도 추가 차이·보완 과제가 남아 wording_valid=true는 과승인이다.",
+          "full_quality_success": false,
+          "elapsed_ms": 17367
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": false,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "코드와 공고를 연결하는 근거는 유효하지만, 설계 원칙의 적용과 별도의 차이·보완 판단을 함께 요구합니다.",
+            "point_coverage": [
+              {
+                "key": "operator_ci_cd_fit",
+                "status": "asked",
+                "question_excerpt": "직접 Kubernetes 운영 경험을 전제하지 않고, 이 코드의 입력 분기와 조기 종료를 Operator 기반 CI/CD 자동화에 참고한다면 어떤 설계 원칙을 적용할 수 있고, Operator 및 배포 파이프라인 측면에서 무엇이 달라 추가로 보완돼야 할까요?"
+              }
+            ]
+          },
+          "expected_verdict": "reject",
+          "actual_verdict": "reject",
+          "decision_match": true,
+          "expected_recovery": "rewrite",
+          "actual_recovery": "rewrite",
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "not_applicable",
+          "source_note": "설계 원칙의 적용과 별도의 차이·보완 판단을 함께 요구한다는 사유가 실제 두 답변 의무와 일치한다. wording_valid=false이며 조회 오류를 부재나 개인 실패로 단정하지 않았다.",
+          "full_quality_success": true,
+          "elapsed_ms": 31994
+        }
+      ]
+    },
+    {
+      "case_id": "review-B-contract-regression-fresh-bat-197390-tool_unavailable",
+      "split": "dev",
+      "synthetic_dialogue_context": true,
+      "question": {
+        "persona": "domain_lead",
+        "text": "공고의 주요 업무에는 Kubernetes Operator 패턴을 활용한 CI/CD 자동화 개발이 있습니다. 제공된 코드 구간만으로 Operator 동작 자체는 확인되지 않습니다. 제공 코드의 조건부 처리 흐름을 Operator 기반 CI/CD에 가정적으로 적용한다면, reconcile 작업을 생략할 조건 하나를 무엇으로 정하고 그 이유는 무엇인가요?",
+        "topic_code": "operator_ci_cd_skip_policy",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "제공 코드의 조건부 처리 흐름을 Operator 기반 CI/CD에 가정적으로 적용한다면, reconcile 작업을 생략할 조건 하나를 무엇으로 정하고 그 이유는 무엇인가요?",
+          "required_points": [
+            {
+              "key": "skip_policy",
+              "description": "제공 코드의 조건부 처리 흐름을 Operator 기반 CI/CD에 가정적으로 적용한다면, reconcile 작업을 생략할 조건 하나를 무엇으로 정하고 그 이유는 무엇인가요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "fresh-bat-e1"
+            },
+            {
+              "kind": "jd_requirement",
+              "id": "fresh-jd-197390-main_tasks-1"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "fresh-bat-e1"
+        ],
+        "jd_requirement_ids": [
+          "fresh-jd-197390-main_tasks-1"
+        ]
+      },
+      "code_sources": [
+        {
+          "evidence_id": "fresh-bat-e1",
+          "git_ref": "8cf33bdde9a6e4c11d0f866415b1fc867df0cd40",
+          "source_kind": "code",
+          "path": "src/controller.rs",
+          "start_line": 143,
+          "end_line": 214,
+          "repository": "sharkdp/bat",
+          "content_sha256": "b3d7ef216b9a34675e6796827b8fe140605521f1605bdf5069c10936ab1e58cc",
+          "content_included_here": false,
+          "public_blob_url": "https://github.com/sharkdp/bat/blob/8cf33bdde9a6e4c11d0f866415b1fc867df0cd40/src/controller.rs"
+        }
+      ],
+      "oracle": {
+        "expected_source_verdict": "accept",
+        "criterion_results": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "reason": "조회 실패·후속 선택 없음에서 기존 check를 main으로 재요구하지 않고 제공 조건부 처리의 직무 적용 판단으로 전환한다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "satisfied",
+            "reason": "reconcile 생략 조건 하나를 고르고 같은 조건의 이유를 설명하는 한 판단이다. 별도의 적용·차이·보완 목록을 요구하지 않는다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "reason": "조건 하나와 이유가 실제 request에 직접 있고 request 전체가 계약과 일치한다. 배경에 숨은 추가 지시는 없다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "reason": "허용 domain_lead main·company_job_fit/communication을 따르며, 코드의 조건부 생략 방식에 대응해 공고의 Operator 작업을 생략할 조건을 선택하도록 직접 요청한다. 일반 진단 지표만으로 완료하는 질문과 다르다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "reason": "Operator의 실제 동작은 제공 구간에서 확인되지 않는다고 알리고 적용은 ‘가정적으로’ 둔다. 생략 조건은 설계 선택이며 실제 구현·운영 결과라고 단정하지 않는다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "reason": "지원자의 본인 구현·운영 경험을 전제로 하지 않고 코드의 조건부 흐름만 근거로 사용한다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "reason": "입력 생략 설명·표준 입력 재현·일반 기록 답변과 달리 Operator 작업의 새 생략 조건을 선택한다. 특정 조건이나 정답은 미리 제시하지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "reason": "원문 조회 실패와 미확인 Operator 구현을 기능 부재·거짓·개인 역량 부족으로 바꾸지 않는다."
+          }
+        ],
+        "minimum_rejection_criteria": [],
+        "expected_recovery": null,
+        "expected_safe_alternative": true,
+        "wrong_reason_rejection_is_not_semantic_success": true,
+        "scope": "previously exposed development candidate; no relabeling or holdout use"
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "코드의 조건부 생략 흐름을 Operator 기반 CI/CD에 가정적으로 적용해 조건과 이유를 직접 묻고, 실제 Operator 동작을 확인한 것처럼 전제하지 않습니다.",
+            "point_coverage": [
+              {
+                "key": "skip_policy",
+                "status": "asked",
+                "question_excerpt": "제공 코드의 조건부 처리 흐름을 Operator 기반 CI/CD에 가정적으로 적용한다면, reconcile 작업을 생략할 조건 하나를 무엇으로 정하고 그 이유는 무엇인가요?"
+              }
+            ]
+          },
+          "expected_verdict": "accept",
+          "actual_verdict": "accept",
+          "decision_match": true,
+          "expected_recovery": null,
+          "actual_recovery": null,
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "pass",
+          "source_note": "reconcile 생략 조건 하나와 그 이유를 묻고 Operator 구현 자체를 확인한 것은 아니라는 사유가 질문 및 제공 범위와 일치한다. 한 선택의 이유를 별개 과제로 세지 않는다.",
+          "full_quality_success": true,
+          "elapsed_ms": 19553
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "제공 코드의 조건부 흐름을 공고의 Operator 기반 CI/CD 업무에 가정적으로 적용해, 생략 조건과 그 이유라는 하나의 판단을 묻습니다. Operator 동작은 확인되지 않았다는 배경도 제공 범위에 맞습니다.",
+            "point_coverage": [
+              {
+                "key": "skip_policy",
+                "status": "asked",
+                "question_excerpt": "제공 코드의 조건부 처리 흐름을 Operator 기반 CI/CD에 가정적으로 적용한다면, reconcile 작업을 생략할 조건 하나를 무엇으로 정하고 그 이유는 무엇인가요?"
+              }
+            ]
+          },
+          "expected_verdict": "accept",
+          "actual_verdict": "accept",
+          "decision_match": true,
+          "expected_recovery": null,
+          "actual_recovery": null,
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "pass",
+          "source_note": "실제 조건부 생략 방식의 가정적 적용에서 한 생략 조건과 이유를 묻는다고 읽었다. 미확인 Operator 동작을 미확인으로 둔 배경도 맞으며 전체 승인이 타당하다.",
+          "full_quality_success": true,
+          "elapsed_ms": 18565
+        }
+      ]
+    },
+    {
+      "case_id": "review-refinement-fresh-postgres-224704-sufficient",
+      "split": "dev",
+      "synthetic_dialogue_context": true,
+      "question": {
+        "persona": "domain_lead",
+        "text": "제공 구간은 대기열 재배열이 필요할 때 이를 반영하고, 해결 가능한 상태를 찾지 못하면 하드 교착을 반환합니다. 이 코드처럼 교착 상황에서 잠금 대기열을 재배열하는 방식을 관계형 데이터베이스의 쿼리·인덱스 최적화 업무에 가져간다고 가정할 때, 그대로 적용할지 수정할지 판단하고 그 이유를 말씀해 주세요.",
+        "topic_code": "deadlock_queue_to_db_optimization_fit",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "이 코드처럼 교착 상황에서 잠금 대기열을 재배열하는 방식을 관계형 데이터베이스의 쿼리·인덱스 최적화 업무에 가져간다고 가정할 때, 그대로 적용할지 수정할지 판단하고 그 이유를 말씀해 주세요.",
+          "required_points": [
+            {
+              "key": "application_judgment",
+              "description": "이 코드처럼 교착 상황에서 잠금 대기열을 재배열하는 방식을 관계형 데이터베이스의 쿼리·인덱스 최적화 업무에 가져간다고 가정할 때, 그대로 적용할지 수정할지 판단하고 그 이유를 말씀해 주세요."
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "answer_turn",
+              "id": "fresh-postgres-224704-sufficient-t1"
+            },
+            {
+              "kind": "answer_turn",
+              "id": "fresh-postgres-224704-sufficient-t8"
+            },
+            {
+              "kind": "evidence",
+              "id": "fresh-postgres-e1"
+            },
+            {
+              "kind": "jd_requirement",
+              "id": "fresh-jd-224704-main_tasks-2"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "fresh-postgres-e1"
+        ],
+        "jd_requirement_ids": [
+          "fresh-jd-224704-main_tasks-2"
+        ]
+      },
+      "code_sources": [
+        {
+          "evidence_id": "fresh-postgres-e1",
+          "git_ref": "5bf919736b20ffdc8d646c33ed2d9054609b23ec",
+          "source_kind": "code",
+          "path": "src/backend/storage/lmgr/deadlock.c",
+          "start_line": 217,
+          "end_line": 280,
+          "repository": "postgres/postgres",
+          "content_sha256": "9d527f6d3a69056b8cbe773f854a7a17019070a2d0992a11710fe380389f4f02",
+          "content_included_here": false,
+          "public_blob_url": "https://github.com/postgres/postgres/blob/5bf919736b20ffdc8d646c33ed2d9054609b23ec/src/backend/storage/lmgr/deadlock.c"
+        }
+      ],
+      "oracle": {
+        "expected_source_verdict": "accept",
+        "criterion_results": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "reason": "현재 답변은 하드/소프트 교착 분기와 검증 방법을 충분히 설명했다. 같은 기술 목적을 반복하지 않고 허용된 마지막 domain_lead의 실제 코드 방식과 공고 업무의 전이 판단으로 이동한다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "satisfied",
+            "reason": "잠금 대기열 재배열 방식을 새 업무에 그대로 적용할지 수정할지 결정하고 그 선택의 이유를 말하는 한 판단이다. 별도 적용 가능성·차이 목록·보완 설계·검증 계획을 모두 요구하지 않는다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "reason": "request 전체=purpose=단일 application_judgment가 같고, 그대로 적용/수정 선택과 이유가 실제 문장에 직접 있다. preamble은 코드 관찰만 제시하며 추가 명령·숨은 채점 요구가 없다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "reason": "domain_lead main/null 및 company_job_fit/communication은 Controller의 허용 목표와 같다. 일반 쿼리 성능 지표만으로는 이 코드의 대기열 재배열 방식을 유지/수정할지에 답하지 못한다. 실제 프로젝트 방식과 JD의 쿼리·인덱스 최적화 관계가 요청의 필수 판단이 됐다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "reason": "대기열 재배열과 해결 가능한 상태를 찾지 못하면 하드 교착을 반환한다는 배경은 제공 deadlock.c:217-280과 맞는다. 코드 방식을 업무에 가져가는 것은 명시적 가정이며 운영 성공·직접 DB 엔진 변경 권한·실제 수행 경험을 전제하지 않는다. 해당 계층 차이 때문에 그대로 적용하기 어렵다는 답도 허용된다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "reason": "지원자가 직접 구현하거나 해당 최적화 업무를 수행했다고 하지 않는다. 코드 관찰과 실제 t1의 학습·기여 정정, t8의 정적 이해 및 미실행 범위를 분리한다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "reason": "t8은 교착 분기와 테스트 관찰을 설명했을 뿐, 그 대기열 방식을 JD 최적화 업무에 유지/수정할 판단과 이유는 설명하지 않았다. 배경에서 기존 코드 사실을 알려 주지만 새 적용 선택의 정답은 주지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "reason": "실행 성능·호출자 트랜잭션 정리 미확인을 기능 부재나 지원자 실패로 바꾸지 않는다. 범위 밖의 동작은 가정한 적용 판단의 한계로 남긴다."
+          }
+        ],
+        "minimum_rejection_criteria": [],
+        "expected_recovery": null,
+        "expected_safe_alternative": true,
+        "wrong_reason_rejection_is_not_semantic_success": true,
+        "scope": "previously exposed development candidate; no relabeling or holdout use"
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "공고의 관계형 DB 쿼리·인덱스 최적화 업무에 이 코드 방식을 가져갈 때의 적용 판단과 이유를 직접 묻습니다.",
+            "point_coverage": [
+              {
+                "key": "application_judgment",
+                "status": "asked",
+                "question_excerpt": "이 코드처럼 교착 상황에서 잠금 대기열을 재배열하는 방식을 관계형 데이터베이스의 쿼리·인덱스 최적화 업무에 가져간다고 가정할 때, 그대로 적용할지 수정할지 판단하고 그 이유를 말씀해 주세요."
+              }
+            ]
+          },
+          "expected_verdict": "accept",
+          "actual_verdict": "accept",
+          "decision_match": true,
+          "expected_recovery": null,
+          "actual_recovery": null,
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "pass",
+          "source_note": "프로젝트의 실제 대기열 재배열 방식을 JD 최적화 업무에 가져갈 때 유지/수정과 이유를 직접 묻는다고 설명한다. 적용 불가라는 선택도 허용된 가정형이므로 새로운 운영/경험 전제를 만들지 않는다.",
+          "full_quality_success": true,
+          "elapsed_ms": 22636
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "실제 코드의 교착 시 대기열 재배열 방식을 쿼리·인덱스 최적화 업무에 적용할지와 그 이유를 한 판단으로 묻고 있어 유효합니다.",
+            "point_coverage": [
+              {
+                "key": "application_judgment",
+                "status": "asked",
+                "question_excerpt": "그대로 적용할지 수정할지 판단하고 그 이유를 말씀해 주세요."
+              }
+            ]
+          },
+          "expected_verdict": "accept",
+          "actual_verdict": "accept",
+          "decision_match": true,
+          "expected_recovery": null,
+          "actual_recovery": null,
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "pass",
+          "source_note": "실제 대기열 방식의 유지/수정 선택과 같은 이유를 한 판단으로 읽었다. source-bound 전체 request가 직접 물어지고, 인용은 실제 선택·이유 구절이어서 가짜 미질문 항목이 없다.",
+          "full_quality_success": true,
+          "elapsed_ms": 22274
+        }
+      ]
+    }
+  ],
+  "summary_from_original_source": {
+    "A": {
+      "responses": 8,
+      "valid_format": 8,
+      "decision_matches": 4,
+      "negative_rejection_matches": 0,
+      "strict_negative_recovery_matches": 0,
+      "false_acceptances": 4,
+      "positive_preserved": 4,
+      "false_rejections": 0,
+      "factual_reason_fidelity_pass": 8,
+      "semantic_flags_grounded": 4,
+      "invented_reason_or_premise": 0,
+      "fabricated_unasked_point": 0,
+      "safe_alternative_protected": 8,
+      "full_quality_success": 4
+    },
+    "B": {
+      "responses": 8,
+      "valid_format": 8,
+      "decision_matches": 8,
+      "negative_rejection_matches": 4,
+      "strict_negative_recovery_matches": 4,
+      "false_acceptances": 0,
+      "positive_preserved": 4,
+      "false_rejections": 0,
+      "factual_reason_fidelity_pass": 8,
+      "semantic_flags_grounded": 8,
+      "invented_reason_or_premise": 0,
+      "fabricated_unasked_point": 0,
+      "safe_alternative_protected": 8,
+      "full_quality_success": 8
+    }
+  },
+  "scope": "16 Review responses over eight preserved exposed candidates; no new question generation, holdout or full-service claim"
+}

@@ -1,0 +1,4766 @@
+{
+  "schema": "director-publication-validation.v3",
+  "status": "completed_recorded_scope",
+  "historical_physical_calls_unchanged": 1254,
+  "scope": {
+    "actual_be_service": true,
+    "postgresql_storage": true,
+    "rest_ws_frontend": false,
+    "new_repository_analysis": false,
+    "github_wanted_tavily_network": false,
+    "tool_source": "preserved_evidence_cache_replay_only",
+    "report": false
+  },
+  "model": "gpt-6-luna",
+  "runtime": {
+    "maximum_physical_calls": 48,
+    "model_retries": 0,
+    "concurrency": 1,
+    "registered_tasks": {
+      "repo_shallow": "repo_shallow_v3",
+      "repo_deep": "repo_deep_v2",
+      "domain_category": "domain_category_v2",
+      "doc_claims": "doc_claims_v2",
+      "director": "director_v17",
+      "claim_code": "claim_code_v1",
+      "jd_extract_image": "jd_extract_image_v1",
+      "answer_analysis": "answer_analysis_v7",
+      "report_score": "report_score_v3",
+      "report": "report_v4",
+      "profile_summary": "profile_summary_v2",
+      "question_pronunciation": "question_pronunciation_v2@9a7e60cd1c7bb9d5"
+    }
+  },
+  "task_limits": {
+    "director": {
+      "timeout_seconds": 120.0,
+      "max_output_tokens": 128000,
+      "max_input_bytes": 1048576,
+      "max_response_bytes": 67108864,
+      "reasoning_effort": "xhigh",
+      "stream": true
+    },
+    "answer_analysis": {
+      "timeout_seconds": 120.0,
+      "max_output_tokens": 128000,
+      "max_input_bytes": 1048576,
+      "max_response_bytes": 67108864,
+      "reasoning_effort": "xhigh",
+      "stream": true
+    }
+  },
+  "actual": {
+    "physical_model_calls": 27,
+    "completed_exported_generations": 27,
+    "unfinished_or_unbound": [],
+    "operations": {
+      "plan": 9,
+      "review": 9,
+      "answer_analysis": 9
+    },
+    "usage": {
+      "input_tokens": {
+        "known_sum": 335047,
+        "unknown_count": 0
+      },
+      "output_tokens": {
+        "known_sum": 56273,
+        "unknown_count": 0
+      }
+    },
+    "actual_billed_cost": null,
+    "physical_call_ids_are_local_ordinals": true,
+    "requests": [
+      {
+        "physical_id": 1,
+        "phase": "start",
+        "operation": "plan",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "c8fc768ca414ba9f0c84db0b2d832187a1a134e7f77279cc1ec8bfbedaa32691",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 8117,
+        "output_tokens": 424,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 265,
+        "cache_write_tokens": 6491,
+        "elapsed_seconds": 5.949564699956682,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1146,
+          "first_sse_event_ms": 1148,
+          "first_output_text_delta_ms": 4848,
+          "response_read_ms": 4774,
+          "response_decode_ms": 4,
+          "validation_ms": 1,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 2,
+        "phase": "start",
+        "operation": "review",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "a9f03ffb039baeff3e320751cfe68bddb58b7c95980807688824565b0dcf3fba",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 7735,
+        "output_tokens": 720,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 566,
+        "cache_write_tokens": 6185,
+        "elapsed_seconds": 8.200107900018338,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 661,
+          "first_sse_event_ms": 662,
+          "first_output_text_delta_ms": 7064,
+          "response_read_ms": 7512,
+          "response_decode_ms": 3,
+          "validation_ms": 0,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 3,
+        "phase": "answer:01",
+        "operation": "answer_analysis",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "a210660355fd534a93cc82881402941e071ac18d7b911507d07146d6654cafdd",
+        "prompt_version": "answer_analysis_v7",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 9883,
+        "output_tokens": 2932,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 2450,
+        "cache_write_tokens": 7904,
+        "elapsed_seconds": 28.604437800007872,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 967,
+          "first_sse_event_ms": 970,
+          "first_output_text_delta_ms": 24887,
+          "response_read_ms": 27605,
+          "response_decode_ms": 18,
+          "validation_ms": 2,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 4,
+        "phase": "answer:01",
+        "operation": "plan",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "b80e8046cd50da8692ad202a96c4b1d2a054752d4aea31a97f507089403f7fb9",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 10258,
+        "output_tokens": 3269,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 2887,
+        "cache_write_tokens": 8204,
+        "elapsed_seconds": 30.72168459999375,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1019,
+          "first_sse_event_ms": 1090,
+          "first_output_text_delta_ms": 28021,
+          "response_read_ms": 29682,
+          "response_decode_ms": 10,
+          "validation_ms": 1,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 5,
+        "phase": "answer:01",
+        "operation": "review",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "8fd4d1215b434a88eb23457db1a53df9111b044864b94b59a819a7e5f2851e8d",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 8999,
+        "output_tokens": 668,
+        "cached_input_tokens": 1382,
+        "reasoning_tokens": 516,
+        "cache_write_tokens": 6091,
+        "elapsed_seconds": 7.415510599967092,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 723,
+          "first_sse_event_ms": 724,
+          "first_output_text_delta_ms": 6222,
+          "response_read_ms": 6662,
+          "response_decode_ms": 4,
+          "validation_ms": 0,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 6,
+        "phase": "answer:02",
+        "operation": "answer_analysis",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "5283a200d5fd73452e0b65363637f80f7a7d5e3566f0924ec5e10d51ae8d4c0b",
+        "prompt_version": "answer_analysis_v7",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 10478,
+        "output_tokens": 2675,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 2112,
+        "cache_write_tokens": 8380,
+        "elapsed_seconds": 25.622309900005348,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1036,
+          "first_sse_event_ms": 1039,
+          "first_output_text_delta_ms": 21322,
+          "response_read_ms": 24536,
+          "response_decode_ms": 26,
+          "validation_ms": 2,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 7,
+        "phase": "answer:02",
+        "operation": "plan",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "24e16a8940ae6a9e4d5bd91a4aefe2a5b24da74a73ea9f4fb28a8ffaef266e89",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 11757,
+        "output_tokens": 3090,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 2588,
+        "cache_write_tokens": 9403,
+        "elapsed_seconds": 29.11014789994806,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1040,
+          "first_sse_event_ms": 1042,
+          "first_output_text_delta_ms": 25511,
+          "response_read_ms": 28026,
+          "response_decode_ms": 16,
+          "validation_ms": 3,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 8,
+        "phase": "answer:02",
+        "operation": "review",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "db1bc234905d94e28a4ddb62378a0b268b0b5bb52cb3e37e1ed6ca85c8d59c5a",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 10467,
+        "output_tokens": 1139,
+        "cached_input_tokens": 1382,
+        "reasoning_tokens": 1004,
+        "cache_write_tokens": 7265,
+        "elapsed_seconds": 12.145389500015881,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 911,
+          "first_sse_event_ms": 912,
+          "first_output_text_delta_ms": 11103,
+          "response_read_ms": 11213,
+          "response_decode_ms": 9,
+          "validation_ms": 0,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 9,
+        "phase": "answer:03",
+        "operation": "answer_analysis",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "d16056fce940a1a43afa9107fd7da6221136bbb20144470734715720099a288c",
+        "prompt_version": "answer_analysis_v7",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 10005,
+        "output_tokens": 1564,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 1074,
+        "cache_write_tokens": 8001,
+        "elapsed_seconds": 15.285330899991095,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1109,
+          "first_sse_event_ms": 1117,
+          "first_output_text_delta_ms": 11563,
+          "response_read_ms": 14137,
+          "response_decode_ms": 25,
+          "validation_ms": 3,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 10,
+        "phase": "answer:03",
+        "operation": "plan",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "3d4e1acad650399b0705e72b8f1adc2ebdd00d9e98226695840d642e8fdf9184",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 13641,
+        "output_tokens": 1263,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 863,
+        "cache_write_tokens": 10910,
+        "elapsed_seconds": 12.563603300019167,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1136,
+          "first_sse_event_ms": 1138,
+          "first_output_text_delta_ms": 9774,
+          "response_read_ms": 11391,
+          "response_decode_ms": 20,
+          "validation_ms": 3,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 11,
+        "phase": "answer:03",
+        "operation": "review",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "21e739cf6101df33e0190bb99bea4aaa1c0aa3faad0367156795ca7bdaf42ff3",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 11339,
+        "output_tokens": 734,
+        "cached_input_tokens": 1382,
+        "reasoning_tokens": 619,
+        "cache_write_tokens": 7963,
+        "elapsed_seconds": 7.729092800000217,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 809,
+          "first_sse_event_ms": 810,
+          "first_output_text_delta_ms": 6825,
+          "response_read_ms": 6902,
+          "response_decode_ms": 3,
+          "validation_ms": 0,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 12,
+        "phase": "answer:04",
+        "operation": "answer_analysis",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "9e799238976c6a4c7aed4aa1824cdc2225e0129301421ddbd3733b0346fa53f6",
+        "prompt_version": "answer_analysis_v7",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 10702,
+        "output_tokens": 4006,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 3607,
+        "cache_write_tokens": 8559,
+        "elapsed_seconds": 41.420367099985015,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1292,
+          "first_sse_event_ms": 1299,
+          "first_output_text_delta_ms": 38223,
+          "response_read_ms": 40085,
+          "response_decode_ms": 12,
+          "validation_ms": 1,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 13,
+        "phase": "answer:04",
+        "operation": "plan",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "b4c8b1f6c938d80eca695f9d06ed66ffaeb17573f4efe799f329753a7fa35230",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 13807,
+        "output_tokens": 3751,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 3456,
+        "cache_write_tokens": 11043,
+        "elapsed_seconds": 37.77096090000123,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 858,
+          "first_sse_event_ms": 860,
+          "first_output_text_delta_ms": 35767,
+          "response_read_ms": 36882,
+          "response_decode_ms": 18,
+          "validation_ms": 3,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 14,
+        "phase": "answer:04",
+        "operation": "review",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "83b09e85138f0bdf86bb850830da5a45905397c2faf57df0d8aa87a59eecee89",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 12278,
+        "output_tokens": 1187,
+        "cached_input_tokens": 1382,
+        "reasoning_tokens": 1034,
+        "cache_write_tokens": 8714,
+        "elapsed_seconds": 13.36878489999799,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1161,
+          "first_sse_event_ms": 1163,
+          "first_output_text_delta_ms": 12035,
+          "response_read_ms": 12177,
+          "response_decode_ms": 11,
+          "validation_ms": 0,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 15,
+        "phase": "answer:05",
+        "operation": "answer_analysis",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "173f7a92d515bb3e1f1fb5ab378babf8695fcc36ddb15fecba8598af7d15cbd5",
+        "prompt_version": "answer_analysis_v7",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 10588,
+        "output_tokens": 2384,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 2009,
+        "cache_write_tokens": 8468,
+        "elapsed_seconds": 22.84632860001875,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1575,
+          "first_sse_event_ms": 1582,
+          "first_output_text_delta_ms": 20006,
+          "response_read_ms": 21230,
+          "response_decode_ms": 14,
+          "validation_ms": 1,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 16,
+        "phase": "answer:05",
+        "operation": "plan",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "16c2eecef1d2991724352463347d4fbd94aceef4b2b2ebdf2f04106b3c28d94b",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 14511,
+        "output_tokens": 2269,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 1898,
+        "cache_write_tokens": 11606,
+        "elapsed_seconds": 30.250588900002185,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 828,
+          "first_sse_event_ms": 912,
+          "first_output_text_delta_ms": 27063,
+          "response_read_ms": 29380,
+          "response_decode_ms": 15,
+          "validation_ms": 2,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 17,
+        "phase": "answer:05",
+        "operation": "review",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "ebba3f56c61090461bf4ef841e79c09c95a9e5057e7d8fca777dc37b5b85492c",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 12949,
+        "output_tokens": 1189,
+        "cached_input_tokens": 1382,
+        "reasoning_tokens": 1022,
+        "cache_write_tokens": 9251,
+        "elapsed_seconds": 12.520184099965263,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 826,
+          "first_sse_event_ms": 830,
+          "first_output_text_delta_ms": 11332,
+          "response_read_ms": 11663,
+          "response_decode_ms": 6,
+          "validation_ms": 0,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 18,
+        "phase": "answer:06",
+        "operation": "answer_analysis",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "6bfefd6b513b232b0192c4a98bd5ba7ae4504fc5ec3db674e5b32b1a869cc250",
+        "prompt_version": "answer_analysis_v7",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 11252,
+        "output_tokens": 4581,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 3747,
+        "cache_write_tokens": 8999,
+        "elapsed_seconds": 42.84811179997632,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1069,
+          "first_sse_event_ms": 1073,
+          "first_output_text_delta_ms": 36925,
+          "response_read_ms": 41746,
+          "response_decode_ms": 20,
+          "validation_ms": 1,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 19,
+        "phase": "answer:06",
+        "operation": "plan",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "562c7c83e4a52a4dcae69edbfd5242cfeeea2786a7ae7f31baf65a15bf1a7cce",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 17142,
+        "output_tokens": 2154,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 1777,
+        "cache_write_tokens": 13711,
+        "elapsed_seconds": 24.847464899998158,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1080,
+          "first_sse_event_ms": 1082,
+          "first_output_text_delta_ms": 21627,
+          "response_read_ms": 23733,
+          "response_decode_ms": 8,
+          "validation_ms": 2,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 20,
+        "phase": "answer:06",
+        "operation": "review",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "9814708daebebab8cb409a6f256d806364ee3491ac69237debc949271141578a",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 14629,
+        "output_tokens": 1165,
+        "cached_input_tokens": 1382,
+        "reasoning_tokens": 1034,
+        "cache_write_tokens": 10595,
+        "elapsed_seconds": 13.10019420000026,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1015,
+          "first_sse_event_ms": 1016,
+          "first_output_text_delta_ms": 12076,
+          "response_read_ms": 12059,
+          "response_decode_ms": 3,
+          "validation_ms": 0,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 21,
+        "phase": "answer:07",
+        "operation": "answer_analysis",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "4ec8541d7906fa83407bdb03d2ae30d597df3b47deb5970ef288247702b37394",
+        "prompt_version": "answer_analysis_v7",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 11913,
+        "output_tokens": 2777,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 2223,
+        "cache_write_tokens": 9528,
+        "elapsed_seconds": 33.60005360003561,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1206,
+          "first_sse_event_ms": 1212,
+          "first_output_text_delta_ms": 28933,
+          "response_read_ms": 32367,
+          "response_decode_ms": 13,
+          "validation_ms": 1,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 22,
+        "phase": "answer:07",
+        "operation": "plan",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "7c98e4a83e5028b6bd640a77486549d2fbf261313d15e2ff0e848a526dc46747",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 17540,
+        "output_tokens": 4161,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 3761,
+        "cache_write_tokens": 14029,
+        "elapsed_seconds": 44.7193161000032,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 799,
+          "first_sse_event_ms": 801,
+          "first_output_text_delta_ms": 40945,
+          "response_read_ms": 43869,
+          "response_decode_ms": 25,
+          "validation_ms": 4,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 23,
+        "phase": "answer:07",
+        "operation": "review",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "dbe3ee3c4f64548ceb00f58b8c2810c7e5a8908bd4a048ae0a318e960453cab5",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 15869,
+        "output_tokens": 1795,
+        "cached_input_tokens": 1382,
+        "reasoning_tokens": 1631,
+        "cache_write_tokens": 11587,
+        "elapsed_seconds": 18.903949700004887,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 901,
+          "first_sse_event_ms": 906,
+          "first_output_text_delta_ms": 17879,
+          "response_read_ms": 17983,
+          "response_decode_ms": 5,
+          "validation_ms": 0,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 24,
+        "phase": "answer:08",
+        "operation": "answer_analysis",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "571390bf3bfba086d44d1a0667707840baabd7f3bbb877ae55925d29e5cfd290",
+        "prompt_version": "answer_analysis_v7",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 12165,
+        "output_tokens": 3145,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 2703,
+        "cache_write_tokens": 9729,
+        "elapsed_seconds": 30.230731699964963,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1077,
+          "first_sse_event_ms": 1080,
+          "first_output_text_delta_ms": 27166,
+          "response_read_ms": 29120,
+          "response_decode_ms": 9,
+          "validation_ms": 1,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 25,
+        "phase": "answer:08",
+        "operation": "plan",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "22dc98ac733993a92886c1e777334b406f8f33b8a7b19e7042ccbc238f695366",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 17790,
+        "output_tokens": 1551,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 1311,
+        "cache_write_tokens": 14229,
+        "elapsed_seconds": 15.789936700020917,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 783,
+          "first_sse_event_ms": 784,
+          "first_output_text_delta_ms": 13664,
+          "response_read_ms": 14992,
+          "response_decode_ms": 5,
+          "validation_ms": 1,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 26,
+        "phase": "answer:08",
+        "operation": "review",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "f61f52ca654037c6dcf8b552df26e480d8c76c89d803b0f461cadf9b2bf61356",
+        "prompt_version": "director_v17",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 16883,
+        "output_tokens": 584,
+        "cached_input_tokens": 1382,
+        "reasoning_tokens": 454,
+        "cache_write_tokens": 12398,
+        "elapsed_seconds": 6.7464063000516035,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 766,
+          "first_sse_event_ms": 767,
+          "first_output_text_delta_ms": 5809,
+          "response_read_ms": 5952,
+          "response_decode_ms": 3,
+          "validation_ms": 0,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      },
+      {
+        "physical_id": 27,
+        "phase": "answer:09",
+        "operation": "answer_analysis",
+        "status": "succeeded",
+        "requested_model": "gpt-6-luna",
+        "actual_model": "gpt-6-luna",
+        "request_sha256": "ee04054f650bd6c1a8f5c8ec26dfcd084c2f23856fa0b9fa8015aed848f7bb63",
+        "prompt_version": "answer_analysis_v7",
+        "analysis_enriched": false,
+        "recovery_feedback_present": false,
+        "input_tokens": 12350,
+        "output_tokens": 1096,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 747,
+        "cache_write_tokens": 9877,
+        "elapsed_seconds": 11.857584499986842,
+        "error_code": null,
+        "timing": {
+          "response_timing_version": 2,
+          "response_headers_ms": 1134,
+          "first_sse_event_ms": 1139,
+          "first_output_text_delta_ms": 8881,
+          "response_read_ms": 10688,
+          "response_decode_ms": 12,
+          "validation_ms": 1,
+          "response_read_complete": true,
+          "sse_timing_limited": false
+        }
+      }
+    ]
+  },
+  "api0": {
+    "mode": "api0",
+    "passed": true,
+    "checks": {
+      "completed": true,
+      "nine_answered": true,
+      "sequential": true,
+      "quota": true,
+      "final_finish": true,
+      "raw_db_attempt_binding": true,
+      "all_phases_succeeded": true,
+      "budget": true,
+      "four_preserved_evidence": true,
+      "completion_event": true,
+      "completed_context_snapshot": true,
+      "automatic_recovery_fixture": true,
+      "cache_enrichment_fixture": true,
+      "report_history_v7_decoder": true,
+      "full_catalog_registered": true
+    },
+    "physical_model_calls": 0,
+    "mock_model_responses": 30,
+    "new_github_wanted_tavily_calls": 0,
+    "included_in_actual_calls": false
+  },
+  "audit": {
+    "passed": true,
+    "checks": {
+      "completed": true,
+      "nine_answered": true,
+      "sequential": true,
+      "quota": true,
+      "final_finish": true,
+      "raw_db_attempt_binding": true,
+      "all_phases_succeeded": true,
+      "budget": true,
+      "four_preserved_evidence": true,
+      "completion_event": true,
+      "completed_context_snapshot": true,
+      "report_history_v7_decoder": true,
+      "full_catalog_registered": true
+    },
+    "physical_model_calls": 27,
+    "mock_model_responses": 0,
+    "new_github_wanted_tavily_calls": 0
+  },
+  "sse_audit_wrapper": {
+    "schema": "publication-final-sse-audit-wrapper.v1",
+    "status": "completed",
+    "original_audit": {
+      "status": "failed_before_sse_fix",
+      "exception_type": "JSONDecodeError",
+      "message": "Original scratch audit recognised only data-prefixed SSE; event-prefixed capture was parsed as JSON."
+    },
+    "wrapper_audit_passed": true,
+    "runner_sha256": "f119103dfdc6e14b6a95501f93b54e6f72e68e4625d29225f615a990d187c2a4",
+    "wrapper_sha256": "4f8c48deb350a147303e350e07f8bb3e7de7a72a1be949bedd62bf2cfbabfc24",
+    "shared_parser_repo_path": "backend/app/integrations/llm/client.py",
+    "shared_parser_sha256": "a0177979c6a48261537327b4f60f687fb87685e77a2de9f3885677b7e5987f87",
+    "manifest_sha256": "b7ce104710ddaaa6bdcb3f9f0a605e5644f3bd13fd05eb1bf204727953cab7e1",
+    "final_audit_sha256": "64148a3659342f7e5fd674ba540c6cc40ee54f12966e08f9aa20fba87666abe2",
+    "provider_capture_files_checked": 108,
+    "provider_captures_and_physical_control_unchanged": true,
+    "physical_calls_before": 27,
+    "physical_calls_after": 27,
+    "new_model_or_http_requests": 0,
+    "blocked_http_attempts": 0
+  },
+  "catalog_registration": {
+    "passed": true,
+    "catalog_tasks": 12,
+    "reregister_unchanged": true,
+    "provider_calls": 0
+  },
+  "codex_source_review": {
+    "status": "codex_source_review_completed",
+    "reviewer": "Codex root",
+    "scope": "Post-generation source/question/answer/analysis comparison for this development run; no human expert validation or untouched holdout accuracy claim.",
+    "source": "Mastodon post_status_service.rb full309 fixed commit; preserved Wanted canonical3",
+    "human_review": "not_performed",
+    "untouched_holdout_groups_executed": 0,
+    "linked_distinct_jd_requirements": 1,
+    "provided_jd_requirements": 3,
+    "jd_limit": "실제 질문의 명시적 JD 참조 1/3. 요구사항 전체의 관찰·숙련도를 뜻하지 않는다.",
+    "observations": [
+      {
+        "turn_no": 1,
+        "original_question_sha256": "168627b6469c853bce68fc3b6d9250440d858a7b2f9cd2d54b1c63b75b67f169",
+        "answer_text_sha256": "4931520f99a48b6b22173c5d847da3d0778dcfdddcc09fa5373fd720ffe198c5",
+        "stored_analysis_sha256": "103bc618d554a833cb84984248c1ca142265d34b28f50926db0ef8058fb7a0c5",
+        "note": "자기소개와 대표 사례의 역할 구분을 직접 요청했다. 지원자는 공개 레포 기여·운영과 팀 프로젝트 경험을 부인했고 학습 활동만 자신의 범위로 밝혔다. T3의 self는 그 좁은 학습 주장 인용으로 읽으며 코드 기여 확인으로 확대하지 않는다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 2,
+        "original_question_sha256": "92302b712f7d2aa9c4304ce0b2c5a90242101cd4b10d33563c47b773c8d50766",
+        "answer_text_sha256": "3abae3d5aa0a0c5b41486a74468493f774fa13508a15f1b6c693bdfd6301796c",
+        "stored_analysis_sha256": "6be905d1c42401df33a9440ecf177338ff41e167e4e05932d746ee28e0761089",
+        "note": "멱등 처리의 가정형 적용 선택과 이유를 물었다. 답변의 DB 유일 제약·트랜잭션은 새 제안이며 실제 레포 구현으로 확정되지 않았다. 질문은 260자로 긴 배경과 면책 설명이 남아 있다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 3,
+        "original_question_sha256": "875ecf77df364ada39aa4ab5a297c41f36b0317d8fe2a0f9145923ac0778f986",
+        "answer_text_sha256": "f638d38c29172631ce3a03b2336959029777bd2e4a6625f800a32e46de310817",
+        "stored_analysis_sha256": "26fbc9868aab457aa4d4633f97ba52383a9af440b88b247ef0975e1a3876f68c",
+        "note": "복구 방식과 이유를 직접 물었으나 답변은 재시도 방식만 제시했다. 실제 partial 다음의 Q4는 빠진 이유만 물었으며 새로운 내구성 설계 의무를 필수점으로 추가하지 않았다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 4,
+        "original_question_sha256": "c86ffa1979bee4219a8cb4b3337dc9bb60c1bbace3a836f3a8856a5ff60b8b4c",
+        "answer_text_sha256": "bae234ff72a89844c5b44bc4f10bc73148895674c9126bfa1ac1137a73d95011",
+        "stored_analysis_sha256": "683fe244b41402ff787eaef470539f7f49303daa6ca3cc56d1d918cb7b61ace2",
+        "note": "Q3의 선택 이유만 보완하는 후속이다. 답변은 중복 저장 위험과 실패 단계 재시도를 연결하고 미구현 범위를 구분했다. 실제 수행·운영으로 인정할 근거는 없다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 5,
+        "original_question_sha256": "6d3ff75fe08178bb02376998e15233d8188c30a6fb42235e51c5e3af8cc25993",
+        "answer_text_sha256": "caabb87656acfe1c0022295207d44fce8ab97225a6ea15d5da1064912fb0f2c3",
+        "stored_analysis_sha256": "ecd2417bcb27210680fcaa9a030c03114a774ce0a64222cf125847fc3f9a2476",
+        "note": "첨부파일 중복 ID 정책의 선택과 이유에 대해 모른다고 답했다. 실제 T3는 evaluated/insufficient로 두었고 허위 구현 주장이나 코드 충돌을 만들지 않았다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 6,
+        "original_question_sha256": "1be2ce4e5beabd7602cb142425f92584e7ddff1f258db06121fce2c8628c29fb",
+        "answer_text_sha256": "6b3ca63e5c53d31b2340cef7d7dfbb88b9da194d04a242a9876de285926b0710",
+        "stored_analysis_sha256": "f5aabe0896a1d276e726c76f2b78ed485ac902d2f3d1d78c9ee0d81865567b1b",
+        "note": "실패 상황의 첫 확인과 구별할 가능성을 직접 요청하는 problem_solving main이다. 답변의 'TTL도 5분'은 원문의 1시간과 충돌하고 예약 지연 5분은 맞다. T3가 두 구간을 conflicting/supported로 나눴다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 7,
+        "original_question_sha256": "c7afd759d5b8ca4b8f65bb3477ad67af6fc522fa9fbd0ce71979b42a53ec5997",
+        "answer_text_sha256": "568fa62f46dea32ad3f83df96d39835c57fbe1d37c1ad42b2cb7ffad5d2ca7e6",
+        "stored_analysis_sha256": "38e5a18dd2c60c05314e37eb94a72ac70a7bd183d245fc8fa69ae2d94ce9e7b7",
+        "note": "Q6에서 잘못 읽은 TTL을 원문과 맞춘 뒤 기존 진단의 구별 범위를 다시 설명하게 했다. 지원자가 1시간·5분을 정정하고 TTL 관측만으로 worker 전송 성공까지 알 수 없다고 제한했다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 8,
+        "original_question_sha256": "5d423010bc0d33ee9794dad4c5afc585daad8801e300d63503ef1390878690d4",
+        "answer_text_sha256": "eeb14920baf29dd95a666f3128a97d08f380fd07137d2a8bfec5182bc49078c0",
+        "stored_analysis_sha256": "944a750314fbee5ee6f60b124dfb0f507f77279d64eeb467a17f332a0dd35684",
+        "note": "가정형 연결 누락의 첫 관측과 결과 해석을 요청했다. 원문에는 첨부 UPDATE를 감싸려는 주석과 트랜잭션 안 create!가 있지만 실제 UPDATE의 내부 구현·영향 행·DB 제약은 제공되지 않았다. 질문의 배경 표현을 실제 SQL 실행 증명으로 읽지 않으며 답변도 새 관측 제안으로 제한한다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      },
+      {
+        "turn_no": 9,
+        "original_question_sha256": "2d260878d85213a0da9133e3a6ffc00f2faa56a8d4d1f554acb5c2beacae990a",
+        "answer_text_sha256": "9bfab6dc0d6b9d318b69df2a1deb2e73f6780911ba52c27bfd3a1533e014788e",
+        "stored_analysis_sha256": "e8d2bfcd14f5e17ff96ef2ee27f47b5421cd2adc4c0bc818186a6a758aa2cd63",
+        "note": "고객 메시징에서 민감한 데이터 하나와 이유를 가정형으로 요청했다. 실제 회사 정책·운영 경험을 전제하지 않는다. JD 연결은 Q2와 같은 요구사항으로, 다른 JD 전체를 다룬 결과가 아니다.",
+        "private_original_binding_checks": {
+          "question_sha_matches_original_export": true,
+          "question_sha_matches_stored_question": true,
+          "answer_text_sha_matches_stored_original": true,
+          "analysis_sha_matches_stored_full_original": true
+        }
+      }
+    ],
+    "reviewer_also_authored_synthetic_inputs": true,
+    "independent_blind_or_human_review_claimed": false,
+    "original_full_analysis_not_fully_published": true,
+    "hash_scope_note": "Original question/full-analysis hashes were checked against private original snapshot. Published UUIDs and selected analysis fields differ, so separately recompute public_question_sha256/public_selected_analysis_sha256. Answer text SHA is directly recomputable.",
+    "construction_note": {
+      "initial_local_canonical_hash_assertion_failed": true,
+      "correction": "Matched flow_control.digest default JSON separators without changing original data or judgments.",
+      "basis": "Root-reported local preparation history; separate original-failure receipt not included.",
+      "additional_model_calls_for_correction": 0,
+      "counted_as_model_quality_failure": false
+    }
+  },
+  "code_identity": {
+    "product_files_checked": 277,
+    "selected_product_files": [
+      {
+        "path": "ai/src/devon_ai/llm_tasks/answer_analysis.py",
+        "sha256": "1b65754d5773e46b191719a53d6a3a240a66650cc828bf01df7c29b63cf54e3b"
+      },
+      {
+        "path": "ai/src/devon_ai/llm_tasks/answer_analysis_wire.py",
+        "sha256": "3b5934b6537ee1e4353ef6606a895bb4b9e71d8f5aa41c8944ba6e43db8c7704"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/agent.py",
+        "sha256": "1a1e785e375e383311b23967069b84905338d83893df372dee72552c82dd6d1e"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/capabilities.py",
+        "sha256": "3bee40d565d38369421a3aefc88f7f219ed2ac96d33e62f5b705fe335e19d3c1"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/model_input.py",
+        "sha256": "73b26b0708b260d4036c5cef2f36148b822774f16c122438e087e596b0d3b388"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/plan_wire.py",
+        "sha256": "8ffd058975787ffbde6efd5c628badc70d10336314162caf9e666b2cb6c96839"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/policy.py",
+        "sha256": "fb7ff353cf9d832079b59eb2882ca9cdc4a044deb624b1ef3ce5b719097bd115"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/review.py",
+        "sha256": "d8dd63260088487edf65a912b01bc801332e0a36c1b6b43be3665de125bea4be"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/runtime.py",
+        "sha256": "e2c9cfd0b5828d1e7de53b1d5159a0f85a4955dc105a09d5bc0bd6ef2964a0bc"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/tools.py",
+        "sha256": "db43c668ccf4b0dc8a3dde81a6b14dacdb991bf9d7ef41fec398039337b65dc6"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/__init__.py",
+        "sha256": "6bf2b297c50227271d3332ab61de99940e9163d12f824b9b4e64c1c89e73cd29"
+      },
+      {
+        "path": "backend/app/integrations/execution_ledger.py",
+        "sha256": "e9851bcdaf4b6c93fa77626b945545a2b40b5fea3aa95e3cd06a0ddae9391225"
+      },
+      {
+        "path": "backend/app/llm_tasks/answer_analysis.py",
+        "sha256": "d6c9d7f1240c628d4e138a9fd644855e32449c419fd53c9791d9ce128020319d"
+      },
+      {
+        "path": "backend/app/features/interview/agent_context.py",
+        "sha256": "0584db1281fe716ceb6486af5fb9a067235ebb18bed3cbab54e9520a640a6998"
+      },
+      {
+        "path": "backend/app/features/interview/agent_queries.py",
+        "sha256": "a910660423e260a72f6ec0f2bd5556edbc10bf11f178910092ed0ac3250bda10"
+      },
+      {
+        "path": "backend/app/features/interview/agent_service.py",
+        "sha256": "93e841a7caec67b7ce0de86093897ce06b70d36716537e38176fa3f636a60e98"
+      },
+      {
+        "path": "backend/app/features/interview/answer_audio.py",
+        "sha256": "22e5979f8b5fa4b88dd566adddb36209248cbdfa95f34bc4498b0bbd35f2a289"
+      },
+      {
+        "path": "backend/app/features/interview/answer_context.py",
+        "sha256": "7fbab2c8801de4e653add02262d2f45e965d3e1980a3ffdc47b15acac7e8f298"
+      },
+      {
+        "path": "backend/app/features/interview/director_service.py",
+        "sha256": "81e270173b3758753ea91944483e3aba8c08f5f68d2520db47e963faa1786fb4"
+      },
+      {
+        "path": "backend/app/features/interview/evaluation_coverage.py",
+        "sha256": "e9174bbc61840987d7006b041f665a93602b6e116ee59f0ff03f0f41f777e683"
+      },
+      {
+        "path": "backend/app/features/interview/external_knowledge.py",
+        "sha256": "59cdb2bf5bdcbef5d9d40f9f316994f6ad01393832bac1693ee6cd7e2acd6bd9"
+      },
+      {
+        "path": "backend/app/features/interview/generation_binding.py",
+        "sha256": "cbaa5a14ceaf646c6e499de917be09a65261b801f38a9a39c2e48166a8dfa679"
+      },
+      {
+        "path": "backend/app/features/interview/observation.py",
+        "sha256": "654502791d3e5262ff841806f43633aad69440db6553a5db901f09b55f4eb792"
+      },
+      {
+        "path": "backend/app/features/interview/prepare.py",
+        "sha256": "d24b36ef2f07a2110210cdae09afd040004a061f0567f76d545f1fc218c9c80f"
+      },
+      {
+        "path": "backend/app/features/interview/prepare_checkpoint.py",
+        "sha256": "c8fae91211e428628d4af6a28cc1049df439fb6761f40a1bab360ab5455c9a0d"
+      },
+      {
+        "path": "backend/app/features/interview/prepare_lease.py",
+        "sha256": "27c3553f025b09b6bef96c15cc81e22beb4e8c49da829740f3183187d4faddd8"
+      },
+      {
+        "path": "backend/app/features/interview/queries.py",
+        "sha256": "d51a9c3609a11a441e3da1638b1b81f14da2e9d3cad2e7deaa2474d7489d98e2"
+      },
+      {
+        "path": "backend/app/features/interview/question_audio.py",
+        "sha256": "59172f37ddea97d5a5175905f51e3687e9c205d3ad1503f13b724c4f61f96662"
+      },
+      {
+        "path": "backend/app/features/interview/question_replay.py",
+        "sha256": "cbd87cc756facda2790216cbc13c308354739751b27de4f0d764de0c47354f4a"
+      },
+      {
+        "path": "backend/app/features/interview/question_retry.py",
+        "sha256": "28acaed59b092520e45f47de61e4d4358d560f94da066cff87e15a1cdd38bec3"
+      },
+      {
+        "path": "backend/app/features/interview/question_speech.py",
+        "sha256": "41f2753ddb775b2af3ca9ea76d00d68dfa2ca0a34ca9aa938da0fbd678ec0354"
+      },
+      {
+        "path": "backend/app/features/interview/question_structure.py",
+        "sha256": "bdafbe8196a2efcbc638ec39ae479165d1d046eed3fc7aaff2065d99436f7a19"
+      },
+      {
+        "path": "backend/app/features/interview/queue.py",
+        "sha256": "17d5b818ff60bf92d63783d01d1afa2ca0cd36b62e3ada91c7b1261ca7484884"
+      },
+      {
+        "path": "backend/app/features/interview/repository_candidates.py",
+        "sha256": "2c0a6fdc6ea78c107f5072598905b8433251c318170b660059bc40ceab7de34c"
+      },
+      {
+        "path": "backend/app/features/interview/repository_inventory.py",
+        "sha256": "4826271703ea61d6e4543562accfd01b4398ae75a014cce9f868e1574aa8785c"
+      },
+      {
+        "path": "backend/app/features/interview/repository_sources.py",
+        "sha256": "a5f7ff91b626efbeb58482c11e06b8ff21e43211ebb45897b33fba715f65ef6b"
+      },
+      {
+        "path": "backend/app/features/interview/repository_source_selection.py",
+        "sha256": "7d485496e9a50baf98c560a01fe05e0c36938f14813080d1fd43817ff0f49e13"
+      },
+      {
+        "path": "backend/app/features/interview/repository_structure.py",
+        "sha256": "22c8a6fc70397e8732203fce4f1be43195f8738da034f30230e16f3946f07445"
+      },
+      {
+        "path": "backend/app/features/interview/router.py",
+        "sha256": "9643f06bd879498211ad298c8fa63f1089607c9d3980145eadc1fddb0a85a810"
+      },
+      {
+        "path": "backend/app/features/interview/schemas.py",
+        "sha256": "9c01f04563d0378658a36c9738b023ed427488ffc4884d2b5222dab60eb546cf"
+      },
+      {
+        "path": "backend/app/features/interview/service.py",
+        "sha256": "9148fff599d4f3c86bb004ed320d405b7b43265c776502f0cf1a40ace875260f"
+      },
+      {
+        "path": "backend/app/features/interview/source_segments.py",
+        "sha256": "5807c233f26dd30e19fb2f44419a6057200f38ee6541dcf911835e38cf9dd301"
+      },
+      {
+        "path": "backend/app/features/interview/speech_address.py",
+        "sha256": "c34eeee1aa3becc538325f9077d797303e4e3ef0636ece6876608753c191c95a"
+      },
+      {
+        "path": "backend/app/features/interview/speech_paths.py",
+        "sha256": "ea3e89d7473de9b08ee9571498d0d77cbd01135e787abd6d0eb8f6184a84beb7"
+      },
+      {
+        "path": "backend/app/features/interview/speech_spelling.py",
+        "sha256": "f22371c96ce1fc7b395ff1b29d3ae78c2367d0ac30c62860dc2ab2c31b4dbb21"
+      },
+      {
+        "path": "backend/app/features/interview/supplemental_sources.py",
+        "sha256": "54ac5deafd98b11ec3f535b50f8fdecf833f8e194448994ecdd104937936115d"
+      },
+      {
+        "path": "backend/app/features/interview/tts_budget.py",
+        "sha256": "763e4cb2c2a44d6f3e01678653d650c3b934ba352c38952759b072526e95941b"
+      },
+      {
+        "path": "backend/app/features/interview/turn_loop.py",
+        "sha256": "795d0795c6a9277d3f8497b862584e8a1ec5577af81b2740c89be69af978545a"
+      },
+      {
+        "path": "backend/app/features/interview/turn_position.py",
+        "sha256": "079ff65b11cd16a85284787c8e74af094dbb6ea8b09902e5616b5db3c543b094"
+      },
+      {
+        "path": "backend/app/features/interview/turn_service.py",
+        "sha256": "624f036c66485711463fdc01d1a176bc6fada2845b4f9f6e16d894593b1be37c"
+      },
+      {
+        "path": "backend/app/features/interview/ws.py",
+        "sha256": "a1841538f496bb6d7305fe57bf75741838eaeec4cb04163d59e8d49810f1ecc3"
+      },
+      {
+        "path": "backend/app/features/interview/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "backend/app/features/report/history.py",
+        "sha256": "2dcc175e208c5591f0e771b379832a3d4588ccc8456bf19c6da5dc1e3f436963"
+      },
+      {
+        "path": "ai/prompts/runtime-prompts.json",
+        "sha256": "d05443f7f061e3e37bfa8372b47a7f9cb768092b2b37979c7d217c48a0f7f658"
+      }
+    ],
+    "selected_product_files_scope": "original actual execution snapshot, not automatically the latest publication tree",
+    "current_selected_product_files": [
+      {
+        "path": "ai/src/devon_ai/llm_tasks/answer_analysis.py",
+        "sha256": "1b65754d5773e46b191719a53d6a3a240a66650cc828bf01df7c29b63cf54e3b"
+      },
+      {
+        "path": "ai/src/devon_ai/llm_tasks/answer_analysis_wire.py",
+        "sha256": "3b5934b6537ee1e4353ef6606a895bb4b9e71d8f5aa41c8944ba6e43db8c7704"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/agent.py",
+        "sha256": "1a1e785e375e383311b23967069b84905338d83893df372dee72552c82dd6d1e"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/capabilities.py",
+        "sha256": "3bee40d565d38369421a3aefc88f7f219ed2ac96d33e62f5b705fe335e19d3c1"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/model_input.py",
+        "sha256": "73b26b0708b260d4036c5cef2f36148b822774f16c122438e087e596b0d3b388"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/plan_wire.py",
+        "sha256": "8ffd058975787ffbde6efd5c628badc70d10336314162caf9e666b2cb6c96839"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/policy.py",
+        "sha256": "fb7ff353cf9d832079b59eb2882ca9cdc4a044deb624b1ef3ce5b719097bd115"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/review.py",
+        "sha256": "d8dd63260088487edf65a912b01bc801332e0a36c1b6b43be3665de125bea4be"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/runtime.py",
+        "sha256": "e2c9cfd0b5828d1e7de53b1d5159a0f85a4955dc105a09d5bc0bd6ef2964a0bc"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/tools.py",
+        "sha256": "db43c668ccf4b0dc8a3dde81a6b14dacdb991bf9d7ef41fec398039337b65dc6"
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/__init__.py",
+        "sha256": "6bf2b297c50227271d3332ab61de99940e9163d12f824b9b4e64c1c89e73cd29"
+      },
+      {
+        "path": "backend/app/integrations/execution_ledger.py",
+        "sha256": "e9851bcdaf4b6c93fa77626b945545a2b40b5fea3aa95e3cd06a0ddae9391225"
+      },
+      {
+        "path": "backend/app/llm_tasks/answer_analysis.py",
+        "sha256": "d6c9d7f1240c628d4e138a9fd644855e32449c419fd53c9791d9ce128020319d"
+      },
+      {
+        "path": "backend/app/features/interview/agent_context.py",
+        "sha256": "0584db1281fe716ceb6486af5fb9a067235ebb18bed3cbab54e9520a640a6998"
+      },
+      {
+        "path": "backend/app/features/interview/agent_queries.py",
+        "sha256": "a910660423e260a72f6ec0f2bd5556edbc10bf11f178910092ed0ac3250bda10"
+      },
+      {
+        "path": "backend/app/features/interview/agent_service.py",
+        "sha256": "93e841a7caec67b7ce0de86093897ce06b70d36716537e38176fa3f636a60e98"
+      },
+      {
+        "path": "backend/app/features/interview/answer_audio.py",
+        "sha256": "22e5979f8b5fa4b88dd566adddb36209248cbdfa95f34bc4498b0bbd35f2a289"
+      },
+      {
+        "path": "backend/app/features/interview/answer_context.py",
+        "sha256": "7fbab2c8801de4e653add02262d2f45e965d3e1980a3ffdc47b15acac7e8f298"
+      },
+      {
+        "path": "backend/app/features/interview/director_service.py",
+        "sha256": "81e270173b3758753ea91944483e3aba8c08f5f68d2520db47e963faa1786fb4"
+      },
+      {
+        "path": "backend/app/features/interview/evaluation_coverage.py",
+        "sha256": "e9174bbc61840987d7006b041f665a93602b6e116ee59f0ff03f0f41f777e683"
+      },
+      {
+        "path": "backend/app/features/interview/external_knowledge.py",
+        "sha256": "59cdb2bf5bdcbef5d9d40f9f316994f6ad01393832bac1693ee6cd7e2acd6bd9"
+      },
+      {
+        "path": "backend/app/features/interview/generation_binding.py",
+        "sha256": "cbaa5a14ceaf646c6e499de917be09a65261b801f38a9a39c2e48166a8dfa679"
+      },
+      {
+        "path": "backend/app/features/interview/observation.py",
+        "sha256": "654502791d3e5262ff841806f43633aad69440db6553a5db901f09b55f4eb792"
+      },
+      {
+        "path": "backend/app/features/interview/prepare.py",
+        "sha256": "d24b36ef2f07a2110210cdae09afd040004a061f0567f76d545f1fc218c9c80f"
+      },
+      {
+        "path": "backend/app/features/interview/prepare_checkpoint.py",
+        "sha256": "c8fae91211e428628d4af6a28cc1049df439fb6761f40a1bab360ab5455c9a0d"
+      },
+      {
+        "path": "backend/app/features/interview/prepare_lease.py",
+        "sha256": "27c3553f025b09b6bef96c15cc81e22beb4e8c49da829740f3183187d4faddd8"
+      },
+      {
+        "path": "backend/app/features/interview/queries.py",
+        "sha256": "d51a9c3609a11a441e3da1638b1b81f14da2e9d3cad2e7deaa2474d7489d98e2"
+      },
+      {
+        "path": "backend/app/features/interview/question_audio.py",
+        "sha256": "44f7482abb6207155e21ef60da3e165ae61895b5643754cff3b120c968dc9b09"
+      },
+      {
+        "path": "backend/app/features/interview/question_replay.py",
+        "sha256": "cbd87cc756facda2790216cbc13c308354739751b27de4f0d764de0c47354f4a"
+      },
+      {
+        "path": "backend/app/features/interview/question_retry.py",
+        "sha256": "28acaed59b092520e45f47de61e4d4358d560f94da066cff87e15a1cdd38bec3"
+      },
+      {
+        "path": "backend/app/features/interview/question_speech.py",
+        "sha256": null
+      },
+      {
+        "path": "backend/app/features/interview/question_structure.py",
+        "sha256": "bdafbe8196a2efcbc638ec39ae479165d1d046eed3fc7aaff2065d99436f7a19"
+      },
+      {
+        "path": "backend/app/features/interview/queue.py",
+        "sha256": "17d5b818ff60bf92d63783d01d1afa2ca0cd36b62e3ada91c7b1261ca7484884"
+      },
+      {
+        "path": "backend/app/features/interview/repository_candidates.py",
+        "sha256": "2c0a6fdc6ea78c107f5072598905b8433251c318170b660059bc40ceab7de34c"
+      },
+      {
+        "path": "backend/app/features/interview/repository_inventory.py",
+        "sha256": "4826271703ea61d6e4543562accfd01b4398ae75a014cce9f868e1574aa8785c"
+      },
+      {
+        "path": "backend/app/features/interview/repository_sources.py",
+        "sha256": "a5f7ff91b626efbeb58482c11e06b8ff21e43211ebb45897b33fba715f65ef6b"
+      },
+      {
+        "path": "backend/app/features/interview/repository_source_selection.py",
+        "sha256": "7d485496e9a50baf98c560a01fe05e0c36938f14813080d1fd43817ff0f49e13"
+      },
+      {
+        "path": "backend/app/features/interview/repository_structure.py",
+        "sha256": "22c8a6fc70397e8732203fce4f1be43195f8738da034f30230e16f3946f07445"
+      },
+      {
+        "path": "backend/app/features/interview/router.py",
+        "sha256": "d9ff4fb3fc4323cc03be11c294afb5a575686120e2d7319801d3e898046f5229"
+      },
+      {
+        "path": "backend/app/features/interview/schemas.py",
+        "sha256": "9c01f04563d0378658a36c9738b023ed427488ffc4884d2b5222dab60eb546cf"
+      },
+      {
+        "path": "backend/app/features/interview/service.py",
+        "sha256": "9148fff599d4f3c86bb004ed320d405b7b43265c776502f0cf1a40ace875260f"
+      },
+      {
+        "path": "backend/app/features/interview/source_segments.py",
+        "sha256": "5807c233f26dd30e19fb2f44419a6057200f38ee6541dcf911835e38cf9dd301"
+      },
+      {
+        "path": "backend/app/features/interview/speech_address.py",
+        "sha256": null
+      },
+      {
+        "path": "backend/app/features/interview/speech_paths.py",
+        "sha256": null
+      },
+      {
+        "path": "backend/app/features/interview/speech_spelling.py",
+        "sha256": null
+      },
+      {
+        "path": "backend/app/features/interview/supplemental_sources.py",
+        "sha256": "54ac5deafd98b11ec3f535b50f8fdecf833f8e194448994ecdd104937936115d"
+      },
+      {
+        "path": "backend/app/features/interview/tts_budget.py",
+        "sha256": "763e4cb2c2a44d6f3e01678653d650c3b934ba352c38952759b072526e95941b"
+      },
+      {
+        "path": "backend/app/features/interview/turn_loop.py",
+        "sha256": "795d0795c6a9277d3f8497b862584e8a1ec5577af81b2740c89be69af978545a"
+      },
+      {
+        "path": "backend/app/features/interview/turn_position.py",
+        "sha256": "079ff65b11cd16a85284787c8e74af094dbb6ea8b09902e5616b5db3c543b094"
+      },
+      {
+        "path": "backend/app/features/interview/turn_service.py",
+        "sha256": "624f036c66485711463fdc01d1a176bc6fada2845b4f9f6e16d894593b1be37c"
+      },
+      {
+        "path": "backend/app/features/interview/ws.py",
+        "sha256": "a1841538f496bb6d7305fe57bf75741838eaeec4cb04163d59e8d49810f1ecc3"
+      },
+      {
+        "path": "backend/app/features/interview/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "backend/app/features/report/history.py",
+        "sha256": "2dcc175e208c5591f0e771b379832a3d4588ccc8456bf19c6da5dc1e3f436963"
+      },
+      {
+        "path": "ai/prompts/runtime-prompts.json",
+        "sha256": "25e7b80b6940334449e5ce9aaf5a2da46de19d50b9671fa3e981c368d37d0dc2"
+      }
+    ],
+    "all_product_identity_sha256": "6b7695236c841e83c2f15378c7e1c8eee1ed40e74ae37753e10cd5bcf694a08e",
+    "preserved_copy_mismatches": [],
+    "current_product_mismatches": [
+      "backend/app/core/config.py",
+      "backend/app/llm_tasks/question_pronunciation.py",
+      "backend/app/llm_tasks/runtime_capabilities.py",
+      "backend/app/features/interview/question_audio.py",
+      "backend/app/features/interview/question_speech.py",
+      "backend/app/features/interview/router.py",
+      "backend/app/features/interview/speech_address.py",
+      "backend/app/features/interview/speech_paths.py",
+      "backend/app/features/interview/speech_spelling.py",
+      "backend/app/integrations/tts/pronunciation.py",
+      "ai/prompts/runtime-prompts.json",
+      "backend/scripts/configure_ai_runtime.py",
+      "backend/scripts/seed_prompt_versions.py",
+      "ai/prompts/question-pronunciation-runtime-v2.md"
+    ],
+    "environment_raw_copied": false,
+    "whole_snapshot_publicly_included": false
+  },
+  "latest_revision_compatibility": {
+    "schema_version": "director-post-revert-compatibility.v1",
+    "status": "same_director_core_verified_with_latest_api0; historical_live_is_not_a_new_live_run",
+    "previous_live": {
+      "recorded_base_head": "110e1aeb",
+      "head_provenance": "root execution record; original snapshot provides exact file identities",
+      "catalog_count": 12,
+      "physical_model_calls": 27,
+      "audit_passed": true,
+      "manifest_sha256": "b7ce104710ddaaa6bdcb3f9f0a605e5644f3bd13fd05eb1bf204727953cab7e1",
+      "audit_sha256": "64148a3659342f7e5fd674ba540c6cc40ee54f12966e08f9aa20fba87666abe2",
+      "full_identity_matches_current": false
+    },
+    "latest": {
+      "head": "561c3f5aacbc0faf1f14b5e17ab18ccbc17d2863",
+      "catalog_count": 11,
+      "physical_model_calls": 0,
+      "mock_model_responses": 30,
+      "api0_audit_sha256": "70ef41bc1d8e54251b20010438e6fc2008071631f9f0b25839875f0ae1554ccd",
+      "api0_passed": true,
+      "opaque_registration_compatibility_fix_included": true
+    },
+    "latest_api0_audit": {
+      "passed": true,
+      "checks": {
+        "completed": true,
+        "nine_answered": true,
+        "sequential": true,
+        "quota": true,
+        "final_finish": true,
+        "raw_db_attempt_binding": true,
+        "all_phases_succeeded": true,
+        "budget": true,
+        "four_preserved_evidence": true,
+        "completion_event": true,
+        "completed_context_snapshot": true,
+        "automatic_recovery_fixture": true,
+        "cache_enrichment_fixture": true,
+        "report_history_v7_decoder": true,
+        "full_catalog_registered": true
+      },
+      "physical_model_calls": 0,
+      "mock_model_responses": 30,
+      "new_github_wanted_tavily_calls": 0
+    },
+    "product_comparison": {
+      "compared_snapshot_files": 277,
+      "identical_bytes_count": 263,
+      "changed_files": [
+        {
+          "path": "ai/prompts/question-pronunciation-runtime-v2.md",
+          "status": "removed",
+          "old_sha256": "a13fa8ecd60f24df0031151873664afd172b736b300ada2e22e284b164b8e581",
+          "new_sha256": null,
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "ai/prompts/runtime-prompts.json",
+          "status": "changed",
+          "old_sha256": "d05443f7f061e3e37bfa8372b47a7f9cb768092b2b37979c7d217c48a0f7f658",
+          "new_sha256": "25e7b80b6940334449e5ce9aaf5a2da46de19d50b9671fa3e981c368d37d0dc2",
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/core/config.py",
+          "status": "changed",
+          "old_sha256": "024afd616772b9262d447841429053f4502c4bd7220d37d9a3bde3e58a07bb49",
+          "new_sha256": "343eda09177645f4ac4125c62e7d81c99668f99dfc810608ff79fb5767c3c885",
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/features/interview/question_audio.py",
+          "status": "changed",
+          "old_sha256": "59172f37ddea97d5a5175905f51e3687e9c205d3ad1503f13b724c4f61f96662",
+          "new_sha256": "44f7482abb6207155e21ef60da3e165ae61895b5643754cff3b120c968dc9b09",
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/features/interview/question_speech.py",
+          "status": "removed",
+          "old_sha256": "41f2753ddb775b2af3ca9ea76d00d68dfa2ca0a34ca9aa938da0fbd678ec0354",
+          "new_sha256": null,
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/features/interview/router.py",
+          "status": "changed",
+          "old_sha256": "9643f06bd879498211ad298c8fa63f1089607c9d3980145eadc1fddb0a85a810",
+          "new_sha256": "d9ff4fb3fc4323cc03be11c294afb5a575686120e2d7319801d3e898046f5229",
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/features/interview/speech_address.py",
+          "status": "removed",
+          "old_sha256": "c34eeee1aa3becc538325f9077d797303e4e3ef0636ece6876608753c191c95a",
+          "new_sha256": null,
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/features/interview/speech_paths.py",
+          "status": "removed",
+          "old_sha256": "ea3e89d7473de9b08ee9571498d0d77cbd01135e787abd6d0eb8f6184a84beb7",
+          "new_sha256": null,
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/features/interview/speech_spelling.py",
+          "status": "removed",
+          "old_sha256": "f22371c96ce1fc7b395ff1b29d3ae78c2367d0ac30c62860dc2ab2c31b4dbb21",
+          "new_sha256": null,
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/integrations/tts/pronunciation.py",
+          "status": "removed",
+          "old_sha256": "c10daacd0ca090786dfa641e81150d00df2c1a60411b136e66f9fd850bffd3dd",
+          "new_sha256": null,
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/llm_tasks/question_pronunciation.py",
+          "status": "removed",
+          "old_sha256": "90a1fb4243c81a46764acee1b6c3cfdd9a91a3e9b697e74ff4c373e18246b7f0",
+          "new_sha256": null,
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/llm_tasks/runtime_capabilities.py",
+          "status": "changed",
+          "old_sha256": "546a691affc47ca85434e640dfe06ea4b75b3c59f06639c71c2fc2ec4c38ba04",
+          "new_sha256": "59dea7e74c77a1252a699ac98d4bf832032d2536d978d983863be154b6629d06",
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/scripts/configure_ai_runtime.py",
+          "status": "changed",
+          "old_sha256": "34284371436545c3e9562b5ea302f68ade652492560c0f73c844759b483ae368",
+          "new_sha256": "06b1231ef5152fd1f6da9c570cec17a91bf5a5303177038886645bff5e940732",
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/scripts/seed_prompt_versions.py",
+          "status": "changed",
+          "old_sha256": "33d7b8264089a41c38159e516b1cc684e6c64965ada0619165dc73fd0c432ef2",
+          "new_sha256": "d3d35fc17e745d03500075d93829cb1ee2a10edbc64a38b347d188606d0f7f84",
+          "same_after_text_newline_normalization": false,
+          "change_scope": [
+            "speech pronunciation task revert",
+            "preserve valid opaque prompt versions; validate operation bodies only for known Director family versions"
+          ]
+        }
+      ],
+      "added_runtime_python_files": []
+    },
+    "core_identity": {
+      "all_identical": true,
+      "files": [
+        {
+          "path": "ai/src/devon_ai/agents/director/__init__.py",
+          "identical": true,
+          "old_sha256": "6bf2b297c50227271d3332ab61de99940e9163d12f824b9b4e64c1c89e73cd29",
+          "new_sha256": "6bf2b297c50227271d3332ab61de99940e9163d12f824b9b4e64c1c89e73cd29"
+        },
+        {
+          "path": "ai/src/devon_ai/agents/director/agent.py",
+          "identical": true,
+          "old_sha256": "1a1e785e375e383311b23967069b84905338d83893df372dee72552c82dd6d1e",
+          "new_sha256": "1a1e785e375e383311b23967069b84905338d83893df372dee72552c82dd6d1e"
+        },
+        {
+          "path": "ai/src/devon_ai/agents/director/capabilities.py",
+          "identical": true,
+          "old_sha256": "3bee40d565d38369421a3aefc88f7f219ed2ac96d33e62f5b705fe335e19d3c1",
+          "new_sha256": "3bee40d565d38369421a3aefc88f7f219ed2ac96d33e62f5b705fe335e19d3c1"
+        },
+        {
+          "path": "ai/src/devon_ai/agents/director/model_input.py",
+          "identical": true,
+          "old_sha256": "73b26b0708b260d4036c5cef2f36148b822774f16c122438e087e596b0d3b388",
+          "new_sha256": "73b26b0708b260d4036c5cef2f36148b822774f16c122438e087e596b0d3b388"
+        },
+        {
+          "path": "ai/src/devon_ai/agents/director/plan_wire.py",
+          "identical": true,
+          "old_sha256": "8ffd058975787ffbde6efd5c628badc70d10336314162caf9e666b2cb6c96839",
+          "new_sha256": "8ffd058975787ffbde6efd5c628badc70d10336314162caf9e666b2cb6c96839"
+        },
+        {
+          "path": "ai/src/devon_ai/agents/director/policy.py",
+          "identical": true,
+          "old_sha256": "fb7ff353cf9d832079b59eb2882ca9cdc4a044deb624b1ef3ce5b719097bd115",
+          "new_sha256": "fb7ff353cf9d832079b59eb2882ca9cdc4a044deb624b1ef3ce5b719097bd115"
+        },
+        {
+          "path": "ai/src/devon_ai/agents/director/review.py",
+          "identical": true,
+          "old_sha256": "d8dd63260088487edf65a912b01bc801332e0a36c1b6b43be3665de125bea4be",
+          "new_sha256": "d8dd63260088487edf65a912b01bc801332e0a36c1b6b43be3665de125bea4be"
+        },
+        {
+          "path": "ai/src/devon_ai/agents/director/runtime.py",
+          "identical": true,
+          "old_sha256": "e2c9cfd0b5828d1e7de53b1d5159a0f85a4955dc105a09d5bc0bd6ef2964a0bc",
+          "new_sha256": "e2c9cfd0b5828d1e7de53b1d5159a0f85a4955dc105a09d5bc0bd6ef2964a0bc"
+        },
+        {
+          "path": "ai/src/devon_ai/agents/director/tools.py",
+          "identical": true,
+          "old_sha256": "db43c668ccf4b0dc8a3dde81a6b14dacdb991bf9d7ef41fec398039337b65dc6",
+          "new_sha256": "db43c668ccf4b0dc8a3dde81a6b14dacdb991bf9d7ef41fec398039337b65dc6"
+        },
+        {
+          "path": "ai/src/devon_ai/contracts.py",
+          "identical": true,
+          "old_sha256": "6849dd3891b851af30ea140b7a104bf0174550cfcde9a9a5479b727a3a3bfd82",
+          "new_sha256": "6849dd3891b851af30ea140b7a104bf0174550cfcde9a9a5479b727a3a3bfd82"
+        },
+        {
+          "path": "ai/src/devon_ai/llm_tasks/answer_analysis.py",
+          "identical": true,
+          "old_sha256": "1b65754d5773e46b191719a53d6a3a240a66650cc828bf01df7c29b63cf54e3b",
+          "new_sha256": "1b65754d5773e46b191719a53d6a3a240a66650cc828bf01df7c29b63cf54e3b"
+        },
+        {
+          "path": "ai/src/devon_ai/llm_tasks/answer_analysis_wire.py",
+          "identical": true,
+          "old_sha256": "3b5934b6537ee1e4353ef6606a895bb4b9e71d8f5aa41c8944ba6e43db8c7704",
+          "new_sha256": "3b5934b6537ee1e4353ef6606a895bb4b9e71d8f5aa41c8944ba6e43db8c7704"
+        },
+        {
+          "path": "ai/src/devon_ai/prompt_versions.py",
+          "identical": true,
+          "old_sha256": "ba7bc2f4792ef163c742d691569da8b1ce001545a4b9d652fd0035fa4ece48e9",
+          "new_sha256": "ba7bc2f4792ef163c742d691569da8b1ce001545a4b9d652fd0035fa4ece48e9"
+        },
+        {
+          "path": "backend/app/agents/director/runtime_adapter.py",
+          "identical": true,
+          "old_sha256": "d722c59d5e0ddd7ce8de38fb980f85fe8a01aa486e882733ec40087bae1a5f9d",
+          "new_sha256": "d722c59d5e0ddd7ce8de38fb980f85fe8a01aa486e882733ec40087bae1a5f9d"
+        },
+        {
+          "path": "backend/app/features/interview/agent_context.py",
+          "identical": true,
+          "old_sha256": "0584db1281fe716ceb6486af5fb9a067235ebb18bed3cbab54e9520a640a6998",
+          "new_sha256": "0584db1281fe716ceb6486af5fb9a067235ebb18bed3cbab54e9520a640a6998"
+        },
+        {
+          "path": "backend/app/features/interview/agent_queries.py",
+          "identical": true,
+          "old_sha256": "a910660423e260a72f6ec0f2bd5556edbc10bf11f178910092ed0ac3250bda10",
+          "new_sha256": "a910660423e260a72f6ec0f2bd5556edbc10bf11f178910092ed0ac3250bda10"
+        },
+        {
+          "path": "backend/app/features/interview/agent_service.py",
+          "identical": true,
+          "old_sha256": "93e841a7caec67b7ce0de86093897ce06b70d36716537e38176fa3f636a60e98",
+          "new_sha256": "93e841a7caec67b7ce0de86093897ce06b70d36716537e38176fa3f636a60e98"
+        },
+        {
+          "path": "backend/app/features/interview/answer_context.py",
+          "identical": true,
+          "old_sha256": "7fbab2c8801de4e653add02262d2f45e965d3e1980a3ffdc47b15acac7e8f298",
+          "new_sha256": "7fbab2c8801de4e653add02262d2f45e965d3e1980a3ffdc47b15acac7e8f298"
+        },
+        {
+          "path": "backend/app/features/interview/director_service.py",
+          "identical": true,
+          "old_sha256": "81e270173b3758753ea91944483e3aba8c08f5f68d2520db47e963faa1786fb4",
+          "new_sha256": "81e270173b3758753ea91944483e3aba8c08f5f68d2520db47e963faa1786fb4"
+        },
+        {
+          "path": "backend/app/features/interview/generation_binding.py",
+          "identical": true,
+          "old_sha256": "cbaa5a14ceaf646c6e499de917be09a65261b801f38a9a39c2e48166a8dfa679",
+          "new_sha256": "cbaa5a14ceaf646c6e499de917be09a65261b801f38a9a39c2e48166a8dfa679"
+        },
+        {
+          "path": "backend/app/features/interview/observation.py",
+          "identical": true,
+          "old_sha256": "654502791d3e5262ff841806f43633aad69440db6553a5db901f09b55f4eb792",
+          "new_sha256": "654502791d3e5262ff841806f43633aad69440db6553a5db901f09b55f4eb792"
+        },
+        {
+          "path": "backend/app/features/interview/question_retry.py",
+          "identical": true,
+          "old_sha256": "28acaed59b092520e45f47de61e4d4358d560f94da066cff87e15a1cdd38bec3",
+          "new_sha256": "28acaed59b092520e45f47de61e4d4358d560f94da066cff87e15a1cdd38bec3"
+        },
+        {
+          "path": "backend/app/features/interview/turn_loop.py",
+          "identical": true,
+          "old_sha256": "795d0795c6a9277d3f8497b862584e8a1ec5577af81b2740c89be69af978545a",
+          "new_sha256": "795d0795c6a9277d3f8497b862584e8a1ec5577af81b2740c89be69af978545a"
+        },
+        {
+          "path": "backend/app/features/interview/turn_position.py",
+          "identical": true,
+          "old_sha256": "079ff65b11cd16a85284787c8e74af094dbb6ea8b09902e5616b5db3c543b094",
+          "new_sha256": "079ff65b11cd16a85284787c8e74af094dbb6ea8b09902e5616b5db3c543b094"
+        },
+        {
+          "path": "backend/app/features/interview/ws.py",
+          "identical": true,
+          "old_sha256": "a1841538f496bb6d7305fe57bf75741838eaeec4cb04163d59e8d49810f1ecc3",
+          "new_sha256": "a1841538f496bb6d7305fe57bf75741838eaeec4cb04163d59e8d49810f1ecc3"
+        },
+        {
+          "path": "backend/app/features/report/generation.py",
+          "identical": true,
+          "old_sha256": "6a47ec5bb1f1716601309dce632e65693e9365c114000479a51e9e6e7be33798",
+          "new_sha256": "6a47ec5bb1f1716601309dce632e65693e9365c114000479a51e9e6e7be33798"
+        },
+        {
+          "path": "backend/app/features/report/history.py",
+          "identical": true,
+          "old_sha256": "2dcc175e208c5591f0e771b379832a3d4588ccc8456bf19c6da5dc1e3f436963",
+          "new_sha256": "2dcc175e208c5591f0e771b379832a3d4588ccc8456bf19c6da5dc1e3f436963"
+        },
+        {
+          "path": "backend/app/features/report/service.py",
+          "identical": true,
+          "old_sha256": "97d007ac2e03286749d993ba50673049b3926a98bd8302adeb1edba759272abf",
+          "new_sha256": "97d007ac2e03286749d993ba50673049b3926a98bd8302adeb1edba759272abf"
+        },
+        {
+          "path": "backend/app/llm_tasks/answer_analysis.py",
+          "identical": true,
+          "old_sha256": "d6c9d7f1240c628d4e138a9fd644855e32449c419fd53c9791d9ce128020319d",
+          "new_sha256": "d6c9d7f1240c628d4e138a9fd644855e32449c419fd53c9791d9ce128020319d"
+        },
+        {
+          "path": "backend/app/llm_tasks/prompt_loader.py",
+          "identical": true,
+          "old_sha256": "beca9ab49722cabac2bd6081217fd3ae4bdc0c75d9b780903a2edd54e76851a4",
+          "new_sha256": "beca9ab49722cabac2bd6081217fd3ae4bdc0c75d9b780903a2edd54e76851a4"
+        }
+      ]
+    },
+    "prompt_identity": {
+      "all_identical": true,
+      "files": [
+        {
+          "task": "director",
+          "version": "director_v17",
+          "path": "ai/prompts/director-runtime-v17-semantic-fit.md",
+          "body_sha256_at_live": "51e959e1db22a8f4538c38f7d434e273f77ae317a877cb761d41c13c690449f4",
+          "body_sha256_current": "51e959e1db22a8f4538c38f7d434e273f77ae317a877cb761d41c13c690449f4",
+          "same_runtime_body": true,
+          "old_registration_matches_snapshot": true,
+          "new_registration_matches_current": true
+        },
+        {
+          "task": "answer_analysis",
+          "version": "answer_analysis_v7",
+          "path": "ai/prompts/answer-analysis-runtime-v7-claim-contribution-scope.md",
+          "body_sha256_at_live": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da",
+          "body_sha256_current": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da",
+          "same_runtime_body": true,
+          "old_registration_matches_snapshot": true,
+          "new_registration_matches_current": true
+        }
+      ],
+      "provider_instruction_checks": {
+        "checked_calls": 27,
+        "all_identical": true,
+        "operations": {
+          "plan": 9,
+          "review": 9,
+          "answer_analysis": 9
+        },
+        "calls": [
+          {
+            "call": 1,
+            "operation": "plan",
+            "identical": true,
+            "instructions_sha256_at_live": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f",
+            "instructions_sha256_current": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f"
+          },
+          {
+            "call": 2,
+            "operation": "review",
+            "identical": true,
+            "instructions_sha256_at_live": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68",
+            "instructions_sha256_current": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68"
+          },
+          {
+            "call": 3,
+            "operation": "answer_analysis",
+            "identical": true,
+            "instructions_sha256_at_live": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da",
+            "instructions_sha256_current": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da"
+          },
+          {
+            "call": 4,
+            "operation": "plan",
+            "identical": true,
+            "instructions_sha256_at_live": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f",
+            "instructions_sha256_current": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f"
+          },
+          {
+            "call": 5,
+            "operation": "review",
+            "identical": true,
+            "instructions_sha256_at_live": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68",
+            "instructions_sha256_current": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68"
+          },
+          {
+            "call": 6,
+            "operation": "answer_analysis",
+            "identical": true,
+            "instructions_sha256_at_live": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da",
+            "instructions_sha256_current": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da"
+          },
+          {
+            "call": 7,
+            "operation": "plan",
+            "identical": true,
+            "instructions_sha256_at_live": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f",
+            "instructions_sha256_current": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f"
+          },
+          {
+            "call": 8,
+            "operation": "review",
+            "identical": true,
+            "instructions_sha256_at_live": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68",
+            "instructions_sha256_current": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68"
+          },
+          {
+            "call": 9,
+            "operation": "answer_analysis",
+            "identical": true,
+            "instructions_sha256_at_live": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da",
+            "instructions_sha256_current": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da"
+          },
+          {
+            "call": 10,
+            "operation": "plan",
+            "identical": true,
+            "instructions_sha256_at_live": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f",
+            "instructions_sha256_current": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f"
+          },
+          {
+            "call": 11,
+            "operation": "review",
+            "identical": true,
+            "instructions_sha256_at_live": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68",
+            "instructions_sha256_current": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68"
+          },
+          {
+            "call": 12,
+            "operation": "answer_analysis",
+            "identical": true,
+            "instructions_sha256_at_live": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da",
+            "instructions_sha256_current": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da"
+          },
+          {
+            "call": 13,
+            "operation": "plan",
+            "identical": true,
+            "instructions_sha256_at_live": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f",
+            "instructions_sha256_current": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f"
+          },
+          {
+            "call": 14,
+            "operation": "review",
+            "identical": true,
+            "instructions_sha256_at_live": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68",
+            "instructions_sha256_current": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68"
+          },
+          {
+            "call": 15,
+            "operation": "answer_analysis",
+            "identical": true,
+            "instructions_sha256_at_live": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da",
+            "instructions_sha256_current": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da"
+          },
+          {
+            "call": 16,
+            "operation": "plan",
+            "identical": true,
+            "instructions_sha256_at_live": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f",
+            "instructions_sha256_current": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f"
+          },
+          {
+            "call": 17,
+            "operation": "review",
+            "identical": true,
+            "instructions_sha256_at_live": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68",
+            "instructions_sha256_current": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68"
+          },
+          {
+            "call": 18,
+            "operation": "answer_analysis",
+            "identical": true,
+            "instructions_sha256_at_live": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da",
+            "instructions_sha256_current": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da"
+          },
+          {
+            "call": 19,
+            "operation": "plan",
+            "identical": true,
+            "instructions_sha256_at_live": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f",
+            "instructions_sha256_current": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f"
+          },
+          {
+            "call": 20,
+            "operation": "review",
+            "identical": true,
+            "instructions_sha256_at_live": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68",
+            "instructions_sha256_current": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68"
+          },
+          {
+            "call": 21,
+            "operation": "answer_analysis",
+            "identical": true,
+            "instructions_sha256_at_live": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da",
+            "instructions_sha256_current": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da"
+          },
+          {
+            "call": 22,
+            "operation": "plan",
+            "identical": true,
+            "instructions_sha256_at_live": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f",
+            "instructions_sha256_current": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f"
+          },
+          {
+            "call": 23,
+            "operation": "review",
+            "identical": true,
+            "instructions_sha256_at_live": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68",
+            "instructions_sha256_current": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68"
+          },
+          {
+            "call": 24,
+            "operation": "answer_analysis",
+            "identical": true,
+            "instructions_sha256_at_live": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da",
+            "instructions_sha256_current": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da"
+          },
+          {
+            "call": 25,
+            "operation": "plan",
+            "identical": true,
+            "instructions_sha256_at_live": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f",
+            "instructions_sha256_current": "f69e769a9f9f1d6d751c6c2c7a256b7d3af1d9b00d745cc1465992a614d1885f"
+          },
+          {
+            "call": 26,
+            "operation": "review",
+            "identical": true,
+            "instructions_sha256_at_live": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68",
+            "instructions_sha256_current": "d702982e75115c5259cd5b132e75992f71d70a8f6d1330ad101ccf28b488df68"
+          },
+          {
+            "call": 27,
+            "operation": "answer_analysis",
+            "identical": true,
+            "instructions_sha256_at_live": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da",
+            "instructions_sha256_current": "57d51b648291d423469799c8ff625973e688b09a7b491521b8e06c4fd7b709da"
+          }
+        ]
+      }
+    },
+    "configuration": {
+      "environment_changed_since_live": true,
+      "global_timeout_before": 60.0,
+      "global_timeout_latest": 50.0,
+      "effective_tasks": {
+        "director": {
+          "at_live": {
+            "timeout_seconds": 120.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          },
+          "latest_api0": {
+            "timeout_seconds": 120.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          }
+        },
+        "answer_analysis": {
+          "at_live": {
+            "timeout_seconds": 120.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          },
+          "latest_api0": {
+            "timeout_seconds": 120.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          }
+        },
+        "repo_shallow": {
+          "at_live": {
+            "timeout_seconds": 180.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          },
+          "latest_api0": {
+            "timeout_seconds": 180.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          }
+        },
+        "repo_deep": {
+          "at_live": {
+            "timeout_seconds": 160.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          },
+          "latest_api0": {
+            "timeout_seconds": 160.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          }
+        },
+        "report": {
+          "at_live": {
+            "timeout_seconds": 180.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          },
+          "latest_api0": {
+            "timeout_seconds": 180.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          }
+        },
+        "report_score": {
+          "at_live": {
+            "timeout_seconds": 180.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          },
+          "latest_api0": {
+            "timeout_seconds": 180.0,
+            "max_output_tokens": 128000,
+            "max_input_bytes": 1048576,
+            "max_response_bytes": 67108864,
+            "reasoning_effort": "xhigh",
+            "stream": true
+          }
+        }
+      },
+      "same_director_answer_limits": true,
+      "raw_env_copied": false,
+      "original_env_modified_by_comparison": false
+    },
+    "original_live_preservation": {
+      "unchanged": true,
+      "files_checked": 498,
+      "schema_or_database_written_by_comparison": false
+    },
+    "scope_limits": [
+      "The historical 27 real Luna calls ran against base 110e1aeb, catalog12 and the then-current environment; they are preserved as historical evidence.",
+      "Latest base561/catalog11 and the changed global timeout have a new complete API0 nine-turn storage/recovery/history validation only; no new provider calls were made.",
+      "Full historical source identity intentionally does not match the latest revision. Core-file and actual transmitted instruction equality do not erase the 14 changed/removed runtime files. The seed script includes both the pronunciation revert and the later opaque prompt-version registration compatibility fix.",
+      "Latest API0 is a structural/connection regression using mock responses, not a new real-model quality, latency, or cost measurement.",
+      "Speech pronunciation, frontend/REST/WS service E2E, fresh repository analysis, external search, and actual report/scoring generation are outside this comparison."
+    ],
+    "original_actual_audit_reexecuted_after_revert": false,
+    "latest_model_actual_calls_added": 0
+  },
+  "actual_run_scope_note": "The real 27-call run belongs to its preserved execution snapshot/catalog12. Upstream voice revert, latest catalog11 and final opaque-version registration compatibility fix are separate publication/API0 checks, not another real-model interview.",
+  "phases": [
+    {
+      "phase": "start",
+      "failed": false,
+      "phase_latency_ms": 14729.12,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 1,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 2,
+      "outcome": {
+        "failure": null,
+        "discard_reason": null
+      }
+    },
+    {
+      "phase": "answer:01",
+      "failed": false,
+      "phase_latency_ms": 67789.256,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 2,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:02",
+      "failed": false,
+      "phase_latency_ms": 68330.342,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 3,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:03",
+      "failed": false,
+      "phase_latency_ms": 36836.739,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 4,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:04",
+      "failed": false,
+      "phase_latency_ms": 94027.011,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 5,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:05",
+      "failed": false,
+      "phase_latency_ms": 67566.844,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 6,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:06",
+      "failed": false,
+      "phase_latency_ms": 82008.133,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 7,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:07",
+      "failed": false,
+      "phase_latency_ms": 98531.76,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 8,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:08",
+      "failed": false,
+      "phase_latency_ms": 54039.308,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 9,
+      "session_status": "in_progress",
+      "physical_model_calls_this_phase": 3,
+      "outcome": {
+        "completed": false,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    },
+    {
+      "phase": "answer:09",
+      "failed": false,
+      "phase_latency_ms": 12528.78,
+      "same_call_replay_no_extra_io": true,
+      "current_turn": 9,
+      "session_status": "completed",
+      "physical_model_calls_this_phase": 1,
+      "outcome": {
+        "completed": true,
+        "failure": null,
+        "discard_reason": null,
+        "accepted": true
+      }
+    }
+  ],
+  "turns": [
+    {
+      "turn_no": 1,
+      "question": {
+        "persona": "hr_manager",
+        "text": "간단히 자기소개해 주시고, 대표 프로젝트 하나를 예로 들어 본인과 팀의 역할을 나누어 설명해 주시겠어요?",
+        "question_contract": {
+          "purpose": "간단히 자기소개해 주시고, 대표 프로젝트 하나를 예로 들어 본인과 팀의 역할을 나누어 설명해 주시겠어요?",
+          "basis_refs": [],
+          "assumptions": [],
+          "evaluation_keys": [
+            "contribution_clarity",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "self_introduction_and_roles",
+              "description": "간단히 자기소개해 주시고, 대표 프로젝트 하나를 예로 들어 본인과 팀의 역할을 나누어 설명해 주시겠어요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "topic_code": "hr_introduction",
+        "jd_requirement_ids": [],
+        "parent_turn_no": null,
+        "depth": 1
+      },
+      "public_question_sha256": "168627b6469c853bce68fc3b6d9250440d858a7b2f9cd2d54b1c63b75b67f169",
+      "original_question_sha256": "168627b6469c853bce68fc3b6d9250440d858a7b2f9cd2d54b1c63b75b67f169",
+      "synthetic_answer": true,
+      "answer_text": "백엔드 개발자를 준비하고 있습니다. 최근에는 Mastodon의 게시 요청과 후처리 코드를 읽으며 실패가 어느 단계에서 발생하는지 구분하는 학습을 했습니다. 이 공개 프로젝트를 직접 구현하거나 운영한 경험은 없습니다. 제가 직접 한 부분은 제공된 원문을 읽고 요청 흐름과 확인할 지점을 정리한 것이고, 원래 서비스 구현에 참여한 기여는 없습니다. 팀원과 함께 개발한 프로젝트의 역할 분담 경험도 이번 사례에서는 제시할 수 없습니다. 확인한 코드와 제가 제안하는 해결책을 구분해서 설명하려고 합니다.",
+      "answer_text_sha256": "4931520f99a48b6b22173c5d847da3d0778dcfdddcc09fa5373fd720ffe198c5",
+      "stored_status": "answered",
+      "prepared_answer_file_present": true,
+      "question_length_codepoints": 58,
+      "original_question_answer_binding_verified": true,
+      "analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "partial",
+        "covered_points": [
+          {
+            "key": "self_introduction_and_roles",
+            "answer_quotes": [
+              "백엔드 개발자를 준비하고 있습니다.",
+              " 최근에는 Mastodon의 게시 요청과 후처리 코드를 읽으며 실패가 어느 단계에서 발생하는지 구분하는 학습을 했습니다.",
+              " 이 공개 프로젝트를 직접 구현하거나 운영한 경험은 없습니다.",
+              " 제가 직접 한 부분은 제공된 원문을 읽고 요청 흐름과 확인할 지점을 정리한 것이고, 원래 서비스 구현에 참여한 기여는 없습니다.",
+              " 팀원과 함께 개발한 프로젝트의 역할 분담 경험도 이번 사례에서는 제시할 수 없습니다."
+            ]
+          }
+        ],
+        "missing_points": [
+          "self_introduction_and_roles"
+        ],
+        "contribution_scope": {
+          "scope": "self",
+          "answer_quotes": [
+            " 제가 직접 한 부분은 제공된 원문을 읽고 요청 흐름과 확인할 지점을 정리한 것이고, 원래 서비스 구현에 참여한 기여는 없습니다."
+          ]
+        },
+        "claim_checks": [],
+        "needs_verification": false,
+        "verification_requests": [],
+        "external_queries": [],
+        "limitations": [
+          "백엔드 개발 준비 중이라는 소개와 Mastodon 게시 요청·후처리 코드 학습 사례, 제공된 원문을 읽고 요청 흐름과 확인할 지점을 정리한 본인의 역할은 설명했습니다. 다만 실제 팀 프로젝트와 팀원 역할은 제시하지 않아 본인과 팀의 역할을 나누어 설명하라는 요청은 충족되지 않았습니다."
+        ]
+      },
+      "public_selected_analysis_sha256": "710fff6ec5d9f646be3148deb929c367306b2f962ed859c3acb123b3b97b2320"
+    },
+    {
+      "turn_no": 2,
+      "question": {
+        "persona": "domain_lead",
+        "text": "공고에는 고객 플랫폼의 메시징 기능이 포함되어 있습니다. 제공된 코드에서는 멱등성 키가 있을 때 계정·키별 Redis 락 아래 중복을 확인해 요청을 처리하고, 성공한 결과 ID를 Redis에 1시간 저장합니다. Redis나 락 장애 시 동작은 이 파일만으로 확인되지 않으며, 개인 구현 경험이 아닌 이 구조의 가정형 적용을 묻습니다. 이 멱등성 처리 흐름을 고객 메시지 생성 API에 그대로 적용할지, 한 부분을 바꿔 적용할지 선택하고 그 이유를 말씀해 주시겠어요?",
+        "question_contract": {
+          "purpose": "이 멱등성 처리 흐름을 고객 메시지 생성 API에 그대로 적용할지, 한 부분을 바꿔 적용할지 선택하고 그 이유를 말씀해 주시겠어요?",
+          "basis_refs": [
+            {
+              "id": "validation-ref-001",
+              "kind": "evidence"
+            },
+            {
+              "id": "validation-ref-002",
+              "kind": "jd_requirement"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "apply_idempotency_flow_to_messaging",
+              "description": "이 멱등성 처리 흐름을 고객 메시지 생성 API에 그대로 적용할지, 한 부분을 바꿔 적용할지 선택하고 그 이유를 말씀해 주시겠어요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "topic_code": "messaging_idempotency_application",
+        "jd_requirement_ids": [
+          "validation-ref-002"
+        ],
+        "parent_turn_no": null,
+        "depth": 1
+      },
+      "public_question_sha256": "65ed433aaf7685cfc5c3760ad2f6302f71bcf031658b736e898d3e8be365a92d",
+      "original_question_sha256": "92302b712f7d2aa9c4304ce0b2c5a90242101cd4b10d33563c47b773c8d50766",
+      "synthetic_answer": true,
+      "answer_text": "한 부분을 바꿔 적용하겠습니다. 중복 판정 결과를 Redis에만 두지 않고, 고객 ID와 멱등성 키에 유일 제약을 둔 DB 기록으로 남기겠습니다. 메시지 저장과 결과 ID 기록을 같은 트랜잭션으로 묶으면 Redis의 결과가 유실되거나 한 시간이 지난 뒤 재시도해도 같은 메시지 ID를 반환할 수 있기 때문입니다. Redis 락은 동시 중복 작업을 줄이는 보조 수단으로 쓰겠습니다. 이것은 메시지 생성 API에 적용한다고 가정한 제안이며, 제가 구현한 경험이나 제공된 프로젝트의 실제 운영 방식은 아닙니다.",
+      "answer_text_sha256": "3abae3d5aa0a0c5b41486a74468493f774fa13508a15f1b6c693bdfd6301796c",
+      "stored_status": "answered",
+      "prepared_answer_file_present": true,
+      "question_length_codepoints": 260,
+      "original_question_answer_binding_verified": true,
+      "analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "sufficient",
+        "covered_points": [
+          {
+            "key": "apply_idempotency_flow_to_messaging",
+            "answer_quotes": [
+              "한 부분을 바꿔 적용하겠습니다.",
+              " 중복 판정 결과를 Redis에만 두지 않고, 고객 ID와 멱등성 키에 유일 제약을 둔 DB 기록으로 남기겠습니다.",
+              " 메시지 저장과 결과 ID 기록을 같은 트랜잭션으로 묶으면 Redis의 결과가 유실되거나 한 시간이 지난 뒤 재시도해도 같은 메시지 ID를 반환할 수 있기 때문입니다.",
+              " Redis 락은 동시 중복 작업을 줄이는 보조 수단으로 쓰겠습니다."
+            ]
+          }
+        ],
+        "missing_points": [],
+        "contribution_scope": {
+          "scope": "unknown",
+          "answer_quotes": [
+            " 이것은 메시지 생성 API에 적용한다고 가정한 제안이며, 제가 구현한 경험이나 제공된 프로젝트의 실제 운영 방식은 아닙니다."
+          ]
+        },
+        "claim_checks": [],
+        "needs_verification": false,
+        "verification_requests": [],
+        "external_queries": [],
+        "limitations": [
+          "답변은 가정형 설계 제안이라고 명시하고, 본인의 구현 경험이나 제공된 프로젝트의 실제 운영 방식이 아니라고 밝힌다. 따라서 기존 구현이나 운영에 대한 개인 기여 범위는 확인할 수 없다."
+        ]
+      },
+      "public_selected_analysis_sha256": "ad86b385ed71b9ef6e24ad19eb45df88dcda2e7767e734eb92f15f9e50d6243e"
+    },
+    {
+      "turn_no": 3,
+      "question": {
+        "persona": "tech_lead",
+        "text": "제공된 코드에서는 멱등성 키가 중복된 요청은 기존 결과를 반환하고, 일반 게시물의 후처리는 멱등성 처리 블록을 마친 뒤 호출됩니다. 저장은 성공했지만 후처리 작업 큐 등록이 실패하는 상황이라면, 누락된 후처리를 복구하기 위해 어떤 방식을 선택하시겠습니까? 그 이유도 말씀해 주세요.",
+        "question_contract": {
+          "purpose": "저장은 성공했지만 후처리 작업 큐 등록이 실패하는 상황이라면, 누락된 후처리를 복구하기 위해 어떤 방식을 선택하시겠습니까? 그 이유도 말씀해 주세요.",
+          "basis_refs": [
+            {
+              "id": "validation-ref-003",
+              "kind": "evidence"
+            },
+            {
+              "id": "validation-ref-001",
+              "kind": "evidence"
+            },
+            {
+              "id": "validation-ref-004",
+              "kind": "evidence"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "postprocess_recovery_choice",
+              "description": "저장은 성공했지만 후처리 작업 큐 등록이 실패하는 상황이라면, 누락된 후처리를 복구하기 위해 어떤 방식을 선택하시겠습니까? 그 이유도 말씀해 주세요."
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "topic_code": "postprocess_recovery",
+        "jd_requirement_ids": [],
+        "parent_turn_no": null,
+        "depth": 1
+      },
+      "public_question_sha256": "a66ddbf2e5e2b31431c4d47ed8a57a0ba9547c22f42d533952fb0539c92fb7bf",
+      "original_question_sha256": "875ecf77df364ada39aa4ab5a297c41f36b0317d8fe2a0f9145923ac0778f986",
+      "synthetic_answer": true,
+      "answer_text": "실패한 작업 큐 등록을 다시 시도하는 방식을 선택하겠습니다.",
+      "answer_text_sha256": "f638d38c29172631ce3a03b2336959029777bd2e4a6625f800a32e46de310817",
+      "stored_status": "answered",
+      "prepared_answer_file_present": true,
+      "question_length_codepoints": 157,
+      "original_question_answer_binding_verified": true,
+      "analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "partial",
+        "covered_points": [
+          {
+            "key": "postprocess_recovery_choice",
+            "answer_quotes": [
+              "실패한 작업 큐 등록을 다시 시도하는 방식을 선택하겠습니다."
+            ]
+          }
+        ],
+        "missing_points": [
+          "postprocess_recovery_choice"
+        ],
+        "contribution_scope": {
+          "scope": "unknown",
+          "answer_quotes": []
+        },
+        "claim_checks": [],
+        "needs_verification": false,
+        "verification_requests": [],
+        "external_queries": [],
+        "limitations": [
+          "답변은 실패한 작업 큐 등록을 다시 시도하겠다는 선택은 밝혔지만, 그 방식을 선택한 이유는 설명하지 않았습니다.",
+          "답변은 가정형 대응 방식을 선택할 뿐, 실제 구현이나 운영에 대한 기여를 진술하지 않습니다."
+        ]
+      },
+      "public_selected_analysis_sha256": "8623924798b94ea7b4e9216e7ff5c3a395d8d2c7a913fe3471e2c75ef701c4c1"
+    },
+    {
+      "turn_no": 4,
+      "question": {
+        "persona": "tech_lead",
+        "text": "실패한 작업 큐 등록을 다시 시도하겠다고 하셨는데, 그 방식을 누락된 후처리의 복구책으로 선택한 이유는 무엇인가요?",
+        "question_contract": {
+          "purpose": "실패한 작업 큐 등록을 다시 시도하겠다고 하셨는데, 그 방식을 누락된 후처리의 복구책으로 선택한 이유는 무엇인가요?",
+          "basis_refs": [
+            {
+              "id": "validation-ref-005",
+              "kind": "answer_turn"
+            },
+            {
+              "id": "validation-ref-003",
+              "kind": "evidence"
+            },
+            {
+              "id": "validation-ref-001",
+              "kind": "evidence"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "postprocess_recovery_choice",
+              "description": "실패한 작업 큐 등록을 다시 시도하겠다고 하셨는데, 그 방식을 누락된 후처리의 복구책으로 선택한 이유는 무엇인가요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "topic_code": "postprocess_recovery_choice",
+        "jd_requirement_ids": [],
+        "parent_turn_no": 3,
+        "depth": 2
+      },
+      "public_question_sha256": "5bdec252bf1290b9769bd067c8fe01538739881727b71f719eb959ba95995d2c",
+      "original_question_sha256": "c86ffa1979bee4219a8cb4b3337dc9bb60c1bbace3a836f3a8856a5ff60b8b4c",
+      "synthetic_answer": true,
+      "answer_text": "게시물은 이미 저장됐다는 가정이므로 요청 전체를 다시 처리하면 중복 게시물을 만들거나 이미 끝난 처리를 반복할 수 있습니다. 실패한 큐 등록 단계만 다시 시도하면 저장된 게시물은 그대로 두고 누락된 후처리의 시작을 복구할 수 있다고 봤습니다. 다만 누락을 찾아 재시도할 내구성 있는 기록과 중복 실행 방지는 별도 설계가 필요합니다. 이것들이 이 파일에 이미 구현돼 있다는 뜻은 아닙니다.",
+      "answer_text_sha256": "bae234ff72a89844c5b44bc4f10bc73148895674c9126bfa1ac1137a73d95011",
+      "stored_status": "answered",
+      "prepared_answer_file_present": true,
+      "question_length_codepoints": 64,
+      "original_question_answer_binding_verified": true,
+      "analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "sufficient",
+        "covered_points": [
+          {
+            "key": "postprocess_recovery_choice",
+            "answer_quotes": [
+              "게시물은 이미 저장됐다는 가정이므로 요청 전체를 다시 처리하면 중복 게시물을 만들거나 이미 끝난 처리를 반복할 수 있습니다.",
+              " 실패한 큐 등록 단계만 다시 시도하면 저장된 게시물은 그대로 두고 누락된 후처리의 시작을 복구할 수 있다고 봤습니다.",
+              " 다만 누락을 찾아 재시도할 내구성 있는 기록과 중복 실행 방지는 별도 설계가 필요합니다."
+            ]
+          }
+        ],
+        "missing_points": [],
+        "contribution_scope": {
+          "scope": "unknown",
+          "answer_quotes": [
+            " 이것들이 이 파일에 이미 구현돼 있다는 뜻은 아닙니다."
+          ]
+        },
+        "claim_checks": [],
+        "needs_verification": false,
+        "verification_requests": [],
+        "external_queries": [],
+        "limitations": [
+          "답변은 복구 방안을 제안하고 해당 설계가 이 파일에 이미 구현됐다는 뜻은 아니라고 밝힐 뿐, 실제 구현이나 운영에서의 개인 기여를 설명하지 않습니다."
+        ]
+      },
+      "public_selected_analysis_sha256": "24d64616d8114d6c139d3fadb7d19e595bb78b99a3bdf25cf52f6aee829221cf"
+    },
+    {
+      "turn_no": 5,
+      "question": {
+        "persona": "tech_lead",
+        "text": "이 파일은 첨부파일 ID 배열의 원소 수가 제한을 넘으면 조회 전에 오류를 내고, 제한 이내에서 해당 계정 소유의 미연결 첨부파일을 찾습니다. 요청된 첨부파일 ID에 중복이 있어 원소 수가 제한을 넘는 경우, 현재처럼 거부할지 중복 제거 후 허용할지 선택하고 이유를 말씀해 주시겠어요?",
+        "question_contract": {
+          "purpose": "요청된 첨부파일 ID에 중복이 있어 원소 수가 제한을 넘는 경우, 현재처럼 거부할지 중복 제거 후 허용할지 선택하고 이유를 말씀해 주시겠어요?",
+          "basis_refs": [
+            {
+              "id": "validation-ref-004",
+              "kind": "evidence"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "technical_reasoning",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "duplicate_media_id_limit_policy",
+              "description": "요청된 첨부파일 ID에 중복이 있어 원소 수가 제한을 넘는 경우, 현재처럼 거부할지 중복 제거 후 허용할지 선택하고 이유를 말씀해 주시겠어요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "topic_code": "media_validation_limit_policy",
+        "jd_requirement_ids": [],
+        "parent_turn_no": null,
+        "depth": 1
+      },
+      "public_question_sha256": "dc1206f513f543b5aa235f2bd42ab80ea16056cb2ef805c9bd53f27babe17e45",
+      "original_question_sha256": "6d3ff75fe08178bb02376998e15233d8188c30a6fb42235e51c5e3af8cc25993",
+      "synthetic_answer": true,
+      "answer_text": "이 경우 거부하는 정책과 중복을 제거해서 허용하는 정책 중 어느 쪽이 더 적절한지 모르겠습니다. 이유도 지금은 설명하지 못하겠습니다.",
+      "answer_text_sha256": "caabb87656acfe1c0022295207d44fce8ab97225a6ea15d5da1064912fb0f2c3",
+      "stored_status": "answered",
+      "prepared_answer_file_present": true,
+      "question_length_codepoints": 159,
+      "original_question_answer_binding_verified": true,
+      "analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "insufficient",
+        "covered_points": [],
+        "missing_points": [
+          "duplicate_media_id_limit_policy"
+        ],
+        "contribution_scope": {
+          "scope": "unknown",
+          "answer_quotes": []
+        },
+        "claim_checks": [],
+        "needs_verification": false,
+        "verification_requests": [],
+        "external_queries": [],
+        "limitations": [
+          "답변은 두 정책 중 어느 쪽을 선택할지 밝히지 않았고, 선택 이유도 제시하지 않았습니다.",
+          "현재 답변은 정책 판단에 대한 불확실성만 말하며, 구현이나 운영에 대한 기여를 진술하지 않습니다."
+        ]
+      },
+      "public_selected_analysis_sha256": "bddf0308ac0386d458b2e783e4955ee22c9efc76875a245f7b387eb9916bb4cd"
+    },
+    {
+      "turn_no": 6,
+      "question": {
+        "persona": "tech_lead",
+        "text": "가정상 이메일 구독 조건은 충족하지만 일부 대상 게시물의 안내 메일이 누락됩니다. 제공된 파일에서는 게시물 ID를 Redis set에 넣고 TTL을 설정한 뒤 5분 후 worker를 예약하는 데까지만 확인되며, worker 내부 구현은 제공되지 않았습니다. 이 상황에서 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 확인이 어떤 가능성을 구분해 주는지 설명해 주시겠어요?",
+        "question_contract": {
+          "purpose": "이 상황에서 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 확인이 어떤 가능성을 구분해 주는지 설명해 주시겠어요?",
+          "basis_refs": [
+            {
+              "id": "validation-ref-004",
+              "kind": "evidence"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "email_distribution_first_check",
+              "description": "이 상황에서 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 확인이 어떤 가능성을 구분해 주는지 설명해 주시겠어요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "topic_code": "email_distribution_failure_isolation",
+        "jd_requirement_ids": [],
+        "parent_turn_no": null,
+        "depth": 1
+      },
+      "public_question_sha256": "5f80739856f87336d7a7e55c69bd506077ea7188f4623486affce588e7166bff",
+      "original_question_sha256": "1be2ce4e5beabd7602cb142425f92584e7ddff1f258db06121fce2c8628c29fb",
+      "synthetic_answer": true,
+      "answer_text": "먼저 worker 예약 시점의 Redis set 잔여 TTL을 확인하겠습니다. 이 파일에서는 TTL도 5분이고 worker 예약 지연도 5분이므로, 작업이 조금 늦게 시작되면 set이 먼저 만료될 수 있다고 판단했습니다. set이 예약 시점부터 너무 짧은 수명으로 남았다면 데이터 만료 가능성을, 충분히 오래 남는데도 메일이 누락된다면 worker 실행 이후의 가능성을 구분하려는 확인입니다. worker 내부에서 실제로 어떤 일이 일어나는지는 이 파일만으로 알 수 없습니다.",
+      "answer_text_sha256": "6b3ca63e5c53d31b2340cef7d7dfbb88b9da194d04a242a9876de285926b0710",
+      "stored_status": "answered",
+      "prepared_answer_file_present": true,
+      "question_length_codepoints": 224,
+      "original_question_answer_binding_verified": true,
+      "analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "partial",
+        "covered_points": [
+          {
+            "key": "email_distribution_first_check",
+            "answer_quotes": [
+              "먼저 worker 예약 시점의 Redis set 잔여 TTL을 확인하겠습니다.",
+              " 이 파일에서는 TTL도 5분이고 worker 예약 지연도 5분이므로, 작업이 조금 늦게 시작되면 set이 먼저 만료될 수 있다고 판단했습니다.",
+              " set이 예약 시점부터 너무 짧은 수명으로 남았다면 데이터 만료 가능성을, 충분히 오래 남는데도 메일이 누락된다면 worker 실행 이후의 가능성을 구분하려는 확인입니다.",
+              " worker 내부에서 실제로 어떤 일이 일어나는지는 이 파일만으로 알 수 없습니다."
+            ]
+          }
+        ],
+        "missing_points": [
+          "email_distribution_first_check"
+        ],
+        "contribution_scope": {
+          "scope": "unknown",
+          "answer_quotes": [
+            "먼저 worker 예약 시점의 Redis set 잔여 TTL을 확인하겠습니다."
+          ]
+        },
+        "claim_checks": [
+          {
+            "status": "conflicting",
+            "claim_text": "TTL도 5분",
+            "limitations": [
+              "제공된 코드의 EMAIL_DISTRIBUTION_TTL 값은 1시간입니다."
+            ],
+            "evidence_refs": [
+              "validation-ref-003"
+            ]
+          },
+          {
+            "status": "supported",
+            "claim_text": "worker 예약 지연도 5분",
+            "limitations": [],
+            "evidence_refs": [
+              "validation-ref-004",
+              "validation-ref-003"
+            ]
+          }
+        ],
+        "needs_verification": false,
+        "verification_requests": [],
+        "external_queries": [],
+        "limitations": [
+          "답변은 Redis set의 잔여 TTL을 확인 지점으로 고르고, 만료 가능성과 worker 실행 이후 가능성을 구분하려는 이유도 설명했습니다. 다만 TTL이 5분이라는 답변의 전제가 제공된 코드와 다릅니다. 코드의 TTL은 1시간이고 예약 지연은 5분이므로, worker가 조금 늦게 시작하면 set이 먼저 만료된다는 설명은 뒷받침되지 않습니다.",
+          "예약 시점의 TTL만으로는 worker가 실제로 set을 읽을 때까지 데이터가 유지됐는지, 또는 누락 원인이 worker 실행 이후인지 확정하기 어렵습니다. worker 내부 동작은 답변에서도 미확인으로 남겼습니다.",
+          "이 답변은 확인하겠다는 진단 제안이며, 기존 구현이나 운영에 대한 개인 기여를 진술하지 않습니다."
+        ]
+      },
+      "public_selected_analysis_sha256": "7c87b5a9296927361f56d3fd2fcb5836057880f5641ae6759f11d8f334d00b54"
+    },
+    {
+      "turn_no": 7,
+      "question": {
+        "persona": "tech_lead",
+        "text": "제공된 코드에서는 Redis set의 TTL이 1시간이고 worker 예약 지연은 5분입니다. 이 조건에서 예약 시점의 잔여 TTL 확인만으로 어떤 가능성을 구분할 수 있다고 보시는지 설명해 주시겠어요?",
+        "question_contract": {
+          "purpose": "이 조건에서 예약 시점의 잔여 TTL 확인만으로 어떤 가능성을 구분할 수 있다고 보시는지 설명해 주시겠어요?",
+          "basis_refs": [
+            {
+              "id": "validation-ref-006",
+              "kind": "answer_turn"
+            },
+            {
+              "id": "validation-ref-004",
+              "kind": "evidence"
+            },
+            {
+              "id": "validation-ref-003",
+              "kind": "evidence"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "email_distribution_first_check",
+              "description": "이 조건에서 예약 시점의 잔여 TTL 확인만으로 어떤 가능성을 구분할 수 있다고 보시는지 설명해 주시겠어요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "topic_code": "email_distribution_first_check",
+        "jd_requirement_ids": [],
+        "parent_turn_no": 6,
+        "depth": 2
+      },
+      "public_question_sha256": "e9d2d54e0744f6592744386932e68d4a76ac63f79cbec5cc3c5f90addfc64c8a",
+      "original_question_sha256": "c7afd759d5b8ca4b8f65bb3477ad67af6fc522fa9fbd0ce71979b42a53ec5997",
+      "synthetic_answer": true,
+      "answer_text": "앞서 TTL을 5분이라고 말한 것은 잘못 읽은 것입니다. 원문은 TTL 1시간, 예약 지연 5분입니다. 예약 직후 잔여 TTL을 보면 만료 시간이 정상적으로 설정됐는지, 예상보다 너무 짧게 남아 있는지부터 구분할 수 있습니다. 5분 정도 실행이 늦어진다는 사실만으로 1시간짜리 set이 만료된다고 설명할 수는 없습니다. TTL이 정상이라고 해서 worker 실행이나 메일 전송 성공까지 확인되는 것도 아닙니다. 따라서 이 확인은 비정상적인 만료 설정 가능성을 좁히는 데 쓰고, 큐 지연과 worker 내부의 전송 실패를 서로 구분하는 증거로 확대하지 않겠습니다.",
+      "answer_text_sha256": "568fa62f46dea32ad3f83df96d39835c57fbe1d37c1ad42b2cb7ffad5d2ca7e6",
+      "stored_status": "answered",
+      "prepared_answer_file_present": true,
+      "question_length_codepoints": 113,
+      "original_question_answer_binding_verified": true,
+      "analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "sufficient",
+        "covered_points": [
+          {
+            "key": "email_distribution_first_check",
+            "answer_quotes": [
+              " 원문은 TTL 1시간, 예약 지연 5분입니다.",
+              " 예약 직후 잔여 TTL을 보면 만료 시간이 정상적으로 설정됐는지, 예상보다 너무 짧게 남아 있는지부터 구분할 수 있습니다.",
+              " 5분 정도 실행이 늦어진다는 사실만으로 1시간짜리 set이 만료된다고 설명할 수는 없습니다.",
+              " TTL이 정상이라고 해서 worker 실행이나 메일 전송 성공까지 확인되는 것도 아닙니다.",
+              " 따라서 이 확인은 비정상적인 만료 설정 가능성을 좁히는 데 쓰고, 큐 지연과 worker 내부의 전송 실패를 서로 구분하는 증거로 확대하지 않겠습니다."
+            ]
+          }
+        ],
+        "missing_points": [],
+        "contribution_scope": {
+          "scope": "unknown",
+          "answer_quotes": []
+        },
+        "claim_checks": [
+          {
+            "status": "supported",
+            "claim_text": "TTL 1시간, 예약 지연 5분입니다.",
+            "limitations": [],
+            "evidence_refs": [
+              "validation-ref-003"
+            ]
+          }
+        ],
+        "needs_verification": false,
+        "verification_requests": [],
+        "external_queries": [],
+        "limitations": [
+          "답변은 관측 지점의 해석과 한계를 설명하지만, 실제 구현이나 운영에 대한 개인 기여를 진술하지 않습니다."
+        ]
+      },
+      "public_selected_analysis_sha256": "a12ec5fe05f5946407d4593b959b2c250716bb7f7cc127a75217a9beea29e345"
+    },
+    {
+      "turn_no": 8,
+      "question": {
+        "persona": "tech_lead",
+        "text": "가정상 예약 게시 레코드는 생성되지만 첨부파일 연결이 누락되는 사례가 있습니다. 제공된 파일에서는 검증용 status를 destroy한 뒤, 첨부파일 UPDATE를 감싸는 트랜잭션 안에서 scheduled_statuses.create!를 호출합니다. 이 문제의 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 결과로 어떤 가능성을 구분할 수 있는지 설명해 주시겠어요?",
+        "question_contract": {
+          "purpose": "이 문제의 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 결과로 어떤 가능성을 구분할 수 있는지 설명해 주시겠어요?",
+          "basis_refs": [
+            {
+              "id": "validation-ref-004",
+              "kind": "evidence"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "technical_reasoning",
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "scheduled_media_link_diagnosis",
+              "description": "이 문제의 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 결과로 어떤 가능성을 구분할 수 있는지 설명해 주시겠어요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "topic_code": "scheduled_media_link_diagnosis",
+        "jd_requirement_ids": [],
+        "parent_turn_no": null,
+        "depth": 1
+      },
+      "public_question_sha256": "c3fd8f86a86d8a90f9e2dc77bb2d100bc101aec50b5c8c712d3324ecdd1ac34c",
+      "original_question_sha256": "5d423010bc0d33ee9794dad4c5afc585daad8801e300d63503ef1390878690d4",
+      "synthetic_answer": true,
+      "answer_text": "같은 요청에서 첨부파일 UPDATE가 실제로 몇 행에 적용됐는지를 먼저 확인하겠습니다. 예약 레코드는 생성됐는데 영향 행이 0개라면, 연결할 첨부파일의 선정이나 UPDATE 대상이 비어 있었을 가능성부터 보겠습니다. 영향 행이 있었다면 그 시점의 연결은 수행됐을 가능성이 있으므로 이후 변경이나 조회 조건을 더 확인해야 합니다. 트랜잭션 안에 있다는 사실만으로 대상 0건까지 오류가 된다고 단정하지 않겠습니다. 다른 파일의 DB 제약과 후속 작업은 제공되지 않았으므로 실제 누락 원인을 여기서 확정하지는 않겠습니다.",
+      "answer_text_sha256": "eeb14920baf29dd95a666f3128a97d08f380fd07137d2a8bfec5182bc49078c0",
+      "stored_status": "answered",
+      "prepared_answer_file_present": true,
+      "question_length_codepoints": 221,
+      "original_question_answer_binding_verified": true,
+      "analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "sufficient",
+        "covered_points": [
+          {
+            "key": "scheduled_media_link_diagnosis",
+            "answer_quotes": [
+              "같은 요청에서 첨부파일 UPDATE가 실제로 몇 행에 적용됐는지를 먼저 확인하겠습니다.",
+              " 예약 레코드는 생성됐는데 영향 행이 0개라면, 연결할 첨부파일의 선정이나 UPDATE 대상이 비어 있었을 가능성부터 보겠습니다.",
+              " 영향 행이 있었다면 그 시점의 연결은 수행됐을 가능성이 있으므로 이후 변경이나 조회 조건을 더 확인해야 합니다.",
+              " 트랜잭션 안에 있다는 사실만으로 대상 0건까지 오류가 된다고 단정하지 않겠습니다.",
+              " 다른 파일의 DB 제약과 후속 작업은 제공되지 않았으므로 실제 누락 원인을 여기서 확정하지는 않겠습니다."
+            ]
+          }
+        ],
+        "missing_points": [],
+        "contribution_scope": {
+          "scope": "unknown",
+          "answer_quotes": [
+            "같은 요청에서 첨부파일 UPDATE가 실제로 몇 행에 적용됐는지를 먼저 확인하겠습니다."
+          ]
+        },
+        "claim_checks": [],
+        "needs_verification": false,
+        "verification_requests": [],
+        "external_queries": [],
+        "limitations": [
+          "답변은 확인하겠다는 진단 절차를 제안할 뿐, 이를 실제 구현하거나 운영한 개인·팀 기여를 진술하지 않습니다."
+        ]
+      },
+      "public_selected_analysis_sha256": "f5824427675a11c4efa135bea559bad88e9788df0da4910ae7dceb8c17daf0a9"
+    },
+    {
+      "turn_no": 9,
+      "question": {
+        "persona": "domain_lead",
+        "text": "공고에는 고객 플랫폼의 메시징 기능이 포함되어 있습니다. 고객 메시징 기능을 가정할 때, 어떤 데이터 한 가지를 가장 민감하게 분류하시겠으며 그 이유는 무엇인가요?",
+        "question_contract": {
+          "purpose": "고객 메시징 기능을 가정할 때, 어떤 데이터 한 가지를 가장 민감하게 분류하시겠으며 그 이유는 무엇인가요?",
+          "basis_refs": [
+            {
+              "id": "validation-ref-002",
+              "kind": "jd_requirement"
+            }
+          ],
+          "assumptions": [],
+          "evaluation_keys": [
+            "communication"
+          ],
+          "required_points": [
+            {
+              "key": "customer_messaging_sensitive_data",
+              "description": "고객 메시징 기능을 가정할 때, 어떤 데이터 한 가지를 가장 민감하게 분류하시겠으며 그 이유는 무엇인가요?"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다."
+        },
+        "topic_code": "customer_messaging_data_sensitivity",
+        "jd_requirement_ids": [
+          "validation-ref-002"
+        ],
+        "parent_turn_no": null,
+        "depth": 1
+      },
+      "public_question_sha256": "5fbfe9cad89dde62187a49caeca5cccc0dcc4ddc8d8f4fb1409cbf0fef7ff22e",
+      "original_question_sha256": "2d260878d85213a0da9133e3a6ffc00f2faa56a8d4d1f554acb5c2beacae990a",
+      "synthetic_answer": true,
+      "answer_text": "고객이 직접 작성한 메시지 본문을 가장 민감하게 분류하겠습니다. 자유롭게 쓰는 내용이라 연락처나 주문 정보처럼 예상하지 못한 개인 정보가 포함될 수 있고, 대화 내용만으로 고객의 개인적인 상황이 드러날 수도 있기 때문입니다. 정해진 필드만 보호해서는 이런 노출을 놓칠 수 있다고 봅니다. 이는 고객 메시징 기능을 가정한 판단이며, 해당 회사의 실제 데이터 분류 정책을 확인했다는 뜻은 아닙니다.",
+      "answer_text_sha256": "9bfab6dc0d6b9d318b69df2a1deb2e73f6780911ba52c27bfd3a1533e014788e",
+      "stored_status": "answered",
+      "prepared_answer_file_present": true,
+      "question_length_codepoints": 91,
+      "original_question_answer_binding_verified": true,
+      "analysis": {
+        "evaluation_status": "evaluated",
+        "sufficiency": "sufficient",
+        "covered_points": [
+          {
+            "key": "customer_messaging_sensitive_data",
+            "answer_quotes": [
+              "고객이 직접 작성한 메시지 본문을 가장 민감하게 분류하겠습니다.",
+              " 자유롭게 쓰는 내용이라 연락처나 주문 정보처럼 예상하지 못한 개인 정보가 포함될 수 있고, 대화 내용만으로 고객의 개인적인 상황이 드러날 수도 있기 때문입니다.",
+              " 정해진 필드만 보호해서는 이런 노출을 놓칠 수 있다고 봅니다."
+            ]
+          }
+        ],
+        "missing_points": [],
+        "contribution_scope": {
+          "scope": "unknown",
+          "answer_quotes": [
+            " 이는 고객 메시징 기능을 가정한 판단이며, 해당 회사의 실제 데이터 분류 정책을 확인했다는 뜻은 아닙니다."
+          ]
+        },
+        "claim_checks": [],
+        "needs_verification": false,
+        "verification_requests": [],
+        "external_queries": [],
+        "limitations": [
+          "가정한 분류 판단만 제시했으며 기존 구현이나 운영에 대한 개인 기여는 설명하지 않아 확인할 수 없습니다."
+        ]
+      },
+      "public_selected_analysis_sha256": "f052bd637b1f481ee8f4e6e24d535cd526257a6beaa59952bebe690cb7ad5a3b"
+    }
+  ],
+  "reviews": [
+    {
+      "physical_id": 2,
+      "phase": "start",
+      "candidate": {
+        "persona": "hr_manager",
+        "text": "간단히 자기소개해 주시고, 대표 프로젝트 하나를 예로 들어 본인과 팀의 역할을 나누어 설명해 주시겠어요?",
+        "question_contract": {
+          "purpose": "간단히 자기소개해 주시고, 대표 프로젝트 하나를 예로 들어 본인과 팀의 역할을 나누어 설명해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "self_introduction_and_roles",
+              "description": "간단히 자기소개해 주시고, 대표 프로젝트 하나를 예로 들어 본인과 팀의 역할을 나누어 설명해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "contribution_clarity",
+            "communication"
+          ]
+        },
+        "question_type": "main",
+        "parent_turn_id": null,
+        "topic_code": "hr_introduction"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "첫 HR 턴에서 자기소개와 대표 프로젝트의 본인·팀 역할을 직접 묻고 있어 계약과 일치합니다.",
+        "point_coverage": [
+          {
+            "key": "self_introduction_and_roles",
+            "status": "asked",
+            "question_excerpt": "간단히 자기소개해 주시고, 대표 프로젝트 하나를 예로 들어 본인과 팀의 역할을 나누어 설명해 주시겠어요?"
+          }
+        ]
+      }
+    },
+    {
+      "physical_id": 5,
+      "phase": "answer:01",
+      "candidate": {
+        "persona": "domain_lead",
+        "text": "공고에는 고객 플랫폼의 메시징 기능이 포함되어 있습니다. 제공된 코드에서는 멱등성 키가 있을 때 계정·키별 Redis 락 아래 중복을 확인해 요청을 처리하고, 성공한 결과 ID를 Redis에 1시간 저장합니다. Redis나 락 장애 시 동작은 이 파일만으로 확인되지 않으며, 개인 구현 경험이 아닌 이 구조의 가정형 적용을 묻습니다. 이 멱등성 처리 흐름을 고객 메시지 생성 API에 그대로 적용할지, 한 부분을 바꿔 적용할지 선택하고 그 이유를 말씀해 주시겠어요?",
+        "question_contract": {
+          "purpose": "이 멱등성 처리 흐름을 고객 메시지 생성 API에 그대로 적용할지, 한 부분을 바꿔 적용할지 선택하고 그 이유를 말씀해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "apply_idempotency_flow_to_messaging",
+              "description": "이 멱등성 처리 흐름을 고객 메시지 생성 API에 그대로 적용할지, 한 부분을 바꿔 적용할지 선택하고 그 이유를 말씀해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "validation-ref-001"
+            },
+            {
+              "kind": "jd_requirement",
+              "id": "validation-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ]
+        },
+        "question_type": "main",
+        "parent_turn_id": null,
+        "topic_code": "messaging_idempotency_application"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "제공된 멱등성 구조와 공고의 메시징 업무를 연결해 적용 여부와 이유를 묻고, 배경은 확인 범위와 가정형 질문을 분명히 합니다.",
+        "point_coverage": [
+          {
+            "key": "apply_idempotency_flow_to_messaging",
+            "status": "asked",
+            "question_excerpt": "이 멱등성 처리 흐름을 고객 메시지 생성 API에 그대로 적용할지, 한 부분을 바꿔 적용할지 선택하고 그 이유를 말씀해 주시겠어요?"
+          }
+        ]
+      }
+    },
+    {
+      "physical_id": 8,
+      "phase": "answer:02",
+      "candidate": {
+        "persona": "tech_lead",
+        "text": "제공된 코드에서는 멱등성 키가 중복된 요청은 기존 결과를 반환하고, 일반 게시물의 후처리는 멱등성 처리 블록을 마친 뒤 호출됩니다. 저장은 성공했지만 후처리 작업 큐 등록이 실패하는 상황이라면, 누락된 후처리를 복구하기 위해 어떤 방식을 선택하시겠습니까? 그 이유도 말씀해 주세요.",
+        "question_contract": {
+          "purpose": "저장은 성공했지만 후처리 작업 큐 등록이 실패하는 상황이라면, 누락된 후처리를 복구하기 위해 어떤 방식을 선택하시겠습니까? 그 이유도 말씀해 주세요.",
+          "required_points": [
+            {
+              "key": "postprocess_recovery_choice",
+              "description": "저장은 성공했지만 후처리 작업 큐 등록이 실패하는 상황이라면, 누락된 후처리를 복구하기 위해 어떤 방식을 선택하시겠습니까? 그 이유도 말씀해 주세요."
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "validation-ref-003"
+            },
+            {
+              "kind": "evidence",
+              "id": "validation-ref-001"
+            },
+            {
+              "kind": "evidence",
+              "id": "validation-ref-004"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ]
+        },
+        "question_type": "main",
+        "parent_turn_id": null,
+        "topic_code": "postprocess_recovery"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "코드에서 저장 후 멱등성 처리 블록을 마친 뒤 후처리가 호출되는 흐름을 근거로, 큐 등록 실패 시 복구 방식을 선택하고 이유를 말하도록 직접 요청합니다.",
+        "point_coverage": [
+          {
+            "key": "postprocess_recovery_choice",
+            "status": "asked",
+            "question_excerpt": "누락된 후처리를 복구하기 위해 어떤 방식을 선택하시겠습니까? 그 이유도 말씀해 주세요."
+          }
+        ]
+      }
+    },
+    {
+      "physical_id": 11,
+      "phase": "answer:03",
+      "candidate": {
+        "persona": "tech_lead",
+        "text": "실패한 작업 큐 등록을 다시 시도하겠다고 하셨는데, 그 방식을 누락된 후처리의 복구책으로 선택한 이유는 무엇인가요?",
+        "question_contract": {
+          "purpose": "실패한 작업 큐 등록을 다시 시도하겠다고 하셨는데, 그 방식을 누락된 후처리의 복구책으로 선택한 이유는 무엇인가요?",
+          "required_points": [
+            {
+              "key": "postprocess_recovery_choice",
+              "description": "실패한 작업 큐 등록을 다시 시도하겠다고 하셨는데, 그 방식을 누락된 후처리의 복구책으로 선택한 이유는 무엇인가요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "answer_turn",
+              "id": "validation-ref-005"
+            },
+            {
+              "kind": "evidence",
+              "id": "validation-ref-003"
+            },
+            {
+              "kind": "evidence",
+              "id": "validation-ref-001"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "project_understanding",
+            "communication"
+          ]
+        },
+        "question_type": "follow_up",
+        "parent_turn_id": "validation-ref-005",
+        "topic_code": "postprocess_recovery_choice"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "허용된 후속 선택지와 실제 답변에 맞춰, 아직 설명되지 않은 재시도 선택의 이유만 묻습니다.",
+        "point_coverage": [
+          {
+            "key": "postprocess_recovery_choice",
+            "status": "asked",
+            "question_excerpt": "그 방식을 누락된 후처리의 복구책으로 선택한 이유는 무엇인가요?"
+          }
+        ]
+      }
+    },
+    {
+      "physical_id": 14,
+      "phase": "answer:04",
+      "candidate": {
+        "persona": "tech_lead",
+        "text": "이 파일은 첨부파일 ID 배열의 원소 수가 제한을 넘으면 조회 전에 오류를 내고, 제한 이내에서 해당 계정 소유의 미연결 첨부파일을 찾습니다. 요청된 첨부파일 ID에 중복이 있어 원소 수가 제한을 넘는 경우, 현재처럼 거부할지 중복 제거 후 허용할지 선택하고 이유를 말씀해 주시겠어요?",
+        "question_contract": {
+          "purpose": "요청된 첨부파일 ID에 중복이 있어 원소 수가 제한을 넘는 경우, 현재처럼 거부할지 중복 제거 후 허용할지 선택하고 이유를 말씀해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "duplicate_media_id_limit_policy",
+              "description": "요청된 첨부파일 ID에 중복이 있어 원소 수가 제한을 넘는 경우, 현재처럼 거부할지 중복 제거 후 허용할지 선택하고 이유를 말씀해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "validation-ref-004"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "technical_reasoning",
+            "communication"
+          ]
+        },
+        "question_type": "main",
+        "parent_turn_id": null,
+        "topic_code": "media_validation_limit_policy"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "파일의 크기 제한 검사와 계정 범위 첨부파일 조회를 정확히 배경으로 삼고, 중복 ID 초과 상황에서의 정책 선택과 이유만 묻습니다.",
+        "point_coverage": [
+          {
+            "key": "duplicate_media_id_limit_policy",
+            "status": "asked",
+            "question_excerpt": "요청된 첨부파일 ID에 중복이 있어 원소 수가 제한을 넘는 경우, 현재처럼 거부할지 중복 제거 후 허용할지 선택하고 이유를 말씀해 주시겠어요?"
+          }
+        ]
+      }
+    },
+    {
+      "physical_id": 17,
+      "phase": "answer:05",
+      "candidate": {
+        "persona": "tech_lead",
+        "text": "가정상 이메일 구독 조건은 충족하지만 일부 대상 게시물의 안내 메일이 누락됩니다. 제공된 파일에서는 게시물 ID를 Redis set에 넣고 TTL을 설정한 뒤 5분 후 worker를 예약하는 데까지만 확인되며, worker 내부 구현은 제공되지 않았습니다. 이 상황에서 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 확인이 어떤 가능성을 구분해 주는지 설명해 주시겠어요?",
+        "question_contract": {
+          "purpose": "이 상황에서 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 확인이 어떤 가능성을 구분해 주는지 설명해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "email_distribution_first_check",
+              "description": "이 상황에서 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 확인이 어떤 가능성을 구분해 주는지 설명해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "validation-ref-004"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "question_type": "main",
+        "parent_turn_id": null,
+        "topic_code": "email_distribution_failure_isolation"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "제공된 코드에서 확인되는 이메일 구독 처리 흐름과 worker 구현의 미확인 범위를 구분하고, 한 관측 지점으로 원인 가능성을 가려보도록 요청합니다. 요청과 계약이 일치하며 하나의 진단 판단으로 답할 수 있습니다.",
+        "point_coverage": [
+          {
+            "key": "email_distribution_first_check",
+            "status": "asked",
+            "question_excerpt": "이 상황에서 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 확인이 어떤 가능성을 구분해 주는지 설명해 주시겠어요?"
+          }
+        ]
+      }
+    },
+    {
+      "physical_id": 20,
+      "phase": "answer:06",
+      "candidate": {
+        "persona": "tech_lead",
+        "text": "제공된 코드에서는 Redis set의 TTL이 1시간이고 worker 예약 지연은 5분입니다. 이 조건에서 예약 시점의 잔여 TTL 확인만으로 어떤 가능성을 구분할 수 있다고 보시는지 설명해 주시겠어요?",
+        "question_contract": {
+          "purpose": "이 조건에서 예약 시점의 잔여 TTL 확인만으로 어떤 가능성을 구분할 수 있다고 보시는지 설명해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "email_distribution_first_check",
+              "description": "이 조건에서 예약 시점의 잔여 TTL 확인만으로 어떤 가능성을 구분할 수 있다고 보시는지 설명해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "answer_turn",
+              "id": "validation-ref-006"
+            },
+            {
+              "kind": "evidence",
+              "id": "validation-ref-004"
+            },
+            {
+              "kind": "evidence",
+              "id": "validation-ref-003"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "question_type": "follow_up",
+        "parent_turn_id": "validation-ref-006",
+        "topic_code": "email_distribution_first_check"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "이전 답변의 TTL 전제를 제공 코드에 맞게 바로잡고, 같은 관측점의 판별 범위를 묻는 허용된 후속 질문이다.",
+        "point_coverage": [
+          {
+            "key": "email_distribution_first_check",
+            "status": "asked",
+            "question_excerpt": "이 조건에서 예약 시점의 잔여 TTL 확인만으로 어떤 가능성을 구분할 수 있다고 보시는지 설명해 주시겠어요?"
+          }
+        ]
+      }
+    },
+    {
+      "physical_id": 23,
+      "phase": "answer:07",
+      "candidate": {
+        "persona": "tech_lead",
+        "text": "가정상 예약 게시 레코드는 생성되지만 첨부파일 연결이 누락되는 사례가 있습니다. 제공된 파일에서는 검증용 status를 destroy한 뒤, 첨부파일 UPDATE를 감싸는 트랜잭션 안에서 scheduled_statuses.create!를 호출합니다. 이 문제의 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 결과로 어떤 가능성을 구분할 수 있는지 설명해 주시겠어요?",
+        "question_contract": {
+          "purpose": "이 문제의 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 결과로 어떤 가능성을 구분할 수 있는지 설명해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "scheduled_media_link_diagnosis",
+              "description": "이 문제의 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 결과로 어떤 가능성을 구분할 수 있는지 설명해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "validation-ref-004"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "technical_reasoning",
+            "communication"
+          ]
+        },
+        "question_type": "main",
+        "parent_turn_id": null,
+        "topic_code": "scheduled_media_link_diagnosis"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "가정된 첨부파일 연결 누락과 제공 코드의 예약 생성·첨부파일 UPDATE 트랜잭션 흐름에 근거해, 관측 지점과 그 결과로 구분할 가능성을 묻는 단일 진단 판단입니다.",
+        "point_coverage": [
+          {
+            "key": "scheduled_media_link_diagnosis",
+            "status": "asked",
+            "question_excerpt": "이 문제의 원인 범위를 좁히기 위해 가장 먼저 확인할 한 가지 관측 지점을 고르고, 그 결과로 어떤 가능성을 구분할 수 있는지 설명해 주시겠어요?"
+          }
+        ]
+      }
+    },
+    {
+      "physical_id": 26,
+      "phase": "answer:08",
+      "candidate": {
+        "persona": "domain_lead",
+        "text": "공고에는 고객 플랫폼의 메시징 기능이 포함되어 있습니다. 고객 메시징 기능을 가정할 때, 어떤 데이터 한 가지를 가장 민감하게 분류하시겠으며 그 이유는 무엇인가요?",
+        "question_contract": {
+          "purpose": "고객 메시징 기능을 가정할 때, 어떤 데이터 한 가지를 가장 민감하게 분류하시겠으며 그 이유는 무엇인가요?",
+          "required_points": [
+            {
+              "key": "customer_messaging_sensitive_data",
+              "description": "고객 메시징 기능을 가정할 때, 어떤 데이터 한 가지를 가장 민감하게 분류하시겠으며 그 이유는 무엇인가요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "jd_requirement",
+              "id": "validation-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "communication"
+          ]
+        },
+        "question_type": "main",
+        "parent_turn_id": null,
+        "topic_code": "customer_messaging_data_sensitivity"
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "공고의 메시징 업무를 가정해 민감 데이터 한 항목과 분류 이유를 직접 묻고, 하나의 판단으로 답할 수 있습니다.",
+        "point_coverage": [
+          {
+            "key": "customer_messaging_sensitive_data",
+            "status": "asked",
+            "question_excerpt": "고객 메시징 기능을 가정할 때, 어떤 데이터 한 가지를 가장 민감하게 분류하시겠으며 그 이유는 무엇인가요?"
+          }
+        ]
+      }
+    }
+  ],
+  "session": {
+    "status": "completed",
+    "total_turns": 9,
+    "current_turn": 9,
+    "started_at_set": true,
+    "completed_at_set": true,
+    "completion_events": 1,
+    "recovery_ledger_entries": 0
+  },
+  "observed_timing": {
+    "phase_latency_ms_sum": 596387.293,
+    "first_question_ms": 14729.12,
+    "answer01_next_question_ms": 67789.256,
+    "next_question_phase_median_ms": 68059.799,
+    "manual_answer_authoring_pauses_excluded": true,
+    "not_provider_internal_reasoning_or_ui_delivery_time": true
+  },
+  "tests": [
+    {
+      "group": "latest_ai",
+      "status": "passed",
+      "tests": 1246,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 1246,
+      "sha256": "30bdfbc19ebf3c51af982e09b84fcbc7837f1c1c85dc065acd06199044db2094",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "AI suite recorded before final publication supplement; XML alone does not bind source revision."
+    },
+    {
+      "group": "prior_actual_rollout_timer_catalog12",
+      "status": "passed",
+      "tests": 13,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 13,
+      "sha256": "07a6bff757e4685e22395911a2d3cb06f28dd44fe5ab4008e19c0fecf8f847f5",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Earlier 13-test rollout/timer check at actual-run base110/catalog12; not latest catalog11 verification."
+    },
+    {
+      "group": "latest_561_catalog11_smoke",
+      "status": "passed",
+      "tests": 11,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 11,
+      "sha256": "5dfbc31ebd55590c5aba6fb541ef99c9580590af4aeb0d4fb1c28d7e23d3f5d7",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Separate latest561 catalog11 smoke; do not sum overlapping test groups."
+    },
+    {
+      "group": "latest_registration_compatibility",
+      "status": "passed",
+      "tests": 49,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 49,
+      "sha256": "438a227b83818cdf0fac3ade76f4ec06b6809b3d3fa4dfd686e1df3f99498ecb",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Four-file registration/opaque-version compatibility check after final seed fix."
+    },
+    {
+      "group": "published_core_smoke",
+      "status": "passed",
+      "tests": 31,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 31,
+      "sha256": "d9b5a3f91da818bdcfe2c0fb11d6f99f135009e540de5ec22f0a89cc630b7925",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Separate 31-test core publication checkout smoke before supplemental evidence/docs; not the v5 full suite."
+    },
+    {
+      "group": "final_backend_full",
+      "status": "passed",
+      "tests": 3302,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 3302,
+      "sha256": "6da86c9d43b8cd577d200e623b9f942fcc37ce7d160d1f2c61a37671f45d0292",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Explicit final v5 Linux full suite; source binding is recorded separately in backend_execution_binding.",
+      "platform": "linux-python3.12.15-pytest9.1.1-pg15.19-redis7.4.12-post561"
+    },
+    {
+      "group": "ledger_gateway_timing_related",
+      "status": "passed",
+      "tests": 101,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 101,
+      "sha256": "0642e8c895d66e80cdc927f1edff7a404fae1a49ebd54fac33172bf43a6d53bb",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Earlier 101-test strict/optional ledger and gateway check including 22 new isolation tests; overlapping groups are not summed."
+    },
+    {
+      "group": "prior_windows_backend_attempt",
+      "status": "failed",
+      "tests": 64,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 63,
+      "sha256": "ecd141309136cc994bbbadefe254bad92bf7d60a923e3a8622eeda8e74ddf1ab",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Preserved prior attempt; failures/errors/skips are not overwritten or counted as current final pass."
+    },
+    {
+      "group": "prior_linux_backend_attempt",
+      "status": "failed",
+      "tests": 1522,
+      "failures": 4,
+      "errors": 118,
+      "skipped": 0,
+      "passed": 1400,
+      "sha256": "d59eb2dc8ec24997a3c3fb8376987a8f47236165acfc057178647367808380ad",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Preserved prior attempt; failures/errors/skips are not overwritten or counted as current final pass."
+    },
+    {
+      "group": "prior_linux_v4_backend_attempt",
+      "status": "failed",
+      "tests": 3302,
+      "failures": 4,
+      "errors": 0,
+      "skipped": 1,
+      "passed": 3297,
+      "sha256": "ace34693d6f44a7192f05ac584b98087aa77d4b52c683a7654b848fe53a440b5",
+      "source_revision_bound_by_xml": false,
+      "scope_note": "Preserved prior attempt; failures/errors/skips are not overwritten or counted as current final pass."
+    }
+  ],
+  "backend_execution_binding": {
+    "status": "verified_completed",
+    "source_base_head": "561c3f5aacbc0faf1f14b5e17ab18ccbc17d2863",
+    "source_normalized_git_tree": "d552da05b8bccc3f36270534bdc14d4cbfdf174e",
+    "source_snapshot_sha256": "ca92b2d09d14a0bfeef7e1c0fc79ee905d1ccc198fc969f0c094923b7942dfa0",
+    "expected_file_manifest_sha256": "a128d18c864fd5128136f94746b80bfbccc0633fc8b441eb7a6aec3b92304c8d",
+    "execution_metadata_sha256": "177f41dc4df88259b430eadb03b5fb299293ad21aaea0ce40c1029db80bd84c7",
+    "source_copy_verification": {
+      "file_count": 1417,
+      "raw_sha256_matches": 1417,
+      "git_blobs_verified_exact": 1417,
+      "reconstructed_git_tree": "d552da05b8bccc3f36270534bdc14d4cbfdf174e",
+      "recorded_git_tree_matches": true,
+      "source_files_modified": 0,
+      "actual_source_index_modified": false,
+      "refs_or_commits_created": 0,
+      "whole_manifest_publicly_included": false
+    },
+    "selected_executed_source_files": [
+      {
+        "path": "ai/prompts/runtime-prompts.json",
+        "sha256": "25e7b80b6940334449e5ce9aaf5a2da46de19d50b9671fa3e981c368d37d0dc2",
+        "current_working_tree_raw_sha256": "25e7b80b6940334449e5ce9aaf5a2da46de19d50b9671fa3e981c368d37d0dc2",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/__init__.py",
+        "sha256": "9f452e0cda902bffbb93ea5040d5bdcd31795c67a9bd2f360c095749f7dbe8db",
+        "current_working_tree_raw_sha256": "6bf2b297c50227271d3332ab61de99940e9163d12f824b9b4e64c1c89e73cd29",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/agent.py",
+        "sha256": "1a1e785e375e383311b23967069b84905338d83893df372dee72552c82dd6d1e",
+        "current_working_tree_raw_sha256": "1a1e785e375e383311b23967069b84905338d83893df372dee72552c82dd6d1e",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/capabilities.py",
+        "sha256": "3bee40d565d38369421a3aefc88f7f219ed2ac96d33e62f5b705fe335e19d3c1",
+        "current_working_tree_raw_sha256": "3bee40d565d38369421a3aefc88f7f219ed2ac96d33e62f5b705fe335e19d3c1",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/model_input.py",
+        "sha256": "73b26b0708b260d4036c5cef2f36148b822774f16c122438e087e596b0d3b388",
+        "current_working_tree_raw_sha256": "73b26b0708b260d4036c5cef2f36148b822774f16c122438e087e596b0d3b388",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/plan_wire.py",
+        "sha256": "8ffd058975787ffbde6efd5c628badc70d10336314162caf9e666b2cb6c96839",
+        "current_working_tree_raw_sha256": "8ffd058975787ffbde6efd5c628badc70d10336314162caf9e666b2cb6c96839",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/policy.py",
+        "sha256": "fb7ff353cf9d832079b59eb2882ca9cdc4a044deb624b1ef3ce5b719097bd115",
+        "current_working_tree_raw_sha256": "fb7ff353cf9d832079b59eb2882ca9cdc4a044deb624b1ef3ce5b719097bd115",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/review.py",
+        "sha256": "d8dd63260088487edf65a912b01bc801332e0a36c1b6b43be3665de125bea4be",
+        "current_working_tree_raw_sha256": "d8dd63260088487edf65a912b01bc801332e0a36c1b6b43be3665de125bea4be",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/runtime.py",
+        "sha256": "e2c9cfd0b5828d1e7de53b1d5159a0f85a4955dc105a09d5bc0bd6ef2964a0bc",
+        "current_working_tree_raw_sha256": "e2c9cfd0b5828d1e7de53b1d5159a0f85a4955dc105a09d5bc0bd6ef2964a0bc",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/agents/director/tools.py",
+        "sha256": "d358806709df22f4a54a85cf3ac6519fdf727276ff5f7fad826097a1e08537ad",
+        "current_working_tree_raw_sha256": "db43c668ccf4b0dc8a3dde81a6b14dacdb991bf9d7ef41fec398039337b65dc6",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/llm_tasks/answer_analysis.py",
+        "sha256": "1b65754d5773e46b191719a53d6a3a240a66650cc828bf01df7c29b63cf54e3b",
+        "current_working_tree_raw_sha256": "1b65754d5773e46b191719a53d6a3a240a66650cc828bf01df7c29b63cf54e3b",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "ai/src/devon_ai/llm_tasks/answer_analysis_wire.py",
+        "sha256": "3b5934b6537ee1e4353ef6606a895bb4b9e71d8f5aa41c8944ba6e43db8c7704",
+        "current_working_tree_raw_sha256": "3b5934b6537ee1e4353ef6606a895bb4b9e71d8f5aa41c8944ba6e43db8c7704",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/__init__.py",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "current_working_tree_raw_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/agent_context.py",
+        "sha256": "0584db1281fe716ceb6486af5fb9a067235ebb18bed3cbab54e9520a640a6998",
+        "current_working_tree_raw_sha256": "0584db1281fe716ceb6486af5fb9a067235ebb18bed3cbab54e9520a640a6998",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/agent_queries.py",
+        "sha256": "94be6fad10cab2b0228c89547cff5f9a779b6fe359eab43682ed8272a25ce45a",
+        "current_working_tree_raw_sha256": "a910660423e260a72f6ec0f2bd5556edbc10bf11f178910092ed0ac3250bda10",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/agent_service.py",
+        "sha256": "9d3de5c58ce84a35807c0fb34f6007d8864103aa7607ad28ee193f649df0845a",
+        "current_working_tree_raw_sha256": "93e841a7caec67b7ce0de86093897ce06b70d36716537e38176fa3f636a60e98",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/answer_audio.py",
+        "sha256": "8a3041766ed06983a7480a60d7c6c340ea2abee0585f612275c86720aecca839",
+        "current_working_tree_raw_sha256": "22e5979f8b5fa4b88dd566adddb36209248cbdfa95f34bc4498b0bbd35f2a289",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/answer_context.py",
+        "sha256": "7fbab2c8801de4e653add02262d2f45e965d3e1980a3ffdc47b15acac7e8f298",
+        "current_working_tree_raw_sha256": "7fbab2c8801de4e653add02262d2f45e965d3e1980a3ffdc47b15acac7e8f298",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/director_service.py",
+        "sha256": "81e270173b3758753ea91944483e3aba8c08f5f68d2520db47e963faa1786fb4",
+        "current_working_tree_raw_sha256": "81e270173b3758753ea91944483e3aba8c08f5f68d2520db47e963faa1786fb4",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/evaluation_coverage.py",
+        "sha256": "e9174bbc61840987d7006b041f665a93602b6e116ee59f0ff03f0f41f777e683",
+        "current_working_tree_raw_sha256": "e9174bbc61840987d7006b041f665a93602b6e116ee59f0ff03f0f41f777e683",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/external_knowledge.py",
+        "sha256": "59cdb2bf5bdcbef5d9d40f9f316994f6ad01393832bac1693ee6cd7e2acd6bd9",
+        "current_working_tree_raw_sha256": "59cdb2bf5bdcbef5d9d40f9f316994f6ad01393832bac1693ee6cd7e2acd6bd9",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/generation_binding.py",
+        "sha256": "cbaa5a14ceaf646c6e499de917be09a65261b801f38a9a39c2e48166a8dfa679",
+        "current_working_tree_raw_sha256": "cbaa5a14ceaf646c6e499de917be09a65261b801f38a9a39c2e48166a8dfa679",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/observation.py",
+        "sha256": "654502791d3e5262ff841806f43633aad69440db6553a5db901f09b55f4eb792",
+        "current_working_tree_raw_sha256": "654502791d3e5262ff841806f43633aad69440db6553a5db901f09b55f4eb792",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/prepare.py",
+        "sha256": "d24b36ef2f07a2110210cdae09afd040004a061f0567f76d545f1fc218c9c80f",
+        "current_working_tree_raw_sha256": "d24b36ef2f07a2110210cdae09afd040004a061f0567f76d545f1fc218c9c80f",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/prepare_checkpoint.py",
+        "sha256": "9458cd18bedb8feb18a033b4b4ec97348bafbdcb8af7d56fc2f3e43aa515eadd",
+        "current_working_tree_raw_sha256": "c8fae91211e428628d4af6a28cc1049df439fb6761f40a1bab360ab5455c9a0d",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/prepare_lease.py",
+        "sha256": "26d7582ea79afae07efce39bbb9f5be647e0f85a41a667c9b4b87df3cddc2528",
+        "current_working_tree_raw_sha256": "27c3553f025b09b6bef96c15cc81e22beb4e8c49da829740f3183187d4faddd8",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/queries.py",
+        "sha256": "bb9daf3f545f21416efc66ffc8bb2a13ee94cb0d21388d6e6f580e47e57cfd53",
+        "current_working_tree_raw_sha256": "d51a9c3609a11a441e3da1638b1b81f14da2e9d3cad2e7deaa2474d7489d98e2",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/question_audio.py",
+        "sha256": "44f7482abb6207155e21ef60da3e165ae61895b5643754cff3b120c968dc9b09",
+        "current_working_tree_raw_sha256": "44f7482abb6207155e21ef60da3e165ae61895b5643754cff3b120c968dc9b09",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/question_replay.py",
+        "sha256": "929c546b5eb82e7df0e30947311bfdff8d472f949ae8ff52f5fbef84fe41930d",
+        "current_working_tree_raw_sha256": "cbd87cc756facda2790216cbc13c308354739751b27de4f0d764de0c47354f4a",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/question_retry.py",
+        "sha256": "28acaed59b092520e45f47de61e4d4358d560f94da066cff87e15a1cdd38bec3",
+        "current_working_tree_raw_sha256": "28acaed59b092520e45f47de61e4d4358d560f94da066cff87e15a1cdd38bec3",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/question_structure.py",
+        "sha256": "d5d51b48166b9ff67ffe5c6c188db96ef03311a705aea48b87cae6a7694e3167",
+        "current_working_tree_raw_sha256": "bdafbe8196a2efcbc638ec39ae479165d1d046eed3fc7aaff2065d99436f7a19",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/queue.py",
+        "sha256": "aeb3411a194c2d9eb83c4e3dd9c8f3e5d0ed53ba90a1a0a5f3263af2e6dad870",
+        "current_working_tree_raw_sha256": "17d5b818ff60bf92d63783d01d1afa2ca0cd36b62e3ada91c7b1261ca7484884",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/repository_candidates.py",
+        "sha256": "b71f383e510e819d394e13ec61ae29aba24f8303611291cdd23c7413994803e4",
+        "current_working_tree_raw_sha256": "2c0a6fdc6ea78c107f5072598905b8433251c318170b660059bc40ceab7de34c",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/repository_inventory.py",
+        "sha256": "d5626003b839daab698c320711b57e3028b8d2dbf4128f9c04e7a79a4eb587c0",
+        "current_working_tree_raw_sha256": "4826271703ea61d6e4543562accfd01b4398ae75a014cce9f868e1574aa8785c",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/repository_source_selection.py",
+        "sha256": "5350554445c023821f5385faf72ac3e838c9a1013bdcbea429824f6c8ad866c5",
+        "current_working_tree_raw_sha256": "7d485496e9a50baf98c560a01fe05e0c36938f14813080d1fd43817ff0f49e13",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/repository_sources.py",
+        "sha256": "f7e7034c6ff7be641a241be388eaa2252a055d322b3037f84c1e523393dff866",
+        "current_working_tree_raw_sha256": "a5f7ff91b626efbeb58482c11e06b8ff21e43211ebb45897b33fba715f65ef6b",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/repository_structure.py",
+        "sha256": "3b097f64c9a3e54ea4a6098068ad816df2209d9e3230d54bcb6ab89c740e9452",
+        "current_working_tree_raw_sha256": "22c8a6fc70397e8732203fce4f1be43195f8738da034f30230e16f3946f07445",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/router.py",
+        "sha256": "d9ff4fb3fc4323cc03be11c294afb5a575686120e2d7319801d3e898046f5229",
+        "current_working_tree_raw_sha256": "d9ff4fb3fc4323cc03be11c294afb5a575686120e2d7319801d3e898046f5229",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/schemas.py",
+        "sha256": "8faba617e4d889f0d040136a5ef355d97343885479600c67425d036845e76671",
+        "current_working_tree_raw_sha256": "9c01f04563d0378658a36c9738b023ed427488ffc4884d2b5222dab60eb546cf",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/service.py",
+        "sha256": "daecfc78f6e5f1505cacb76ef9b57b49d35e4a4bfb3477763a5d2dcd63fbfd2e",
+        "current_working_tree_raw_sha256": "9148fff599d4f3c86bb004ed320d405b7b43265c776502f0cf1a40ace875260f",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/source_segments.py",
+        "sha256": "2fc172caa93902793f31683e7b41736299f79e5581554a6fece05ee5e603949b",
+        "current_working_tree_raw_sha256": "5807c233f26dd30e19fb2f44419a6057200f38ee6541dcf911835e38cf9dd301",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/supplemental_sources.py",
+        "sha256": "65a1b51776ac060dff1aa225dcbf487c0f9963cf255bc2bcb93400ee8988a888",
+        "current_working_tree_raw_sha256": "54ac5deafd98b11ec3f535b50f8fdecf833f8e194448994ecdd104937936115d",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/tts_budget.py",
+        "sha256": "d582020e5c33d41358eceabcbe046a1dda82ceb2f12a67d486e0ecc0e6b5cc2e",
+        "current_working_tree_raw_sha256": "763e4cb2c2a44d6f3e01678653d650c3b934ba352c38952759b072526e95941b",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/turn_loop.py",
+        "sha256": "233e6b7e31db03a735bdbfb5347412c99e8c10634844b4850cfa378a689208d5",
+        "current_working_tree_raw_sha256": "795d0795c6a9277d3f8497b862584e8a1ec5577af81b2740c89be69af978545a",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/turn_position.py",
+        "sha256": "89aa31f6c9fb36b8ca99b2475bb5a2fd350ef3016d4ea9da4805072b20a002a4",
+        "current_working_tree_raw_sha256": "079ff65b11cd16a85284787c8e74af094dbb6ea8b09902e5616b5db3c543b094",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/turn_service.py",
+        "sha256": "a8f137342ab8598232e3a232b47c98bd2b56eecf827e3fb2ae77482287da70ea",
+        "current_working_tree_raw_sha256": "624f036c66485711463fdc01d1a176bc6fada2845b4f9f6e16d894593b1be37c",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/interview/ws.py",
+        "sha256": "a1841538f496bb6d7305fe57bf75741838eaeec4cb04163d59e8d49810f1ecc3",
+        "current_working_tree_raw_sha256": "a1841538f496bb6d7305fe57bf75741838eaeec4cb04163d59e8d49810f1ecc3",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/features/report/history.py",
+        "sha256": "2a85a0abf22d2157f06e1acad9a98c0ad647be124cd9dd8d83ebfe68ef456447",
+        "current_working_tree_raw_sha256": "2dcc175e208c5591f0e771b379832a3d4588ccc8456bf19c6da5dc1e3f436963",
+        "raw_bytes_equal": false,
+        "only_crlf_to_lf_difference": true,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/integrations/execution_ledger.py",
+        "sha256": "e9851bcdaf4b6c93fa77626b945545a2b40b5fea3aa95e3cd06a0ddae9391225",
+        "current_working_tree_raw_sha256": "e9851bcdaf4b6c93fa77626b945545a2b40b5fea3aa95e3cd06a0ddae9391225",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/app/llm_tasks/answer_analysis.py",
+        "sha256": "d6c9d7f1240c628d4e138a9fd644855e32449c419fd53c9791d9ce128020319d",
+        "current_working_tree_raw_sha256": "d6c9d7f1240c628d4e138a9fd644855e32449c419fd53c9791d9ce128020319d",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      },
+      {
+        "path": "backend/scripts/seed_prompt_versions.py",
+        "sha256": "d3d35fc17e745d03500075d93829cb1ee2a10edbc64a38b347d188606d0f7f84",
+        "current_working_tree_raw_sha256": "d3d35fc17e745d03500075d93829cb1ee2a10edbc64a38b347d188606d0f7f84",
+        "raw_bytes_equal": true,
+        "only_crlf_to_lf_difference": false,
+        "line_ending_relationship_verified": true
+      }
+    ],
+    "execution": {
+      "phase": "full",
+      "image": "sha256:9e297f8c91b39edb1a17727e2ebf73248f75984a72f0d5d7c2f4237ba048b305",
+      "started_at": "2026-11-11T09:24:05.090735+00:00",
+      "finished_at": "2026-11-11T09:40:17.229554+00:00",
+      "exit_code": 0,
+      "provider_api_calls": 0,
+      "package_installs": 0,
+      "source_snapshot_mount_read_only": true,
+      "executed_source_copy_git_exact": true,
+      "postgres_data_tmpfs": true,
+      "disk_durability_or_crash_test": false
+    },
+    "workspace_postcheck": {
+      "git_exact_files_before_run": 1417,
+      "changed_source_files_after_run": [],
+      "source_snapshot_read_only": true,
+      "disk_durability_or_crash_test": false
+    },
+    "xml_sha256": "6da86c9d43b8cd577d200e623b9f942fcc37ce7d160d1f2c61a37671f45d0292",
+    "xml_count_binding_verified": true,
+    "versions": {
+      "test_image": "sha256:9e297f8c91b39edb1a17727e2ebf73248f75984a72f0d5d7c2f4237ba048b305",
+      "postgres_image_tag": "postgres:15",
+      "redis_image_tag": "redis:7-alpine",
+      "runtime_query_receipt": {
+        "image_id": "sha256:9e297f8c91b39edb1a17727e2ebf73248f75984a72f0d5d7c2f4237ba048b305",
+        "scope": "Same cached execution image and running dedicated validation DB/Redis binaries; read-only version queries",
+        "versions": {
+          "python": "3.12.15",
+          "pytest": "9.1.1",
+          "pytest-asyncio": "1.4.0",
+          "SQLAlchemy": "2.0.52",
+          "asyncpg": "0.31.0",
+          "redis": "5.3.1",
+          "httpx": "0.28.1",
+          "postgresql": "postgres (PostgreSQL) 15.19 (Debian 15.19-1.pgdg13+2)",
+          "redis_server": "7.4.12"
+        },
+        "package_installs": 0,
+        "provider_model_calls": 0
+      },
+      "tag_basis": "Frozen v5 launcher; exact versions separately observed in the read-only runtime receipt when present"
+    },
+    "selected_source_line_endings": {
+      "direct_byte_equal_count": 26,
+      "crlf_working_tree_vs_lf_git_count": 25,
+      "scope_note": "Original/current working-tree raw SHA and executed Git-LF raw SHA are separate measured identities. The exporter checked that differing selected source bytes differ only by CRLF to LF. Public derivative hashes always require their one exact LF byte identity."
+    },
+    "storage_scope": "Read-only frozen source copied into container tmpfs; separate PostgreSQL data tmpfs and Redis. Logical transactions/constraints/migrations tested; disk durability/crash behavior untested.",
+    "revision_binding_limit": "Recorded XML SHA, metadata, all frozen copy bytes and reconstructed Git tree were cross-checked locally. Full manifest/private metadata are hashed but absent from this excerpt. Final publication adds documentation/evidence/attributes and may have another whole-tree ID; no claim that its whole tree was this exact full-test snapshot.",
+    "additional_model_or_http_or_business_db_calls": 0
+  },
+  "quality_limits": {
+    "semantic_quality_status": "post_generation_Codex_source_notes_with_explicit_limits; not_source_perfect_or_general_accuracy",
+    "independent_human_review": "not_performed",
+    "new_holdout_groups_run": 0,
+    "explicit_distinct_jd_refs": 1,
+    "provided_jd_requirements": 3,
+    "known_long_questions": [
+      {
+        "turn_no": 2,
+        "codepoints": 260
+      },
+      {
+        "turn_no": 6,
+        "codepoints": 224
+      },
+      {
+        "turn_no": 8,
+        "codepoints": 221
+      }
+    ],
+    "known_long_question_note": "Q2/Q6/Q8 retain long background; do not claim naturalness or overall speed solved.",
+    "q8_source_limit": "UPDATE is mentioned as a source comment's intent around create!; actual SQL internals, affected rows and DB constraints were not demonstrated from other files or execution.",
+    "whole_user_browser_voice_report_e2e": false,
+    "report_model_calls": 0,
+    "tool_source": "preserved Evidence cache replay only; not new GitHub collection"
+  },
+  "source_provenance": {
+    "originals": [
+      {
+        "source_id": "backend-v5:execution-metadata",
+        "sha256": "177f41dc4df88259b430eadb03b5fb299293ad21aaea0ce40c1029db80bd84c7",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "backend-v5:expected-files-manifest",
+        "sha256": "a128d18c864fd5128136f94746b80bfbccc0633fc8b441eb7a6aec3b92304c8d",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "backend-v5:runtime-versions",
+        "sha256": "436818d41b56d287dfeb017224e9d22d0035a7ac9553ecae0052ba1d626853b2",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "backend-v5:source-snapshot",
+        "sha256": "ca92b2d09d14a0bfeef7e1c0fc79ee905d1ccc198fc969f0c094923b7942dfa0",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "backend-v5:workspace-postcheck",
+        "sha256": "cbb7058f3df1d4029cf38ff7eb4c8b8d3e1bec966c41f52bc010b5bbff42a152",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "junit:final_backend_full",
+        "sha256": "6da86c9d43b8cd577d200e623b9f942fcc37ce7d160d1f2c61a37671f45d0292",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "junit:latest_561_catalog11_smoke",
+        "sha256": "5dfbc31ebd55590c5aba6fb541ef99c9580590af4aeb0d4fb1c28d7e23d3f5d7",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "junit:latest_ai",
+        "sha256": "30bdfbc19ebf3c51af982e09b84fcbc7837f1c1c85dc065acd06199044db2094",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "junit:latest_registration_compatibility",
+        "sha256": "438a227b83818cdf0fac3ade76f4ec06b6809b3d3fa4dfd686e1df3f99498ecb",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "junit:ledger_gateway_timing_related",
+        "sha256": "0642e8c895d66e80cdc927f1edff7a404fae1a49ebd54fac33172bf43a6d53bb",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "junit:prior_actual_rollout_timer_catalog12",
+        "sha256": "07a6bff757e4685e22395911a2d3cb06f28dd44fe5ab4008e19c0fecf8f847f5",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "junit:prior_linux_backend_attempt",
+        "sha256": "d59eb2dc8ec24997a3c3fb8376987a8f47236165acfc057178647367808380ad",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "junit:prior_linux_v4_backend_attempt",
+        "sha256": "ace34693d6f44a7192f05ac584b98087aa77d4b52c683a7654b848fe53a440b5",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "junit:prior_windows_backend_attempt",
+        "sha256": "ecd141309136cc994bbbadefe254bad92bf7d60a923e3a8622eeda8e74ddf1ab",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "junit:published_core_smoke",
+        "sha256": "d9b5a3f91da818bdcfe2c0fb11d6f99f135009e540de5ec22f0a89cc630b7925",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "local-ledger:calls.sqlite3:events",
+        "selected_rows_canonical_sha256": "aa64a2ae242ead0dcc7b23e4469ae340e83729a9bf42cd77b30e38ec64e5e6ae",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "local-ledger:shared-physical.sqlite3:calls",
+        "selected_rows_canonical_sha256": "afdc395cdc518332f5d39d69d17ee3552cd322f40e2a9c1f79b8ee8af9131aba",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "local-ledger:shared-physical.sqlite3:phases",
+        "selected_rows_canonical_sha256": "40f3ba15494cd8df749bd709db5f5f3131cda59baf607450e73201093f80de90",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "phase:answer-01-result",
+        "sha256": "332f96719db5531a95eb9fe25fbf01521ec550d6c6b1a51277ed415242442671",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "phase:answer-02-result",
+        "sha256": "79c14dcbaa27d1510b51dbe7fd5150219eb6cdb085c8c1b0d22d544f3c6b794a",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "phase:answer-03-result",
+        "sha256": "a03d873224f373169fdf5e3c94c0ce50de435ed0fe69a183f7a08b887ef47e76",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "phase:answer-04-result",
+        "sha256": "9f382557ca24b12b8cfd1b106bc2d15edb87c25865a3d1b54e5a66692171ad12",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "phase:answer-05-result",
+        "sha256": "b40c24695448746564e9e06f7ab499ad4381071e200a2ea02668df84806f25be",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "phase:answer-06-result",
+        "sha256": "5e0dd2857ed219bddf38ad4ae28ff6bba80d0e1b28f93baec1e629176547e926",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "phase:answer-07-result",
+        "sha256": "55e72d33ff3238161285ea7e5043163a7b701a48714bcbc6b99d42e72807d98c",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "phase:answer-08-result",
+        "sha256": "8c4417404cb6272227af32b56e7879f041c745f3a130c7092129f41464241372",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "phase:answer-09-result",
+        "sha256": "d20f9678bc29c51c03df431abc47c5a220e507cad4b6527ec3031c2f12ed2402",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "phase:start-result",
+        "sha256": "e82f70155729aaed66fbbd6e777c0dbea09356cc5826ad0be52837455000f155",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:10:meta",
+        "sha256": "180769796558836cadf9e6ec17e0d260f851da61712d7bea7f5e26501b0e1a47",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:10:request",
+        "sha256": "61c6ac5187ff06da014a1b4e2cf890c6d9f86798b6d61eb0f6a77943179251ea",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:11:meta",
+        "sha256": "6358174ed28d507a16f400b064afc2814eadd82af0539fc6999b285ccd1b56f3",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:11:request",
+        "sha256": "69e6e07370a46933b7a27d552d99d488a3b3e710949160c99fb07f43d08e5f29",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:12:meta",
+        "sha256": "fb163211a71fd909c7ab6888e859a323969c7bea877ca68596bb37ad70550b24",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:12:request",
+        "sha256": "4b25b89d86c87acaaf5f7c3dd6e8d3877dfe32f4d7df48c586e6b740d0e1d6fa",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:13:meta",
+        "sha256": "3ace66218856e00c1ac4aa604334131460c1c65498708417dca8373c6ab78446",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:13:request",
+        "sha256": "09b342a39fc85fa8e0ae22017dbad4a4bc45bb97a05739a6c7c9510211b43b39",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:14:meta",
+        "sha256": "4a83e356c0e2051c23a06dcbf1d60fbe9c5489b686f71bf5768e3e7797183c10",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:14:request",
+        "sha256": "5fcbc4273e4617a7f7a92616ecc14345232a6abfcf3e19e9e7abaf973ddc9a5b",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:15:meta",
+        "sha256": "c34084aae6c674dae742f754d521c01089f209dff9a2eed0148c5a156ad89464",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:15:request",
+        "sha256": "0fe1ccdf33f22766e5e0bb3f114090ae7d3ca6d2f6ec4ef44bc9a0a10cdcdfca",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:16:meta",
+        "sha256": "5d804b4620f114427f6916ec7545fc7c976fcdad01c5ba3fc6683f650161a523",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:16:request",
+        "sha256": "81b9e393a07e385290a7074ca97b69823061e9361d7587cd93592677b8330bd8",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:17:meta",
+        "sha256": "a2b258afbd8835e68aa32598a5ce29bddd7dbad552ee27a771a1bc73a9ae7927",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:17:request",
+        "sha256": "7527e898daf743f93a5a2f1426c9db48bb60e9e825f542f1cf53739b790e8b3f",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:18:meta",
+        "sha256": "de1c57a6025f676da1bb2522a43667dda3e518feae2f4094f30991d514b3ed15",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:18:request",
+        "sha256": "6dab262020b57cc1fd675b0baf08345417c53d99a6737dd11716a5bae865735b",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:19:meta",
+        "sha256": "a21cbec385dff530fd94fbf29799cf1ba9a5602ef551471a78cd8cf06b7872d3",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:19:request",
+        "sha256": "809a8cdea5e611ad0818624f51748944096a6453a651d1d0f8609200b0a62d1b",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:1:meta",
+        "sha256": "c94074187c77088a7a04efc4703fa598724613434dc6e69e2cedd4fd127cdd19",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:1:request",
+        "sha256": "fd39e3d6e9b4d1b384835e99e23fd0bea8fe6537f0ece09585e05e4ebbfecb44",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:20:meta",
+        "sha256": "0a3155984b67b096ebda9c50bc2116844384019f74e0195353b09b1aecb371a1",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:20:request",
+        "sha256": "788e00beeaf912e70a08a1fd56777ac5592dd9de9b11c6d05dbfe47864c8d230",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:21:meta",
+        "sha256": "d6aed1843a0ef43f3c5f88d151e825db0e1d7c4318c3741fa2839edd09e5cb1a",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:21:request",
+        "sha256": "533854fe6e4f7322a99131864987a6397b68ce24de6a86275f09b13c6a15c536",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:22:meta",
+        "sha256": "96d404c291354e5222cab14d92ca13b362fcfffae877bcca3d5986b80bf3de3d",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:22:request",
+        "sha256": "df428b5aa25f8120f1636fafe89948feacf645560838f7bec49d58d74f5b0344",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:23:meta",
+        "sha256": "19da08ce1e69a762212e73efd640a8400d8078569f77996ebcd460ea170f8089",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:23:request",
+        "sha256": "6d8b181a4555e6c824d13efac340929391c71fdb07b9aff40d63252ef251cbb3",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:24:meta",
+        "sha256": "571e7c0bb0009630240272d56f892538e8521fdc34649c30289603acf9b6c8e3",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:24:request",
+        "sha256": "7241425c755086773bb5419ed425ff801fd0fe0667eb6abf75bf0be1060c2988",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:25:meta",
+        "sha256": "a996ad0ff11981e03a3c51a41565458d9b878f9cd4cde6eaa218160d8cbddc74",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:25:request",
+        "sha256": "fd47961661955569e8d352dde34ef80236f847ba731d1631576f11cc7ff91448",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:26:meta",
+        "sha256": "edee402a79a31ff90c9393e235fe543b4d714eaac5bfc663a0f4ae63bee4df94",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:26:request",
+        "sha256": "e1ff680c7c94ed2e90c6bb44bf1a5b464886930384a2f7f73c6b38ecde40e2b2",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:27:meta",
+        "sha256": "e7b538992d6a52ebf7a47208716e8d58f65c0e30b49432494c64eab4f77cd16d",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:27:request",
+        "sha256": "493c2e26e3dbbe03650780953aa55c31ecb27d5b9b1d908715e0782c0e829d57",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:2:meta",
+        "sha256": "11ff61d83fda9a3e1b16eb5545dc02687da5db1c1c011331f15e27f602816b8e",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:2:request",
+        "sha256": "e64ed912ecf46bf94b27389c154a1b4806780ff285b4edfbc7966a1a825dda80",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:3:meta",
+        "sha256": "60204eb27ee47774d508bf6e9a585066a9fe0f04a751600a77a9c457790653a8",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:3:request",
+        "sha256": "894362b7a3658883cc6aebda7179808b186e081fa989c2a42ca1f324e01744ad",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:4:meta",
+        "sha256": "66f7f8b9c2153bd8475992a455450b7d8397d56384fb72750ad0a9db80c7e8ce",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:4:request",
+        "sha256": "938f16625da6f557d376135713c21188b8d148a0667754d96bad2c37bb651e12",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:5:meta",
+        "sha256": "e2381972d0a4c963828990e9ebbb9370a68fb02b426c394961fa284f770a788f",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:5:request",
+        "sha256": "62a9e44e48b675b4e524761d418f2abc906256bfe3b652bd53510fa59ae898c2",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:6:meta",
+        "sha256": "6d4ec6bf6c0e21d4210076ccae717044e09c6eb0870e4e08ace08fcce0023da1",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:6:request",
+        "sha256": "145e1a531e6bcfa881f83e469b9940a643bce29cb45afa2eb7b2d2ea494f1eed",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:7:meta",
+        "sha256": "b96b15c589f2402e3df00508c8356b6cac96f149683828a66ed7ba9b2ff80002",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:7:request",
+        "sha256": "296442ab86dba0f21c9bc1b7602a64f1dbb662109799a0182bc0124363fda260",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:8:meta",
+        "sha256": "5a090b494ea182c7c4dd9433c6bcf9220565b9730c275481e2d20ae6952ac63c",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:8:request",
+        "sha256": "49fb8d32208b820a96a493f5f26cd728110b5d3998370e503b2ca56167c6c351",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:9:meta",
+        "sha256": "4402ebd27551bc8bce35e526399d61af27006f3685cfeefd54d612766a4c9668",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "provider:9:request",
+        "sha256": "eda24b8901428797ac961e9e411d8b270032f20a3f15aa84d81b60775143507e",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "publication:latest-revision-api0-audit",
+        "sha256": "70ef41bc1d8e54251b20010438e6fc2008071631f9f0b25839875f0ae1554ccd",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "publication:post-revert-compatibility",
+        "sha256": "d11ee7efbf112d7a00ef129a874a4b901c3b89abfa4c6686df4fabffe36281a8",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "rollout:api0-proof",
+        "sha256": "1f6719f213ea7303d6b8306805c9f3edd40075a8e9d61b4e449f6b401b205876",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "rollout:catalog-registration",
+        "sha256": "6c648a9a20b65b88185da8dac835c825afac7b6f053500f061ee898cc6eace98",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "rollout:codex-source-review",
+        "sha256": "11071890de4f820e381739346bcd0be57b405de4fc41c9955398b4d0df349ed6",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "rollout:execution-snapshot",
+        "sha256": "135d0107f79785dbf409cff8d4edf688d25bb0ae25876b69aa6d7cfe259201f0",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "rollout:final-audit",
+        "sha256": "64148a3659342f7e5fd674ba540c6cc40ee54f12966e08f9aa20fba87666abe2",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "rollout:initial-context",
+        "sha256": "c95b5355916b140c16e2e7d196192fc4c80bb3b3f1ef60c16e313f42f916da47",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "rollout:manifest",
+        "sha256": "b7ce104710ddaaa6bdcb3f9f0a605e5644f3bd13fd05eb1bf204727953cab7e1",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "rollout:sanitized-runtime",
+        "sha256": "bc0279e2dc3271a401e89a85a40ce839020362652dff8238e6501ff3c75229ca",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "rollout:selected-database-snapshot",
+        "sha256": "59cf1ac6e09afb990992d7ea7f55ac0cd6d983c688eb9408119d25baceb3d226",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "rollout:sse-audit-wrapper-receipt",
+        "sha256": "ddd4bc31e79e2bbee0324b4bcbade9dfc65d6bb891fd05179b77cf77b553bac7",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:1:question",
+        "sha256": "4d379ef81a20ad5512201751eb10cace99e7cec24d314b22996417413863a0a9",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:1:synthetic-answer",
+        "sha256": "cebe2adc97cf09fcadda919489c3300a0fffc5e4a3036831c4d645da5caf2bb2",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:2:question",
+        "sha256": "d1d39e8f63cade329f6372c4a1f3ceb39cc131e52cf4a1d8b17dbd0403096489",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:2:synthetic-answer",
+        "sha256": "0b6e008618f9689bfc84bc521a0a8dd0940248b2a4863517b31ffb3c54f53575",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:3:question",
+        "sha256": "d256db7e73a7c67ac1bb1767925432e01ad98595fa35b591b08d8c092de5a825",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:3:synthetic-answer",
+        "sha256": "abf277fa95d3bf7b6c9d58636bcffc176798c4bdf070af4d7108e3353535106a",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:4:question",
+        "sha256": "c9b6561d2e95b6c8ea9221665c4606d8282d27b81d430b02634f2e66b71da1a0",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:4:synthetic-answer",
+        "sha256": "484fd65199c887fa68857e5ca94bf85825829292432037dbc109e2ede0e7cfd3",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:5:question",
+        "sha256": "4c0048edb4c412cc6f4409f7c5f99d235db805a98dcc200fd7e68163773ebf19",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:5:synthetic-answer",
+        "sha256": "c2c2bfb486f06433cdbe7294cf942536a3f043238a34941393a658d1150cb9b2",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:6:question",
+        "sha256": "82427084799d831c810829aa91fb08f32924da0d6f8729a0b92b1da444cef46b",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:6:synthetic-answer",
+        "sha256": "d84396c319d40830506d0c48586d3259855986316ad5e2a1f30a94df454d6ea5",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:7:question",
+        "sha256": "14080ebd82732ec026212ff7ee4c563322a7a2015ddcba7844b89ec50a08ad58",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:7:synthetic-answer",
+        "sha256": "b8b287d696e5e7a4b40d61e6a96fa6e5a0826aaa697ac36b5465ab5e5969c0e1",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:8:question",
+        "sha256": "71921b0dc98b1c6df1b3180aed55fc790dfae7241ff95b38fd655dc288a57606",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:8:synthetic-answer",
+        "sha256": "b283b77b1b3f7f0957e8d83b59648668741c53ec9839522b92f2e5e27262802c",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:9:question",
+        "sha256": "0fd4e587cde790c3ffa528a1d117534d3a347b8623fde20b4070edc07ecde4df",
+        "original_publicly_included": false
+      },
+      {
+        "source_id": "turn:9:synthetic-answer",
+        "sha256": "65f31efc8af0822c8396a809a5772a7e19bf6545e3e5e040325d936afa256621",
+        "original_publicly_included": false
+      }
+    ],
+    "private_hashes_do_not_make_absent_originals_reproducible": true,
+    "uuid_mapping": "validation-ref-NNN, private mapping omitted",
+    "published_question_answer_text_unchanged": true,
+    "full_request_sse_env_credentials_published": false
+  },
+  "export_side_effects": {
+    "new_model_calls": 0,
+    "new_network_calls": 0,
+    "new_business_db_connections": 0
+  }
+}

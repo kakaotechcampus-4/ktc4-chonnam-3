@@ -118,6 +118,17 @@ def test_first_hr_question_returns_checked_data_and_preserves_attempts(context, 
     assert request.schema_version == "2"
 
 
+def test_legacy_generator_does_not_expose_new_follow_up_policy_fields(context, contract):
+    provider = Provider(model_output(candidate(contract)))
+    result = generate(context, contract, provider)
+    assert result.succeeded
+    shown = provider.requests[0].payload["context"]
+    assert "presented_evaluation_keys" not in shown
+    assert "follow_up_options" not in shown
+    assert shown["interview_id"] == "interview-1"
+    assert shown["history"] == ()
+
+
 @pytest.mark.parametrize(
     "category,source_field",
     [
@@ -243,10 +254,14 @@ def test_followup_uses_real_source_text_and_injected_reviewer(context, contract)
 
     result = generate(context, contract, provider, review=review)
     assert result.succeeded
-    assert reviewed == [(asdict(context), question)]
+    # 구형 생성기의 검토 입력은 원래 문답·원문을 유지하고 후속 배정 정책은 포함하지 않는다.
+    expected_context = asdict(context)
+    del expected_context["presented_evaluation_keys"]
+    del expected_context["follow_up_options"]
+    assert reviewed == [(expected_context, question)]
     texts = provider.requests[0].payload["reference_texts"]
     assert texts == []
-    assert provider.requests[0].payload["context"] == asdict(context)
+    assert provider.requests[0].payload["context"] == expected_context
 
 
 @pytest.mark.parametrize(

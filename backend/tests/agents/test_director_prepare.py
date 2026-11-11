@@ -250,6 +250,23 @@ async def run(sessions, seed, transport):
         )
 
 
+async def test_fresh_selection_is_flushed_before_checkpoint_reload_with_app_session_policy(
+    agent_sessions, ready
+):
+    agent_sessions.configure(autoflush=False)
+    async with agent_sessions.begin() as db:
+        selected = await db.scalar(select(SessionRepository))
+        selected.snapshot_head_sha = None
+        selected.is_primary = False
+    success = await run(agent_sessions, ready, Transport(ready))
+    async with agent_sessions() as db:
+        interview = await db.get(InterviewSession, ready["interview_id"])
+        selected = await db.scalar(select(SessionRepository))
+        assert success, interview.last_error
+        assert selected.snapshot_head_sha == ready["sha"]
+        assert selected.is_primary
+
+
 async def test_cached_l2_reads_real_fixed_source_and_starts_actual_director(agent_sessions, ready):
     transport = Transport(ready)
     success = await run(agent_sessions, ready, transport)

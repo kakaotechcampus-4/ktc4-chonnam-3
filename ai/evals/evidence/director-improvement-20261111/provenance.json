@@ -1,0 +1,403 @@
+{
+  "schema": "director-public-evidence-provenance.v1",
+  "transform": "explicit field selection; stable global pseudonyms for UUIDs; UTF-8 pretty JSON; original semantic judgments, false values, unknowns, question/answer wording and metric values retained",
+  "id_pseudonyms": 7,
+  "private_id_mapping_published": false,
+  "originals": [
+    {
+      "source_id": "I:claim-study/live/A/explicit-fact-and-future-proposal/input.json",
+      "sha256": "94172c1dee55a1707d5e5e6f4d5ab782905789f23e196f4ce13b26d2fdba2416",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/A/explicit-fact-and-future-proposal/raw-response.json",
+      "sha256": "1113873f753207043f95a7b98630ef7d095e8c21d0e2a1245bc5b76424c5beeb",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/A/explicit-fact-and-future-proposal/result.json",
+      "sha256": "6abc89adbad448504ddd1bf654d0a4b28e668c505dd94a077f264d900126a349",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/A/hypothetical-scope-selection/input.json",
+      "sha256": "6213699454fa9b6eb2565eb3cc938efd5cfe633110c94f92bf05470dec7988d4",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/A/hypothetical-scope-selection/raw-response.json",
+      "sha256": "729341828abcc9a13763cf81a08e20d0d3666109c08c94a121228834834c0b7b",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/A/hypothetical-scope-selection/result.json",
+      "sha256": "a0564076de7fb24dfb22f16f495e26b5357c5000824ed79acad33617d2be752c",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/B/explicit-fact-and-future-proposal/raw-response.json",
+      "sha256": "324a44394700ac3db12aff83f8b24961bc64c57d03b45e6a8393482bc7452d72",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/B/explicit-fact-and-future-proposal/result.json",
+      "sha256": "09f19aeb8b095cbda6f8afa1380d4fee3e3e7fda9f1b94f04f6ffd6b5e3b28e7",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/B/hypothetical-scope-selection/raw-response.json",
+      "sha256": "6ba8e60cca0d1ca66cee4047dec9147947e139e52e92d69612abd0776ccb9745",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/B/hypothetical-scope-selection/result.json",
+      "sha256": "fe5da4911357762cfe73ab3dce75ce76cb9fbc35aa0ac600efef10a134f371d9",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/live/codex-source-grade.json",
+      "sha256": "5c2ebfb5c303bd2f23b0ea6368868c19d143789c6aa832add1686c7a9f619c34",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:claim-study/oracle.json",
+      "sha256": "76ff3d3814fa72a69e104ba9228405588afc9ea08472b162cb98d4e8e0a6c6e2",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "I:refinement/contribution-source-grade.json",
+      "sha256": "fe5217570d52cf20ffb8082da85b5f4cd4dc8a552b74b8865dfd9ce11f5bb442",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-audit/live-response-grade.json",
+      "sha256": "e0727aa6958929bd75f02e14294bd8beb5bc12dcf6ed0007004d03101fac1b38",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/cases-selected-eight.json",
+      "sha256": "a02fb5487fa5fde3e024094e28f927a15ce185260a0ca4341c1dfe8da63c201c",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-A-contract-regression-fresh-bat-197390-tool_unavailable.json",
+      "sha256": "47691ff51d0cfd62cf7aebf437f90ead398c7ffe56b2937064384736307e11db",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-A-fresh-kubernetes-268685-dont_know.json",
+      "sha256": "e5d8adbe8b8c5d1807f42babce347dd51f1d6f8d44008d1a2f822a7a858e0c91",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-A-fresh-postgres-224704-sufficient.json",
+      "sha256": "e4366067f986bf6eb618028845816c689729eb7972fcf46840cc26e35265474f",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-B-contract-regression-fresh-bat-197390-tool_unavailable.json",
+      "sha256": "38f9c67b8fd08822e38ac46ffb9c9e1c8b650499af8483f8ac29414924f694fb",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-B-fresh-kubernetes-268685-dont_know.json",
+      "sha256": "525ccaec32f48c71f4f0b8ea16577ec0e431699999e4a4034856034d66c6db09",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-B-fresh-postgres-224704-sufficient.json",
+      "sha256": "74ecf7ee3c447f5c1a646e2cd6dc5ff646454f977ee02a92eb87041c497c5a05",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-B-fresh-restic-75217-contribution_correction.json",
+      "sha256": "d367906825d682f167ae95fad3ef3faa5406a8a1b251aaedfd8931bd21702190",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-refinement-fresh-postgres-224704-sufficient.json",
+      "sha256": "87bd8390d29d1cb7f712d303c38aa10d8d188dd3795120ff4f8b70d82c05a83d",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/visible/review-A-contract-regression-fresh-bat-197390-tool_unavailable/model-payload.json",
+      "sha256": "af6de3df65de2e59e9e72ef27881a6e057132b961e9804ddac0ee1b70dcb6e58",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/visible/review-A-fresh-kubernetes-268685-dont_know/model-payload.json",
+      "sha256": "6365d1b89f25426c17003e0702c58c6bd7ee73257aa2f285146dd0ec28484644",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/visible/review-A-fresh-postgres-224704-sufficient/model-payload.json",
+      "sha256": "8a7567b0a34b927c9fe10837d55336085dd2231d192dbba073eb28603e3a7d51",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/visible/review-B-contract-regression-fresh-bat-197390-tool_unavailable/model-payload.json",
+      "sha256": "de480a9830b89b86aabcfdb81577f0d829f0c33442c16ea3d8d67571a0f8e17b",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/visible/review-B-fresh-kubernetes-268685-dont_know/model-payload.json",
+      "sha256": "28aa9a51a6083bbadb55dd92427984140304f547d8d138ac6e8a8396c9184006",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/visible/review-B-fresh-postgres-224704-sufficient/model-payload.json",
+      "sha256": "348b55297eebd0e9e84c51da48d00e022ae299220880c9ff6905430c24ac3c00",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/visible/review-B-fresh-restic-75217-contribution_correction/model-payload.json",
+      "sha256": "a9688d63d33a028224f869bce5638f6ec4da32c69a44356bb738a9eb5b3a1aba",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/visible/review-refinement-fresh-postgres-224704-sufficient/model-payload.json",
+      "sha256": "dd2eb01b2e1f73c0d533b721f9a402f7116723df645ff5912c1ab7374f1966bd",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "K:completion-audit.json",
+      "sha256": "8ce69130bf54d134e3e484e998ad12aa77f9b5e754699559a3b7777405a90fae",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "K:full-flow/live/measurements-v1.json",
+      "sha256": "7f4990d2cfb094ca735de7096d64b80c15aa0d1262db8e682570e23b695f10f0",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "K:recovery-audit/live-database-audit.json",
+      "sha256": "51ef5e4eafb8596dea4606143ca5c34726383236254335ee48601fe9e6f8618c",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "K:source-quality/mastodon-provenance.frozen.json",
+      "sha256": "d56bba7887a81dc10595d04de3cd0e5a57ac85a287bd17bf2549f46b6dea0e87",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "K:source-review/live-grade.json",
+      "sha256": "3bba5bb0799d63b4bc0c20b96154b35f8add26fa97a19b2c50e158722a0c3020",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:completion-audit.json",
+      "sha256": "a5d7cb39595bd3e974193b299d56d85a600af37b2e397e135ca6a5bbbd5c5a92",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:probe-review/source-grade.json",
+      "sha256": "4d1377c06454653eaaf5564dc9e673d16c6d4ac2a8b897f74efc6590720e3bdd",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:review-study/api0-final/completion.json",
+      "sha256": "266c5432cdc67c547da94dfdbd04ae62fd8a0d3208594bf7d5694fee172e6ac8",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:review-study/probe-api0-final/failure-review.json",
+      "sha256": "79b67cbd08e61911b48cdaa58be63786d757463c354c7bd7b94d77a14e9d9e94",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:review-study/probe-api0-v2/completion.json",
+      "sha256": "70b9cb4b1cb98587ba01755b00155c0f707d1c7eab59f93007e40daa0251a0c8",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:scope-controls/validation.json",
+      "sha256": "10f901a742fabae318d2566fac9a7a99e89bf6788ede25adf61641a20d28d993",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/cases.json",
+      "sha256": "e1d9b4ce1e850915ea6934098d4555198194d8976bccd60ca91490531428bf62",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/criteria.json",
+      "sha256": "2bd711b5d79fcf6346e26b0f18fbae655e991bd7bdb19b0e6b49eabdfd0b7f1c",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-n01.json",
+      "sha256": "89bc72615b79dd8a116d194818fcb03633f7f0ab0930512e5cdd4224cc796e9a",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-n02.json",
+      "sha256": "ae902c1a990b4bd0e842ef7d41046c944c1ade1c4509ad3ad68cb45cbdddd16f",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-n03.json",
+      "sha256": "75ead9bd984b02fec0a6b689665dcf1d98f1ae1e482b898c570de37e3d85f925",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-n04.json",
+      "sha256": "ab943726748515025e2dee77fbdcc12c6cca9afca4c16a1d156458fcd5a5c3c0",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-n05.json",
+      "sha256": "74042c516244d09e2538eaa459a8404b241faa89f59d0d47983ecd62169b0bcf",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-n06.json",
+      "sha256": "284a78847b30267f819a2452145b454af158060be879375368fa991d69dfdeb0",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-p01.json",
+      "sha256": "e0a2deb1248b82581b4b7fcb8402b69a93eb399efb50185d7afe86c5ed6ae1aa",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-p02.json",
+      "sha256": "6f85077975a612075b5244c8f7dee3fa2a2cbd1979c6987b7f6605dc7d20a2ab",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-p03.json",
+      "sha256": "362af590089a368c412edd2eb7e9487fdc367c2edd8e2e5a289d4b4bdaa3d350",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-p04.json",
+      "sha256": "55be52f117fe95139587242626734c44b564f7aedbac7126373faed7a6e35d52",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-p05.json",
+      "sha256": "6d8a14a48ed0148a0985c2b6317116307d69f7d06442a55b8e77f297afc5331b",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/oracles/ps-fit-p06.json",
+      "sha256": "32bbeff8094e2c579a5d9058bdf810c1df437241dd24673cec4a85dfb8fdee80",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-n01.json",
+      "sha256": "0e95862b043d0cf064f261ef9bf7b38fd4b7c6c32f66b8cf735dc751f400e435",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-n02.json",
+      "sha256": "100d954f75452ca8392d0c055d8ee6acbf26cc9faef7c9c72975170ec63d2aad",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-n03.json",
+      "sha256": "ec02a93a501efb15eb344640bb33ec055e4d7730c802822e7f308c17a4cbb1e7",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-n04.json",
+      "sha256": "d997527d2f576660c57aba84446c0a46a32891401e81bcc67c6d899f7ec5fb8f",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-n05.json",
+      "sha256": "37089c58c8d09fcf147c922611e4790ebea3360ff0f522427d0f72377ddc2658",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-n06.json",
+      "sha256": "7ff6e80fc2d3e3edefe303e58a8ec10bf98375d3ab028cb49a86cf558a532508",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-p01.json",
+      "sha256": "0848cc25e590df9ea61811e3866b19d25a853fe1109787b617d3df2967322e17",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-p02.json",
+      "sha256": "9500bdef5bedd041a3ce029a3adf7435ee748f1e25543bd6a5b5fcf02ba257da",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-p03.json",
+      "sha256": "e8d60f26a1cd9cdc27132f72da6ad0c9fa6020243e8627662412d6d21663a91c",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-p04.json",
+      "sha256": "56f472475f3766ddc0aa81e79d141edd255f1a66c1b28556ead9db00f2a73c6a",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-p05.json",
+      "sha256": "c29056e663395e4b35e03596f70b46ac8dd67fd716824ef592c8eaba29ab0ca0",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:semantic-fit/payloads/ps-fit-p06.json",
+      "sha256": "9bfb370d280a30cb818d0c3d9b403ebd291bd0a3b6165a383e3aa8954f51a99f",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "L:source-review/live-review-grade.json",
+      "sha256": "1075556f562f984b46480b7fb4f45a7612aed2b0cd4fb33cc4f717665d4755fa",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "history:call-accounting",
+      "sha256": "3781c4cacb5eaf6020cc6d70bc6536af97faa29a3b30f1722e9e301d0daf14f4",
+      "original_publicly_included": false
+    }
+  ],
+  "original_hash_meaning": "Marks private retained source identity; does not let a reader recompute absent originals or reproduce model calls, DB state, full prompts or wire-body identity.",
+  "public_code": {
+    "repository": "mastodon/mastodon",
+    "commit": "cc76f85b9afc02b1265e68e6ee6c24ab266771b4",
+    "path": "app/services/post_status_service.rb",
+    "raw_url": "https://raw.githubusercontent.com/mastodon/mastodon/cc76f85b9afc02b1265e68e6ee6c24ab266771b4/app/services/post_status_service.rb",
+    "line_count": 309,
+    "byte_count": 10888,
+    "source_sha256": "3f61d6c6d5fb174b0cc1d61f9dedf89ea645cfbd8b394e551bb82d8db0b9387e",
+    "full_blob_sha1": "fce7b6d4c14c836d47f59f6d150fd206c291ed39"
+  },
+  "public_file_hashes": {
+    "README.md": "355023d50ec0fa1448bd6c998b0d5947e29f2fe7e4ed0aad7785980065e45c84",
+    "answer-scope-cases.json": "59d1f96f44aabf449dd862bfbe6d8b36cff6cc6a9f64bb5e22e17330c35e762b",
+    "criteria.json": "944f7d76d2d34c615446c9ef54fc64988ca9a01d76553ae7bf1122bc27d41673",
+    "publication-validation.json": "ac5b23c73c0d4210fd98bffebc51f4fce1c816fff9e8567bac11a613de164270",
+    "review-calibration-cases.json": "f1a3b772893ad673dfee0cb3d0d6f92eb73809fb276d2e0bd99786bdf0259cd4",
+    "semantic-fit-cases.json": "632d4e3e39663b35879e5272683b11a0a6f825559547821b165e6f60e8bc75f9",
+    "semantic-fit-generation.json": "0f0f4280b2bc201dec7b2d2b317fb7f103c7b859bbe74c661b2110b8791ab0db",
+    "service-flow-summary.json": "028d6c2e0a675368a2156e03badff004e7b9bac00a90fd575af5d17a882a9695",
+    "summary.json": "469b461ff24fcc5be7781d839a4fcd8201340d2e17e3cc2ff8f9523366295d33",
+    "verify.py": "9de3e4cd0d41931b7c338304ab0ab316a2b8bd98b2cefca7b7c32032e348c2ca"
+  },
+  "self_hash_note": "This manifest is anchored by the Git commit; no recursive self SHA is claimed. Other bundle files including verify.py are listed below.",
+  "recomputed_by_public_verifier": [
+    "published file hashes",
+    "selected cohort sums",
+    "fixed-case verdict/recovery matches",
+    "contiguous question/answer quotes",
+    "actual/Mock partition",
+    "K nine-turn selected counts and timing sums"
+  ],
+  "not_recomputed": [
+    "private original call_id ledger deduplication",
+    "absent original payload byte identity",
+    "semantic truth or expert validity",
+    "new provider responses",
+    "whole-service browser/voice/report E2E",
+    "actual billing"
+  ],
+  "export_side_effects": {
+    "new_model_calls": 0,
+    "new_network_calls": 0,
+    "new_business_db_connections": 0
+  }
+}

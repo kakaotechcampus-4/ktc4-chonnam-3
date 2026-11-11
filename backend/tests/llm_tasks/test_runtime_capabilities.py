@@ -14,7 +14,12 @@ def test_all_recipe_entries_have_installed_consumers():
 
     recipe = json.loads((runtime.PROMPT_ROOT / "runtime-prompts.json").read_text(encoding="utf-8"))
     prompts = [
-        c.PromptSpec(task, item["version"] + "@review", "fixture", "body")
+        c.PromptSpec(
+            task,
+            item["version"] + "@review",
+            "fixture",
+            (runtime.PROMPT_ROOT / item["template"]).read_text(encoding="utf-8"),
+        )
         for task, item in recipe.items()
     ]
     validate_runtime_prompts(prompts)

@@ -127,7 +127,11 @@ async def test_http_request_and_checked_question_reach_existing_jsonb_boundary(c
     payload = json.loads(body["input"][0]["content"][0]["text"])
     assert set(payload) == {"context", "question_contract", "reference_texts", "answer_analysis"}
     assert payload["question_contract"] == wire(contract)
-    assert payload["context"] == wire(context)
+    # 구형 질문 생성 입력에는 v9의 새 정책 필드가 추가되지 않아야 한다.
+    legacy_context = wire(context)
+    assert legacy_context.pop("presented_evaluation_keys") == []
+    assert legacy_context.pop("follow_up_options") == []
+    assert payload["context"] == legacy_context
     assert payload["reference_texts"] == [] and payload["answer_analysis"] is None
     request, question = reviewed[0]
     assert json.loads(json.dumps(request.payload)) == payload

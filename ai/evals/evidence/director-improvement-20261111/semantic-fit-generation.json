@@ -1,0 +1,572 @@
+{
+  "schema": "director-semantic-fit-public-generation-and-scope.v1",
+  "mode": "actual_luna",
+  "physical_model_calls": 8,
+  "generation_candidate_count": 2,
+  "generation_plan_review_calls": 4,
+  "scope_candidate_count": 2,
+  "scope_review_calls": 4,
+  "actual_t3_calls": 0,
+  "same_context_note": "Generation uses minimum typed restoration of original model projection; unknown current analysis_ref remained None; not full DB Context restoration.",
+  "scope_fixture_validation": {
+    "passed": true,
+    "model_or_api_or_database_calls": 0,
+    "actual_projection_roundtrips": 2,
+    "shared_v7_decoder_and_contract_validation": true,
+    "actual_follow_up_option_count": 1,
+    "follow_up_question_policy_valid": true,
+    "non_ps_main_valid": true
+  },
+  "observations": [
+    {
+      "kind": "scope",
+      "group": "A",
+      "case_id": "non-ps-main-actual-q06",
+      "prompt_version": "director_v17@calibrated-review",
+      "question_length_codepoints": 81,
+      "request_length_codepoints": 81,
+      "preamble_length_codepoints": 0,
+      "source_verdict": "accept",
+      "actual_review_verdict": "accept",
+      "source_and_review_agree": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "코드 흐름을 근거로, `allowed_mentions`가 설정된 경우 허용 목록과 실제 멘션 사이에 어떤 관계가 강제되는지 어떻게 판단하시겠어요?",
+        "topic_code": "allowed_mentions_guard_scope",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "코드 흐름을 근거로, `allowed_mentions`가 설정된 경우 허용 목록과 실제 멘션 사이에 어떤 관계가 강제되는지 어떻게 판단하시겠어요?",
+          "required_points": [
+            {
+              "key": "allowed_mentions_guard_scope",
+              "description": "코드 흐름을 근거로, `allowed_mentions`가 설정된 경우 허용 목록과 실제 멘션 사이에 어떤 관계가 강제되는지 어떻게 판단하시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "public-ref-003"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "technical_reasoning",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "public-ref-003"
+        ],
+        "jd_requirement_ids": []
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "제공된 코드의 검증 흐름을 근거로 허용 목록과 실제 멘션의 관계를 묻고 있으며, 계약과 질문이 일치합니다.",
+        "point_coverage": [
+          {
+            "key": "allowed_mentions_guard_scope",
+            "status": "asked",
+            "question_excerpt": "허용 목록과 실제 멘션 사이에 어떤 관계가 강제되는지"
+          }
+        ]
+      },
+      "codex_source_grade": {
+        "candidate_source_verdict": "accept",
+        "criterion_applicable": false,
+        "applicability_reason": "실제 K Q6의 main은 technical_reasoning/communication 키이며 신규 problem_solving main 제한의 대상이 아니다.",
+        "direct_request_excerpt": "`allowed_mentions`가 설정된 경우 허용 목록과 실제 멘션 사이에 어떤 관계가 강제되는지",
+        "minimum_sufficient_answer_scope": "실제 멘션 중 허용 목록 밖의 계정만 걸러 오류를 만드는 비교 방향을 설명한다. 허용 목록의 모든 계정이 실제 멘션에도 있어야 한다는 역조건을 코드에 추가하지 않는다.",
+        "source_checks": {
+          "source_grounding": "satisfied",
+          "single_judgment": "satisfied",
+          "question_contract_alignment": "satisfied",
+          "controller_main_route": "satisfied",
+          "history_nonrepetition": "satisfied",
+          "new_ps_main_gate_excluded": "satisfied"
+        },
+        "parallel_judgment_axes": 1,
+        "understanding_load": 1,
+        "naturalness_note": "'어떤 관계가 강제되는지 어떻게 판단'은 다소 문어적이지만 한 비교 조건을 묻는 범위는 명확하다. 실제 음성 청취 검증은 아니다.",
+        "not_claimed": [
+          "모든 비PS 평가 항목의 의미 타당성 확보",
+          "기술적 근거 전체 평가 완료",
+          "실제 T3 추가 호출",
+          "새 PG 경로 실행"
+        ]
+      },
+      "synthetic_partial_analysis": false
+    },
+    {
+      "kind": "scope",
+      "group": "A",
+      "case_id": "ps-follow-up-legacy-gap",
+      "prompt_version": "director_v17@calibrated-review",
+      "question_length_codepoints": 35,
+      "request_length_codepoints": 35,
+      "preamble_length_codepoints": 0,
+      "source_verdict": "accept",
+      "actual_review_verdict": "accept",
+      "source_and_review_agree": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "이 코드에서 이메일 발송 worker의 예약 지연은 얼마인가요?",
+        "topic_code": "email_subscription_batching",
+        "question_type": "follow_up",
+        "parent_turn_id": "public-ref-004",
+        "question_contract": {
+          "purpose": "이 코드에서 이메일 발송 worker의 예약 지연은 얼마인가요?",
+          "required_points": [
+            {
+              "key": "email_subscription_batching_flow",
+              "description": "이 코드에서 이메일 발송 worker의 예약 지연은 얼마인가요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "public-ref-001"
+            },
+            {
+              "kind": "evidence",
+              "id": "public-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "public-ref-001",
+          "public-ref-002"
+        ],
+        "jd_requirement_ids": []
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "앞선 답변에서 미답이었던 worker 예약 지연을 코드의 값으로 직접 묻고 있으며, 상수는 5분을 나타냅니다.",
+        "point_coverage": [
+          {
+            "key": "email_subscription_batching_flow",
+            "status": "asked",
+            "question_excerpt": "이 코드에서 이메일 발송 worker의 예약 지연은 얼마인가요?"
+          }
+        ]
+      },
+      "codex_source_grade": {
+        "candidate_source_verdict": "accept",
+        "criterion_applicable": false,
+        "applicability_reason": "PS 키가 있더라도 과거 확정된 what/when 질문의 허용된 미답 보완 follow_up이며 신규 main 제한 대상이 아니다.",
+        "direct_request_excerpt": "이 코드에서 이메일 발송 worker의 예약 지연은 얼마인가요?",
+        "minimum_sufficient_answer_scope": "합성 부분 답변이 아직 설명하지 않은 예약 지연 5분만 답하면 된다. 이미 설명한 Redis 수집 상태나 새 원인·대안·검증을 추가로 요구하지 않는다.",
+        "source_checks": {
+          "source_grounding": "satisfied",
+          "single_judgment": "satisfied",
+          "question_contract_alignment": "satisfied",
+          "actual_recalculated_follow_up_route": "satisfied",
+          "partial_covered_scope_preserved": "satisfied",
+          "new_ps_main_gate_excluded": "satisfied"
+        },
+        "actual_review_reason_factuality": "예약 지연이 앞선 합성 답변의 미답이고 상수가 5분을 나타낸다는 사유는 원래 what/when 계약·partial fixture와 상수 원문에 맞다.",
+        "parallel_judgment_axes": 1,
+        "understanding_load": 0,
+        "naturalness_note": "짧은 확인 질문으로 답 범위가 명확하다. 청취·TTS 검증이나 이전 실제 K 질문 교체를 뜻하지 않는다.",
+        "fixture_boundary": "partial 답변·분석과 마지막 턴 Context는 합성 대조 fixture다. 실제 K 질문·답변·첫 분석·DB를 변경하지 않았고 이번 실제 T3 출력으로 세지 않는다."
+      },
+      "synthetic_partial_analysis": true
+    },
+    {
+      "kind": "generation",
+      "group": "A",
+      "case_id": "actual-k-call022-context",
+      "prompt_version": "director_v17@calibrated-review",
+      "question_length_codepoints": 87,
+      "request_length_codepoints": 87,
+      "preamble_length_codepoints": 0,
+      "source_verdict": "reject",
+      "actual_review_verdict": "accept",
+      "source_and_review_agree": false,
+      "question": {
+        "persona": "tech_lead",
+        "text": "이메일 구독 발송 경로에서 Redis set과 지연 작업이 어떤 순서로 사용되어 여러 게시글의 알림을 묶도록 하는지, 코드 흐름을 근거로 설명해 주시겠어요?",
+        "topic_code": "email_subscription_batching",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "이메일 구독 발송 경로에서 Redis set과 지연 작업이 어떤 순서로 사용되어 여러 게시글의 알림을 묶도록 하는지, 코드 흐름을 근거로 설명해 주시겠어요?",
+          "required_points": [
+            {
+              "key": "email_subscription_batch_flow",
+              "description": "이메일 구독 발송 경로에서 Redis set과 지연 작업이 어떤 순서로 사용되어 여러 게시글의 알림을 묶도록 하는지, 코드 흐름을 근거로 설명해 주시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "public-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "public-ref-002"
+        ],
+        "jd_requirement_ids": []
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "코드와 주석은 게시글 ID를 계정별 Redis set에 추가하고 TTL을 설정한 뒤 지연 작업을 예약하는 순서와 그룹핑 목적을 뒷받침합니다. 이 흐름 설명이라는 단일 과제를 요구하며, 확인되지 않은 워커 내부 동작까지 묻지는 않습니다.",
+        "point_coverage": [
+          {
+            "key": "email_subscription_batch_flow",
+            "status": "asked",
+            "question_excerpt": "이메일 구독 발송 경로에서 Redis set과 지연 작업이 어떤 순서로 사용되어 여러 게시글의 알림을 묶도록 하는지, 코드 흐름을 근거로 설명해 주시겠어요?"
+          }
+        ]
+      },
+      "codex_source_grade": {
+        "candidate_source_verdict": "reject",
+        "criterion_scope": "이번 사전 동결한 신규 main의 problem_solving 최소 관찰 기준. 과거 K의 8기준 수용을 소급 변경하지 않는다.",
+        "direct_request_excerpt": "Redis set과 지연 작업이 어떤 순서로 사용되어 여러 게시글의 알림을 묶도록 하는지, 코드 흐름을 근거로 설명해 주시겠어요?",
+        "minimum_sufficient_answer_scope": "계정별 Redis set에 게시글 ID를 넣고 만료를 설정한 뒤 지연 worker를 예약하는 기존 순서를 설명하면 직접 요청을 완료할 수 있다.",
+        "source_checks": {
+          "source_grounding": "satisfied",
+          "explicit_unknown_limits": "satisfied",
+          "single_judgment": "satisfied",
+          "question_contract_alignment": "satisfied",
+          "controller_main_route": "satisfied",
+          "history_nonrepetition": "satisfied",
+          "problem_solving_main_semantic_fit": "violated"
+        },
+        "rationale": "원문과 주석으로 뒷받침되는 새 코드 흐름 질문이지만, 최소 충분 답에는 문제·실패·제약에서 원인 범위를 좁히거나 접근을 선택하거나 가설을 구별할 확인을 정하는 판단이 필요하지 않다. key와 intent를 관찰의 증거로 대신 쓰지 않는다.",
+        "actual_review_reason_factuality": "계정별 set·TTL·예약 순서와 묶음 목적은 실제 코드·주석에 맞으며 미조회 worker 내부를 확정하지 않는다. 다만 그 근거만으로 신규 PS main의 의미 적합성을 승인한 점은 이번 기준과 다르다.",
+        "parallel_judgment_axes": 1,
+        "understanding_load": 1,
+        "naturalness_note": "중심 요청은 하나지만 순서·코드 흐름·묶도록의 표현이 한 문장에 이어지고 Redis set·지연 작업 용어가 들어간다. 실제 청취·TTS 검증은 아니다.",
+        "not_claimed": [
+          "일반 코드 이해 질문의 부적합",
+          "지원자의 낮은 역량",
+          "이전 K 수용 판정의 번복",
+          "정책 간 일반 우월성",
+          "실제 개인 문제 해결 경험"
+        ]
+      },
+      "synthetic_partial_analysis": false
+    },
+    {
+      "kind": "scope",
+      "group": "B",
+      "case_id": "non-ps-main-actual-q06",
+      "prompt_version": "director_v17@semantic-fit",
+      "question_length_codepoints": 81,
+      "request_length_codepoints": 81,
+      "preamble_length_codepoints": 0,
+      "source_verdict": "accept",
+      "actual_review_verdict": "accept",
+      "source_and_review_agree": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "코드 흐름을 근거로, `allowed_mentions`가 설정된 경우 허용 목록과 실제 멘션 사이에 어떤 관계가 강제되는지 어떻게 판단하시겠어요?",
+        "topic_code": "allowed_mentions_guard_scope",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "코드 흐름을 근거로, `allowed_mentions`가 설정된 경우 허용 목록과 실제 멘션 사이에 어떤 관계가 강제되는지 어떻게 판단하시겠어요?",
+          "required_points": [
+            {
+              "key": "allowed_mentions_guard_scope",
+              "description": "코드 흐름을 근거로, `allowed_mentions`가 설정된 경우 허용 목록과 실제 멘션 사이에 어떤 관계가 강제되는지 어떻게 판단하시겠어요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "public-ref-003"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "technical_reasoning",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "public-ref-003"
+        ],
+        "jd_requirement_ids": []
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "제공 코드의 멘션 검사 흐름을 근거로 허용 목록과 실제 멘션의 관계를 판단하게 합니다. 실제 멘션은 허용 목록의 부분집합이어야 하며, 허용 목록의 모든 항목이 실제 멘션에 포함될 필요는 없다는 점을 답할 수 있습니다.",
+        "point_coverage": [
+          {
+            "key": "allowed_mentions_guard_scope",
+            "status": "asked",
+            "question_excerpt": "코드 흐름을 근거로, `allowed_mentions`가 설정된 경우 허용 목록과 실제 멘션 사이에 어떤 관계가 강제되는지 어떻게 판단하시겠어요?"
+          }
+        ]
+      },
+      "codex_source_grade": {
+        "candidate_source_verdict": "accept",
+        "criterion_applicable": false,
+        "applicability_reason": "실제 K Q6의 main은 technical_reasoning/communication 키이며 신규 problem_solving main 제한의 대상이 아니다.",
+        "direct_request_excerpt": "`allowed_mentions`가 설정된 경우 허용 목록과 실제 멘션 사이에 어떤 관계가 강제되는지",
+        "minimum_sufficient_answer_scope": "실제 멘션 중 허용 목록 밖의 계정만 걸러 오류를 만드는 비교 방향을 설명한다. 허용 목록의 모든 계정이 실제 멘션에도 있어야 한다는 역조건을 코드에 추가하지 않는다.",
+        "source_checks": {
+          "source_grounding": "satisfied",
+          "single_judgment": "satisfied",
+          "question_contract_alignment": "satisfied",
+          "controller_main_route": "satisfied",
+          "history_nonrepetition": "satisfied",
+          "new_ps_main_gate_excluded": "satisfied"
+        },
+        "parallel_judgment_axes": 1,
+        "understanding_load": 1,
+        "naturalness_note": "'어떤 관계가 강제되는지 어떻게 판단'은 다소 문어적이지만 한 비교 조건을 묻는 범위는 명확하다. 실제 음성 청취 검증은 아니다.",
+        "not_claimed": [
+          "모든 비PS 평가 항목의 의미 타당성 확보",
+          "기술적 근거 전체 평가 완료",
+          "실제 T3 추가 호출",
+          "새 PG 경로 실행"
+        ]
+      },
+      "synthetic_partial_analysis": false
+    },
+    {
+      "kind": "scope",
+      "group": "B",
+      "case_id": "ps-follow-up-legacy-gap",
+      "prompt_version": "director_v17@semantic-fit",
+      "question_length_codepoints": 35,
+      "request_length_codepoints": 35,
+      "preamble_length_codepoints": 0,
+      "source_verdict": "accept",
+      "actual_review_verdict": "accept",
+      "source_and_review_agree": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "이 코드에서 이메일 발송 worker의 예약 지연은 얼마인가요?",
+        "topic_code": "email_subscription_batching",
+        "question_type": "follow_up",
+        "parent_turn_id": "public-ref-004",
+        "question_contract": {
+          "purpose": "이 코드에서 이메일 발송 worker의 예약 지연은 얼마인가요?",
+          "required_points": [
+            {
+              "key": "email_subscription_batching_flow",
+              "description": "이 코드에서 이메일 발송 worker의 예약 지연은 얼마인가요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "public-ref-001"
+            },
+            {
+              "kind": "evidence",
+              "id": "public-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "public-ref-001",
+          "public-ref-002"
+        ],
+        "jd_requirement_ids": []
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "앞서 답변에서 설명하지 못한 worker 예약 지연을, 코드에 정의된 값으로 직접 묻는 유효한 후속 질문입니다.",
+        "point_coverage": [
+          {
+            "key": "email_subscription_batching_flow",
+            "status": "asked",
+            "question_excerpt": "이 코드에서 이메일 발송 worker의 예약 지연은 얼마인가요?"
+          }
+        ]
+      },
+      "codex_source_grade": {
+        "candidate_source_verdict": "accept",
+        "criterion_applicable": false,
+        "applicability_reason": "PS 키가 있더라도 과거 확정된 what/when 질문의 허용된 미답 보완 follow_up이며 신규 main 제한 대상이 아니다.",
+        "direct_request_excerpt": "이 코드에서 이메일 발송 worker의 예약 지연은 얼마인가요?",
+        "minimum_sufficient_answer_scope": "합성 부분 답변이 아직 설명하지 않은 예약 지연 5분만 답하면 된다. 이미 설명한 Redis 수집 상태나 새 원인·대안·검증을 추가로 요구하지 않는다.",
+        "source_checks": {
+          "source_grounding": "satisfied",
+          "single_judgment": "satisfied",
+          "question_contract_alignment": "satisfied",
+          "actual_recalculated_follow_up_route": "satisfied",
+          "partial_covered_scope_preserved": "satisfied",
+          "new_ps_main_gate_excluded": "satisfied"
+        },
+        "actual_review_reason_factuality": "앞선 답변에서 설명하지 못한 예약 지연을 코드 값으로 직접 묻는다는 사유가 합성 partial와 실제 요청에 맞다.",
+        "parallel_judgment_axes": 1,
+        "understanding_load": 0,
+        "naturalness_note": "짧은 확인 질문으로 답 범위가 명확하다. 청취·TTS 검증이나 이전 실제 K 질문 교체를 뜻하지 않는다.",
+        "fixture_boundary": "partial 답변·분석과 마지막 턴 Context는 합성 대조 fixture다. 실제 K 질문·답변·첫 분석·DB를 변경하지 않았고 이번 실제 T3 출력으로 세지 않는다."
+      },
+      "synthetic_partial_analysis": true
+    },
+    {
+      "kind": "generation",
+      "group": "B",
+      "case_id": "actual-k-call022-context",
+      "prompt_version": "director_v17@semantic-fit",
+      "question_length_codepoints": 196,
+      "request_length_codepoints": 109,
+      "preamble_length_codepoints": 86,
+      "source_verdict": "accept",
+      "actual_review_verdict": "accept",
+      "source_and_review_agree": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "제공된 코드에서는 일반 게시가 `process_status!` 안의 `save!` 트랜잭션을 거친 뒤 `postprocess_status!`를 호출합니다. 일반 게시 요청에서 오류가 났지만 게시물은 생성된 것으로 보인다고 가정하면, 저장 실패와 저장 후 처리 실패를 구분하기 위해 어떤 관측 하나를 가장 먼저 확인하시겠어요? 그 이유도 말씀해 주세요.",
+        "topic_code": "post_save_failure_diagnosis",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "일반 게시 요청에서 오류가 났지만 게시물은 생성된 것으로 보인다고 가정하면, 저장 실패와 저장 후 처리 실패를 구분하기 위해 어떤 관측 하나를 가장 먼저 확인하시겠어요? 그 이유도 말씀해 주세요.",
+          "required_points": [
+            {
+              "key": "post_save_failure_diagnosis",
+              "description": "일반 게시 요청에서 오류가 났지만 게시물은 생성된 것으로 보인다고 가정하면, 저장 실패와 저장 후 처리 실패를 구분하기 위해 어떤 관측 하나를 가장 먼저 확인하시겠어요? 그 이유도 말씀해 주세요."
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "public-ref-001"
+            },
+            {
+              "kind": "evidence",
+              "id": "public-ref-003"
+            },
+            {
+              "kind": "evidence",
+              "id": "public-ref-002"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "problem_solving",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "public-ref-001",
+          "public-ref-003",
+          "public-ref-002"
+        ],
+        "jd_requirement_ids": []
+      },
+      "raw_review": {
+        "plan_valid": true,
+        "context_valid": true,
+        "wording_valid": true,
+        "contract_matches": true,
+        "safe_alternative": true,
+        "reason_summary": "코드 흐름과 일치하며, 저장 단계와 저장 후 처리 단계를 구분할 단일 관측과 그 이유를 직접 묻습니다.",
+        "point_coverage": [
+          {
+            "key": "post_save_failure_diagnosis",
+            "status": "asked",
+            "question_excerpt": "저장 실패와 저장 후 처리 실패를 구분하기 위해 어떤 관측 하나를 가장 먼저 확인하시겠어요? 그 이유도 말씀해 주세요."
+          }
+        ]
+      },
+      "codex_source_grade": {
+        "candidate_source_verdict": "accept",
+        "criterion_scope": "신규 main의 problem_solving 최소 관찰 기준을 실제 request에 적용한다.",
+        "direct_request_excerpt": "저장 실패와 저장 후 처리 실패를 구분하기 위해 어떤 관측 하나를 가장 먼저 확인하시겠어요? 그 이유도 말씀해 주세요.",
+        "minimum_sufficient_answer_scope": "명시한 오류·게시물 생성 의심 상황에서 저장 이전과 이후의 원인 범주를 구별할 관측 한 가지를 선택하고 그 관측을 우선할 근거를 설명해야 한다.",
+        "source_checks": {
+          "source_grounding": "satisfied",
+          "explicit_unknown_limits": "satisfied",
+          "single_judgment": "satisfied",
+          "question_contract_alignment": "satisfied",
+          "controller_main_route": "satisfied",
+          "history_nonrepetition": "satisfied",
+          "problem_solving_main_semantic_fit": "satisfied"
+        },
+        "rationale": "정상 call 경로는 process_status!의 save! 트랜잭션 뒤 일반 게시의 postprocess_status!로 이어진다. 후보는 오류와 생성 의심을 가정으로 명시하고, 그 상황에서 원인 범위를 좁힐 확인 하나를 직접 요구한다. 해당 확인과 그 이유는 한 판단이다. 기존 멱등성의 시간차 보장 질문이나 멘션 비교 정정을 다시 요구하지 않는다.",
+        "actual_review_reason_factuality": "저장 단계와 저장 후 처리 단계를 구분할 관측 한 가지와 그 이유를 묻는다는 사유는 실제 request에 맞다. 실제 장애 원인·커밋 성공·외부 작업 성공을 확인했다고 확정하지 않는다.",
+        "parallel_judgment_axes": 1,
+        "understanding_load": 1,
+        "naturalness_note": "중심 판단은 명확하지만 코드 배경 한 문장과 실패 가정·비교 목적·이유 요청이 이어져 길다. '관측'은 다소 문어적이다. 이번 수용을 표현 간결성·실제 청취 품질 개선으로 일반화하지 않는다.",
+        "not_claimed": [
+          "실제 장애 원인 확정",
+          "지원자의 실제 구현·운영 경험",
+          "진단부터 재발 방지까지 전 과정 평가",
+          "한 개발 문맥을 넘어선 정책 일반 우월성",
+          "응답 속도·간결성 개선"
+        ]
+      },
+      "synthetic_partial_analysis": false
+    }
+  ],
+  "summary_from_original_source": {
+    "physical_actual_model_calls": 8,
+    "scope_review_calls": 4,
+    "scope_source_accept": 4,
+    "scope_review_agreement": 4,
+    "generated_candidates": 2,
+    "generation_by_policy": {
+      "A": {
+        "source_verdict": "reject",
+        "review_verdict": "accept",
+        "matches_source": false,
+        "text_length": 87
+      },
+      "B": {
+        "source_verdict": "accept",
+        "review_verdict": "accept",
+        "matches_source": true,
+        "text_length": 196
+      }
+    },
+    "all_question_review_excerpts_exact": true,
+    "wire_request_and_output_bindings_verified": 8,
+    "synthetic_partial_analyses_counted_as_actual_t3": 0,
+    "actual_t3_or_database_or_tool_provider_calls": 0,
+    "primary_24_review_calls_graded_here": 0,
+    "general_policy_superiority_established": false,
+    "naturalness_or_speed_improvement_established": false
+  }
+}

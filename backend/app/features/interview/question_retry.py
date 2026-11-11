@@ -13,6 +13,8 @@ from uuid import UUID, uuid4, uuid5
 
 import httpx
 from devon_ai import contracts as c
+from devon_ai.agents.director.capabilities import prompt_capabilities
+from devon_ai.agents.director.runtime import RecoveryFeedback, recovery_feedback_from_attempts
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 from sqlalchemy import select
@@ -21,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.core.config import LLMSettings
 from app.core.errors import AppError
 from app.db.models import InterviewSession, InterviewTurn, LLMCallRecord, PromptVersion
+from app.features.interview import generation_binding
 from app.features.interview.agent_context import AgentStateError, load_context
 from app.features.interview.agent_service import QuestionExecution, _owned
 from app.features.interview.answer_context import prior_analyses, reference_texts
@@ -54,6 +57,68 @@ class _Scope:
     analysis: c.ContractChecked[c.AnswerAnalysis]
     lookup_summary: str
     tool_results: tuple[c.ToolResult, ...]
+    expected_prompt: c.PromptSpec | None = None
+
+
+def _attempt_version(record: LLMCallRecord) -> str | None:
+    attempts = record.attempts
+    if not isinstance(attempts, list) or not attempts:
+        return None
+    versions = [item.get("prompt_version") for item in attempts if isinstance(item, dict)]
+    if (
+        len(versions) != len(attempts)
+        or any(type(value) is not str or not value for value in versions)
+        or len(set(versions)) != 1
+    ):
+        return None
+    return str(versions[0])
+
+
+def _new_recovery_policy(version: str | None) -> bool:
+    try:
+        return version is not None and prompt_capabilities(version).auto_replan
+    except c.ContractError:
+        return False
+
+
+def _failure_binding(record: LLMCallRecord) -> str:
+    # 입력 지문과 분리해 부모·자동 자식의 같은 입력 연결을 보존한다. 실패 원문은
+    # 추가 저장하지 않고 예약 당시 전체 실패·시도 기록의 변경 여부만 검사한다.
+    return hashlib.sha256(
+        json.dumps(
+            {"id": str(record.id), "failure": record.failure, "attempts": record.attempts},
+            ensure_ascii=False,
+            sort_keys=True,
+            allow_nan=False,
+        ).encode()
+    ).hexdigest()
+
+
+def _automatic_feedback(record: LLMCallRecord, active_version: str) -> RecoveryFeedback | None:
+    failure = record.failure
+    if not isinstance(failure, dict) or failure.get("stage") != "semantic":
+        return None
+    code = failure.get("error_code")
+    if code not in {"director_candidate_rewrite", "director_candidate_replan"}:
+        return None
+    try:
+        active = prompt_capabilities(active_version)
+    except c.ContractError:
+        return None
+    if not active.recovery_feedback:
+        return None
+    feedback = recovery_feedback_from_attempts(record.attempts, failure_code=str(code))
+    if feedback is None:
+        return None
+    original_version = _attempt_version(record)
+    original_new = _new_recovery_policy(original_version)
+    if active.auto_replan or original_new:
+        # 현재 버전만 바꿔 과거 실패를 승격하거나 새 정책의 지문 검사를 우회하지 않는다.
+        if not active.auto_replan or not original_new or original_version != active_version:
+            return None
+    elif feedback.recovery.recovery != "rewrite":
+        return None
+    return feedback
 
 
 def _ledger(row: InterviewSession) -> dict[str, dict[str, object]]:
@@ -255,9 +320,35 @@ async def _scope(db: AsyncSession, row: InterviewSession) -> _Scope:
     )
     stored_inputs = (row.context_state or {}).get("director_retry_inputs", {})
     saved = stored_inputs.get(str(target)) if isinstance(stored_inputs, dict) else None
+    expected_prompt = None
     if isinstance(saved, dict):
         summary = saved.get("lookup_summary", "")
         raw_tools = saved.get("tool_results", [])
+        if "analysis_reuse_prompt" in saved:
+            raw_prompt = saved["analysis_reuse_prompt"]
+            if (
+                not isinstance(raw_prompt, dict)
+                or set(raw_prompt) != {"task_name", "version", "model", "template"}
+                or any(
+                    not isinstance(value, str) or not value.strip() for value in raw_prompt.values()
+                )
+            ):
+                raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE)
+            expected_prompt = c.PromptSpec(
+                raw_prompt["task_name"],
+                raw_prompt["version"],
+                raw_prompt["model"],
+                raw_prompt["template"],
+            )
+            # 새 요청 ID나 복구 라운드로 재사용 정책의 버전·본문·모델 검사를 우회하지 않는다.
+            if (
+                expected_prompt.task_name != "director"
+                or not prompt_capabilities(expected_prompt.version).reuse_empty_lookup_analysis
+                or prompt is None
+                or expected_prompt
+                != c.PromptSpec("director", prompt.version, prompt.model, prompt.template)
+            ):
+                raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE)
     else:
         summary = (previous.decision or {}).get("reason_summary", "")
         traces = (row.context_state or {}).get("evidence_tool_results", {})
@@ -266,6 +357,39 @@ async def _scope(db: AsyncSession, row: InterviewSession) -> _Scope:
     if not isinstance(summary, str) or not isinstance(raw_tools, list):
         raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE)
     tools = tuple(c.decode(c.ToolResult, value) for value in raw_tools)
+    reuse_prompt = expected_prompt
+    original_version = _attempt_version(failed)
+    generation_records = (row.context_state or {}).get(generation_binding.STATE_KEY, {})
+    captured = isinstance(generation_records, dict) and str(failed.id) in generation_records
+    pinned = (
+        _new_recovery_policy(prompt.version if prompt else None)
+        or _new_recovery_policy(original_version)
+        or captured
+    )
+    if pinned:
+        current_prompt = (
+            c.PromptSpec("director", prompt.version, prompt.model, prompt.template)
+            if prompt is not None
+            else None
+        )
+        if (
+            current_prompt is None
+            or not _new_recovery_policy(current_prompt.version)
+            or original_version != current_prompt.version
+            or not generation_binding.matches(
+                row.context_state or {},
+                call_id=failed.id,
+                context=context,
+                prompt=current_prompt,
+                answer_analysis=checked,
+                prior_analyses=past,
+                reference_texts=sources,
+                lookup_summary=summary,
+                tool_results=tools,
+            )
+        ):
+            raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE)
+        expected_prompt = current_prompt
     binding = {
         "lookup_summary": summary,
         "tool_results": [asdict(value) for value in tools],
@@ -276,10 +400,17 @@ async def _scope(db: AsyncSession, row: InterviewSession) -> _Scope:
         if prompt is None
         else (str(prompt.id), prompt.version, prompt.model, prompt.template),
     }
+    if reuse_prompt is not None:
+        binding["analysis_reuse_prompt"] = asdict(reuse_prompt)
+    if pinned:
+        # 예약부터 결과 확정까지 과거 분석의 변경도 막는다. 구버전 digest는 유지한다.
+        binding["prior_analyses"] = {key: asdict(value.data) for key, value in past.items()}
+        assert expected_prompt is not None
+        binding["generation_prompt"] = generation_binding.prompt_identity(expected_prompt)
     digest = hashlib.sha256(
         json.dumps(binding, ensure_ascii=False, sort_keys=True).encode()
     ).hexdigest()
-    return _Scope(target, previous.id, failed, digest, checked, summary, tools)
+    return _Scope(target, previous.id, failed, digest, checked, summary, tools, expected_prompt)
 
 
 async def availability(db: AsyncSession, row: InterviewSession) -> tuple[bool, int]:
@@ -396,19 +527,17 @@ async def _reserve(
             except (AgentStateError, c.ContractError):
                 raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE) from None
             if kind == "auto":
-                from devon_ai.agents.director.runtime import recovery_feedback_from_attempts
-
-                failure = scope.failure.failure
-                if (
-                    scope.failure.id != expected_failed_call_id
-                    or failure is None
-                    or failure.get("error_code") != "director_candidate_rewrite"
-                ):
-                    raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE)
-                feedback = recovery_feedback_from_attempts(
-                    scope.failure.attempts, failure_code="director_candidate_rewrite"
+                active = await db.scalar(
+                    select(PromptVersion).where(
+                        PromptVersion.task_name == "director", PromptVersion.is_active.is_(True)
+                    )
                 )
-                if feedback is None or feedback.recovery.recovery != "rewrite":
+                feedback = (
+                    _automatic_feedback(scope.failure, active.version)
+                    if active is not None
+                    else None
+                )
+                if scope.failure.id != expected_failed_call_id or feedback is None:
                     raise AppError(Reason.QUESTION_RETRY_UNAVAILABLE)
             if any(
                 saved.get("target") == scope.target and saved.get("kind") == kind
@@ -436,6 +565,13 @@ async def _reserve(
                 "deadline": deadline.isoformat(),
                 "status": "running",
             }
+            if kind == "auto":
+                assert feedback is not None
+                entry["recovery_kind"] = feedback.recovery.recovery
+            if scope.expected_prompt is not None and _new_recovery_policy(
+                scope.expected_prompt.version
+            ):
+                entry["failure_binding"] = _failure_binding(scope.failure)
             ledger[str(request_id)] = entry
             _store(row, ledger)
             return entry, scope
@@ -468,8 +604,6 @@ async def _execute(
     settings: LLMSettings,
     http_client: httpx.AsyncClient | None,
 ) -> QuestionExecution:
-    from devon_ai.agents.director.runtime import recovery_feedback_from_attempts
-
     from app.features.interview.director_service import start_director
 
     async def guard(db: AsyncSession, row: InterviewSession) -> bool:
@@ -477,7 +611,16 @@ async def _execute(
         if saved != entry or saved.get("status") != "running" or _expired(saved):
             return False
         try:
-            return (await _scope(db, row)).digest == scope.digest
+            current = await _scope(db, row)
+            if current.digest != scope.digest:
+                return False
+            if scope.expected_prompt is not None and _new_recovery_policy(
+                scope.expected_prompt.version
+            ):
+                return str(current.failure.id) == entry.get("failed_call_id") and _failure_binding(
+                    current.failure
+                ) == entry.get("failure_binding")
+            return True
         except (AppError, AgentStateError, c.ContractError):
             return False
 
@@ -501,6 +644,7 @@ async def _execute(
                 tool_results=scope.tool_results,
                 preparation_guard=guard,
                 recovery_feedback=feedback,
+                expected_prompt=scope.expected_prompt,
             )
     except BaseException as error:
         async with sessions.begin() as db:
@@ -712,10 +856,12 @@ async def auto_retry_question(
     http_client: httpx.AsyncClient | None = None,
     shield_cancellation: bool = True,
 ) -> QuestionExecution | None:
-    """정확히 복원한 안전 rewrite 한 번만 자동 실행한다. 일반 실패는 수동 경로로 둔다."""
-    if failed.failure is None or failed.failure.error_code != "director_candidate_rewrite":
+    """안전한 rewrite와 새 정책의 replan은 같은 자동 슬롯 한 번을 공유한다."""
+    if failed.failure is None or failed.failure.error_code not in {
+        "director_candidate_rewrite",
+        "director_candidate_replan",
+    }:
         return None
-    from devon_ai.agents.director.runtime import recovery_feedback_from_attempts
 
     async with sessions() as db:
         record = await db.get(LLMCallRecord, failed.call_id)
@@ -727,19 +873,19 @@ async def auto_retry_question(
         if (
             record is None
             or prompt is None
-            or prompt.version.partition("@")[0] not in {"director_v7", "director_v8"}
+            or record.interview_session_id != interview_id
+            or not isinstance(record.failure, dict)
+            or record.failure.get("error_code") != failed.failure.error_code
         ):
             return None
-        feedback = recovery_feedback_from_attempts(
-            record.attempts, failure_code=failed.failure.error_code
-        )
-        if feedback is None or feedback.recovery.recovery != "rewrite":
+        if _automatic_feedback(record, prompt.version) is None:
             return None
     try:
         entry, scope = await _reserve(
             sessions,
             user_id=user_id,
             interview_id=interview_id,
+            # 구버전 재전송과 같은 슬롯을 찾는 불투명 ID이므로 namespace를 보존한다.
             request_id=uuid5(failed.call_id, "automatic-rewrite"),
             kind="auto",
             settings=settings,

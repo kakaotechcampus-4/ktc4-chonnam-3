@@ -4,6 +4,7 @@ import json
 from dataclasses import asdict
 from uuid import uuid4
 
+import pytest
 from devon_ai import contracts as c
 from sqlalchemy import select
 
@@ -12,8 +13,9 @@ from app.features.interview.answer_context import load_answer_context, prior_ana
 from tests.agents.director_helpers import analysis, seed_turns
 
 
-async def test_prior_analysis_restores_v6_wire_without_changing_the_audit_output(
-    agent_sessions, agent_seed
+@pytest.mark.parametrize("wire_version", [6, 7])
+async def test_prior_analysis_restores_wire_without_changing_the_audit_output(
+    agent_sessions, agent_seed, wire_version
 ):
     await seed_turns(agent_sessions, agent_seed, 2)
     raw = {
@@ -55,8 +57,8 @@ async def test_prior_analysis_restores_v6_wire_without_changing_the_audit_output
                         1,
                         "fixture",
                         "fixture",
-                        "answer_analysis_v6@fixture",
-                        "6",
+                        f"answer_analysis_v{wire_version}@fixture",
+                        str(wire_version),
                         1,
                         1,
                         1,

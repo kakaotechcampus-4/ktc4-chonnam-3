@@ -612,10 +612,29 @@ def validate_analysis(
     evidence_refs: frozenset[str],
     allowed_locations: frozenset[tuple[str, str, str]],
 ) -> ContractChecked[AnswerAnalysis]:
+    contract = _checked_data(question, Question).question_contract
+    return validate_analysis_for_contract(
+        candidate,
+        contract=contract,
+        answer_text=answer_text,
+        evidence_refs=evidence_refs,
+        allowed_locations=allowed_locations,
+    )
+
+
+def validate_analysis_for_contract(
+    candidate: AnswerAnalysis,
+    *,
+    contract: QuestionContract,
+    answer_text: str,
+    evidence_refs: frozenset[str],
+    allowed_locations: frozenset[tuple[str, str, str]],
+) -> ContractChecked[AnswerAnalysis]:
+    """복원한 질문 계약·답변에 저장 분석을 다시 대조한다. 새 질문의 승인 경로가 아니다."""
     # 질문하지 않은 항목을 평가에 섞거나 답변 원문에 없는 인용을 근거로 만들지 못하게 한다.
     _convert(AnswerAnalysis, candidate, "analysis", wire=False)
+    _convert(QuestionContract, contract, "question contract", wire=False)
     _text(answer_text, "submitted answer")
-    contract = _checked_data(question, Question).question_contract
     keys = frozenset(point.key for point in contract.required_points)
     covered = tuple(point.key for point in candidate.covered_points)
     _references(covered, keys, "covered_points")
@@ -914,6 +933,25 @@ class EvaluationTarget(_Contract):
 
 
 @dataclass(frozen=True)
+class FollowUpOption(_Contract):
+    """코드가 허용한 직전 답변의 보완·명확화다. 부족함이나 점수를 새로 확정하지 않는다."""
+
+    persona: PersonaId
+    parent_turn_id: str
+    evaluation_keys: "tuple[ScoreKeyId, ...]"
+    # clarify에서는 아직 판단하지 못한 확인 대상도 포함하며 감점 항목을 뜻하지 않는다.
+    missing_point_keys: tuple[str, ...]
+    intent: Literal["complete", "clarify"]
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not self.evaluation_keys or not self.missing_point_keys:
+            raise ContractError("schema", "follow up option")
+        _unique(cast(tuple[object, ...], self.evaluation_keys), "follow up evaluation keys")
+        _unique(self.missing_point_keys, "follow up point keys")
+
+
+@dataclass(frozen=True)
 class Context(_Contract):
     interview_id: str
     current_turn_id: str | None
@@ -932,6 +970,9 @@ class Context(_Contract):
     supplemental_sources: tuple[SupplementalSource, ...] = ()
     external_searches: tuple[ExternalSearchStatus, ...] = ()
     supplemental_limitations: tuple[str, ...] = ()
+    # 확정 질문에서 제공한 기회다. 지원자가 충분히 답했다는 뜻이 아니다.
+    presented_evaluation_keys: "tuple[ScoreKeyId, ...]" = ()
+    follow_up_options: tuple[FollowUpOption, ...] = ()
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -943,6 +984,24 @@ class Context(_Contract):
         _unique(tuple(item.persona for item in self.evaluation_targets), "evaluation personas")
         if any(item.persona not in self.allowed_personas for item in self.evaluation_targets):
             raise ContractError("semantic", "evaluation personas")
+        _unique(
+            cast(tuple[object, ...], self.presented_evaluation_keys), "presented evaluation keys"
+        )
+        _unique(
+            tuple(
+                (item.persona, item.parent_turn_id, item.intent) for item in self.follow_up_options
+            ),
+            "follow up options",
+        )
+        for option in self.follow_up_options:
+            parents = tuple(turn for turn in self.history if turn.turn_id == option.parent_turn_id)
+            if (
+                len(parents) != 1
+                or option.parent_turn_id != self.current_turn_id
+                or parents[0].persona != option.persona
+                or option.persona not in self.allowed_personas
+            ):
+                raise ContractError("semantic", "follow up parent")
         _unique(
             tuple((item.kind, item.source_id) for item in self.supplemental_sources),
             "supplemental sources",

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.config import Settings
 from app.db.models import AnalysisJob, InterviewExternalSource, InterviewSession, JobPosting
+from app.features.interview.observation import observed_stage
 from app.features.interview.supplemental_sources import load_supplemental_sources
 from app.features.knowledge.official_catalog import OFFICIAL_DOMAINS as OFFICIAL_DOMAINS
 from app.features.knowledge.official_catalog import scope_domains, source_matches_query
@@ -125,6 +126,7 @@ def _reservations(value: object) -> dict[str, dict[str, int]]:
     return {key: _usage(item) for key, item in value.items()}
 
 
+@observed_stage("external.lookup")
 async def retrieve_external_knowledge(
     sessions: async_sessionmaker[AsyncSession],
     *,

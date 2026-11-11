@@ -12,11 +12,15 @@ from dataclasses import asdict, dataclass
 from typing import Any, cast
 
 from async_grader import VERDICTS, GraderLike, call_grader
+from director_diagnostics import validate_diagnostics
+from director_sources import SUPPORTED_SCHEMA_VERSIONS as DIRECTOR_SOURCES_VERSIONS
+from director_sources import source_context as director_source_context
 from eval_artifacts import validate_artifacts
 from eval_cases import Case
 from grader_check import check_grader_async
 from judge_context import build_judge_context
 from report_check import check_form, grade_reports
+from repository_sources import source_context as repository_source_context
 
 
 @dataclass(frozen=True)
@@ -25,13 +29,25 @@ class Execution:
     attempts: tuple[dict[str, Any], ...] = ()
     validated_only: bool = False
     artifacts: Mapping[str, object] | None = None
+    source_snapshot: dict[str, Any] | None = None
+    diagnostics: dict[str, Any] | None = None
 
 
 class ExecutionError(ValueError):
     """비밀값이나 입력 원문 없이 실패 단계와 코드만 기록한다."""
 
-    def __init__(self, stage: str, code: str, attempts: tuple[dict[str, Any], ...] = ()) -> None:
+    def __init__(
+        self,
+        stage: str,
+        code: str,
+        attempts: tuple[dict[str, Any], ...] = (),
+        *,
+        source_snapshot: dict[str, Any] | None = None,
+        diagnostics: dict[str, Any] | None = None,
+    ) -> None:
         self.stage, self.code, self.attempts = stage, code, attempts
+        self.source_snapshot = source_snapshot
+        self.diagnostics = diagnostics
         super().__init__(code)
 
 
@@ -45,18 +61,21 @@ async def _checkpoint(
     rows: list[dict[str, Any]],
     total: int,
     current: str | None,
+    *,
+    inflight_case: Mapping[str, Any] | None = None,
 ) -> None:
     if callback is not None:
         # 이후 rows가 바뀌거나 다음 모델 호출이 중단돼도 완료 원문은 보존한다.
-        await callback(
-            {
-                "format_version": 1,
-                "metadata": dict(metadata),
-                "cases": copy.deepcopy(rows),
-                "checkpoint": {"completed": len(rows), "total": total, "current_case": current},
-                "summary": {"total": total, "completed": len(rows), "release_gate_passed": None},
-            }
-        )
+        document: dict[str, Any] = {
+            "format_version": 1,
+            "metadata": dict(metadata),
+            "cases": copy.deepcopy(rows),
+            "checkpoint": {"completed": len(rows), "total": total, "current_case": current},
+            "summary": {"total": total, "completed": len(rows), "release_gate_passed": None},
+        }
+        if inflight_case is not None:
+            document["inflight_case"] = copy.deepcopy(dict(inflight_case))
+        await callback(document)
 
 
 def _hash(value: object) -> str:
@@ -72,6 +91,40 @@ def _candidate(output: object, artifacts: object) -> str:
         else {"public_output": output, "validated_artifacts": validate_artifacts(artifacts)}
     )
     return json.dumps(value, ensure_ascii=False)
+
+
+def _source_context(case: Case, row: Mapping[str, Any]) -> dict[str, Any]:
+    snapshot = row.get("source_snapshot")
+    if snapshot is not None:
+        if not isinstance(snapshot, dict) or row.get("source_snapshot_hash") != _hash(snapshot):
+            raise ValueError("rejudge source snapshot hash mismatch")
+        if (
+            isinstance(snapshot.get("schema_version"), str)
+            and snapshot["schema_version"] in DIRECTOR_SOURCES_VERSIONS
+        ):
+            if (
+                case.kind not in {"question", "flow"}
+                or case.payload.get("service_task") != "director"
+                or snapshot.get("service_input_sha256") != _hash(case.payload)
+            ):
+                raise ValueError("rejudge Director source snapshot binding mismatch")
+            return director_source_context(snapshot)
+        if case.kind in {"repo_shallow", "repo_deep"}:
+            data = case.model_input()["service_input"]
+            declared = data.get("repository", data)
+            observed = snapshot.get("repository", {})
+            if (
+                not isinstance(observed, dict)
+                or snapshot.get("task") != case.kind
+                or any(
+                    observed.get(key) != declared.get(key) for key in ("repository_id", "head_sha")
+                )
+            ):
+                raise ValueError("rejudge source snapshot binding mismatch")
+        return repository_source_context(snapshot)
+    if row.get("source_snapshot_hash") is not None:
+        raise ValueError("rejudge source snapshot missing")
+    return build_judge_context(case.model_input())
 
 
 def validate_rejudge_source(
@@ -117,7 +170,67 @@ def validate_rejudge_source(
             validate_artifacts(artifacts)
             if artifact_hash != _hash(artifacts):
                 raise ValueError("rejudge artifacts hash mismatch")
+        _source_context(case, row)
+        _validate_diagnostics(case, row)
     return indexed
+
+
+def _validate_diagnostics(case: Case, row: Mapping[str, Any]) -> None:
+    value = row.get("diagnostics")
+    if value is None:
+        if row.get("diagnostics_hash") is not None:
+            raise ValueError("rejudge diagnostics missing")
+        return
+    if case.payload.get("service_task") != "director" or case.kind not in {"question", "flow"}:
+        raise ValueError("invalid Director diagnostics case binding")
+    if row.get("diagnostics_hash") != _hash(value):
+        raise ValueError("rejudge diagnostics hash mismatch")
+    validate_diagnostics(
+        value,
+        service_input_sha256=_hash(case.payload),
+        source_snapshot=row.get("source_snapshot"),
+        attempts=row.get("attempts", []),
+    )
+
+
+def _preserve_diagnostics(case: Case, row: dict[str, Any], evidence: Any) -> None:
+    value = getattr(evidence, "diagnostics", None)
+    if value is not None:
+        row.update(diagnostics=copy.deepcopy(value), diagnostics_hash=_hash(value))
+        _validate_diagnostics(case, {**row, "attempts": list(evidence.attempts)})
+
+
+def review_packets(
+    cases: Sequence[Case],
+    previous: Mapping[str, Any],
+    *,
+    bindings: Mapping[str, Mapping[str, object]] | None = None,
+) -> list[dict[str, Any]]:
+    """재판정과 동일한 후보·원문을 내보내고 숨은 검수·control은 전달하지 않는다."""
+    indexed = validate_rejudge_source(cases, previous, bindings=bindings)
+    packets = []
+    for case in cases:
+        stem = f"{case.case_id}.v{case.version}"
+        row = indexed[stem]
+        if row["status"] != "succeeded":
+            continue
+        rubric = {key: copy.deepcopy(case.expectation[key]) for key in ("allowed", "forbidden")}
+        candidate = _candidate(row["output"], row.get("artifacts"))
+        context = _source_context(case, row)
+        packets.append(
+            {
+                "case": stem,
+                "rubric": rubric,
+                "candidate_output": candidate,
+                "source_context": context,
+                "binding": {
+                    "rubric_sha256": _hash(rubric),
+                    "candidate_sha256": _hash(candidate),
+                    "source_context_sha256": _hash(context),
+                },
+            }
+        )
+    return packets
 
 
 async def rejudge_cases(
@@ -148,18 +261,33 @@ async def rejudge_cases(
             "output_hash": original.get("output_hash"),
             "artifacts": copy.deepcopy(original.get("artifacts")),
             "artifacts_hash": original.get("artifacts_hash"),
+            "source_snapshot": copy.deepcopy(original.get("source_snapshot")),
+            "source_snapshot_hash": original.get("source_snapshot_hash"),
+            "attempts": copy.deepcopy(original.get("attempts", [])),
+            "diagnostics": copy.deepcopy(original.get("diagnostics")),
+            "diagnostics_hash": original.get("diagnostics_hash"),
             "review_status": case.expectation["review"]["status"],
             "status": "not_rejudged",
             "judge": None,
         }
         if original["status"] == "succeeded":
             rubric = {key: case.expectation[key] for key in ("allowed", "forbidden")}
-            judgment = await call_grader(
-                grader,
-                rubric,
-                _candidate(original["output"], original.get("artifacts")),
-                source_context=build_judge_context(case.model_input()),
-            )
+            try:
+                judgment = await call_grader(
+                    grader,
+                    rubric,
+                    _candidate(original["output"], original.get("artifacts")),
+                    source_context=_source_context(case, original),
+                )
+            except BaseException as error:
+                row.update(
+                    status="interrupted",
+                    error_stage="interrupted",
+                    error_code=type(error).__name__,
+                    interrupted_stage="evaluation",
+                )
+                await _checkpoint(checkpoint, metadata, rows, len(cases), stem, inflight_case=row)
+                raise
             row.update(status="rejudged", judge=asdict(judgment))
             verdicts[_diagnostic_verdict(asdict(judgment))] += 1
         rows.append(row)
@@ -334,15 +462,20 @@ async def run_cases(
             continue
         started = time.perf_counter()
         attempts: tuple[dict[str, Any], ...] = ()
+        service_completed = False
         try:
             # 실행기는 입력만 받는다. 정답·pair·검수·control 종류를 함께 전달하지 않는다.
-            execution = await executor(case.kind, case.model_input())
+            try:
+                execution = await executor(case.kind, case.model_input())
+            finally:
+                # 실패·취소도 사용자가 기다린 서비스 구간이며 Judge 시간은 포함하지 않는다.
+                row["service_latency_ms"] = round((time.perf_counter() - started) * 1000)
+            service_completed = True
             attempts = execution.attempts
             row.update(
                 status="validated_only" if execution.validated_only else "succeeded",
                 output=execution.output,
                 output_hash=_hash(execution.output),
-                service_latency_ms=round((time.perf_counter() - started) * 1000),
             )
             if execution.artifacts is not None:
                 checked_artifacts = validate_artifacts(dict(execution.artifacts))
@@ -350,6 +483,13 @@ async def run_cases(
                     artifacts=checked_artifacts,
                     artifacts_hash=_hash(checked_artifacts),
                 )
+            if execution.source_snapshot is not None:
+                row.update(
+                    source_snapshot=copy.deepcopy(execution.source_snapshot),
+                    source_snapshot_hash=_hash(execution.source_snapshot),
+                )
+                _source_context(case, row)
+            _preserve_diagnostics(case, row, execution)
             if not execution.validated_only:
                 outputs[stem] = execution.output
             if review_status == "approved":
@@ -365,7 +505,7 @@ async def run_cases(
                             grader,
                             rubric,
                             _candidate(execution.output, execution.artifacts),
-                            source_context=build_judge_context(case.model_input()),
+                            source_context=_source_context(case, row),
                         )
                         field = "judge" if review_status == "approved" else "diagnostic_judge"
                         row[field] = asdict(judgment)
@@ -390,12 +530,44 @@ async def run_cases(
         except ExecutionError as exc:
             attempts = exc.attempts
             row.update(status="failed", error_stage=exc.stage, error_code=exc.code)
+            if exc.source_snapshot is not None:
+                row.update(
+                    source_snapshot=copy.deepcopy(exc.source_snapshot),
+                    source_snapshot_hash=_hash(exc.source_snapshot),
+                )
+                _source_context(case, row)
+            _preserve_diagnostics(case, row, exc)
             if review_status == "approved":
                 row["quality"] = "execution_failed"
         except Exception as exc:
             row.update(status="failed", error_stage="executor", error_code=type(exc).__name__)
             if review_status == "approved":
                 row["quality"] = "execution_failed"
+        except BaseException as exc:
+            if not service_completed:
+                attempts = getattr(exc, "attempts", attempts)
+                snapshot = getattr(exc, "source_snapshot", None)
+                if snapshot is not None:
+                    row.update(
+                        source_snapshot=copy.deepcopy(snapshot),
+                        source_snapshot_hash=_hash(snapshot),
+                    )
+                _preserve_diagnostics(case, row, exc)
+            row.update(
+                status="interrupted",
+                error_stage="interrupted",
+                error_code=type(exc).__name__,
+                latency_ms=round((time.perf_counter() - started) * 1000),
+                attempts=list(attempts),
+                input_tokens=_usage(attempts, "input_tokens"),
+                output_tokens=_usage(attempts, "output_tokens"),
+                service_status="completed" if service_completed else "interrupted",
+                interrupted_stage="evaluation" if service_completed else "service",
+            )
+            # 취소된 사례는 완료 분모에 넣지 않는다. 이미 생성한 출력·시도·원문과
+            # 대기 시간은 별도 미완료 기록으로 남겨 재실행·감사 때 확인할 수 있게 한다.
+            await _checkpoint(checkpoint, metadata, rows, len(cases), stem, inflight_case=row)
+            raise
         row["attempts"] = list(attempts)
         row["input_tokens"] = _usage(attempts, "input_tokens")
         row["output_tokens"] = _usage(attempts, "output_tokens")

@@ -155,15 +155,19 @@ async def retry_question(
     user_id = user.id
     # 인증 조회의 트랜잭션을 닫고 전용 실행 세션으로 유한 재생성을 진행한다.
     await db.rollback()
-    return await execute_retry(
-        request.app.state.session_factory,
-        request.app.state.redis,
-        user_id=user_id,
-        interview_id=_parse_id(interview_id, Reason.NOT_FOUND),
-        request_id=body.request_id,
-        settings=request.app.state.settings.require_llm(),
-        http_client=request.app.state.http_client,
-    )
+    from app.features.interview.observation import interview_execution
+
+    key = _parse_id(interview_id, Reason.NOT_FOUND)
+    async with interview_execution(request.app.state.settings, "api.question_retry", key):
+        return await execute_retry(
+            request.app.state.session_factory,
+            request.app.state.redis,
+            user_id=user_id,
+            interview_id=key,
+            request_id=body.request_id,
+            settings=request.app.state.settings.require_llm(),
+            http_client=request.app.state.http_client,
+        )
 
 
 @router.post("/{interview_id}/abandon", status_code=status.HTTP_204_NO_CONTENT)

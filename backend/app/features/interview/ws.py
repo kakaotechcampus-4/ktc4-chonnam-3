@@ -734,6 +734,25 @@ async def _run_answer(
 async def _execute(
     connection: _Connection, user_id: UUID, turn: int, text: str, *, answer_mode: str
 ) -> AnswerExecution:
+    from app.features.interview.observation import interview_execution
+
+    async with interview_execution(
+        connection.socket.app.state.settings,
+        "ws.answer",
+        connection.interview_id,
+        turn=turn,
+    ) as observed:
+        result = await _execute_answer(connection, user_id, turn, text, answer_mode=answer_mode)
+        if observed is not None:
+            observed.complete(
+                result.failure.error_code if result.failure else result.discard_reason
+            )
+        return result
+
+
+async def _execute_answer(
+    connection: _Connection, user_id: UUID, turn: int, text: str, *, answer_mode: str
+) -> AnswerExecution:
     state = connection.socket.app.state
     config = state.settings
     current = await _read_state(connection.socket, user_id, connection.interview_id)

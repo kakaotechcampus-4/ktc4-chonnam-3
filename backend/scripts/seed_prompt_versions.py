@@ -2,7 +2,8 @@
 
 from collections.abc import Iterable
 
-from devon_ai.contracts import PromptSpec
+from devon_ai.agents.director.runtime import SUPPORTED_PROMPT_VERSIONS, operation_prompts
+from devon_ai.contracts import ContractError, PromptSpec
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -162,6 +163,16 @@ def _validate_registration(prompts: list[PromptSpec]) -> None:
         for field in ("version", "model", "template"):
             if not getattr(prompt, field).strip():
                 raise PromptSeedValidationError(f"{field} must not be blank: {prompt.task_name}")
+        if (
+            prompt.task_name == "director"
+            and prompt.version.partition("@")[0] in SUPPORTED_PROMPT_VERSIONS
+        ):
+            # 기존의 불투명한 버전명은 보존하고, 알려진 실행 계열의 본문만 사전 검증한다.
+            # 단건 CLI도 설치된 Director의 정책 형식을 SQL 실행 전에 확인한다.
+            try:
+                operation_prompts(prompt)
+            except ContractError as exc:
+                raise PromptSeedValidationError(str(exc)) from exc
 
 
 __all__ = [

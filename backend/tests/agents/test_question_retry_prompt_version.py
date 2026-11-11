@@ -19,6 +19,12 @@ from tests.agents.director_helpers import settings
         ("director_v7@legacy", True),
         ("director_v8", True),
         ("director_v8@publication", True),
+        ("director_v9", True),
+        ("director_v9@candidate", True),
+        ("director_v10", True),
+        ("director_v11", True),
+        ("director_v12", True),
+        ("director_v12@candidate", True),
         ("director_v6", False),
         ("director_v80", False),
         ("unregistered", False),
@@ -27,8 +33,14 @@ from tests.agents.director_helpers import settings
 async def test_recovery_prompt_gate_accepts_only_registered_feedback_versions(
     monkeypatch, version, supported
 ):
+    interview_id = uuid4()
+    failure = c.CallFailure("semantic", "director_candidate_rewrite", "fixture")
     db = AsyncMock()
-    db.get.return_value = SimpleNamespace(attempts=[])
+    db.get.return_value = SimpleNamespace(
+        interview_session_id=interview_id,
+        failure={"stage": failure.stage, "error_code": failure.error_code},
+        attempts=[{"prompt_version": version}],
+    )
     db.scalar.return_value = SimpleNamespace(version=version)
     sessions = MagicMock()
     sessions.return_value.__aenter__ = AsyncMock(return_value=db)
@@ -36,7 +48,7 @@ async def test_recovery_prompt_gate_accepts_only_registered_feedback_versions(
     feedback = SimpleNamespace(recovery=c.CandidateRecovery("rewrite", "fixture"))
     # 타입·출처의 복원 검사는 별도 실제 AI 회귀에서 다룬다. 이 테스트는 버전 게이트만 분리한다.
     monkeypatch.setattr(
-        "devon_ai.agents.director.runtime.recovery_feedback_from_attempts",
+        "app.features.interview.question_retry.recovery_feedback_from_attempts",
         Mock(return_value=feedback),
     )
     reserve = AsyncMock(return_value=({}, object()))
@@ -47,11 +59,11 @@ async def test_recovery_prompt_gate_accepts_only_registered_feedback_versions(
     failed = QuestionExecution(
         turn_id=None,
         call_id=uuid4(),
-        failure=c.CallFailure("semantic", "director_candidate_rewrite", "fixture"),
+        failure=failure,
         discard_reason=None,
     )
     result = await question_retry.auto_retry_question(
-        sessions, user_id=uuid4(), interview_id=uuid4(), failed=failed, settings=settings()
+        sessions, user_id=uuid4(), interview_id=interview_id, failed=failed, settings=settings()
     )
     assert result is expected if supported else result is None
     assert reserve.await_count == execute.await_count == int(supported)

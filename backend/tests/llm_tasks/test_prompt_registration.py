@@ -24,6 +24,14 @@ async def test_oversized_version_is_rejected_before_any_database_access():
     assert session.sql == []
 
 
+async def test_incomplete_director_stage_policy_is_rejected_before_any_database_access():
+    session = _SeedSession()
+    incomplete = PromptSpec("director", "director_v13@candidate", "local-model", "## 공통\n본문\n")
+    with pytest.raises(seeds.PromptSeedValidationError, match="Director operation prompt sections"):
+        await seeds.register_prompt_versions(session, [PROMPT, incomplete])
+    assert session.sql == []
+
+
 async def test_registers_one_explicit_version_idempotently_from_an_iterable():
     session = _SeedSession()
 
