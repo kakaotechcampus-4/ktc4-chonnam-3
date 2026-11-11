@@ -1,3 +1,96 @@
+def load_seed_file(path: Path, expected_sha256: str | None = None) -> tuple[Case, dict[str, Any]]:
+    """파일 지문과 실제 typed 입력을 검사한다. 수집 원천의 진실성은 별도 provenance로 확인한다."""
+    with path.open("rb") as stream:
+        raw = stream.read(MAX_SEED_BYTES + 1)
+    if not raw or len(raw) > MAX_SEED_BYTES:
+        raise ValueError("seed file byte limit exceeded")
+    digest = hashlib.sha256(raw).hexdigest()
+    if expected_sha256 is not None and (
+        re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is None or digest != expected_sha256
+    ):
+        raise ValueError("seed file hash mismatch")
+    try:
+        data = json.loads(raw.decode("utf-8-sig"), object_pairs_hook=_unique_seed_keys)
+    except (UnicodeError, ValueError, RecursionError):
+        raise ValueError("invalid seed JSON") from None
+    if not isinstance(data, dict) or set(data) != _SEED_FIELDS:
+        raise ValueError("seed requires exactly the seven Case fields")
+    if (
+        any(
+            not isinstance(data[key], str) or not data[key].strip() or len(data[key]) > 200
+            for key in ("case_id", "source_group_id")
+        )
+        or type(data["version"]) is not int
+        or data["version"] < 1
+        or data["kind"] != "question"
+        or not isinstance(data["split"], str)
+        or data["split"] not in {"dev", "holdout"}
+        or not isinstance(data["payload"], dict)
+        or not isinstance(data["expectation"], dict)
+    ):
+        raise ValueError("invalid seed Case fields")
+    expectation = data["expectation"]
+    _check_keys("seed expectation", expectation, _EXPECTATION_KEYS, _EXPECTATION_OPTIONAL)
+    _check_expectation("seed expectation", expectation)
+    if (
+        expectation["case_id"] != data["case_id"]
+        or type(expectation["version"]) is not int
+        or expectation["version"] != data["version"]
+        or "pair" in expectation
+    ):
+        raise ValueError("seed expectation binding mismatch")
+    case = Case(**data)
+    task, prepared = prepare(case.kind, case.model_input())
+    if task != "director":
+        raise ValueError("trajectory seed must contain a typed Director input")
+    context = prepared["context"]
+    if (
+        len(context.repositories) != 1
+        or not context.repositories[0].primary
+        or not context.evidence
+    ):
+        raise ValueError("seed requires one primary repository and bound original evidence")
+    repository = context.repositories[0]
+    if any(
+        (item.repository_id, item.git_ref) != (repository.repository_id, repository.git_ref)
+        for item in context.evidence
+    ):
+        raise ValueError("seed mixes evidence source versions")
+    if any(
+        (repo, git_ref) != (repository.repository_id, repository.git_ref)
+        for repo, git_ref, _ in prepared["allowed_locations"]
+    ):
+        raise ValueError("seed mixes allowed location versions")
+    return case, {
+        "path": str(path.resolve()),
+        "sha256": digest,
+        "bytes": len(raw),
+        "payload_sha256": content_hash(case.payload),
+        "case": f"{case.case_id}.v{case.version}",
+        "provenance_verified": False,
+    }
+
+
+def parser() -> argparse.ArgumentParser:
+    value = argparse.ArgumentParser(description=__doc__)
+    value.add_argument("--manifest", type=Path, required=True)
+    seed = value.add_mutually_exclusive_group()
+    seed.add_argument("--seed-case-id")
+    seed.add_argument("--seed-file", type=Path)
+    value.add_argument("--seed-sha256")
+    value.add_argument("--session-id")
+    value.add_argument("--resume", type=Path)
+    value.add_argument("--answer-file", type=Path)
+    value.add_argument("--output", type=Path, required=True)
+    value.add_argument("--execute", action="store_true")
+    value.add_argument("--env-file", type=Path)
+    value.add_argument("--max-model-attempts", type=int)
+    value.add_argument("--max-session-attempts", type=int, default=36)
+    value.add_argument("--max-wall-seconds", type=float)
+    value.add_argument("--ledger", type=Path)
+    return value
+
+
 async def execute(args: argparse.Namespace) -> dict[str, Any]:
     if args.execute and (
         type(args.max_model_attempts) is not int

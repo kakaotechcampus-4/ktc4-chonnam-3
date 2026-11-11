@@ -1,3 +1,9 @@
+def _write_new(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("x", encoding="utf-8", newline="\n") as stream:
+        stream.write(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+
+
 async def execute(args: argparse.Namespace) -> dict[str, Any]:
     if args.compare is not None:
         if args.execute or args.rejudge_results or args.controls_only:

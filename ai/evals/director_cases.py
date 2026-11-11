@@ -1,3 +1,81 @@
+def build_cohort() -> Cohort:
+    cases = tuple(
+        _case(profile, scenario, number)
+        for number, profile in enumerate(_PROFILES, 1)
+        for scenario in SCENARIOS
+    )
+    pilot = tuple(cases[index * 5 + index % 5].case_id for index in range(12))
+    manifest = {
+        "version": VERSION,
+        "synthetic": True,
+        "independent_real_repositories": 0,
+        "source_groups": 24,
+        "cases_per_group": 5,
+        "pilot_ids": list(pilot),
+        "case_payload_sha256": {case.case_id: content_hash(case.payload) for case in cases},
+        "case_expectation_sha256": {case.case_id: content_hash(case.expectation) for case in cases},
+        "rubric_protocol": compile_criteria("partial")["protocol"],
+        "limitations": [
+            LIMITATION,
+            "같은 source group의 변형을 독립 표본으로 계산하지 않는다.",
+            "60/60/12/24는 실행 규모이며 통계적 충분성이나 수치 합격선의 근거가 아니다.",
+        ],
+    }
+    cohort = Cohort(cases, pilot, manifest)
+    validate_cohort(cohort)
+    return cohort
+
+
+def validate_cohort(cohort: Cohort) -> None:
+    identities: set[str] = set()
+    groups: dict[str, str] = {}
+    source_texts: dict[str, str] = {}
+    for case in cohort.cases:
+        if case.case_id in identities:
+            raise ValueError("duplicate Director case")
+        identities.add(case.case_id)
+        if groups.setdefault(case.source_group_id, case.split) != case.split:
+            raise ValueError("source group leaks across splits")
+        for item in case.payload["service_input"]["context"]["evidence"]:
+            digest = content_hash(item["content"])
+            if source_texts.setdefault(digest, case.split) != case.split:
+                raise ValueError("source text leaks across splits under a different ID")
+    if not set(cohort.pilot_ids) <= {case.case_id for case in cohort.cases if case.split == "dev"}:
+        raise ValueError("pilot must be a subset of development cases")
+    if cohort.manifest["case_payload_sha256"] != {
+        case.case_id: content_hash(case.payload) for case in cohort.cases
+    } or cohort.manifest["case_expectation_sha256"] != {
+        case.case_id: content_hash(case.expectation) for case in cohort.cases
+    }:
+        raise ValueError("cohort manifest binding mismatch")
+
+
+def export_cohort(cohort: Cohort, destination: Path) -> None:
+    """원본을 덮어쓰지 않고 기존 load_cases가 읽는 형식으로 물질화한다."""
+    validate_cohort(cohort)
+    destination.mkdir(parents=True, exist_ok=True)
+    for folder in ("inputs", "expectations"):
+        (destination / folder).mkdir(exist_ok=True)
+    for case in cohort.cases:
+        stem = f"{case.case_id}.v{case.version}.json"
+        inp = {
+            "case_id": case.case_id,
+            "version": case.version,
+            "control": {
+                "kind": case.kind,
+                "split": case.split,
+                "source_group_id": case.source_group_id,
+                "synthetic": True,
+            },
+            "payload": case.model_input(),
+        }
+        for folder, value in (("inputs", inp), ("expectations", case.expectation)):
+            with (destination / folder / stem).open("x", encoding="utf-8", newline="\n") as stream:
+                stream.write(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+    with (destination / "cohort-manifest.json").open("x", encoding="utf-8") as stream:
+        stream.write(json.dumps(cohort.manifest, ensure_ascii=False, indent=2) + "\n")
+
+
 def control_packets(cohort: Cohort) -> tuple[list[dict[str, Any]], dict[str, str]]:
     """기대 라벨은 검토 자료와 분리한다. 모호 control은 계약이 없는 부분 관측이다."""
     packets, labels = [], {}
