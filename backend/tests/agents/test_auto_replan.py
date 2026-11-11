@@ -1,3 +1,16 @@
+from tests.agents.test_question_retry import Redis, retry
+
+
+async def seed(sessions, values, version="director_v12", count=1):
+    await seed_turns(sessions, values, count)
+    async with sessions.begin() as db:
+        prompt = await db.scalar(select(PromptVersion).where(PromptVersion.task_name == "director"))
+        prompt.version = version
+        if count > 1:
+            first = await db.scalar(select(InterviewTurn).where(InterviewTurn.turn_no == 1))
+            first.analysis = asdict(analysis())
+
+
 def payload(request):
     return json.loads(json.loads(request.content)["input"][0]["content"][0]["text"])
 

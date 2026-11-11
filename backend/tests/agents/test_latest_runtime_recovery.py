@@ -1,3 +1,6 @@
+from sqlalchemy import select
+
+from app.db.models import InterviewSession, InterviewTurn, LLMCallRecord, PromptVersion
 from app.features.interview.answer_context import load_answer_context, prior_analyses
 from app.features.interview.director_service import process_answer
 from app.features.report.history import enrich_report_history
