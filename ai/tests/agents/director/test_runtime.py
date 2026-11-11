@@ -886,6 +886,97 @@ def run_version(provider, ctx, *, version="director_v4", **options):
     )
 
 
+@pytest.mark.parametrize(
+    "template",
+    [
+        "## 공통\n공통 규칙\n## 질문 생성\n생성 지침\n",
+        "## 공통\n공통 규칙\n## 질문 생성\n\n## 독립 검토\n검토 지침\n",
+        "## 공통\n공통 규칙\n## 독립 검토\n검토 지침\n## 질문 생성\n생성 지침\n",
+        "## 공통\n공통 규칙\n## 질문 생성\n생성 지침\n## 독립 검토\n검토 지침\n## 공통\n중복\n",
+    ],
+)
+def test_v13_rejects_incomplete_policy_before_model_calls(template):
+    provider = Provider(plan(), review())
+    result = asyncio.run(
+        runtime().run_director(
+            context(),
+            prompt=replace(PROMPT, version="director_v13", template=template),
+            limits=LIMITS,
+            model_call=provider,
+        )
+    )
+    assert result.failure is not None
+    assert result.failure.error_code == "director_input_invalid"
+    assert not provider.requests
+    with pytest.raises(c.ContractError, match="Director operation prompt sections"):
+        runtime().operation_prompts(replace(PROMPT, version="director_v13", template=template))
+
+
+def test_v12_keeps_all_past_answers_without_counting_the_last_one_twice():
+    ctx = completed_turn_context(8)
+    candidate = replace(question(), persona="tech_lead")
+    provider = Provider(plan(candidate), review())
+    result = run_version(provider, ctx, version="director_v12")
+    assert result.succeeded and len(provider.requests) == 2
+    for request in provider.requests:
+        rows = request.payload["answered_turns"]
+        assert [row["turn_id"] for row in rows] == [f"turn-{number}" for number in range(1, 8)]
+        assert [row["answer"] for row in rows] == [turn.answer for turn in ctx.history[:-1]]
+        assert request.payload["current_answer"]["turn_id"] == "turn-8"
+        assert request.payload["turn_state"]["next_question_no"] == 9
+        assert request.payload["turn_state"]["answered_turn_count"] == 8
+        assert result.data.decision.data.next_step == "ask"
+
+
+def test_v12_preserves_checked_prior_correction_and_unquoted_extra_statement():
+    ctx, analysis, candidate = continuation_fixture()
+    correction = "저의 구현이 아니라 팀원이 개발했습니다."
+    extra = " 예외가 발생한 정확한 원인은 확인하지 못했습니다."
+    old = replace(ctx.history[0], answer=correction + extra, analysis_ref="prior-analysis")
+    ctx = replace(ctx, history=(old, ctx.history[1]))
+    previous = c.validate_analysis_for_contract(
+        c.AnswerAnalysis(
+            "evaluated",
+            "sufficient",
+            (c.CoveredPoint("role", (correction,)),),
+            (),
+            c.TechnicalAssessment(
+                "기여 범위를 정정했다.", (correction,), (), ("실제 기여 미확인",)
+            ),
+            c.ContributionScope("teammate", (correction,)),
+            (c.ClaimCheck(correction, "unverified", (), ("기여의 별도 근거가 없다.",)),),
+            False,
+            (),
+            ("실제 실행과 개인 기여의 근거로 사용하지 않는다.",),
+        ),
+        contract=question().question_contract,
+        answer_text=old.answer,
+        evidence_refs=frozenset(),
+        allowed_locations=frozenset(),
+    )
+    original = asdict(ctx)
+    prior = c.to_data(previous)
+    provider = Provider(plan(candidate), review())
+    result = run_version(
+        provider,
+        ctx,
+        version="director_v12",
+        answer_analysis=analysis,
+        prior_analyses={old.turn_id: previous, ctx.current_turn_id: analysis},
+    )
+    assert result.succeeded and len(provider.requests) == 2
+    for request in provider.requests:
+        row = request.payload["answered_turns"][0]
+        assert row["answer"] == correction + extra
+        assert row["analysis_ref"] == "prior-analysis"
+        assert row["analysis"] == prior
+        assert row["analysis_status"] == "provided"
+        assert row["analysis"]["claim_checks"][0]["status"] == "unverified"
+        assert row["analysis"]["contribution_scope"]["scope"] == "teammate"
+        assert request.limits == LIMITS and request.max_attempts == 1
+    assert asdict(ctx) == original and c.to_data(previous) == prior
+
+
 @pytest.mark.parametrize("invalid", ["unknown_turn", "unchecked_analysis"])
 def test_v12_rejects_misbound_prior_analysis_before_any_provider_call(invalid):
     ctx, analysis, candidate = continuation_fixture()
