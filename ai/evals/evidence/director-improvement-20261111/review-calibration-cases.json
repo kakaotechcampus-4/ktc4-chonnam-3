@@ -923,6 +923,185 @@
           "elapsed_ms": 17266
         }
       ]
+    },
+    {
+      "case_id": "review-A-contract-regression-fresh-bat-197390-tool_unavailable",
+      "split": "dev",
+      "synthetic_dialogue_context": true,
+      "question": {
+        "persona": "domain_lead",
+        "text": "공고는 Kubernetes Operator 패턴을 활용한 CI/CD 자동화 개발을 요구합니다. 제공된 함수는 Git 변경 줄 모드에서 일반 파일이 아닌 입력과 변경이 없는 파일을 출력 단계 전에 건너뜁니다. 직접 Kubernetes 운영 경험을 전제하지 않고, 이 코드의 입력 분기와 조기 종료를 Operator 기반 CI/CD 자동화에 참고한다면 어떤 설계 원칙을 적용할 수 있고, Operator 및 배포 파이프라인 측면에서 무엇이 달라 추가로 보완돼야 할까요?",
+        "topic_code": "operator_ci_cd_fit",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "직접 Kubernetes 운영 경험을 전제하지 않고, 이 코드의 입력 분기와 조기 종료를 Operator 기반 CI/CD 자동화에 참고한다면 어떤 설계 원칙을 적용할 수 있고, Operator 및 배포 파이프라인 측면에서 무엇이 달라 추가로 보완돼야 할까요?",
+          "required_points": [
+            {
+              "key": "operator_ci_cd_fit",
+              "description": "직접 Kubernetes 운영 경험을 전제하지 않고, 이 코드의 입력 분기와 조기 종료를 Operator 기반 CI/CD 자동화에 참고한다면 어떤 설계 원칙을 적용할 수 있고, Operator 및 배포 파이프라인 측면에서 무엇이 달라 추가로 보완돼야 할까요?"
+            }
+          ],
+          "assumptions": [],
+          "basis_refs": [
+            {
+              "kind": "evidence",
+              "id": "fresh-bat-e1"
+            },
+            {
+              "kind": "jd_requirement",
+              "id": "fresh-jd-197390-main_tasks-1"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "company_job_fit",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "fresh-bat-e1"
+        ],
+        "jd_requirement_ids": [
+          "fresh-jd-197390-main_tasks-1"
+        ]
+      },
+      "code_sources": [
+        {
+          "evidence_id": "fresh-bat-e1",
+          "git_ref": "8cf33bdde9a6e4c11d0f866415b1fc867df0cd40",
+          "source_kind": "code",
+          "path": "src/controller.rs",
+          "start_line": 143,
+          "end_line": 214,
+          "repository": "sharkdp/bat",
+          "content_sha256": "b3d7ef216b9a34675e6796827b8fe140605521f1605bdf5069c10936ab1e58cc",
+          "content_included_here": false,
+          "public_blob_url": "https://github.com/sharkdp/bat/blob/8cf33bdde9a6e4c11d0f866415b1fc867df0cd40/src/controller.rs"
+        }
+      ],
+      "oracle": {
+        "expected_source_verdict": "reject",
+        "criterion_results": [
+          {
+            "id": "allowed:next_action",
+            "status": "satisfied",
+            "reason": "추가 조회에 실패하고 허용 후속이 없는 상태에서 미답 재현을 main으로 우회하지 않고 코드의 직무 적용이라는 다른 목적으로 전환한다."
+          },
+          {
+            "id": "allowed:one_goal",
+            "status": "violated",
+            "reason": "‘어떤 설계 원칙을 적용할 수 있고’와 ‘무엇이 달라 추가로 보완돼야’는 적용 원칙 선택과 별도 차이·보완 설명을 함께 요구한다. 사전의 한 관계 기준으로는 두 독립 판단 축이다."
+          },
+          {
+            "id": "allowed:contract_alignment",
+            "status": "satisfied",
+            "reason": "적용과 차이·보완의 실제 요청 전체가 purpose·단일 필수점으로 보존된다. preamble은 공고와 코드 관찰만 제시한다."
+          },
+          {
+            "id": "allowed:context_alignment",
+            "status": "satisfied",
+            "reason": "허용 domain_lead main과 실제 평가 키를 따르고, 입력 분기·조기 종료를 실제 JD의 Operator 기반 CI/CD에 전이하는 관계를 직접 묻는다."
+          },
+          {
+            "id": "forbidden:false_premise",
+            "status": "satisfied",
+            "reason": "Git 변경 줄 모드의 일반 파일 외 입력·변경 없는 파일 생략은 제공 controller.rs 분기에 있다. Kubernetes 실무 경력·Operator 동작은 사실로 전제하지 않는다."
+          },
+          {
+            "id": "forbidden:false_attribution",
+            "status": "satisfied",
+            "reason": "입력 생략은 코드 관찰로 제시하며 지원자가 Operator를 구현·운영했다고 귀속하지 않는다. 학습 목적과 직접 기여 없음의 발언을 해치지 않는다."
+          },
+          {
+            "id": "forbidden:repeat_or_lead",
+            "status": "satisfied",
+            "reason": "이전 입력별 생략 답변이나 일반 재현 기록과 다른 구체적인 Operator 직무 전이다. 특정 적용 원칙·보완 정답은 먼저 주지 않는다."
+          },
+          {
+            "id": "forbidden:unknown_as_failure",
+            "status": "satisfied",
+            "reason": "Tool 오류·프린터 내부 미확인을 기능 부재나 개인 기여 부족으로 평가하지 않는다."
+          }
+        ],
+        "minimum_rejection_criteria": [
+          "allowed:one_goal"
+        ],
+        "expected_recovery": "rewrite",
+        "expected_safe_alternative": true,
+        "wrong_reason_rejection_is_not_semantic_success": true,
+        "scope": "previously exposed development candidate; no relabeling or holdout use"
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": true,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "코드의 입력 분기와 조기 종료를 Operator 기반 CI/CD 업무에 적용하는 설계 원칙과 추가 차이를 직접 묻고, 전제와 요구가 계약에 반영되어 있습니다.",
+            "point_coverage": [
+              {
+                "key": "operator_ci_cd_fit",
+                "status": "asked",
+                "question_excerpt": "이 코드의 입력 분기와 조기 종료를 Operator 기반 CI/CD 자동화에 참고한다면 어떤 설계 원칙을 적용할 수 있고, Operator 및 배포 파이프라인 측면에서 무엇이 달라 추가로 보완돼야 할까요?"
+              }
+            ]
+          },
+          "expected_verdict": "reject",
+          "actual_verdict": "accept",
+          "decision_match": false,
+          "expected_recovery": "rewrite",
+          "actual_recovery": null,
+          "strict_recovery_match": false,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "fail",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "not_applicable",
+          "source_note": "입력 분기·조기 종료와 Operator JD를 가정적으로 연결해 적용 원칙 및 차이를 묻는다는 사유 자체는 원문에 있다. 다만 적용 원칙에 답해도 추가 차이·보완 과제가 남아 wording_valid=true는 과승인이다.",
+          "full_quality_success": false,
+          "elapsed_ms": 17367
+        },
+        {
+          "arm": "B",
+          "raw_review": {
+            "plan_valid": true,
+            "context_valid": true,
+            "wording_valid": false,
+            "contract_matches": true,
+            "safe_alternative": true,
+            "reason_summary": "코드와 공고를 연결하는 근거는 유효하지만, 설계 원칙의 적용과 별도의 차이·보완 판단을 함께 요구합니다.",
+            "point_coverage": [
+              {
+                "key": "operator_ci_cd_fit",
+                "status": "asked",
+                "question_excerpt": "직접 Kubernetes 운영 경험을 전제하지 않고, 이 코드의 입력 분기와 조기 종료를 Operator 기반 CI/CD 자동화에 참고한다면 어떤 설계 원칙을 적용할 수 있고, Operator 및 배포 파이프라인 측면에서 무엇이 달라 추가로 보완돼야 할까요?"
+              }
+            ]
+          },
+          "expected_verdict": "reject",
+          "actual_verdict": "reject",
+          "decision_match": true,
+          "expected_recovery": "rewrite",
+          "actual_recovery": "rewrite",
+          "strict_recovery_match": true,
+          "format_and_binding": "pass",
+          "reason_grounding": "pass",
+          "semantic_flags_and_point_coverage": "pass",
+          "invented_reason_or_premise": false,
+          "fabricated_unasked_point": false,
+          "safe_alternative_protection": "pass",
+          "positive_boundary_preservation": "not_applicable",
+          "source_note": "설계 원칙의 적용과 별도의 차이·보완 판단을 함께 요구한다는 사유가 실제 두 답변 의무와 일치한다. wording_valid=false이며 조회 오류를 부재나 개인 실패로 단정하지 않았다.",
+          "full_quality_success": true,
+          "elapsed_ms": 31994
+        }
+      ]
     }
   ]
 }

@@ -93,6 +93,41 @@
       "source_id": "J:review-cases/oracles/selected/review-A-fresh-postgres-224704-sufficient.json",
       "sha256": "e4366067f986bf6eb618028845816c689729eb7972fcf46840cc26e35265474f",
       "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-B-contract-regression-fresh-bat-197390-tool_unavailable.json",
+      "sha256": "38f9c67b8fd08822e38ac46ffb9c9e1c8b650499af8483f8ac29414924f694fb",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-B-fresh-kubernetes-268685-dont_know.json",
+      "sha256": "525ccaec32f48c71f4f0b8ea16577ec0e431699999e4a4034856034d66c6db09",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-B-fresh-postgres-224704-sufficient.json",
+      "sha256": "74ecf7ee3c447f5c1a646e2cd6dc5ff646454f977ee02a92eb87041c497c5a05",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-B-fresh-restic-75217-contribution_correction.json",
+      "sha256": "d367906825d682f167ae95fad3ef3faa5406a8a1b251aaedfd8931bd21702190",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/oracles/selected/review-refinement-fresh-postgres-224704-sufficient.json",
+      "sha256": "87bd8390d29d1cb7f712d303c38aa10d8d188dd3795120ff4f8b70d82c05a83d",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/visible/review-A-contract-regression-fresh-bat-197390-tool_unavailable/model-payload.json",
+      "sha256": "af6de3df65de2e59e9e72ef27881a6e057132b961e9804ddac0ee1b70dcb6e58",
+      "original_publicly_included": false
+    },
+    {
+      "source_id": "J:review-cases/visible/review-A-fresh-kubernetes-268685-dont_know/model-payload.json",
+      "sha256": "6365d1b89f25426c17003e0702c58c6bd7ee73257aa2f285146dd0ec28484644",
+      "original_publicly_included": false
     }
   ]
 }
