@@ -1579,6 +1579,138 @@
       "api0_audit_sha256": "70ef41bc1d8e54251b20010438e6fc2008071631f9f0b25839875f0ae1554ccd",
       "api0_passed": true,
       "opaque_registration_compatibility_fix_included": true
+    },
+    "latest_api0_audit": {
+      "passed": true,
+      "checks": {
+        "completed": true,
+        "nine_answered": true,
+        "sequential": true,
+        "quota": true,
+        "final_finish": true,
+        "raw_db_attempt_binding": true,
+        "all_phases_succeeded": true,
+        "budget": true,
+        "four_preserved_evidence": true,
+        "completion_event": true,
+        "completed_context_snapshot": true,
+        "automatic_recovery_fixture": true,
+        "cache_enrichment_fixture": true,
+        "report_history_v7_decoder": true,
+        "full_catalog_registered": true
+      },
+      "physical_model_calls": 0,
+      "mock_model_responses": 30,
+      "new_github_wanted_tavily_calls": 0
+    },
+    "product_comparison": {
+      "compared_snapshot_files": 277,
+      "identical_bytes_count": 263,
+      "changed_files": [
+        {
+          "path": "ai/prompts/question-pronunciation-runtime-v2.md",
+          "status": "removed",
+          "old_sha256": "a13fa8ecd60f24df0031151873664afd172b736b300ada2e22e284b164b8e581",
+          "new_sha256": null,
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "ai/prompts/runtime-prompts.json",
+          "status": "changed",
+          "old_sha256": "d05443f7f061e3e37bfa8372b47a7f9cb768092b2b37979c7d217c48a0f7f658",
+          "new_sha256": "25e7b80b6940334449e5ce9aaf5a2da46de19d50b9671fa3e981c368d37d0dc2",
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/core/config.py",
+          "status": "changed",
+          "old_sha256": "024afd616772b9262d447841429053f4502c4bd7220d37d9a3bde3e58a07bb49",
+          "new_sha256": "343eda09177645f4ac4125c62e7d81c99668f99dfc810608ff79fb5767c3c885",
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/features/interview/question_audio.py",
+          "status": "changed",
+          "old_sha256": "59172f37ddea97d5a5175905f51e3687e9c205d3ad1503f13b724c4f61f96662",
+          "new_sha256": "44f7482abb6207155e21ef60da3e165ae61895b5643754cff3b120c968dc9b09",
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/features/interview/question_speech.py",
+          "status": "removed",
+          "old_sha256": "41f2753ddb775b2af3ca9ea76d00d68dfa2ca0a34ca9aa938da0fbd678ec0354",
+          "new_sha256": null,
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/features/interview/router.py",
+          "status": "changed",
+          "old_sha256": "9643f06bd879498211ad298c8fa63f1089607c9d3980145eadc1fddb0a85a810",
+          "new_sha256": "d9ff4fb3fc4323cc03be11c294afb5a575686120e2d7319801d3e898046f5229",
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/features/interview/speech_address.py",
+          "status": "removed",
+          "old_sha256": "c34eeee1aa3becc538325f9077d797303e4e3ef0636ece6876608753c191c95a",
+          "new_sha256": null,
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/features/interview/speech_paths.py",
+          "status": "removed",
+          "old_sha256": "ea3e89d7473de9b08ee9571498d0d77cbd01135e787abd6d0eb8f6184a84beb7",
+          "new_sha256": null,
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/features/interview/speech_spelling.py",
+          "status": "removed",
+          "old_sha256": "f22371c96ce1fc7b395ff1b29d3ae78c2367d0ac30c62860dc2ab2c31b4dbb21",
+          "new_sha256": null,
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/integrations/tts/pronunciation.py",
+          "status": "removed",
+          "old_sha256": "c10daacd0ca090786dfa641e81150d00df2c1a60411b136e66f9fd850bffd3dd",
+          "new_sha256": null,
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/llm_tasks/question_pronunciation.py",
+          "status": "removed",
+          "old_sha256": "90a1fb4243c81a46764acee1b6c3cfdd9a91a3e9b697e74ff4c373e18246b7f0",
+          "new_sha256": null,
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/app/llm_tasks/runtime_capabilities.py",
+          "status": "changed",
+          "old_sha256": "546a691affc47ca85434e640dfe06ea4b75b3c59f06639c71c2fc2ec4c38ba04",
+          "new_sha256": "59dea7e74c77a1252a699ac98d4bf832032d2536d978d983863be154b6629d06",
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/scripts/configure_ai_runtime.py",
+          "status": "changed",
+          "old_sha256": "34284371436545c3e9562b5ea302f68ade652492560c0f73c844759b483ae368",
+          "new_sha256": "06b1231ef5152fd1f6da9c570cec17a91bf5a5303177038886645bff5e940732",
+          "same_after_text_newline_normalization": false
+        },
+        {
+          "path": "backend/scripts/seed_prompt_versions.py",
+          "status": "changed",
+          "old_sha256": "33d7b8264089a41c38159e516b1cc684e6c64965ada0619165dc73fd0c432ef2",
+          "new_sha256": "d3d35fc17e745d03500075d93829cb1ee2a10edbc64a38b347d188606d0f7f84",
+          "same_after_text_newline_normalization": false,
+          "change_scope": [
+            "speech pronunciation task revert",
+            "preserve valid opaque prompt versions; validate operation bodies only for known Director family versions"
+          ]
+        }
+      ],
+      "added_runtime_python_files": []
     }
   }
 }
