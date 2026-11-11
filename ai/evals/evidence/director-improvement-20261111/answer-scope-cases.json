@@ -16,5 +16,203 @@
     ],
     "fact": "redis.setex(idempotency_key, 3_600, @status.id)"
   },
-  "cases": []
+  "cases": [
+    {
+      "case_id": "hypothetical-scope-selection",
+      "split": "dev",
+      "synthetic_answer": true,
+      "question": {
+        "persona": "tech_lead",
+        "text": "이 코드의 멱등 키는 3,600초 보관됩니다. 같은 키로 그 이후에도 재시도될 수 있는 서비스라면, 중복 방지 보장 범위를 어떻게 정하고 어떤 보완을 선택할지 근거와 함께 말씀해 주세요.",
+        "topic_code": "idempotency_retention_window",
+        "question_type": "main",
+        "parent_turn_id": null,
+        "question_contract": {
+          "purpose": "같은 키로 그 이후에도 재시도될 수 있는 서비스라면, 중복 방지 보장 범위를 어떻게 정하고 어떤 보완을 선택할지 근거와 함께 말씀해 주세요.",
+          "required_points": [
+            {
+              "key": "request",
+              "description": "같은 키로 그 이후에도 재시도될 수 있는 서비스라면, 중복 방지 보장 범위를 어떻게 정하고 어떤 보완을 선택할지 근거와 함께 말씀해 주세요."
+            }
+          ],
+          "assumptions": [
+            "같은 키로 그 이후에도 재시도될 수 있는 서비스라면"
+          ],
+          "basis_refs": [
+            {
+              "kind": "answer_turn",
+              "id": "director-improvement-d-v10-fresh-dev-t2"
+            },
+            {
+              "kind": "evidence",
+              "id": "fresh-mastodon-e2"
+            }
+          ],
+          "evaluation_scope": "표시된 질문에서 직접 요구한 답만 평가한다. 배경의 재설명이나 질문하지 않은 이유·관계·조치를 추가로 요구하지 않으며, 제공된 자료와 실제 답변으로 확인할 수 없는 사실은 미확인으로 둔다.",
+          "evaluation_keys": [
+            "technical_reasoning",
+            "communication"
+          ]
+        },
+        "evidence_refs": [
+          "fresh-mastodon-e2"
+        ],
+        "jd_requirement_ids": []
+      },
+      "answer_text": "같은 결과를 재사용하겠다고 약속하는 범위는 결과 ID가 보관되는 3,600초 이내의 재시도로 정하겠습니다. 실제 구현이 그 범위의 동시성이나 원자성을 보장하는지는 제공된 구간만으로 확정하지 않겠습니다.",
+      "oracle": {
+        "minimum_expected": "설계 약속 범위의 제안과 현재 구현의 보장 미확인을 분리한다.",
+        "claim_omission_is_acceptable": true,
+        "fact_scope": "결과 ID의 3,600초 보관 값은 원문에서 확인된다.",
+        "forbidden": "약속 범위 결정·동시성·원자성 보장 미확인을 현재 구현의 supported로 통째로 확정",
+        "legacy_limitation": "v6 전체 unit의 partially_supported와 명시적 한계는 형식상 오류로 단정하지 않는다."
+      },
+      "actual_observations": [
+        {
+          "arm": "A",
+          "raw": {
+            "coverage_assessment": {
+              "evaluation_status": "evaluated",
+              "sufficiency": "partial",
+              "covered_points": {
+                "request": [
+                  "answer:0001"
+                ]
+              },
+              "missing_points": [
+                "request"
+              ],
+              "limitations": [
+                "보장 범위를 결과 ID가 보관되는 3,600초 이내로 한정한 점은 답했지만, 3,600초를 넘는 재시도에 대비해 어떤 보완을 선택할지와 그 근거는 제시하지 않았습니다."
+              ]
+            },
+            "contribution_scope": {
+              "scope": "unknown",
+              "quote_ids": [],
+              "unknown_reason": "답변은 보장 범위에 대한 제안과 구현 확인의 한계를 말할 뿐, 코드의 작성·기여 주체를 밝히지 않습니다."
+            },
+            "claim_checks": [
+              {
+                "quote_id": "answer:0001",
+                "status": "supported",
+                "evidence_refs": [
+                  "fresh-mastodon-e2"
+                ],
+                "limitations": [
+                  "이 근거는 해당 코드가 결과 ID를 Redis에 3,600초 TTL로 저장한다는 점을 뒷받침하며, 1시간 이후에도 중복 방지를 보장하는지는 보여주지 않습니다."
+                ]
+              }
+            ]
+          },
+          "canonical": {
+            "sufficiency": "partial",
+            "contribution_scope": {
+              "scope": "unknown",
+              "answer_quotes": []
+            },
+            "claim_checks": [
+              {
+                "claim_text": "같은 결과를 재사용하겠다고 약속하는 범위는 결과 ID가 보관되는 3,600초 이내의 재시도로 정하겠습니다.",
+                "status": "supported",
+                "evidence_refs": [
+                  "fresh-mastodon-e2"
+                ],
+                "limitations": [
+                  "이 근거는 해당 코드가 결과 ID를 Redis에 3,600초 TTL로 저장한다는 점을 뒷받침하며, 1시간 이후에도 중복 방지를 보장하는지는 보여주지 않습니다."
+                ]
+              }
+            ]
+          },
+          "codex_source_grade": {
+            "focused_claim_scope_verdict": "reject",
+            "reason": "supported의 claim_text 전체에 앞으로 보장 범위를 정하겠다는 제안이 포함됐다. 한계는 TTL 관찰 범위를 좁히지만 claim_text의 supported 범위와 분리되지 않았다.",
+            "claims": [
+              {
+                "claim_text": "같은 결과를 재사용하겠다고 약속하는 범위는 결과 ID가 보관되는 3,600초 이내의 재시도로 정하겠습니다.",
+                "status": "supported",
+                "evidence_refs": [
+                  "fresh-mastodon-e2"
+                ],
+                "limitations": [
+                  "이 근거는 해당 코드가 결과 ID를 Redis에 3,600초 TTL로 저장한다는 점을 뒷받침하며, 1시간 이후에도 중복 방지를 보장하는지는 보여주지 않습니다."
+                ]
+              }
+            ],
+            "sufficiency": "partial"
+          },
+          "physical_calls": 1
+        },
+        {
+          "arm": "B",
+          "raw": {
+            "coverage_assessment": {
+              "evaluation_status": "evaluated",
+              "sufficiency": "partial",
+              "covered_points": {
+                "request": [
+                  "answer:0001"
+                ]
+              },
+              "missing_points": [
+                "request"
+              ],
+              "limitations": [
+                "answer:0001은 결과 재사용 약속의 범위를 3,600초 이내로 정하지만, 그 이후 재시도를 위한 보완책과 그 선택 근거는 제시하지 않는다.",
+                "answer:0002는 해당 범위에서 실제 구현이 동시성이나 원자성을 보장하는지도 확정하지 않겠다고 유보한다."
+              ]
+            },
+            "contribution_scope": {
+              "scope": "unknown",
+              "quote_ids": [],
+              "unknown_reason": "현재 답변은 보장 범위와 확인 한계만 말하며 코드의 작성·운영·기여 주체는 밝히지 않는다."
+            },
+            "claim_checks": [
+              {
+                "quote_id": "answer:0001",
+                "claim_excerpt": "결과 ID가 보관되는 3,600초",
+                "status": "supported",
+                "evidence_refs": [
+                  "fresh-mastodon-e2"
+                ],
+                "limitations": []
+              }
+            ]
+          },
+          "canonical": {
+            "sufficiency": "partial",
+            "contribution_scope": {
+              "scope": "unknown",
+              "answer_quotes": []
+            },
+            "claim_checks": [
+              {
+                "claim_text": "결과 ID가 보관되는 3,600초",
+                "status": "supported",
+                "evidence_refs": [
+                  "fresh-mastodon-e2"
+                ],
+                "limitations": []
+              }
+            ]
+          },
+          "codex_source_grade": {
+            "focused_claim_scope_verdict": "accept",
+            "reason": "현재 코드에서 확인되는 '결과 ID가 보관되는 3,600초'만 선택했다. 보장 범위 제안과 동시성·원자성 미확인을 supported claim에 포함하지 않았다.",
+            "claims": [
+              {
+                "claim_text": "결과 ID가 보관되는 3,600초",
+                "status": "supported",
+                "evidence_refs": [
+                  "fresh-mastodon-e2"
+                ],
+                "limitations": []
+              }
+            ],
+            "sufficiency": "partial"
+          },
+          "physical_calls": 1
+        }
+      ]
+    }
+  ]
 }
