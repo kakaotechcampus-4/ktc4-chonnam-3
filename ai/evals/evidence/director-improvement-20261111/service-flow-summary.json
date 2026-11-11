@@ -6,5 +6,170 @@
   "latest_semantic_fit_nine_turn_run": false,
   "real_user_session": false,
   "oauth_ws_browser_stt_tts_report_e2e": false,
-  "fresh_repository_analysis_run": false
+  "fresh_repository_analysis_run": false,
+  "public_code": {
+    "repository": "mastodon/mastodon",
+    "commit": "cc76f85b9afc02b1265e68e6ee6c24ab266771b4",
+    "path": "app/services/post_status_service.rb",
+    "raw_url": "https://raw.githubusercontent.com/mastodon/mastodon/cc76f85b9afc02b1265e68e6ee6c24ab266771b4/app/services/post_status_service.rb",
+    "line_count": 309,
+    "byte_count": 10888,
+    "source_sha256": "3f61d6c6d5fb174b0cc1d61f9dedf89ea645cfbd8b394e551bb82d8db0b9387e",
+    "full_blob_sha1": "fce7b6d4c14c836d47f59f6d150fd206c291ed39"
+  },
+  "summary_from_original_source": {
+    "questions_source_accept": 9,
+    "questions_source_reject": 0,
+    "questions_source_ambiguous": 0,
+    "question_criterion_statuses": {
+      "satisfied": 70,
+      "not_applicable": 2
+    },
+    "answer_analyses_source_accept": 9,
+    "actual_answers_sufficiency": {
+      "sufficient": 6,
+      "partial": 2,
+      "insufficient": 1
+    },
+    "claim_excerpts_checked": 16,
+    "claim_excerpt_exact_substring_and_allowed_code_refs": 16,
+    "claim_verdict_counts": {
+      "supported": 14,
+      "conflicting": 2
+    },
+    "spoken_understanding_load": {
+      "0": 3,
+      "1": 6
+    },
+    "independent_judgment_axes": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "presented_evaluation_keys": [
+      "communication",
+      "company_job_fit",
+      "contribution_clarity",
+      "problem_solving",
+      "project_understanding",
+      "technical_reasoning"
+    ],
+    "evaluation_keys_meaning": "질문에 표시한 평가 기회이며 충분한 역량 관찰·점수·실력의 증거가 아니다.",
+    "physical_model_requests_observed": 27,
+    "all_actual_provider_inputs_full309_and_stage_bound_jd_exact": true,
+    "jd3_full_selected_scope_in_plan_review_calls": 18,
+    "t3_jd_scope": "질문에 연결된 JD만 전달: Q4/Q5는 각1개, 나머지7개는0개. 모든 전달 ID/text는 보존 JD3의 해당 원문과 일치한다.",
+    "full_jd_reference_delivered_requests": 0,
+    "l1_l2_analysis_scope": "RepositorySummary에 보존 L1/L2의 UUID2개만 전달되며 별도 L1/L2 본문 객체는 없다. 새로운 분석은 수행하지 않았다.",
+    "source_grader_model_or_api_calls": 0
+  },
+  "database_audit": {
+    "passed": true,
+    "failures": [],
+    "checks": {
+      "stored_row_not_deleted": 50,
+      "stored_question_unchanged": 54,
+      "finished_call_and_raw_unchanged": 99,
+      "source_content_and_location_unchanged": 40,
+      "source_usage_annotation_valid": 40,
+      "source_or_event_unchanged": 245,
+      "saved_answer_unchanged": 45,
+      "first_analysis_unchanged": 45,
+      "same_interview_identity": 1,
+      "nine_unique_turns": 1,
+      "nine_answers": 1,
+      "persona_quota": 1,
+      "completed_after_ninth": 1,
+      "stored_topic_within_fifty_characters": 9,
+      "valid_stored_parent": 2,
+      "nine_question_events": 1,
+      "nine_answer_events": 1,
+      "single_completion_event": 1,
+      "has_valid_v7_analysis": 9,
+      "first_canonical_matches_original_raw": 9,
+      "call_attempt_budget_two": 18,
+      "no_director_after_ninth": 9,
+      "director_round_budget_three": 1,
+      "shared_auto_and_manual_slots": 1,
+      "bounded_generation_bindings": 1,
+      "director_consumes_selected_analysis": 16,
+      "director_consumes_prior_analysis": 56,
+      "same_call_replay_no_io": 10,
+      "same_call_replay_same_stored_result": 10
+    },
+    "snapshots": 11,
+    "turns": 9,
+    "first_analyses": 9,
+    "call_records": 18,
+    "attempts": 27,
+    "captured_provider_requests": 27,
+    "director_rounds": {
+      "1": 1,
+      "2": 1,
+      "3": 1,
+      "4": 1,
+      "5": 1,
+      "6": 1,
+      "7": 1,
+      "8": 1,
+      "9": 1
+    },
+    "retry_entries": 0,
+    "replays": 10
+  },
+  "actual_call_count": 27,
+  "actual_retries_rejections_tools": 0,
+  "operation_counts": {
+    "plan": 9,
+    "review": 9,
+    "answer_analysis.initial": 9
+  },
+  "raw_usage": {
+    "input_tokens": {
+      "known_sum": 348594,
+      "known_count": 27,
+      "unknown_count": 0,
+      "complete_total": 348594
+    },
+    "output_tokens": {
+      "known_sum": 60158,
+      "known_count": 27,
+      "unknown_count": 0,
+      "complete_total": 60158
+    },
+    "cached_input_tokens": {
+      "known_sum": 9696,
+      "known_count": 27,
+      "unknown_count": 0,
+      "complete_total": 9696
+    },
+    "reasoning_tokens": {
+      "known_sum": 49893,
+      "known_count": 27,
+      "unknown_count": 0,
+      "complete_total": 49893
+    },
+    "cache_write_tokens": {
+      "known_sum": 271047,
+      "known_count": 27,
+      "unknown_count": 0,
+      "complete_total": 271047
+    }
+  },
+  "timing": {
+    "completed_cli_phase_seconds_sum": 597.060051,
+    "generation_observed_seconds_sum": {
+      "known_sum": 586.5510603001458,
+      "known_count": 27,
+      "unknown_count": 0,
+      "complete_total": 586.5510603001458
+    },
+    "session_wall_span_with_authoring_pauses_seconds": 920.5358662605286
+  }
 }

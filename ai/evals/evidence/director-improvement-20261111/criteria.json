@@ -1,0 +1,81 @@
+{
+  "schema": "director-main-problem-solving-key-fit.v1",
+  "status": "frozen_before_actual_model_calls",
+  "scope": "이번 로컬 개발의 신규 main 질문에 problem_solving 키가 배정됐을 때만 적용하는 최소 관찰 기준",
+  "is_global_taxonomy_or_official_score_redefinition": false,
+  "adoption_scope": "후속 질문에 새로운 과제를 강제하거나 기존 질문·T3·점수를 소급 변경하지 않는다.",
+  "applicability": {
+    "question_type": "main",
+    "requires_key": "problem_solving",
+    "not_retroactive_to_follow_up": true,
+    "other_keys": "다른 평가 항목에서 같은 코드 설명이 유효할 수 있다. 코드 회상·흐름 설명 자체를 전역 금지하지 않는다."
+  },
+  "decision_test": [
+    "질문 본문과 필요한 가정에서 문제·실패·목표 미달 또는 해결할 제약이 드러나는지 확인한다.",
+    "최소한으로 충분한 답이 어떤 내용인지 질문의 직접 요구만으로 구성한다. intent·key 이름·배경의 문제 단어를 대신 평가하지 않는다.",
+    "그 답이 원인 범위를 좁히는 판단, 해결 접근·대안 한 가지 선택, 가설·결과를 구별할 확인 한 가지 중 적어도 하나를 실제로 요구하는지 확인한다.",
+    "최소 충분 답이 기존 이름·상수·호출 순서·상태를 재진술하는 것으로 끝나면 이번 problem_solving main의 의미 적합성은 부족하다.",
+    "그 판단과 같은 판단의 근거·이유는 한 목적이다. 원인·대안·구현·검증·재발 방지 전부를 한 질문에 요구하지 않는다."
+  ],
+  "allowed": [
+    "명시한 누락·중복·지연 가정에서 원인 후보를 지지·배제할 증거 한 가지를 고르고 이유를 설명하게 한다.",
+    "제약을 만족시키기 위해 기존 접근을 유지하거나 바꿀지 한 가지 선택을 요구한다.",
+    "한 장애 경계의 누락을 줄일 개선 한 가지와 그 이유를 제안하게 한다.",
+    "개인 수행이 확인되지 않았으면 실제 경험을 전제하지 않고 가정형 판단으로 묻는다.",
+    "지원자가 정보 부족으로 결론을 보류하더라도, 무엇을 확인해야 가설을 구별할지 판단하는 답을 허용한다."
+  ],
+  "forbidden_as_problem_solving_main": [
+    "어떤 Redis 명령·키·ID·인자·상수인지 또는 기존 호출 순서만 물어 코드 회상으로 충분히 답할 수 있는 경우",
+    "배경·intent에는 문제 해결이라고 쓰지만 실제 request는 기존 흐름만 설명하게 하는 경우",
+    "판단하라는 말만 붙이고 결과적으로 변수 값이나 나열된 동작을 읽으면 끝나는 경우",
+    "새 기준을 맞추려고 서로 독립적인 원인 진단·대안 비교·구현 계획·검증 과제를 한꺼번에 추가하는 경우"
+  ],
+  "ambiguous": [
+    "왜 이렇게 구현했는가만 묻고 어떤 문제·제약·선택을 확인하는지 원문과 문맥에서 정할 수 없는 경우",
+    "이 흐름을 어떻게 개선할지라는 넓은 요청에서 무엇이 문제인지·무엇을 개선하는지 제공 문맥으로 결정하기 어려운 경우",
+    "원인이라고 표현했지만 문법상 원래 코드의 경로를 읽으라는 요청인지 새로운 가설을 구별하라는 요청인지 불명확한 경우"
+  ],
+  "source_grade_rule": "의미 적합성 위반은 reject, 해당 의미를 결정하기 어려우면 ambiguous, 적용 기준과 기존 안전·단일목적·계약 기준을 모두 만족하면 accept다. 적용하지 않는 상황을 reject로 바꾸지 않는다.",
+  "review_wire_mapping": {
+    "key_fit_reject": {
+      "plan_valid": false,
+      "safe_alternative": true,
+      "expected_recovery": "replan"
+    },
+    "note": "의미상 부적합한 새 목적은 기존 plan_valid에 반영한다. 기존 stable Review v3 구조와 point_coverage의 직접 요청 판정은 유지한다. 실제 출력과 이 기대를 따로 대조한다."
+  },
+  "sufficiency_separation": "이미 제시된 what/when 질문에 정확히 답했다면 sufficient를 유지한다. 묻지 않은 진단·대안·검증을 사후 missing으로 만들지 않는다.",
+  "not_claimed": [
+    "공식 rubric의 점수 단계 재정의",
+    "최종 측정 타당성 검증",
+    "모든 역량의 전역 분리",
+    "사람 검수 완료",
+    "독립 레포 holdout"
+  ],
+  "publication": {
+    "source_kind": "frozen development criterion selected from historical source, not a new post-hoc verdict",
+    "public_code": {
+      "repository": "mastodon/mastodon",
+      "commit": "cc76f85b9afc02b1265e68e6ee6c24ab266771b4",
+      "path": "app/services/post_status_service.rb",
+      "raw_url": "https://raw.githubusercontent.com/mastodon/mastodon/cc76f85b9afc02b1265e68e6ee6c24ab266771b4/app/services/post_status_service.rb",
+      "line_count": 309,
+      "byte_count": 10888,
+      "source_sha256": "3f61d6c6d5fb174b0cc1d61f9dedf89ea645cfbd8b394e551bb82d8db0b9387e",
+      "full_blob_sha1": "fce7b6d4c14c836d47f59f6d150fd206c291ed39"
+    },
+    "project_definition_sources": [
+      {
+        "path": "backend/scripts/seed_score_criteria.py",
+        "lines": "69-77"
+      },
+      {
+        "path": "ai/prompts/director-runtime-v12.md",
+        "lines": "20",
+        "active_policy_claim": false
+      }
+    ],
+    "official_score_redefinition": false,
+    "independent_human_or_statistical_validation": false
+  }
+}
